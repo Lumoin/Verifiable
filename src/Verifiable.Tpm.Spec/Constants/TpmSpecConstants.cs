@@ -1,13 +1,13 @@
 namespace Verifiable.Tpm.Spec.Constants;
 
 /// <summary>
-/// TPM_SPEC constants (Table 8).
+/// TPM_SPEC constants (Table 6).
 /// </summary>
 /// <remarks>
 /// <para>
 /// Specification:
 /// <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>
-/// (Part 2: Structures, section "6 Constants", Table 8).
+/// (Part 2: Structures, Version 185, section "6 Constants", Table 6).
 /// </para>
 /// </remarks>
 public static class TpmSpecConstants
@@ -25,15 +25,16 @@ public static class TpmSpecConstants
     /// <summary>
     /// the version number of the specification
     /// </summary>
-    public const uint TPM_SPEC_VERSION = 184;
+    public const uint TPM_SPEC_VERSION = 185;
 
     /// <summary>
-    /// the year of the version
+    /// shall be zero
     /// </summary>
-    public const uint TPM_SPEC_YEAR = 2025;
+    public const uint TPM_SPEC_YEAR = 0;
 
     /// <summary>
-    /// the day of the year (March 20)
+    /// the errata version implemented by the TPM; the base publication implements none. Version 185 renamed
+    /// this slot from TPM_SPEC_DAY_OF_YEAR and reports an errata version number here instead of a date.
     /// </summary>
-    public const uint TPM_SPEC_DAY_OF_YEAR = 79;
+    public const uint TPM_SPEC_ERRATA = 0;
 }

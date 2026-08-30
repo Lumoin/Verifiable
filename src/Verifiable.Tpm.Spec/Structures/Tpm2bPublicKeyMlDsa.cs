@@ -22,7 +22,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// } TPM2B_PUBLIC_KEY_MLDSA;
 /// </code>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 11.2.7.3, Table 209 (v1.85).
+/// Specification reference: TPM 2.0 Library Part 2, Section 11.2.7.3, Table 223 (v1.85).
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]

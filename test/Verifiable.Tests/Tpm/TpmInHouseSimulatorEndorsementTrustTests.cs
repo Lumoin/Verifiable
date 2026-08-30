@@ -37,7 +37,7 @@ namespace Verifiable.Tests.Tpm;
 /// <para>
 /// <c>TPM2_CreatePrimary()</c> mints a restricted-decrypt ECC storage primary under the endorsement hierarchy (the
 /// EK); a test CA stands in for the manufacturer and issues an EK certificate over the TPM's actual exported EK
-/// public key (TPM 2.0 Library Part 3, clause 24.1; the EK role is defined in Part 1, clause 25.2). Validating that
+/// public key (TPM 2.0 Library Part 3, clause 24.1; the EK role is defined in Part 1, clause 24.2). Validating that
 /// certificate to the CA, and confirming it certifies the TPM's real EK, is what turns "an EK I created" into "an
 /// EK whose origin a relying party can trust" — the missing leg above credential activation (which proves an
 /// attestation key co-resides with this EK). The negative case validates the same certificate against an unrelated

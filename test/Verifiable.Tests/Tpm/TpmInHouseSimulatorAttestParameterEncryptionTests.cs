@@ -25,7 +25,7 @@ namespace Verifiable.Tests.Tpm;
 /// <c>TPM2_CertifyCreation()</c>, <c>TPM2_Quote()</c>, <c>TPM2_GetTime()</c>, and <c>TPM2_NV_Certify()</c> —
 /// against the in-house behavioural <see cref="TpmSimulator"/>, in both directions: the <c>decrypt</c> attribute
 /// protecting <c>qualifyingData</c> on the way in and the <c>encrypt</c> attribute protecting the
-/// <c>TPM2B_ATTEST</c> on the way out (TPM 2.0 Library Part 1, clause 19.1; the per-command tables are Part 3,
+/// <c>TPM2B_ATTEST</c> on the way out (TPM 2.0 Library Part 1, clause 18.1; the per-command tables are Part 3,
 /// clauses 18.2, 18.3, 18.4, 18.7, and 31.16).
 /// </summary>
 /// <remarks>
@@ -33,7 +33,7 @@ namespace Verifiable.Tests.Tpm;
 /// Every round trip runs through the production path — <see cref="TpmCommandExecutor"/>, the real command inputs,
 /// the real <see cref="TpmSession"/>, and the real response codecs — so what is proven is that the two sides
 /// agree, not that one side is self-consistent. The observable that carries the proof is the attestation itself:
-/// <c>extraData</c> echoes <c>qualifyingData</c> (Part 2, clause 10.12.12, Table 151), so a request keystream mismatch shows
+/// <c>extraData</c> echoes <c>qualifyingData</c> (Part 2, clause 10.11.12, Table 154), so a request keystream mismatch shows
 /// up as an attestation signed over different octets, and a response keystream mismatch shows up as a
 /// <c>TPM2B_ATTEST</c> that does not parse into the value the caller sent.
 /// </para>
@@ -96,7 +96,7 @@ internal sealed class TpmInHouseSimulatorAttestParameterEncryptionTests
     /// <c>extraData</c> echoes exactly the octets the caller supplied, which it can only do if the simulator
     /// derived the same keystream over the same nonce order the host encrypted with (TPM 2.0 Library Part 1,
     /// clauses 19.1 and 19.2; the parameter is the first command parameter and a TPM2B, Part 3, clause 18.4,
-    /// Table 93).
+    /// Table 101).
     /// </summary>
     [TestMethod]
     public async Task QuoteWithXorEncryptedQualifyingDataEchoesItIntoTheAttestation()
@@ -119,7 +119,7 @@ internal sealed class TpmInHouseSimulatorAttestParameterEncryptionTests
     /// <c>TPM2_Quote()</c>'s <c>TPM2B_ATTEST</c> survives XOR obfuscation in the response direction: the caller
     /// recovers an attestation that parses and echoes its own nonce, which it can only do if the simulator
     /// encrypted with the response nonce order — nonceNewer the freshly rolled nonceTPM, nonceOlder the command
-    /// caller nonce (TPM 2.0 Library Part 1, clause 19.2) — and did so BEFORE rpHash (clause 19.1), so the
+    /// caller nonce (TPM 2.0 Library Part 1, clause 18.2) — and did so BEFORE rpHash (clause 18.1), so the
     /// response HMAC covers the ciphertext.
     /// </summary>
     [TestMethod]
@@ -128,7 +128,7 @@ internal sealed class TpmInHouseSimulatorAttestParameterEncryptionTests
         await RunQuoteAsync(TpmtSymDef.Xor(HmacSessionAlg), TpmaSession.CONTINUE_SESSION | TpmaSession.ENCRYPT).ConfigureAwait(false);
     }
 
-    /// <summary>The AES-CFB half of <see cref="QuoteWithXorEncryptedAttestationDecryptsToAParsableAttestation"/> (TPM 2.0 Library Part 1, clause 19.3).</summary>
+    /// <summary>The AES-CFB half of <see cref="QuoteWithXorEncryptedAttestationDecryptsToAParsableAttestation"/> (TPM 2.0 Library Part 1, clause 18.3).</summary>
     [TestMethod]
     public async Task QuoteWithAesCfbEncryptedAttestationDecryptsToAParsableAttestation()
     {
@@ -137,7 +137,7 @@ internal sealed class TpmInHouseSimulatorAttestParameterEncryptionTests
 
     /// <summary>
     /// One session carries BOTH attributes on the same command: "The attributes can be SET in different sessions
-    /// or in the same session" (TPM 2.0 Library Part 1, clause 19.1). Both directions are keyed from the same
+    /// or in the same session" (TPM 2.0 Library Part 1, clause 18.1). Both directions are keyed from the same
     /// <c>sessionValue</c> and differ only in nonce order, so a single session doing both jobs is the tightest
     /// check that the two orders are not accidentally the same.
     /// </summary>
@@ -152,8 +152,8 @@ internal sealed class TpmInHouseSimulatorAttestParameterEncryptionTests
     /// <summary>
     /// A companion negotiating SHA-384 alongside a SHA-256 authorization area succeeds end to end: cpHash and
     /// rpHash are computed per session under that session's OWN hash algorithm (TPM 2.0 Library Part 1, clause
-    /// 16.7 equation 15 and clause 16.8 equation 16), and the companion's keystream is derived under its own
-    /// algorithm too (clauses 19.2 and 19.3).
+    /// 16.7 equation 15 and clause 15.8 equation 16), and the companion's keystream is derived under its own
+    /// algorithm too (clauses 18.2 and 18.3).
     /// </summary>
     [TestMethod]
     public async Task QuoteWithASha384CompanionSucceedsEndToEnd()
@@ -166,7 +166,7 @@ internal sealed class TpmInHouseSimulatorAttestParameterEncryptionTests
 
     /// <summary>
     /// <c>TPM2_Certify()</c>'s <c>qualifyingData</c> round-trips over a decrypt companion (TPM 2.0 Library Part
-    /// 3, clause 18.2, Table 89: the first command parameter and a TPM2B).
+    /// 3, clause 18.2, Table 97: the first command parameter and a TPM2B).
     /// </summary>
     [TestMethod]
     public async Task CertifyWithXorEncryptedQualifyingDataEchoesItIntoTheAttestation()
@@ -174,7 +174,7 @@ internal sealed class TpmInHouseSimulatorAttestParameterEncryptionTests
         await RunCertifyAsync(TpmtSymDef.Xor(HmacSessionAlg), TpmaSession.CONTINUE_SESSION | TpmaSession.DECRYPT).ConfigureAwait(false);
     }
 
-    /// <summary>The AES-CFB half of <see cref="CertifyWithXorEncryptedQualifyingDataEchoesItIntoTheAttestation"/> (TPM 2.0 Library Part 1, clause 19.3).</summary>
+    /// <summary>The AES-CFB half of <see cref="CertifyWithXorEncryptedQualifyingDataEchoesItIntoTheAttestation"/> (TPM 2.0 Library Part 1, clause 18.3).</summary>
     [TestMethod]
     public async Task CertifyWithAesCfbEncryptedQualifyingDataEchoesItIntoTheAttestation()
     {
@@ -183,7 +183,7 @@ internal sealed class TpmInHouseSimulatorAttestParameterEncryptionTests
 
     /// <summary>
     /// <c>TPM2_Certify()</c>'s <c>certifyInfo</c> round-trips over an encrypt companion (TPM 2.0 Library Part 3,
-    /// clause 18.2, Table 90: the first response parameter and a TPM2B).
+    /// clause 18.2, Table 98: the first response parameter and a TPM2B).
     /// </summary>
     [TestMethod]
     public async Task CertifyWithXorEncryptedAttestationDecryptsToAParsableAttestation()
@@ -191,7 +191,7 @@ internal sealed class TpmInHouseSimulatorAttestParameterEncryptionTests
         await RunCertifyAsync(TpmtSymDef.Xor(HmacSessionAlg), TpmaSession.CONTINUE_SESSION | TpmaSession.ENCRYPT).ConfigureAwait(false);
     }
 
-    /// <summary>The AES-CFB half of <see cref="CertifyWithXorEncryptedAttestationDecryptsToAParsableAttestation"/> (TPM 2.0 Library Part 1, clause 19.3).</summary>
+    /// <summary>The AES-CFB half of <see cref="CertifyWithXorEncryptedAttestationDecryptsToAParsableAttestation"/> (TPM 2.0 Library Part 1, clause 18.3).</summary>
     [TestMethod]
     public async Task CertifyWithAesCfbEncryptedAttestationDecryptsToAParsableAttestation()
     {
@@ -201,7 +201,7 @@ internal sealed class TpmInHouseSimulatorAttestParameterEncryptionTests
     /// <summary>
     /// <c>TPM2_CertifyCreation()</c>'s <c>qualifyingData</c> round-trips over a decrypt companion. Its
     /// <c>creationHash</c> and <c>creationTicket</c> sit BEHIND the first parameter and so are never protected
-    /// (TPM 2.0 Library Part 1, clause 19.1: "only the first parameter ... can be encrypted"); the ticket still
+    /// (TPM 2.0 Library Part 1, clause 18.1: "only the first parameter ... can be encrypted"); the ticket still
     /// re-verifies, which proves those trailing parameters were parsed from the same octets the caller sent.
     /// </summary>
     [TestMethod]
@@ -210,7 +210,7 @@ internal sealed class TpmInHouseSimulatorAttestParameterEncryptionTests
         await RunCertifyCreationAsync(TpmtSymDef.Xor(HmacSessionAlg), TpmaSession.CONTINUE_SESSION | TpmaSession.DECRYPT).ConfigureAwait(false);
     }
 
-    /// <summary>The AES-CFB half of <see cref="CertifyCreationWithXorEncryptedQualifyingDataEchoesItIntoTheAttestation"/> (TPM 2.0 Library Part 1, clause 19.3).</summary>
+    /// <summary>The AES-CFB half of <see cref="CertifyCreationWithXorEncryptedQualifyingDataEchoesItIntoTheAttestation"/> (TPM 2.0 Library Part 1, clause 18.3).</summary>
     [TestMethod]
     public async Task CertifyCreationWithAesCfbEncryptedQualifyingDataEchoesItIntoTheAttestation()
     {
@@ -219,7 +219,7 @@ internal sealed class TpmInHouseSimulatorAttestParameterEncryptionTests
 
     /// <summary>
     /// <c>TPM2_CertifyCreation()</c>'s <c>certifyInfo</c> round-trips over an encrypt companion (TPM 2.0 Library
-    /// Part 3, clause 18.3, Table 92).
+    /// Part 3, clause 18.3, Table 100).
     /// </summary>
     [TestMethod]
     public async Task CertifyCreationWithXorEncryptedAttestationDecryptsToAParsableAttestation()
@@ -227,7 +227,7 @@ internal sealed class TpmInHouseSimulatorAttestParameterEncryptionTests
         await RunCertifyCreationAsync(TpmtSymDef.Xor(HmacSessionAlg), TpmaSession.CONTINUE_SESSION | TpmaSession.ENCRYPT).ConfigureAwait(false);
     }
 
-    /// <summary>The AES-CFB half of <see cref="CertifyCreationWithXorEncryptedAttestationDecryptsToAParsableAttestation"/> (TPM 2.0 Library Part 1, clause 19.3).</summary>
+    /// <summary>The AES-CFB half of <see cref="CertifyCreationWithXorEncryptedAttestationDecryptsToAParsableAttestation"/> (TPM 2.0 Library Part 1, clause 18.3).</summary>
     [TestMethod]
     public async Task CertifyCreationWithAesCfbEncryptedAttestationDecryptsToAParsableAttestation()
     {
@@ -236,7 +236,7 @@ internal sealed class TpmInHouseSimulatorAttestParameterEncryptionTests
 
     /// <summary>
     /// <c>TPM2_GetTime()</c>'s <c>qualifyingData</c> round-trips over a decrypt companion (TPM 2.0 Library Part
-    /// 3, clause 18.7, Table 99), with the companion at index 2 behind the two authorizing slots
+    /// 3, clause 18.7, Table 107), with the companion at index 2 behind the two authorizing slots
     /// <c>@privacyAdminHandle</c> and <c>@signHandle</c>.
     /// </summary>
     [TestMethod]
@@ -245,7 +245,7 @@ internal sealed class TpmInHouseSimulatorAttestParameterEncryptionTests
         await RunGetTimeAsync(TpmtSymDef.Xor(HmacSessionAlg), TpmaSession.CONTINUE_SESSION | TpmaSession.DECRYPT).ConfigureAwait(false);
     }
 
-    /// <summary>The AES-CFB half of <see cref="GetTimeWithXorEncryptedQualifyingDataEchoesItIntoTheAttestation"/> (TPM 2.0 Library Part 1, clause 19.3).</summary>
+    /// <summary>The AES-CFB half of <see cref="GetTimeWithXorEncryptedQualifyingDataEchoesItIntoTheAttestation"/> (TPM 2.0 Library Part 1, clause 18.3).</summary>
     [TestMethod]
     public async Task GetTimeWithAesCfbEncryptedQualifyingDataEchoesItIntoTheAttestation()
     {
@@ -254,7 +254,7 @@ internal sealed class TpmInHouseSimulatorAttestParameterEncryptionTests
 
     /// <summary>
     /// <c>TPM2_GetTime()</c>'s <c>timeInfo</c> round-trips over an encrypt companion (TPM 2.0 Library Part 3,
-    /// clause 18.7, Table 100).
+    /// clause 18.7, Table 108).
     /// </summary>
     [TestMethod]
     public async Task GetTimeWithXorEncryptedAttestationDecryptsToAParsableAttestation()
@@ -262,7 +262,7 @@ internal sealed class TpmInHouseSimulatorAttestParameterEncryptionTests
         await RunGetTimeAsync(TpmtSymDef.Xor(HmacSessionAlg), TpmaSession.CONTINUE_SESSION | TpmaSession.ENCRYPT).ConfigureAwait(false);
     }
 
-    /// <summary>The AES-CFB half of <see cref="GetTimeWithXorEncryptedAttestationDecryptsToAParsableAttestation"/> (TPM 2.0 Library Part 1, clause 19.3).</summary>
+    /// <summary>The AES-CFB half of <see cref="GetTimeWithXorEncryptedAttestationDecryptsToAParsableAttestation"/> (TPM 2.0 Library Part 1, clause 18.3).</summary>
     [TestMethod]
     public async Task GetTimeWithAesCfbEncryptedAttestationDecryptsToAParsableAttestation()
     {
@@ -271,7 +271,7 @@ internal sealed class TpmInHouseSimulatorAttestParameterEncryptionTests
 
     /// <summary>
     /// <c>TPM2_NV_Certify()</c>'s <c>qualifyingData</c> round-trips over a decrypt companion sitting at index 2
-    /// (TPM 2.0 Library Part 3, clause 31.16.2, Table 254): this is the command with two authorizing slots AND a
+    /// (TPM 2.0 Library Part 3, clause 31.16.2, Table 271): this is the command with two authorizing slots AND a
     /// third handle that carries no authorization, so it is the one that exercises a companion at the last
     /// position Table 9 allows.
     /// </summary>
@@ -281,7 +281,7 @@ internal sealed class TpmInHouseSimulatorAttestParameterEncryptionTests
         await RunNvCertifyAsync(TpmtSymDef.Xor(HmacSessionAlg), TpmaSession.CONTINUE_SESSION | TpmaSession.DECRYPT).ConfigureAwait(false);
     }
 
-    /// <summary>The AES-CFB half of <see cref="NvCertifyWithXorEncryptedQualifyingDataEchoesItIntoTheAttestation"/> (TPM 2.0 Library Part 1, clause 19.3).</summary>
+    /// <summary>The AES-CFB half of <see cref="NvCertifyWithXorEncryptedQualifyingDataEchoesItIntoTheAttestation"/> (TPM 2.0 Library Part 1, clause 18.3).</summary>
     [TestMethod]
     public async Task NvCertifyWithAesCfbEncryptedQualifyingDataEchoesItIntoTheAttestation()
     {
@@ -290,7 +290,7 @@ internal sealed class TpmInHouseSimulatorAttestParameterEncryptionTests
 
     /// <summary>
     /// <c>TPM2_NV_Certify()</c>'s <c>certifyInfo</c> round-trips over an encrypt companion at index 2 (TPM 2.0
-    /// Library Part 3, clause 31.16.2, Table 255).
+    /// Library Part 3, clause 31.16.2, Table 272).
     /// </summary>
     [TestMethod]
     public async Task NvCertifyWithXorEncryptedAttestationDecryptsToAParsableAttestation()
@@ -298,7 +298,7 @@ internal sealed class TpmInHouseSimulatorAttestParameterEncryptionTests
         await RunNvCertifyAsync(TpmtSymDef.Xor(HmacSessionAlg), TpmaSession.CONTINUE_SESSION | TpmaSession.ENCRYPT).ConfigureAwait(false);
     }
 
-    /// <summary>The AES-CFB half of <see cref="NvCertifyWithXorEncryptedAttestationDecryptsToAParsableAttestation"/> (TPM 2.0 Library Part 1, clause 19.3).</summary>
+    /// <summary>The AES-CFB half of <see cref="NvCertifyWithXorEncryptedAttestationDecryptsToAParsableAttestation"/> (TPM 2.0 Library Part 1, clause 18.3).</summary>
     [TestMethod]
     public async Task NvCertifyWithAesCfbEncryptedAttestationDecryptsToAParsableAttestation()
     {
@@ -307,8 +307,8 @@ internal sealed class TpmInHouseSimulatorAttestParameterEncryptionTests
 
     /// <summary>
     /// A <c>TPM2_NV_Certify()</c> companion at index 2 carrying BOTH attributes protects the command parameter
-    /// and the response parameter in one command — the last position Table 9 admits, doing both jobs (TPM 2.0
-    /// Library Part 1, clauses 16.6.1 and 19.1).
+    /// and the response parameter in one command — the last position Table 12 admits, doing both jobs (TPM 2.0
+    /// Library Part 1, clauses 15.6.1 and 18.1).
     /// </summary>
     [TestMethod]
     public async Task NvCertifyWithACompanionAtIndexTwoRoundTripsBothDirections()
@@ -335,9 +335,9 @@ internal sealed class TpmInHouseSimulatorAttestParameterEncryptionTests
     /// <summary>
     /// Two DIFFERENT sessions carry the two attributes on one command, and neither is the first session, so the
     /// first session's command HMAC folds BOTH their nonceTPMs — the decrypt session's, then the encrypt
-    /// session's, each exactly once (TPM 2.0 Library Part 1, clause 17.6.3.4 and clause 17.6.5's equation 17:
+    /// session's, each exactly once (TPM 2.0 Library Part 1, clause 16.6.3.4 and clause 16.6.5's equation 17:
     /// "If different sessions are used for decrypt and encrypt, both nonceTPMs are included"). Driven on
-    /// <c>TPM2_Certify()</c>, whose two authorizing slots plus a companion fill the three blocks clause 16.6.1
+    /// <c>TPM2_Certify()</c>, whose two authorizing slots plus a companion fill the three blocks clause 15.6.1
     /// allows: the object slot at index 0 folds, the sign slot at index 1 decrypts, and the companion at index 2
     /// encrypts. A success is the only outcome consistent with the host and the simulator concatenating those two
     /// terms in the same order.
@@ -390,7 +390,7 @@ internal sealed class TpmInHouseSimulatorAttestParameterEncryptionTests
     /// <summary>
     /// The <c>decrypt</c> attribute riding the AUTHORIZING sign session folds that session's authorized entity's
     /// authValue into the cipher key: "If a session is also being used for authorization, sessionValue ... is
-    /// sessionKey ‖ authValue" (TPM 2.0 Library Part 1, clause 19.1). The signing key here carries a NON-EMPTY
+    /// sessionKey ‖ authValue" (TPM 2.0 Library Part 1, clause 18.1). The signing key here carries a NON-EMPTY
     /// authValue, so the term is observable — with it dropped on either side the recovered <c>qualifyingData</c>
     /// would be garbage and <c>extraData</c> would not echo.
     /// </summary>
@@ -437,7 +437,7 @@ internal sealed class TpmInHouseSimulatorAttestParameterEncryptionTests
 
     /// <summary>
     /// The other half of the <c>sessionValue</c> rule: a companion authorizes no entity, so its
-    /// <c>sessionValue</c> is its session key ALONE (TPM 2.0 Library Part 1, clause 19.1: "If the session is not
+    /// <c>sessionValue</c> is its session key ALONE (TPM 2.0 Library Part 1, clause 18.1: "If the session is not
     /// being used for authorization, sessionValue is sessionKey"). The signing key still carries a non-empty
     /// authValue, and the round trip succeeds without it being folded anywhere — which is what separates this
     /// case from <see cref="CertifyWithDecryptOnTheAuthorizingSignSessionFoldsTheSignerAuthValue"/>.
@@ -483,7 +483,7 @@ internal sealed class TpmInHouseSimulatorAttestParameterEncryptionTests
     /// <summary>
     /// A session BOUND to the very entity it authorizes still folds that entity's authValue into the CIPHER key,
     /// even though its authorization HMAC omits it: "The binding of the session is ignored" (TPM 2.0 Library
-    /// Part 1, clause 19.1), against clause 17.6.10's equation 22, which drops the term from the HMAC key. The
+    /// Part 1, clause 18.1), against clause 16.6.10's equation 22, which drops the term from the HMAC key. The
     /// two keys therefore differ for one and the same session, and only a design that keeps them apart can make
     /// this command both authorize and decrypt correctly.
     /// </summary>
@@ -499,7 +499,7 @@ internal sealed class TpmInHouseSimulatorAttestParameterEncryptionTests
     }
 
     /// <summary>
-    /// The honest malleability negative (TPM 2.0 Library Part 1, clause 19.1: the two schemes "are, by
+    /// The honest malleability negative (TPM 2.0 Library Part 1, clause 18.1: the two schemes "are, by
     /// themselves, malleable ... mitigated by the HMAC authorization session verification"): a caller whose
     /// cipher key is wrong but whose cpHash covers exactly the ciphertext it transmitted passes every HMAC check,
     /// so the command SUCCEEDS and the attestation is signed over garbage <c>extraData</c>. The wrong key is
@@ -525,7 +525,7 @@ internal sealed class TpmInHouseSimulatorAttestParameterEncryptionTests
     /// <summary>
     /// Removing the decrypt companion from the wire breaks the FIRST session's command HMAC: "To prevent removal
     /// of extra encrypting sessions, the nonceTPM of each of these sessions is included in the HMAC computation
-    /// of the first authorization session of a command" (TPM 2.0 Library Part 1, clause 17.6.3.4). The identical
+    /// of the first authorization session of a command" (TPM 2.0 Library Part 1, clause 16.6.3.4). The identical
     /// command with the companion left in place succeeds, so the failure is the fold and nothing else.
     /// </summary>
     [TestMethod]
@@ -583,7 +583,7 @@ internal sealed class TpmInHouseSimulatorAttestParameterEncryptionTests
     /// <summary>
     /// A SECOND session claiming <c>decrypt</c> is refused with <c>TPM_RC_ATTRIBUTES</c> encoded to the
     /// RE-CLAIMING slot: "the decrypt attribute can only be SET in one session per command" (TPM 2.0 Library Part
-    /// 1, clause 19.1; Part 3, clause 5.5's step 4.1.2), blamed on the offending entry (Part 2, clause 6.6.2).
+    /// 1, clause 18.1; Part 3, clause 5.5's step 4.1.2), blamed on the offending entry (Part 2, clause 6.6.2).
     /// The second claim is planted on the wire because the host executor refuses to frame such a command at all,
     /// and the area is otherwise entirely well formed, so the refusal can be about nothing else.
     /// </summary>
@@ -600,7 +600,7 @@ internal sealed class TpmInHouseSimulatorAttestParameterEncryptionTests
     /// <summary>
     /// The <c>encrypt</c> half of <see cref="TwoDecryptClaimingSessionsOnCertifyAreRefusedAtTheSecondClaimer"/>:
     /// "The encrypt attribute can only be SET in one session that is used in a command" (TPM 2.0 Library Part 1,
-    /// clause 19.1).
+    /// clause 18.1).
     /// </summary>
     [TestMethod]
     public async Task TwoEncryptClaimingSessionsOnCertifyAreRefusedAtTheSecondClaimer()
@@ -666,7 +666,7 @@ internal sealed class TpmInHouseSimulatorAttestParameterEncryptionTests
     /// A <c>qualifyingData</c> protected by a decrypt session never appears on the wire in the clear: the
     /// parameter's plaintext octets are absent from the command bytes as a contiguous sequence, while the same
     /// command without the attribute carries them verbatim. The pair is what makes the assertion non-vacuous
-    /// (TPM 2.0 Library Part 1, clause 19.1).
+    /// (TPM 2.0 Library Part 1, clause 18.1).
     /// </summary>
     [TestMethod]
     public async Task QuoteOverADecryptSessionKeepsTheQualifyingDataOffTheWire()
@@ -684,7 +684,7 @@ internal sealed class TpmInHouseSimulatorAttestParameterEncryptionTests
     /// <summary>
     /// A <c>TPM2B_ATTEST</c> protected by an encrypt session never appears on the wire in the clear: the
     /// attestation structure's <c>TPM_GENERATED_VALUE</c> magic — the fixed four octets every genuine attestation
-    /// starts with (TPM 2.0 Library Part 2, clause 6.2, Table 9 for the constant; clause 10.12.12, Table 151 for
+    /// starts with (TPM 2.0 Library Part 2, clause 6.2, Table 7 for the constant; clause 10.11.12, Table 154 for
     /// the <c>magic</c> field it opens <c>TPMS_ATTEST</c> with) — is absent from the response bytes, while the same
     /// command without the attribute carries it. The magic is the right probe precisely because it is
     /// caller-independent: it is present in every unprotected attestation and in none that is encrypted.
@@ -785,11 +785,11 @@ internal sealed class TpmInHouseSimulatorAttestParameterEncryptionTests
     /// <summary>
     /// A <c>TPM2_Quote()</c> area fills all three blocks an authorization area may hold — the authorizing sign
     /// session, then a companion that decrypts and a companion that encrypts — and both directions survive at
-    /// once. An area carries "at least one but no more than three" blocks and Table 9 marks positions 2 and 3
-    /// alike as an encryption, decryption, or audit session (TPM 2.0 Library Part 1, clause 16.6.1), and
+    /// once. An area carries "at least one but no more than three" blocks and Table 12 marks positions 2 and 3
+    /// alike as an encryption, decryption, or audit session (TPM 2.0 Library Part 1, clause 15.6.1), and
     /// <c>TPM2_Quote()</c> authorizes a single handle, so both later positions are open to it. The sign slot's
     /// command HMAC folds BOTH companions' nonceTPMs, the decrypt session's first and the encrypt session's second
-    /// (clause 17.6.3.4 and clause 17.6.5's equation 17), so a success is only possible if host and simulator lay
+    /// (clause 16.6.3.4 and clause 16.6.5's equation 17), so a success is only possible if host and simulator lay
     /// those two terms end to end in the same order across a three-block area — and the attestation that comes
     /// back must still echo the caller's <c>qualifyingData</c> and parse as a quote.
     /// </summary>
@@ -845,7 +845,7 @@ internal sealed class TpmInHouseSimulatorAttestParameterEncryptionTests
     /// The once-per-command rule survives the third block: with two companions present, a <c>decrypt</c> claim
     /// planted onto the one at index 2 — the slot at index 1 having claimed it already — is refused with
     /// <c>TPM_RC_ATTRIBUTES</c> encoded to the RE-CLAIMING slot ("the decrypt attribute can only be SET in one
-    /// session per command", TPM 2.0 Library Part 1, clause 19.1; blamed on the offending entry, Part 2, clause
+    /// session per command", TPM 2.0 Library Part 1, clause 18.1; blamed on the offending entry, Part 2, clause
     /// 6.6.2). The claim is planted on the wire because the host executor refuses to frame such a command at all,
     /// and the area is otherwise entirely well formed, so the refusal can be about nothing else.
     /// </summary>
@@ -902,7 +902,7 @@ internal sealed class TpmInHouseSimulatorAttestParameterEncryptionTests
 
     /// <summary>
     /// The three-block bound is the bound: an authorization area holds "at least one but no more than three"
-    /// blocks (TPM 2.0 Library Part 1, clause 16.6.1), so a <c>TPM2_Quote()</c> area carrying a FOURTH one leaves
+    /// blocks (TPM 2.0 Library Part 1, clause 15.6.1), so a <c>TPM2_Quote()</c> area carrying a FOURTH one leaves
     /// octets that no slot accounts for against the declared <c>authorizationSize</c> — a bare
     /// <c>TPM_RC_AUTHSIZE</c> naming no slot, because the surplus belongs to the area rather than to any session
     /// in it. The fourth block is planted on the wire, the host executor having no way to express it.
@@ -959,7 +959,7 @@ internal sealed class TpmInHouseSimulatorAttestParameterEncryptionTests
     /// <summary>
     /// The <c>TPM2_CertifyCreation()</c> half of
     /// <see cref="QuoteWithTwoCompanionsOneDecryptingOneEncryptingRoundTripsBothDirections"/>: only
-    /// <c>@signHandle</c> authorizes this command (TPM 2.0 Library Part 3, clause 18.3, Table 88), so Table 9's
+    /// <c>@signHandle</c> authorizes this command (TPM 2.0 Library Part 3, clause 18.3, Table 99), so Table 9's
     /// positions 2 and 3 are both free and the area carries a decrypting companion and an encrypting one
     /// alongside the sign session. The re-verified creation ticket rides through unprotected behind the first
     /// parameter, so a success also pins that the parameters after <c>qualifyingData</c> were left alone.
@@ -1549,7 +1549,7 @@ internal sealed class TpmInHouseSimulatorAttestParameterEncryptionTests
 
     /// <summary>
     /// Asserts an attestation is a genuine one carrying the expected <c>extraData</c> (TPM 2.0 Library Part 2,
-    /// clause 10.12.12, Table 151: <c>magic</c> is <c>TPM_GENERATED_VALUE</c> (clause 6.2, Table 9) and <c>extraData</c> is the caller's
+    /// clause 10.11.12, Table 154: <c>magic</c> is <c>TPM_GENERATED_VALUE</c> (clause 6.2, Table 7) and <c>extraData</c> is the caller's
     /// <c>qualifyingData</c>).
     /// </summary>
     /// <param name="attest">The attestation the response carried.</param>
@@ -1573,7 +1573,7 @@ internal sealed class TpmInHouseSimulatorAttestParameterEncryptionTests
     private static TpmRcConstants SessionEncodedRc(TpmRcConstants baseRc, int sessionIndex) =>
         (TpmRcConstants)((uint)baseRc + (uint)TpmRcConstants.TPM_RC_S + (0x100u * (uint)(sessionIndex + 1)));
 
-    /// <summary>The endorsement hierarchy's Name, which for a permanent handle is the 4-octet handle value (TPM 2.0 Library Part 1, clause 14, Table 6).</summary>
+    /// <summary>The endorsement hierarchy's Name, which for a permanent handle is the 4-octet handle value (TPM 2.0 Library Part 1, clause 13, Table 9).</summary>
     /// <returns>The 4-octet Name.</returns>
     private static byte[] EndorsementHandleBytes()
     {
@@ -1583,7 +1583,7 @@ internal sealed class TpmInHouseSimulatorAttestParameterEncryptionTests
         return bytes;
     }
 
-    /// <summary>Reads a framed command's <c>commandCode</c> field (TPM 2.0 Library Part 1, clause 18.2's command header).</summary>
+    /// <summary>Reads a framed command's <c>commandCode</c> field (TPM 2.0 Library Part 1, clause 15.2.3's commandCode header field).</summary>
     /// <param name="command">The framed command.</param>
     /// <returns>The command code.</returns>
     private static TpmCcConstants ReadCommandCode(ReadOnlySpan<byte> command) =>
@@ -1862,7 +1862,7 @@ internal sealed class TpmInHouseSimulatorAttestParameterEncryptionTests
 
     /// <summary>
     /// Transcribes <see cref="NvIndexHandle"/>'s Name — <c>nameAlg ‖ H_nameAlg(TPMS_NV_PUBLIC)</c> (TPM 2.0
-    /// Library Part 1, clause 14, Table 6) — independently of the simulator, for cpHash's handle-Name area.
+    /// Library Part 1, clause 13, Table 9) — independently of the simulator, for cpHash's handle-Name area.
     /// </summary>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The Index's Name.</returns>

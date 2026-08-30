@@ -24,7 +24,7 @@ namespace Verifiable.Tests.Tpm;
 /// uses (<see cref="TpmCommandExecutor"/> with the real <see cref="GetRandomInput"/>, <see cref="CreateInput"/>,
 /// <see cref="UnsealInput"/>, <see cref="TpmSession"/>, and the real response codecs): <c>TPM2_GetRandom()</c> and
 /// <c>TPM2_Unseal()</c> over a bound HMAC session now have their command HMAC genuinely verified (TPM 2.0 Library
-/// Part 1, clauses 16.7 and 19.6; Part 3, clause 5.6), where previously the field parsed and was discarded.
+/// Part 1, clauses 15.7 and 18.6; Part 3, clause 5.6), where previously the field parsed and was discarded.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -33,8 +33,8 @@ namespace Verifiable.Tests.Tpm;
 /// parameter-encryption tests already set (<see cref="TpmInHouseSimulatorParameterEncryptionTests"/>).
 /// </para>
 /// <para>
-/// One test recomputes the expected command HMAC independently — <c>KDFa</c> (Part 1, clause 11.4.10.2) and the
-/// HMAC itself (clause 17.6.5, equation 17) composed by hand, field by field, through the project's own
+/// One test recomputes the expected command HMAC independently — <c>KDFa</c> (Part 1, clause 10.4.10.2) and the
+/// HMAC itself (clause 16.6.5, equation 17) composed by hand, field by field, through the project's own
 /// <c>Kdfa</c> and registered digest/HMAC seam — from the raw wire bytes a genuine <see cref="TpmSession"/> sent,
 /// proving the simulator's accept path against an independently-assembled transcription. Independence is at the
 /// composition level (this test builds the message itself and compares to what the simulator accepted), not the
@@ -186,7 +186,7 @@ internal sealed class TpmInHouseSimulatorSessionAuthTests
                         //octets, and authorizationSize does not include itself, so the new value is simply the old
                         //value minus that same shrinkage. Left stale, TryBeginAuthArea's own
                         //authorizationSize/commandSize framing cross-check rejects with TPM_RC_AUTHSIZE BEFORE the
-                        //simulator ever reaches the clause 17.6.15 empty-hmac gate this test names — masking the
+                        //simulator ever reaches the clause 16.6.16 empty-hmac gate this test names — masking the
                         //very check under test (F4: the prior version of this helper left authorizationSize stale).
                         BinaryPrimitives.WriteUInt32BigEndian(rewritten.AsSpan(TpmHeader.HeaderSize), oldAuthorizationSize - oldHmacLength);
 
@@ -202,7 +202,7 @@ internal sealed class TpmInHouseSimulatorSessionAuthTests
                     Assert.AreEqual(
                         SessionEncodedRc(TpmRcConstants.TPM_RC_BAD_AUTH, sessionIndex: 0), result.ResponseCode,
                         "A bound session's non-empty sessionKey means a zero-length hmac must be rejected by the " +
-                        "clause 17.6.15 empty-hmac gate specifically (session-index-encoded TPM_RC_BAD_AUTH), not merely " +
+                        "clause 16.6.16 empty-hmac gate specifically (session-index-encoded TPM_RC_BAD_AUTH), not merely " +
                         "some other rejection reason (e.g. a stale authorizationSize producing TPM_RC_AUTHSIZE at framing).");
                 }
                 finally
@@ -316,16 +316,16 @@ internal sealed class TpmInHouseSimulatorSessionAuthTests
 
                     BaseMemoryPool oraclePool = BaseMemoryPool.Shared;
 
-                    //Independent oracle: KDFa (Part 1, clause 11.4.10.2) via the project's own Kdfa, keyed on the
+                    //Independent oracle: KDFa (Part 1, clause 10.4.10.2) via the project's own Kdfa, keyed on the
                     //bind object's authValue (empty for this test's signing key) — the session-key derivation the
-                    //sim itself performs at TPM2_StartAuthSession() (Part 1, clause 17.6.10, equation 20). Context order is nonceTPM
+                    //sim itself performs at TPM2_StartAuthSession() (Part 1, clause 16.6.10, equation 20). Context order is nonceTPM
                     //(contextU) then nonceCaller (contextV), the initial StartAuthSession nonces.
                     using IMemoryOwner<byte> derivedSessionKey = await Kdfa.DeriveAsync(
                         HashAlgorithmName.SHA256, ReadOnlyMemory<byte>.Empty, "ATH", initialNonceTpm, initialNonceCaller, DigestSize * 8, oraclePool, TestContext.CancellationToken).ConfigureAwait(false);
                     ReadOnlyMemory<byte> sessionKey = derivedSessionKey.Memory[..DigestSize];
 
                     //cpHash = H_SHA256(commandCode || parameters) — GetRandom-over-session carries no command
-                    //handles, so the handle-Name term is empty (Part 1, clause 16.7, equation 15).
+                    //handles, so the handle-Name term is empty (Part 1, clause 15.7, equation 15).
                     int cpHashInputLength = sizeof(uint) + rawBytesRequested.Length;
                     using IMemoryOwner<byte> cpHashInputOwner = oraclePool.Rent(cpHashInputLength);
                     {
@@ -338,9 +338,9 @@ internal sealed class TpmInHouseSimulatorSessionAuthTests
                         cpHashInputOwner.Memory[..cpHashInputLength], outputByteLength: DigestSize, tag: DigestTag(), pool: oraclePool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
                     //authHMAC = HMAC_SHA256(sessionKey, cpHash || nonceCaller || nonceTPM || sessionAttributes)
-                    //(Part 1, clause 17.6.5, equation 17) — GetRandom authorizes no entity, so the key is the
+                    //(Part 1, clause 16.6.5, equation 17) — GetRandom authorizes no entity, so the key is the
                     //session key alone (no authValue term) and there is no nonceTPMdecrypt/encrypt fold (a single
-                    //session in the auth area never folds, clause 17.6.3.4).
+                    //session in the auth area never folds, clause 16.6.3.4).
                     int hmacInputLength = cpHash.AsReadOnlySpan().Length + nonceCaller.Length + initialNonceTpm.Length + 1;
                     using IMemoryOwner<byte> hmacInputOwner = oraclePool.Rent(hmacInputLength);
                     {
@@ -483,7 +483,7 @@ internal sealed class TpmInHouseSimulatorSessionAuthTests
 
         try
         {
-            //DA-protected: noDa is CLEAR (the default template), so a wrong authorization counts (Part 1, clause 17.8).
+            //DA-protected: noDa is CLEAR (the default template), so a wrong authorization counts (Part 1, clause 16.8).
             using LoadResponse loaded = await SealAndLoadAsync(tpm, registry, pool, parentHandle, CorrectUserAuth, noDa: false).ConfigureAwait(false);
             itemHandle = loaded.ObjectHandle.Value;
 
@@ -607,7 +607,7 @@ internal sealed class TpmInHouseSimulatorSessionAuthTests
             (sessionHandle, TpmSession session, _, _) = await StartBoundHmacSessionAsync(tpm, registry, pool, parentHandle, TpmtSymDef.Null).ConfigureAwait(false);
             using(session)
             {
-                //Even the CORRECT userAuth must be rejected while locked out (Part 1, clause 17.8.3).
+                //Even the CORRECT userAuth must be rejected while locked out (Part 1, clause 16.8.3).
                 session.SetAuthValue(CorrectUserAuth, pool);
 
                 UnsealInput unsealInput = UnsealInput.ForItem(loaded.ObjectHandle);
@@ -684,7 +684,7 @@ internal sealed class TpmInHouseSimulatorSessionAuthTests
             using LoadResponse loaded = await SealAndLoadAsync(tpm, registry, pool, parentHandle, CorrectUserAuth, noDa: false).ConfigureAwait(false);
             itemHandle = loaded.ObjectHandle.Value;
 
-            //Both directions of the strip rule (Part 1, clause 17.6.4): a password padded with trailing zero octets
+            //Both directions of the strip rule (Part 1, clause 16.6.4): a password padded with trailing zero octets
             //relative to the stored authValue must still be accepted.
             byte[] paddedPassword = [.. CorrectUserAuth, 0x00, 0x00];
 

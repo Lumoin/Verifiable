@@ -1,13 +1,13 @@
 namespace Verifiable.Tpm.Spec.Constants;
 
 /// <summary>
-/// TPM_CONSTANTS32 constants (Table 9).
+/// TPM_CONSTANTS32 constants (Table 7).
 /// </summary>
 /// <remarks>
 /// <para>
 /// Specification:
 /// <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>
-/// (Part 2: Structures, section "6 Constants", Table 9).
+/// (Part 2: Structures, section "6 Constants", Table 7).
 /// </para>
 /// </remarks>
 public static class TpmConstants32

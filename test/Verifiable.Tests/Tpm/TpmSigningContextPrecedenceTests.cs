@@ -34,7 +34,7 @@ namespace Verifiable.Tests.Tpm;
 /// simulators stand in for two distinct devices: the signing key is created only on
 /// <c>deviceWithKey</c>, so a context naming <c>deviceWithoutKey</c> is a "poisoned" default — routing
 /// a Sign command to it fails with <see cref="TpmRcConstants.TPM_RC_HANDLE"/> because the handle does
-/// not resolve there (TPM 2.0 Part 3, clause 20.2), the same failure
+/// not resolve there (TPM 2.0 Part 3, clause 20.5), the same failure
 /// <c>TpmInHouseSimulatorSignTests.SignWithUnknownKeyHandleReturnsHandle</c> proves for a raw command.
 /// </para>
 /// <para>

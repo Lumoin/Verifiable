@@ -1,6 +1,7 @@
 using System;
 using System.Buffers;
 using System.Diagnostics;
+using Verifiable.Tpm.Spec.Algorithms;
 using Verifiable.Tpm.Spec.Constants;
 
 namespace Verifiable.Tpm.Infrastructure.Commands;
@@ -19,20 +20,20 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// the authority can revise at will (TPM 2.0 Library Part 3, Section 23.16).
 /// </para>
 /// <para>
-/// Command structure (TPM 2.0 Part 3, Section 23.16, Table 150):
+/// Command structure (TPM 2.0 Part 3, Section 23.16, Table 170):
 /// </para>
 /// <list type="bullet">
 ///   <item><description>policySession (TPMI_SH_POLICY): The policy session handle being extended. Requires no authorization.</description></item>
 ///   <item><description>approvedPolicy (TPM2B_DIGEST): The policy digest being approved; must equal the session's current policyDigest.</description></item>
 ///   <item><description>policyRef (TPM2B_NONCE): An opaque qualifier; Empty Buffer if none.</description></item>
 ///   <item><description>keySign (TPM2B_NAME): The Name of the key that signed the approval (its first two octets are the hash algorithm aHash is built with).</description></item>
-///   <item><description>checkTicket (TPMT_TK_VERIFIED): The ticket TPM2_VerifySignature() returned, proving keySign signed <c>H(approvedPolicy || policyRef)</c>; may be a NULL Ticket for a trial session.</description></item>
+///   <item><description>checkTicket (TPMT_TK_VERIFIED): The ticket proving keySign signed <c>H(approvedPolicy || policyRef)</c>, carrying whichever of Table 112's three tags produced it — TPM_ST_VERIFIED (TPM2_VerifySignature()), TPM_ST_MESSAGE_VERIFIED (TPM2_VerifySequenceComplete()), or TPM_ST_DIGEST_VERIFIED (TPM2_VerifyDigestSignature(), Part 3 clause 23.16.2's preferred producer), with the <c>[tag]metadata</c> field Table 113 conditions on that tag; may be a NULL Ticket for a trial session.</description></item>
 /// </list>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 public sealed class PolicyAuthorizeInput: ITpmCommandInput, IDisposable
 {
-    private bool disposed;
+    private bool Disposed { get; set; }
 
     private IMemoryOwner<byte> ApprovedPolicyOwner { get; }
 
@@ -66,7 +67,8 @@ public sealed class PolicyAuthorizeInput: ITpmCommandInput, IDisposable
     public ReadOnlyMemory<byte> KeySign { get; }
 
     /// <summary>
-    /// Gets the checkTicket's structure tag (TPM_ST_VERIFIED).
+    /// Gets the checkTicket's structure tag — one of Table 112's three values (TPM_ST_VERIFIED,
+    /// TPM_ST_MESSAGE_VERIFIED, or TPM_ST_DIGEST_VERIFIED).
     /// </summary>
     public ushort CheckTicketTag { get; }
 
@@ -74,6 +76,13 @@ public sealed class PolicyAuthorizeInput: ITpmCommandInput, IDisposable
     /// Gets the checkTicket's hierarchy (the signing key's own hierarchy, or TPM_RH_NULL for a NULL ticket).
     /// </summary>
     public uint CheckTicketHierarchy { get; }
+
+    /// <summary>
+    /// Gets the checkTicket's <c>[tag]metadata</c> field (Table 111, TPMU_TK_VERIFIED_META): <see langword="null"/>
+    /// for the two <c>TPMS_EMPTY</c> arms <see cref="CheckTicketTag"/> TPM_ST_VERIFIED and TPM_ST_MESSAGE_VERIFIED
+    /// select, or the <c>digestVerified</c> hash algorithm when <see cref="CheckTicketTag"/> is TPM_ST_DIGEST_VERIFIED.
+    /// </summary>
+    public TpmiAlgHash? CheckTicketMetadata { get; }
 
     /// <summary>
     /// Gets the checkTicket's HMAC digest (empty for a NULL ticket).
@@ -87,11 +96,13 @@ public sealed class PolicyAuthorizeInput: ITpmCommandInput, IDisposable
     /// <param name="approvedPolicy">The policy digest being approved.</param>
     /// <param name="policyRef">The opaque policy qualifier, or empty for none.</param>
     /// <param name="keySign">The Name of the key that signed the approval.</param>
-    /// <param name="checkTicketTag">The checkTicket's structure tag (TPM_ST_VERIFIED).</param>
+    /// <param name="checkTicketTag">The checkTicket's structure tag — one of Table 112's three values.</param>
     /// <param name="checkTicketHierarchy">The checkTicket's hierarchy.</param>
+    /// <param name="checkTicketMetadata">The checkTicket's <c>[tag]metadata</c> field, or <see langword="null"/> when <paramref name="checkTicketTag"/> selects a <c>TPMS_EMPTY</c> arm.</param>
     /// <param name="checkTicketDigest">The checkTicket's HMAC digest, or empty for a NULL ticket.</param>
     /// <param name="pool">The memory pool for the parameter buffers.</param>
     /// <returns>A new <see cref="PolicyAuthorizeInput"/>.</returns>
+    /// <exception cref="ArgumentException"><paramref name="checkTicketMetadata"/> disagrees with <paramref name="checkTicketTag"/> about Table 111's tag-selected arm.</exception>
     public static PolicyAuthorizeInput Create(
         uint policySession,
         ReadOnlySpan<byte> approvedPolicy,
@@ -99,10 +110,22 @@ public sealed class PolicyAuthorizeInput: ITpmCommandInput, IDisposable
         ReadOnlySpan<byte> keySign,
         ushort checkTicketTag,
         uint checkTicketHierarchy,
+        TpmiAlgHash? checkTicketMetadata,
         ReadOnlySpan<byte> checkTicketDigest,
         BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
+
+        //Table 111 binds [tag]metadata to the tag: the digestVerified arm (TPM_ST_DIGEST_VERIFIED) carries a
+        //hash algorithm, the two TPMS_EMPTY arms carry none — an inconsistent pair would frame a checkTicket
+        //whose hmac size field lands at the wrong offset (TPM 2.0 Library Part 2, clause 10.6.4, Table 111).
+        bool isMetadataArmSelected = checkTicketTag == (ushort)TpmStConstants.TPM_ST_DIGEST_VERIFIED;
+        if(isMetadataArmSelected != checkTicketMetadata.HasValue)
+        {
+            throw new ArgumentException(
+                "The checkTicket's [tag]metadata must be present exactly when the tag is TPM_ST_DIGEST_VERIFIED (Part 2, clause 10.6.4, Table 111).",
+                nameof(checkTicketMetadata));
+        }
 
         IMemoryOwner<byte> approvedPolicyOwner = pool.Rent(Math.Max(approvedPolicy.Length, 1));
         approvedPolicy.CopyTo(approvedPolicyOwner.Memory.Span);
@@ -126,6 +149,7 @@ public sealed class PolicyAuthorizeInput: ITpmCommandInput, IDisposable
             keySignOwner.Memory[..keySign.Length],
             checkTicketTag,
             checkTicketHierarchy,
+            checkTicketMetadata,
             checkTicketDigestOwner,
             checkTicketDigestOwner.Memory[..checkTicketDigest.Length]);
     }
@@ -140,6 +164,7 @@ public sealed class PolicyAuthorizeInput: ITpmCommandInput, IDisposable
         ReadOnlyMemory<byte> keySign,
         ushort checkTicketTag,
         uint checkTicketHierarchy,
+        TpmiAlgHash? checkTicketMetadata,
         IMemoryOwner<byte> checkTicketDigestOwner,
         ReadOnlyMemory<byte> checkTicketDigest)
     {
@@ -152,6 +177,7 @@ public sealed class PolicyAuthorizeInput: ITpmCommandInput, IDisposable
         KeySign = keySign;
         CheckTicketTag = checkTicketTag;
         CheckTicketHierarchy = checkTicketHierarchy;
+        CheckTicketMetadata = checkTicketMetadata;
         CheckTicketDigestOwner = checkTicketDigestOwner;
         CheckTicketDigest = checkTicketDigest;
     }
@@ -163,7 +189,9 @@ public sealed class PolicyAuthorizeInput: ITpmCommandInput, IDisposable
                sizeof(ushort) + ApprovedPolicy.Length +                                       //approvedPolicy (TPM2B_DIGEST).
                sizeof(ushort) + PolicyRef.Length +                                             //policyRef (TPM2B_NONCE).
                sizeof(ushort) + KeySign.Length +                                               //keySign (TPM2B_NAME).
-               sizeof(ushort) + sizeof(uint) + sizeof(ushort) + CheckTicketDigest.Length;      //checkTicket (TPMT_TK_VERIFIED).
+               sizeof(ushort) + sizeof(uint) +                                                 //checkTicket: tag + hierarchy.
+               (CheckTicketMetadata.HasValue ? sizeof(ushort) : 0) +                           //checkTicket: [tag]metadata (TPM_ST_DIGEST_VERIFIED only).
+               sizeof(ushort) + CheckTicketDigest.Length;                                      //checkTicket: hmac (TPM2B_DIGEST).
     }
 
     /// <inheritdoc/>
@@ -175,28 +203,35 @@ public sealed class PolicyAuthorizeInput: ITpmCommandInput, IDisposable
     /// <inheritdoc/>
     public void WriteParameters(ref TpmWriter writer)
     {
-        ObjectDisposedException.ThrowIf(disposed, this);
+        ObjectDisposedException.ThrowIf(Disposed, this);
 
         writer.WriteTpm2b(ApprovedPolicy.Span);
         writer.WriteTpm2b(PolicyRef.Span);
         writer.WriteTpm2b(KeySign.Span);
 
-        //checkTicket (TPMT_TK_VERIFIED): tag + hierarchy + digest (TPM2B_DIGEST).
+        //checkTicket (TPMT_TK_VERIFIED): tag + hierarchy + [tag]metadata (TPM_ST_DIGEST_VERIFIED only) + hmac
+        //(TPM2B_DIGEST) (TPM 2.0 Library Part 2, clause 10.6.5, Table 113).
         writer.WriteUInt16(CheckTicketTag);
         writer.WriteUInt32(CheckTicketHierarchy);
+
+        if(CheckTicketMetadata is { } checkTicketMetadataHash)
+        {
+            checkTicketMetadataHash.WriteTo(ref writer);
+        }
+
         writer.WriteTpm2b(CheckTicketDigest.Span);
     }
 
     /// <inheritdoc/>
     public void Dispose()
     {
-        if(!disposed)
+        if(!Disposed)
         {
             ApprovedPolicyOwner.Dispose();
             PolicyRefOwner.Dispose();
             KeySignOwner.Dispose();
             CheckTicketDigestOwner.Dispose();
-            disposed = true;
+            Disposed = true;
         }
     }
 

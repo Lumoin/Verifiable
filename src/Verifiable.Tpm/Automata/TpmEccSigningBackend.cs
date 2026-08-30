@@ -29,7 +29,7 @@ public delegate ValueTask<TpmGeneratedEccKey> TpmEccKeyGenerationDelegate(
 
 /// <summary>
 /// Signs a pre-computed digest with an ECC private scalar, modelling <c>TPM2_Sign()</c> over an
-/// externally-computed digest with a NULL validation ticket (TPM 2.0 Library Part 3, clause 20.2).
+/// externally-computed digest with a NULL validation ticket (TPM 2.0 Library Part 3, clause 20.5).
 /// </summary>
 /// <remarks>
 /// The digest is signed <strong>directly</strong> — the backend must not hash it again, since the caller
@@ -53,8 +53,8 @@ public delegate ValueTask<Signature> TpmEccDigestSignDelegate(
 /// <summary>
 /// Computes an elliptic-curve Diffie-Hellman shared value: the x-coordinate of the point
 /// <c>privateScalar · peerPublicPoint</c>, modelling the secret exchange a TPM performs for the credential
-/// protection of <c>TPM2_MakeCredential</c> / <c>TPM2_ActivateCredential</c> (TPM 2.0 Library Part 1, clause 24;
-/// the shared value <c>Z</c> then seeds <c>KDFe</c>, Part 1, clause 9.4.10.3).
+/// protection of <c>TPM2_MakeCredential</c> / <c>TPM2_ActivateCredential</c> (TPM 2.0 Library Part 1, clause 21;
+/// the shared value <c>Z</c> then seeds <c>KDFe</c>, Part 1, clause 8.4.10.3).
 /// </summary>
 /// <remarks>
 /// The curves the backend models have cofactor one, so the plain point multiplication yields the same shared
@@ -80,7 +80,7 @@ public delegate ValueTask<IMemoryOwner<byte>> TpmEccSharedSecretDelegate(
 
 /// <summary>
 /// Verifies that a signature over a pre-computed digest is valid for an elliptic-curve public key, modelling
-/// the public-key operation <c>TPM2_VerifySignature()</c> performs (TPM 2.0 Library Part 3, clause 20.1).
+/// the public-key operation <c>TPM2_VerifySignature()</c> performs (TPM 2.0 Library Part 3, clause 20.2).
 /// </summary>
 /// <remarks>
 /// The digest is verified <strong>directly</strong> — the backend must not hash it again, mirroring
@@ -116,7 +116,7 @@ public delegate ValueTask<bool> TpmEccDigestVerifyDelegate(
 /// <param name="SignDigest">Signs a digest with a retained key for <c>TPM2_Sign()</c>.</param>
 /// <param name="ComputeSharedSecret">
 /// Computes the ECDH shared value the credential protection of <c>TPM2_MakeCredential</c> /
-/// <c>TPM2_ActivateCredential</c> transports the seed with (TPM 2.0 Library Part 1, clause 24).
+/// <c>TPM2_ActivateCredential</c> transports the seed with (TPM 2.0 Library Part 1, clause 21).
 /// </param>
 /// <param name="VerifyDigest">Verifies a digest/signature pair against a public point for <c>TPM2_VerifySignature()</c>.</param>
 public sealed record TpmEccSigningBackend(

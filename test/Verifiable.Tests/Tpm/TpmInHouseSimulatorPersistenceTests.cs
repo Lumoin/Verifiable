@@ -76,11 +76,11 @@ internal sealed class TpmInHouseSimulatorPersistenceTests
 
     /// <summary>
     /// <c>TPM2_EvictControl</c>'s @auth slot (<c>TPMI_RH_PROVISION</c>, Auth Role USER; TPM 2.0 Library Part
-    /// 3, clause 28.5) is verified against the named provisioning hierarchy's own authorization value through
+    /// 3, clause 27.5) is verified against the named provisioning hierarchy's own authorization value through
     /// the house hierarchy-authorization ladder: after <c>TPM2_HierarchyChangeAuth</c> installs a real owner
     /// password, a WRONG password is refused with the bare, uncharged <c>TPM_RC_BAD_AUTH</c> a permanent
     /// entity answers - never session-encoded and never a dictionary-attack strike, because a hierarchy
-    /// authorization value carries no such protection (Part 1, clause 17.8.1) - while the CORRECT password
+    /// authorization value carries no such protection (Part 1, clause 16.8.1) - while the CORRECT password
     /// persists the transient key, and a second correctly-authorized call evicts it.
     /// </summary>
     [TestMethod]
@@ -112,7 +112,7 @@ internal sealed class TpmInHouseSimulatorPersistenceTests
         TpmResult<TpmDictionaryAttackParameters> afterWrong = await tpm.GetDictionaryAttackParametersAsync(pool, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(
             before.Value.LockoutCounter, afterWrong.Value.LockoutCounter,
-            "A wrong owner password must never charge the dictionary-attack counter (TPM 2.0 Library Part 1, clause 17.8.1 exempts permanent entities).");
+            "A wrong owner password must never charge the dictionary-attack counter (TPM 2.0 Library Part 1, clause 16.8.1 exempts permanent entities).");
 
         TpmResult<EvictControlResponse> persistResult = await EvictControlAsync(
             tpm, registry, pool, primary.ObjectHandle.Value, PersistentHandle, OwnerAuthBytes).ConfigureAwait(false);
@@ -177,7 +177,7 @@ internal sealed class TpmInHouseSimulatorPersistenceTests
     /// The authorizing hierarchy's availability is resolved as a handle-area outcome on @auth, ahead of the
     /// next handle's presence (TPM 2.0 Library Part 3, clause 5.4): with the owner hierarchy disabled — which
     /// also flushes its transient objects — a request naming an absent object handle answers
-    /// <c>TPM_RC_HIERARCHY</c> (a disabled hierarchy's authValue can authorize nothing, Part 1, clause 11.2),
+    /// <c>TPM_RC_HIERARCHY</c> (a disabled hierarchy's authValue can authorize nothing, Part 1, clause 10.2),
     /// not the <c>TPM_RC_HANDLE</c> the presence probe would give.
     /// </summary>
     [TestMethod]
@@ -230,7 +230,7 @@ internal sealed class TpmInHouseSimulatorPersistenceTests
     /// handle-area outcomes — admit, then enable — before probing the next handle's presence, the same
     /// convention <c>TPM2_EvictControl()</c> holds. With the owner hierarchy disabled, a request naming an
     /// unknown NV Index handle answers <c>TPM_RC_HIERARCHY</c> (a disabled hierarchy's authValue can authorize
-    /// nothing, Part 1, clause 11.2), not the <c>TPM_RC_HANDLE</c> the Index presence probe alone would give.
+    /// nothing, Part 1, clause 10.2), not the <c>TPM_RC_HANDLE</c> the Index presence probe alone would give.
     /// </summary>
     [TestMethod]
     public async Task NvUndefineSpaceUnderADisabledOwnerHierarchyAnswersHierarchy()
@@ -282,7 +282,7 @@ internal sealed class TpmInHouseSimulatorPersistenceTests
                 Assert.IsTrue(disableResult.IsSuccess, $"Disabling the owner hierarchy failed: '{disableResult.ResponseCode}'.");
 
                 //The rejection below is decided before the Index's Name is ever computed, so this placeholder
-                //never has to carry the Index's genuine Name (TPM 2.0 Library Part 1, clause 16.7) - it only
+                //never has to carry the Index's genuine Name (TPM 2.0 Library Part 1, clause 15.7) - it only
                 //has to be non-empty, satisfying the executor's requirement that a named handle supply one.
                 ReadOnlyMemory<byte>[] handleNames = [ReadOnlyMemory<byte>.Empty, new byte[] { 0x00 }];
                 var input = new NvUndefineSpaceInput(TpmRh.TPM_RH_OWNER, NvIndexHandle);
@@ -446,7 +446,7 @@ internal sealed class TpmInHouseSimulatorPersistenceTests
 
     /// <summary>
     /// Starts an HMAC session bound to the owner hierarchy through the production
-    /// <c>TPM2_StartAuthSession()</c> path (TPM 2.0 Library Part 1, clause 17.6.10, equation 20), deriving the
+    /// <c>TPM2_StartAuthSession()</c> path (TPM 2.0 Library Part 1, clause 16.6.10, equation 20), deriving the
     /// session key from the owner's Empty Buffer authValue - this file never rotates it away before calling
     /// this helper.
     /// </summary>

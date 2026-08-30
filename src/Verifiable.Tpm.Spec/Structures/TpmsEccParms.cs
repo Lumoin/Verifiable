@@ -27,7 +27,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// For restricted decryption keys, symmetric must be set to a supported algorithm.
 /// </para>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 12.2.3.6, Table 216.
+/// Specification reference: TPM 2.0 Library Part 2, Section 12.2.3.6, Table 229.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -60,7 +60,24 @@ public readonly record struct TpmsEccParms
     /// Gets the optional KDF scheme.
     /// </summary>
     /// <remarks>
-    /// Currently has no effect in TPM commands. Should be TPM_ALG_NULL.
+    /// <para>
+    /// TPM 2.0 Library Part 2, Table 229 (v185): "if the key is an unrestricted decryption
+    /// TPM_ALG_ECDH key, an optional key derivation scheme. <b>Shall be NULL in all other cases
+    /// (TPM_RC_KDF).</b> If this field is not NULL, then this key can be used with
+    /// TPM2_Encapsulate() and TPM2_Decapsulate() ... the KEM is equivalent to DHKEM(curveID, kdf)
+    /// from RFC 9180. Currently, TPM_ALG_HKDF is the only supported KDF for DHKEM. ...
+    /// scheme.details.ecdh.hashAlg is ignored, because kdf specifies all parameters of the KDF ...
+    /// If this field is NULL, then this key cannot be used with TPM2_Encapsulate() and
+    /// TPM2_Decapsulate()."
+    /// </para>
+    /// <para>
+    /// A non-NULL value here is therefore not a passive parameter but the KEM admission gate: it
+    /// is what turns an unrestricted <c>TPM_ALG_ECDH</c> decryption key (<see cref="Scheme"/>,
+    /// <see cref="TpmtEccScheme.Ecdh"/>) into a key <c>TPM2_Encapsulate()</c>/<c>TPM2_Decapsulate()</c>
+    /// will accept — every other key shape must carry <see cref="TpmtKdfScheme.Null"/>. Once this
+    /// field is HKDF, <see cref="Scheme"/>'s own hash algorithm plays no role in the KEM: the DHKEM
+    /// hash is this field's <see cref="TpmtKdfScheme.HashAlg"/> alone.
+    /// </para>
     /// </remarks>
     public TpmtKdfScheme Kdf { get; init; }
 
@@ -115,6 +132,42 @@ public readonly record struct TpmsEccParms
         Scheme = TpmtEccScheme.Ecdh(TpmAlgIdConstants.TPM_ALG_SHA256),
         CurveId = curve,
         Kdf = TpmtKdfScheme.Null
+    };
+
+
+    /// <summary>
+    /// Creates ECC parameters for a KEM key usable with TPM2_Encapsulate() and TPM2_Decapsulate().
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Neither <see cref="ForKeyAgreement"/> (kdf NULL, the ECDH_ZGen shape) nor <see cref="ForSigning"/>
+    /// nor <see cref="ForStorage"/> can express the KEM admission gate Table 229 requires: a non-NULL
+    /// <see cref="Kdf"/> on an unrestricted decryption <c>TPM_ALG_ECDH</c> key (TPM 2.0 Library Part 2,
+    /// Table 229; see <see cref="Kdf"/>'s remarks for the load-bearing sentences). This factory sets
+    /// <c>kdf.scheme</c> to <c>TPM_ALG_HKDF</c> — "currently ... the only supported KDF for DHKEM" — which
+    /// makes the resulting key DHKEM(<paramref name="curve"/>, HKDF-<paramref name="kdfHashAlg"/>) per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9180">RFC 9180</see>.
+    /// </para>
+    /// <para>
+    /// <paramref name="curve"/> and <paramref name="kdfHashAlg"/> together select the DHKEM suite. The wire
+    /// still requires <c>scheme.details.ecdh.hashAlg</c> to hold some value even though Table 229 states it
+    /// "is ignored" once <see cref="Kdf"/> is non-NULL — but that ignore-note is scoped to
+    /// <c>TPM2_Encapsulate()</c>/<c>TPM2_Decapsulate()</c>, not to object creation, where "all of the bits
+    /// of the template are used" (Part 3, clause 24.1.1). <paramref name="schemeHashAlg"/> therefore carries
+    /// the caller's own <c>scheme.details.ecdh.hashAlg</c> independently of <paramref name="kdfHashAlg"/> —
+    /// the KDF's own hash is the one that actually parameterizes DHKEM's <c>ExtractAndExpand</c>.
+    /// </para>
+    /// </remarks>
+    /// <param name="curve">The ECC curve — the DHKEM's <c>curveID</c>.</param>
+    /// <param name="schemeHashAlg">The <c>scheme.details.ecdh.hashAlg</c> to carry — inert on the KEM path, but still template data that a conformant creation must echo unchanged.</param>
+    /// <param name="kdfHashAlg">The HKDF hash algorithm — the DHKEM's KDF hash.</param>
+    /// <returns>The ECC parameters configured as a KEM key.</returns>
+    public static TpmsEccParms ForKeyEncapsulation(TpmEccCurveConstants curve, TpmAlgIdConstants schemeHashAlg, TpmAlgIdConstants kdfHashAlg) => new()
+    {
+        Symmetric = TpmtSymDefObject.Null,
+        Scheme = TpmtEccScheme.Ecdh(schemeHashAlg),
+        CurveId = curve,
+        Kdf = new TpmtKdfScheme { Scheme = TpmAlgIdConstants.TPM_ALG_HKDF, HashAlg = kdfHashAlg }
     };
 
 

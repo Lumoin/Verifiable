@@ -44,7 +44,7 @@ namespace Verifiable.Tests.Tpm;
 /// <see cref="EquationTwelveTicketDigestIsAVerifiableHmacOfTheInjectedSeedAndTimeEpoch"/> is the independent,
 /// oracle-free proof that the ticket digest really is
 /// <c>HMAC(proof, tag || cpHash || policyRef || authName || timeout || timeEpoch || resetCount)</c> — equation
-/// 12 (TPM 2.0 Library Part 2, Section 10.7.5, Table 111) — hand-assembled and HMAC'd in this file, not merely
+/// 12 (TPM 2.0 Library Part 2, Section 10.6.6, Table 114) — hand-assembled and HMAC'd in this file, not merely
 /// re-invoking the implementation under test. It reproduces the simulator's own <c>TimeEpoch</c> derivation
 /// (a one-time FNV-1a fold of the injected seed, then one well-known MurmurHash3 64-bit finalizer regeneration
 /// per completed <c>TPM2_Startup()</c>) from those two algorithms' own public definitions, the same technique
@@ -252,7 +252,7 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
     /// are split at all: a clear "change[s] the storage primary seed (SPS) to a new value from the TPM's random
     /// number generator" and with it "shProof and ehProof" (TPM 2.0 Library Part 3, Section 24.6.1), while the
     /// platform proof appears nowhere on that list. A ticket is an HMAC keyed by its hierarchy's proof (Part 1,
-    /// Section 12.5), and there is no invalidation pass over any list of outstanding tickets - "When the SPS is
+    /// Section 11.5), and there is no invalidation pass over any list of outstanding tickets - "When the SPS is
     /// changed, shProof will change so that the saved contexts cannot be reloaded" is the whole mechanism. So an
     /// owner-hierarchy ticket minted before a clear must stop re-verifying afterwards (<c>TPM_RC_TICKET</c>, the
     /// recompute-and-compare failure) while a platform-hierarchy ticket minted in the same breath must still
@@ -263,7 +263,7 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
     /// Both tickets are minted against the minting session's own retained <c>nonceTPM</c>, which makes the
     /// authorization session-bound rather than absolute and therefore leaves <c>expiresOnReset</c> CLEAR (Part 3,
     /// Section 23.2.2). That matters here: with it SET, equation 12 folds <c>resetCount</c> into the ticket
-    /// digest (Part 2, Section 10.7.5, Table 111), and a clear sets <c>resetCount</c> to zero - so BOTH tickets
+    /// digest (Part 2, Section 10.6.6, Table 114), and a clear sets <c>resetCount</c> to zero - so BOTH tickets
     /// would die and the proof split would be unobservable. Excluding that term isolates the proof.
     /// </remarks>
     [TestMethod]
@@ -342,7 +342,7 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
 
     /// <summary>
     /// A <c>timeout</c> whose wire length is not exactly 8 octets is rejected with <c>TPM_RC_SIZE</c> — a
-    /// tighter rule than Part 2 Table 100's general "8 or less" for <c>TPM2B_TIMEOUT</c>, specific to this
+    /// tighter rule than Part 2 Table 98's general "8 or less" for <c>TPM2B_TIMEOUT</c>, specific to this
     /// command because it must extract the expires-on-reset flag bit and reproduce the exact 64-bit value that
     /// was hashed into the original ticket. Part 4's <c>TPM2_PolicyTicket()</c>, printed page 654, states the
     /// rule as <c>if(in-&gt;timeout.t.size != sizeof(UINT64)) return TPM_RCS_SIZE + RC_PolicyTicket_timeout;</c>.
@@ -697,8 +697,8 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
     }
 
     /// <summary>
-    /// R-7: an illegal <c>TPMT_TK_AUTH.tag</c> (neither <c>TPM_ST_AUTH_SIGNED</c> nor <c>TPM_ST_AUTH_SECRET</c>)
-    /// is rejected with <c>TPM_RC_TAG</c> at the wire reader (Part 2, Table 111: "TPM_RC_TAG error returned when
+    /// An illegal <c>TPMT_TK_AUTH.tag</c> (neither <c>TPM_ST_AUTH_SIGNED</c> nor <c>TPM_ST_AUTH_SECRET</c>)
+    /// is rejected with <c>TPM_RC_TAG</c> at the wire reader (Part 2, Table 114: "TPM_RC_TAG error returned when
     /// tag is not TPM_ST_AUTH_*") — the only place this constraint is actually enforced, since the
     /// re-verification recompute has no independent tag-legality check of its own (an illegal tag would still
     /// recompute a comparable, if forgery-resistant, HMAC).
@@ -736,7 +736,7 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
     }
 
     /// <summary>
-    /// <c>TPMT_TK_AUTH.hierarchy</c> is typed <c>TPMI_RH_HIERARCHY+</c> (TPM 2.0 Library Part 2, Table 111):
+    /// <c>TPMT_TK_AUTH.hierarchy</c> is typed <c>TPMI_RH_HIERARCHY+</c> (TPM 2.0 Library Part 2, Table 114):
     /// its legal set is exactly <c>{TPM_RH_OWNER, TPM_RH_PLATFORM, TPM_RH_ENDORSEMENT, TPM_RH_NULL}</c>. A
     /// ticket carrying a hierarchy value outside that set — for example a transient-object-range handle — is
     /// rejected with <c>TPM_RC_VALUE</c> at the wire reader, the same layer <c>TPMT_TK_AUTH.tag</c>'s own
@@ -777,7 +777,7 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
 
     /// <summary>
     /// The independent equation 12 known-answer test: hand-assembles <c>tag || cpHash || policyRef || authName
-    /// || timeout || timeEpoch || resetCount</c> (TPM 2.0 Library Part 2, Section 10.7.5, Table 111) and HMACs
+    /// || timeout || timeEpoch || resetCount</c> (TPM 2.0 Library Part 2, Section 10.6.6, Table 114) and HMACs
     /// it with a proof and a TimeEpoch both reproduced from the injected seed's own public, well-known
     /// derivation algorithms (SHA-256(seed || hierarchy) for the proof; one FNV-1a fold plus one MurmurHash3
     /// 64-bit finalizer regeneration for TimeEpoch) — comparing the result against a production-minted ticket.
@@ -994,7 +994,7 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
     }
 
     /// <summary>
-    /// Equation 12's own field order, byte-for-byte (TPM 2.0 Library Part 2, Section 10.7.5, Table 111):
+    /// Equation 12's own field order, byte-for-byte (TPM 2.0 Library Part 2, Section 10.6.6, Table 114):
     /// <c>tag || cpHash || policyRef || authName || timeout || timeEpoch || resetCount</c>.
     /// </summary>
     private static byte[] BuildAuthTicketMessage(

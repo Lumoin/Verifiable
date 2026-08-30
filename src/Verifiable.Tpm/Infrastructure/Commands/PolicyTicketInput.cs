@@ -18,7 +18,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// <see cref="TicketTag"/> — never <c>TPM_CC_PolicyTicket</c> itself. As long as the ticket has not expired, its
 /// effect on the session's policyDigest and timeout is identical to the TPM2_PolicySigned()/TPM2_PolicySecret()
 /// call that produced it, which is what makes ticket replay a valid stand-in for holding the original
-/// authorization material (TPM 2.0 Library Part 1, Section 17.7.12).
+/// authorization material (TPM 2.0 Library Part 1, Section 16.7.12).
 /// </para>
 /// <para>
 /// Unlike TPM2_PolicySigned()/TPM2_PolicySecret(), this command carries no nonceTPM of its own —
@@ -26,7 +26,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// fresh deadline computed against a live nonce.
 /// </para>
 /// <para>
-/// Command structure (TPM 2.0 Part 3, Section 23.5, Table 131):
+/// Command structure (TPM 2.0 Part 3, Section 23.5, Table 148):
 /// </para>
 /// <list type="bullet">
 ///   <item><description>policySession (TPMI_SH_POLICY): The policy session handle being extended. Requires no authorization.</description></item>
@@ -62,7 +62,7 @@ public sealed class PolicyTicketInput: ITpmCommandInput, IDisposable
 
     /// <summary>
     /// Gets the timeout value exactly as returned when the ticket was produced (the raw big-endian
-    /// TPM2B_TIMEOUT buffer, MSb-flagged per TPM 2.0 Library Part 2, Section 10.4.10).
+    /// TPM2B_TIMEOUT buffer, MSb-flagged per TPM 2.0 Library Part 2, Section 10.3.10).
     /// </summary>
     public ReadOnlyMemory<byte> Timeout { get; }
 

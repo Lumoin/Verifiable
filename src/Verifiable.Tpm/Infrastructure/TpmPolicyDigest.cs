@@ -2,6 +2,7 @@ using System;
 using System.Buffers;
 using System.Buffers.Binary;
 using Verifiable.Cryptography;
+using Verifiable.Tpm.Spec.Attributes;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Structures;
 
@@ -110,7 +111,7 @@ public static class TpmPolicyDigest
     /// <c>policyDigestnew = H(policyDigestold || TPM_CC_PolicyPCR || pcrs || pcrDigest)</c>.
     /// </summary>
     /// <param name="current">The current policyDigest (<see cref="Size"/> bytes; all zero for a fresh session).</param>
-    /// <param name="marshaledPcrs">The marshaled TPML_PCR_SELECTION, exactly as sent in the command.</param>
+    /// <param name="marshaledPcrs">The marshaled TPML_PCR_SELECTION as the TPM folds it (Part 3, clause 23.7): predicting a trial-session digest, the selection exactly as sent; predicting a real-session digest, the target TPM's modified value, with bits corresponding to PCR that TPM does not implement cleared.</param>
     /// <param name="pcrDigest">The digest of the selected PCR values that the policy binds to.</param>
     /// <param name="policyHashAlgorithm">The session's policy hash algorithm.</param>
     /// <param name="destination">Receives the new policyDigest; must be at least <see cref="Size"/> bytes.</param>
@@ -350,7 +351,7 @@ public static class TpmPolicyDigest
 
     /// <summary>
     /// Computes the policyDigest for TPM2_PolicyOR over the branch list in the <c>TPML_DIGEST</c> the command
-    /// carries on the wire (TPM 2.0 Library Part 2, clause 10.9.5, Table 123):
+    /// carries on the wire (TPM 2.0 Library Part 2, clause 10.8.5, Table 126):
     /// <c>policyDigest = H(0...0 || TPM_CC_PolicyOR || branchDigest0 || branchDigest1 || ...)</c>.
     /// </summary>
     /// <remarks>
@@ -511,6 +512,309 @@ public static class TpmPolicyDigest
         BinaryPrimitives.WriteUInt32BigEndian(buffer[bufferOffset..], (uint)TpmCcConstants.TPM_CC_PolicyCounterTimer);
         bufferOffset += sizeof(uint);
         argHash.CopyTo(buffer[bufferOffset..]);
+
+        int written = Hash(buffer, policyHashAlgorithm, destination);
+        buffer.Clear();
+
+        return written;
+    }
+
+    /// <summary>
+    /// Extends a policyDigest for TPM2_PolicyPassword:
+    /// <c>policyDigestnew = H(policyDigestold || TPM_CC_PolicyAuthValue)</c>.
+    /// </summary>
+    /// <remarks>
+    /// TPM2_PolicyPassword folds the SAME command code as <see cref="ExtendForAuthValue"/> — TPM_CC_PolicyAuthValue,
+    /// not a code of its own (TPM 2.0 Library Part 3, Section 23.18: "the same extend value as used with
+    /// TPM2_PolicyAuthValue()") — so a single authPolicy authorizes with either an HMAC over the object's
+    /// authValue (TPM2_PolicyAuthValue) or the authValue itself presented as a cleartext password
+    /// (TPM2_PolicyPassword); only the session's isPasswordNeeded/isAuthValueNeeded flags and the authorization
+    /// wire shape differ between the two commands.
+    /// </remarks>
+    /// <param name="current">The current policyDigest (<see cref="Size"/> bytes; all zero for a fresh session).</param>
+    /// <param name="policyHashAlgorithm">The session's policy hash algorithm.</param>
+    /// <param name="destination">Receives the new policyDigest; must be at least <see cref="Size"/> bytes.</param>
+    /// <returns>The number of digest bytes written.</returns>
+    public static int ExtendForPassword(
+        ReadOnlySpan<byte> current,
+        TpmAlgIdConstants policyHashAlgorithm,
+        Span<byte> destination)
+    {
+        return ExtendForAuthValue(current, policyHashAlgorithm, destination);
+    }
+
+    /// <summary>
+    /// Extends a policyDigest for TPM2_PolicyCpHash:
+    /// <c>policyDigestnew = H(policyDigestold || TPM_CC_PolicyCpHash || cpHashA)</c>.
+    /// </summary>
+    /// <param name="current">The current policyDigest (<see cref="Size"/> bytes; all zero for a fresh session).</param>
+    /// <param name="cpHashA">The command parameter digest the policy binds to.</param>
+    /// <param name="policyHashAlgorithm">The session's policy hash algorithm.</param>
+    /// <param name="destination">Receives the new policyDigest; must be at least <see cref="Size"/> bytes.</param>
+    /// <returns>The number of digest bytes written.</returns>
+    public static int ExtendForCpHash(
+        ReadOnlySpan<byte> current,
+        ReadOnlySpan<byte> cpHashA,
+        TpmAlgIdConstants policyHashAlgorithm,
+        Span<byte> destination)
+    {
+        //H( current || TPM_CC_PolicyCpHash || cpHashA ); no size prefix, the raw digest bytes are folded.
+        int length = current.Length + sizeof(uint) + cpHashA.Length;
+        using IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(length);
+        Span<byte> buffer = owner.Memory.Span[..length];
+        int offset = 0;
+        current.CopyTo(buffer);
+        offset += current.Length;
+        BinaryPrimitives.WriteUInt32BigEndian(buffer[offset..], (uint)TpmCcConstants.TPM_CC_PolicyCpHash);
+        offset += sizeof(uint);
+        cpHashA.CopyTo(buffer[offset..]);
+
+        int written = Hash(buffer, policyHashAlgorithm, destination);
+        buffer.Clear();
+
+        return written;
+    }
+
+    /// <summary>
+    /// Extends a policyDigest for TPM2_PolicyNameHash:
+    /// <c>policyDigestnew = H(policyDigestold || TPM_CC_PolicyNameHash || nameHash)</c>.
+    /// </summary>
+    /// <param name="current">The current policyDigest (<see cref="Size"/> bytes; all zero for a fresh session).</param>
+    /// <param name="nameHash">The digest of the concatenated target Names the policy binds to.</param>
+    /// <param name="policyHashAlgorithm">The session's policy hash algorithm.</param>
+    /// <param name="destination">Receives the new policyDigest; must be at least <see cref="Size"/> bytes.</param>
+    /// <returns>The number of digest bytes written.</returns>
+    public static int ExtendForNameHash(
+        ReadOnlySpan<byte> current,
+        ReadOnlySpan<byte> nameHash,
+        TpmAlgIdConstants policyHashAlgorithm,
+        Span<byte> destination)
+    {
+        //H( current || TPM_CC_PolicyNameHash || nameHash ); no size prefix, the raw digest bytes are folded.
+        int length = current.Length + sizeof(uint) + nameHash.Length;
+        using IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(length);
+        Span<byte> buffer = owner.Memory.Span[..length];
+        int offset = 0;
+        current.CopyTo(buffer);
+        offset += current.Length;
+        BinaryPrimitives.WriteUInt32BigEndian(buffer[offset..], (uint)TpmCcConstants.TPM_CC_PolicyNameHash);
+        offset += sizeof(uint);
+        nameHash.CopyTo(buffer[offset..]);
+
+        int written = Hash(buffer, policyHashAlgorithm, destination);
+        buffer.Clear();
+
+        return written;
+    }
+
+    /// <summary>
+    /// Extends a policyDigest for TPM2_PolicyTemplate:
+    /// <c>policyDigestnew = H(policyDigestold || TPM_CC_PolicyTemplate || templateHash)</c>.
+    /// </summary>
+    /// <param name="current">The current policyDigest (<see cref="Size"/> bytes; all zero for a fresh session).</param>
+    /// <param name="templateHash">The digest of the bound object template.</param>
+    /// <param name="policyHashAlgorithm">The session's policy hash algorithm.</param>
+    /// <param name="destination">Receives the new policyDigest; must be at least <see cref="Size"/> bytes.</param>
+    /// <returns>The number of digest bytes written.</returns>
+    public static int ExtendForTemplate(
+        ReadOnlySpan<byte> current,
+        ReadOnlySpan<byte> templateHash,
+        TpmAlgIdConstants policyHashAlgorithm,
+        Span<byte> destination)
+    {
+        //H( current || TPM_CC_PolicyTemplate || templateHash ); no size prefix, the raw digest bytes are folded.
+        int length = current.Length + sizeof(uint) + templateHash.Length;
+        using IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(length);
+        Span<byte> buffer = owner.Memory.Span[..length];
+        int offset = 0;
+        current.CopyTo(buffer);
+        offset += current.Length;
+        BinaryPrimitives.WriteUInt32BigEndian(buffer[offset..], (uint)TpmCcConstants.TPM_CC_PolicyTemplate);
+        offset += sizeof(uint);
+        templateHash.CopyTo(buffer[offset..]);
+
+        int written = Hash(buffer, policyHashAlgorithm, destination);
+        buffer.Clear();
+
+        return written;
+    }
+
+    /// <summary>
+    /// Extends a policyDigest for TPM2_PolicyDuplicationSelect (TPM 2.0 Part 3, Section 23.15, its equation (8)):
+    /// with <paramref name="isObjectIncluded"/> SET,
+    /// <c>policyDigestnew = H(policyDigestold || TPM_CC_PolicyDuplicationSelect || objectName.name || newParentName.name || includeObject)</c>;
+    /// otherwise <c>policyDigestnew = H(policyDigestold || TPM_CC_PolicyDuplicationSelect || newParentName.name || includeObject)</c>.
+    /// Each Name is folded as its <c>name</c> octets alone ("the UINT16 size is not included in the hash") and
+    /// includeObject as one TPMI_YES_NO octet (0x01 for YES, 0x00 for NO).
+    /// </summary>
+    /// <param name="current">The current policyDigest (<see cref="Size"/> bytes; all zero for a fresh session).</param>
+    /// <param name="objectName">The Name of the object to be duplicated; folded only when <paramref name="isObjectIncluded"/> is SET.</param>
+    /// <param name="newParentName">The Name of the new parent the duplication is qualified to.</param>
+    /// <param name="isObjectIncluded">Whether the object Name is folded (YES) or the policy binds the new parent alone (NO).</param>
+    /// <param name="policyHashAlgorithm">The session's policy hash algorithm.</param>
+    /// <param name="destination">Receives the new policyDigest; must be at least <see cref="Size"/> bytes.</param>
+    /// <returns>The number of digest bytes written.</returns>
+    public static int ExtendForDuplicationSelect(
+        ReadOnlySpan<byte> current,
+        ReadOnlySpan<byte> objectName,
+        ReadOnlySpan<byte> newParentName,
+        bool isObjectIncluded,
+        TpmAlgIdConstants policyHashAlgorithm,
+        Span<byte> destination)
+    {
+        //H( current || TPM_CC_PolicyDuplicationSelect || [objectName ||] newParentName || includeObject ); the Names
+        //are folded without their size prefixes and includeObject as a single TPMI_YES_NO octet.
+        int namesLength = (isObjectIncluded ? objectName.Length : 0) + newParentName.Length;
+        int length = current.Length + sizeof(uint) + namesLength + sizeof(byte);
+        using IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(length);
+        Span<byte> buffer = owner.Memory.Span[..length];
+        int offset = 0;
+        current.CopyTo(buffer);
+        offset += current.Length;
+        BinaryPrimitives.WriteUInt32BigEndian(buffer[offset..], (uint)TpmCcConstants.TPM_CC_PolicyDuplicationSelect);
+        offset += sizeof(uint);
+        if(isObjectIncluded)
+        {
+            objectName.CopyTo(buffer[offset..]);
+            offset += objectName.Length;
+        }
+
+        newParentName.CopyTo(buffer[offset..]);
+        offset += newParentName.Length;
+        buffer[offset] = isObjectIncluded ? (byte)1 : (byte)0;
+
+        int written = Hash(buffer, policyHashAlgorithm, destination);
+        buffer.Clear();
+
+        return written;
+    }
+
+    /// <summary>
+    /// Extends a policyDigest for TPM2_PolicyParameters:
+    /// <c>policyDigestnew = H(policyDigestold || TPM_CC_PolicyParameters || pHash)</c> (TPM 2.0 Part 3, Section
+    /// 23.24).
+    /// </summary>
+    /// <param name="current">The current policyDigest (<see cref="Size"/> bytes; all zero for a fresh session).</param>
+    /// <param name="parametersHash">The digest of the command code and parameters the policy binds to.</param>
+    /// <param name="policyHashAlgorithm">The session's policy hash algorithm.</param>
+    /// <param name="destination">Receives the new policyDigest; must be at least <see cref="Size"/> bytes.</param>
+    /// <returns>The number of digest bytes written.</returns>
+    public static int ExtendForParameters(
+        ReadOnlySpan<byte> current,
+        ReadOnlySpan<byte> parametersHash,
+        TpmAlgIdConstants policyHashAlgorithm,
+        Span<byte> destination)
+    {
+        //H( current || TPM_CC_PolicyParameters || pHash ); no size prefix, the raw digest bytes are folded.
+        int length = current.Length + sizeof(uint) + parametersHash.Length;
+        using IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(length);
+        Span<byte> buffer = owner.Memory.Span[..length];
+        int offset = 0;
+        current.CopyTo(buffer);
+        offset += current.Length;
+        BinaryPrimitives.WriteUInt32BigEndian(buffer[offset..], (uint)TpmCcConstants.TPM_CC_PolicyParameters);
+        offset += sizeof(uint);
+        parametersHash.CopyTo(buffer[offset..]);
+
+        int written = Hash(buffer, policyHashAlgorithm, destination);
+        buffer.Clear();
+
+        return written;
+    }
+
+    /// <summary>
+    /// Extends a policyDigest for TPM2_PolicyLocality:
+    /// <c>policyDigestnew = H(policyDigestold || TPM_CC_PolicyLocality || locality)</c>.
+    /// </summary>
+    /// <param name="current">The current policyDigest (<see cref="Size"/> bytes; all zero for a fresh session).</param>
+    /// <param name="locality">The set of localities the policy admits (Part 2, Section 8.5, Table 39), folded as one octet.</param>
+    /// <param name="policyHashAlgorithm">The session's policy hash algorithm.</param>
+    /// <param name="destination">Receives the new policyDigest; must be at least <see cref="Size"/> bytes.</param>
+    /// <returns>The number of digest bytes written.</returns>
+    public static int ExtendForLocality(
+        ReadOnlySpan<byte> current,
+        TpmaLocality locality,
+        TpmAlgIdConstants policyHashAlgorithm,
+        Span<byte> destination)
+    {
+        //H( current || TPM_CC_PolicyLocality || locality ); locality is a single TPMA_LOCALITY octet.
+        int length = current.Length + sizeof(uint) + sizeof(byte);
+        using IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(length);
+        Span<byte> buffer = owner.Memory.Span[..length];
+        int offset = 0;
+        current.CopyTo(buffer);
+        offset += current.Length;
+        BinaryPrimitives.WriteUInt32BigEndian(buffer[offset..], (uint)TpmCcConstants.TPM_CC_PolicyLocality);
+        offset += sizeof(uint);
+        buffer[offset] = (byte)locality;
+
+        int written = Hash(buffer, policyHashAlgorithm, destination);
+        buffer.Clear();
+
+        return written;
+    }
+
+    /// <summary>
+    /// Extends a policyDigest for TPM2_PolicyNvWritten:
+    /// <c>policyDigestnew = H(policyDigestold || TPM_CC_PolicyNvWritten || writtenSet)</c>.
+    /// </summary>
+    /// <param name="current">The current policyDigest (<see cref="Size"/> bytes; all zero for a fresh session).</param>
+    /// <param name="isWrittenSet">The required TPMA_NV_WRITTEN state, folded as TPMI_YES_NO (0x01 for YES, 0x00 for NO).</param>
+    /// <param name="policyHashAlgorithm">The session's policy hash algorithm.</param>
+    /// <param name="destination">Receives the new policyDigest; must be at least <see cref="Size"/> bytes.</param>
+    /// <returns>The number of digest bytes written.</returns>
+    public static int ExtendForNvWritten(
+        ReadOnlySpan<byte> current,
+        bool isWrittenSet,
+        TpmAlgIdConstants policyHashAlgorithm,
+        Span<byte> destination)
+    {
+        //H( current || TPM_CC_PolicyNvWritten || writtenSet ); writtenSet is a single TPMI_YES_NO octet.
+        int length = current.Length + sizeof(uint) + sizeof(byte);
+        using IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(length);
+        Span<byte> buffer = owner.Memory.Span[..length];
+        int offset = 0;
+        current.CopyTo(buffer);
+        offset += current.Length;
+        BinaryPrimitives.WriteUInt32BigEndian(buffer[offset..], (uint)TpmCcConstants.TPM_CC_PolicyNvWritten);
+        offset += sizeof(uint);
+        buffer[offset] = isWrittenSet ? (byte)1 : (byte)0;
+
+        int written = Hash(buffer, policyHashAlgorithm, destination);
+        buffer.Clear();
+
+        return written;
+    }
+
+    /// <summary>
+    /// Computes the policyDigest for TPM2_PolicyAuthorizeNV:
+    /// <c>policyDigest = H(0...0 || TPM_CC_PolicyAuthorizeNV || nvIndex.Name)</c> (TPM 2.0 Part 3, Section 23.22,
+    /// equation 9).
+    /// </summary>
+    /// <remarks>
+    /// The digest is RESET to zero first, exactly like <see cref="ExtendForAuthorize"/>'s own reset — the
+    /// accumulated policyDigest is discarded, never folded in — but unlike <see cref="ExtendForAuthorize"/> there
+    /// is no second policyRef hash: this is a single fold over the NV Index's Name alone.
+    /// </remarks>
+    /// <param name="nvName">The Name of the NV Index whose held authPolicy authorizes the session.</param>
+    /// <param name="policyHashAlgorithm">The session's policy hash algorithm.</param>
+    /// <param name="destination">Receives the new policyDigest; must be at least <see cref="Size"/> bytes.</param>
+    /// <returns>The number of digest bytes written.</returns>
+    public static int ExtendForAuthorizeNv(
+        ReadOnlySpan<byte> nvName,
+        TpmAlgIdConstants policyHashAlgorithm,
+        Span<byte> destination)
+    {
+        int size = Size(policyHashAlgorithm);
+
+        //H( zeros(size) || TPM_CC_PolicyAuthorizeNV || nvName ). The digest is RESET to zero first — the
+        //accumulated policyDigest is never folded in, exactly as ExtendForAuthorize's own reset.
+        int length = size + sizeof(uint) + nvName.Length;
+        using IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(length);
+        Span<byte> buffer = owner.Memory.Span[..length];
+        buffer[..size].Clear();
+        BinaryPrimitives.WriteUInt32BigEndian(buffer[size..], (uint)TpmCcConstants.TPM_CC_PolicyAuthorizeNV);
+        nvName.CopyTo(buffer[(size + sizeof(uint))..]);
 
         int written = Hash(buffer, policyHashAlgorithm, destination);
         buffer.Clear();

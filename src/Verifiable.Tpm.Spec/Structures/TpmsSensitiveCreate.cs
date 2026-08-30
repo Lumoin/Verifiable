@@ -23,7 +23,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// } TPMS_SENSITIVE_CREATE;
 /// </code>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 11.1.15, Table 168.
+/// Specification reference: TPM 2.0 Library Part 2, Section 11.1.15, Table 171.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]

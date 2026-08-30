@@ -32,7 +32,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// TPML_PCR_SELECTION     creationPCR     PCRs to include in creation data
 /// </code>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 3, Section 24.1, Table 174.
+/// Specification reference: TPM 2.0 Library Part 3, Section 24.1, Table 191.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -265,6 +265,65 @@ public sealed class CreatePrimaryInput: ITpmCommandInput, IDisposable
     }
 
     /// <summary>
+    /// Creates a <see cref="CreatePrimaryInput"/> for an unrestricted ECC decryption key usable with
+    /// <c>TPM2_Encapsulate()</c> and <c>TPM2_Decapsulate()</c> — a DHKEM(<paramref name="curve"/>,
+    /// HKDF-<paramref name="kdfHashAlg"/>) key per RFC 9180.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Key differences from <see cref="ForEccKeyAgreementKey"/> (the null-scheme/null-kdf ECDH_ZGen shape):
+    /// </para>
+    /// <list type="bullet">
+    ///   <item><description>Scheme is TPM_ALG_ECDH — see <see cref="TpmtEccScheme.Ecdh"/>.</description></item>
+    ///   <item><description>KDF is TPM_ALG_HKDF over <paramref name="kdfHashAlg"/> — the KEM admission gate TPM 2.0 Library Part 2, Table 229 requires (<see cref="TpmsEccParms.ForKeyEncapsulation"/>); a NULL <c>kdf</c> here is what makes <see cref="ForEccKeyAgreementKey"/>'s key refuse both commands.</description></item>
+    ///   <item><description><see cref="TpmaObject.RESTRICTED"/> stays CLEAR: TPM2_Decapsulate() requires <c>restricted</c> CLEAR and <c>decrypt</c> SET (TPM_RC_ATTRIBUTES otherwise) — the anti-oracle gate that keeps this command from decapsulating a storage parent's Labeled-KEM traffic.</description></item>
+    ///   <item><description><see cref="TpmaObject.SIGN_ENCRYPT"/> stays CLEAR: a KEM key is a decryption key, not a signing key.</description></item>
+    /// </list>
+    /// </remarks>
+    /// <param name="hierarchy">The hierarchy under which to create the primary key.</param>
+    /// <param name="password">Optional password for the key (null for no password).</param>
+    /// <param name="curve">The ECC curve — the DHKEM's <c>curveID</c>.</param>
+    /// <param name="kdfHashAlg">The HKDF hash algorithm — the DHKEM's KDF hash.</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <param name="noDa">
+    /// When <see langword="true"/>, sets TPMA_OBJECT.noDA so that authorization failures against the key do not
+    /// advance the TPM's dictionary-attack lockout counter. Defaults to <see langword="false"/>.
+    /// </param>
+    /// <returns>The command input.</returns>
+    public static CreatePrimaryInput ForEccKemKey(
+        TpmRh hierarchy,
+        string? password,
+        TpmEccCurveConstants curve,
+        TpmAlgIdConstants kdfHashAlg,
+        BaseMemoryPool pool,
+        bool noDa = false)
+    {
+        var objectAttributes =
+            TpmaObject.FIXED_TPM |
+            TpmaObject.FIXED_PARENT |
+            TpmaObject.SENSITIVE_DATA_ORIGIN |
+            TpmaObject.USER_WITH_AUTH |
+            TpmaObject.DECRYPT;
+
+        if(noDa)
+        {
+            objectAttributes |= TpmaObject.NO_DA;
+        }
+
+        var inSensitive = string.IsNullOrEmpty(password)
+            ? Tpm2bSensitiveCreate.CreateEmpty(pool)
+            : Tpm2bSensitiveCreate.WithPassword(password, pool);
+
+        var inPublic = Tpm2bPublic.CreateEccKemKeyTemplate(
+            TpmAlgIdConstants.TPM_ALG_SHA256,
+            objectAttributes,
+            curve,
+            kdfHashAlg);
+
+        return new CreatePrimaryInput(hierarchy, inSensitive, inPublic, Tpm2bData.Empty, TpmlPcrSelection.Empty);
+    }
+
+    /// <summary>
     /// Creates a <see cref="CreatePrimaryInput"/> for an ECC restricted storage key, a key that can act as
     /// a parent for <c>TPM2_Create()</c>.
     /// </summary>
@@ -296,6 +355,37 @@ public sealed class CreatePrimaryInput: ITpmCommandInput, IDisposable
         Tpm2bPublic inPublic = Tpm2bPublic.CreateEccStorageParentTemplate(
             TpmAlgIdConstants.TPM_ALG_SHA256,
             curve,
+            noDa);
+
+        return new CreatePrimaryInput(hierarchy, inSensitive, inPublic, Tpm2bData.Empty, TpmlPcrSelection.Empty);
+    }
+
+    /// <summary>
+    /// Creates a <see cref="CreatePrimaryInput"/> for an ordinary (password-authorizable) RSA restricted
+    /// storage key — the RSA counterpart of <see cref="ForEccStorageParent"/>, and the non-endorsement sibling
+    /// of <see cref="ForRsaEndorsementKey"/>, whose policy-only authorization an ordinary storage parent does
+    /// not carry.
+    /// </summary>
+    /// <param name="hierarchy">The hierarchy under which to create the key.</param>
+    /// <param name="authPassword">The parent's authorization password, or <see langword="null"/>/empty for an empty authValue.</param>
+    /// <param name="keyBits">The RSA modulus size in bits.</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <param name="noDa">When <see langword="true"/>, sets TPMA_OBJECT.noDA on the template.</param>
+    /// <returns>A <see cref="CreatePrimaryInput"/> configured for an RSA storage parent.</returns>
+    public static CreatePrimaryInput ForRsaStorageParent(
+        TpmRh hierarchy,
+        string? authPassword,
+        ushort keyBits,
+        BaseMemoryPool pool,
+        bool noDa = false)
+    {
+        Tpm2bSensitiveCreate inSensitive = string.IsNullOrEmpty(authPassword)
+            ? Tpm2bSensitiveCreate.CreateEmpty(pool)
+            : Tpm2bSensitiveCreate.WithPassword(authPassword, pool);
+
+        Tpm2bPublic inPublic = Tpm2bPublic.CreateRsaStorageParentTemplate(
+            TpmAlgIdConstants.TPM_ALG_SHA256,
+            keyBits,
             noDa);
 
         return new CreatePrimaryInput(hierarchy, inSensitive, inPublic, Tpm2bData.Empty, TpmlPcrSelection.Empty);

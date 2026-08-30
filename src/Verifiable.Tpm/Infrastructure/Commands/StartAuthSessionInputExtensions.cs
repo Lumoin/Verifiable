@@ -27,7 +27,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 ///   <item><description><strong>Bound and salted:</strong> Maximum security with both binding and salt.</description></item>
 /// </list>
 /// <para>
-/// See TPM 2.0 Part 1, Section 17.6 for session binding and salting details.
+/// See TPM 2.0 Part 1, Section 16.6 for session binding and salting details.
 /// </para>
 /// </remarks>
 [SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "The analyzer is not up to date with latest syntax.")]
@@ -45,7 +45,7 @@ public static class StartAuthSessionInputExtensions
         /// <see cref="TpmtSymDef.Xor(TpmAlgIdConstants)"/> to enable XOR obfuscation; the per-command
         /// <c>decrypt</c>/<c>encrypt</c> attributes then select which parameters are protected. Note that an
         /// unbound, unsalted session has an empty session key, so parameter encryption derives only from the
-        /// authValue (Part 1 §19.1); a bound or salted session is required to secure it for commands without an
+        /// authValue (Part 1 §18.1); a bound or salted session is required to secure it for commands without an
         /// authValue.
         /// </param>
         /// <returns>A StartAuthSessionInput configured for an unbound, unsalted HMAC session.</returns>
@@ -103,7 +103,7 @@ public static class StartAuthSessionInputExtensions
         /// Binding folds the bind entity's authValue into the session key
         /// (<c>sessionKey = KDFa(authHash, bindAuthValue, "ATH", nonceTPM, nonceCaller, bits)</c>, Part 1
         /// §17.6.10 eq 20), so a session that subsequently authorizes the bind entity omits that authValue from
-        /// the per-command HMAC key (Part 1 §17.6.10 eq 21/22).
+        /// the per-command HMAC key (Part 1 §16.6.10 eq 21/22).
         /// </para>
         /// <para>
         /// The generated <see cref="StartAuthSessionInput.NonceCaller"/> is the nonceCaller that the key
@@ -136,12 +136,12 @@ public static class StartAuthSessionInputExtensions
         /// <param name="exponent">tpmKey's public exponent.</param>
         /// <param name="tpmKeyNameAlg">
         /// tpmKey's own Name algorithm — sizes the drawn salt and drives OAEP's <c>lhash</c>/MGF1 (TPM 2.0
-        /// Library Part 1, Annex B.10.1); independent of <paramref name="authHash"/>.
+        /// Library Part 1, clause 43.10.1); independent of <paramref name="authHash"/>.
         /// </param>
         /// <param name="authHash">The hash algorithm for the session.</param>
         /// <param name="encryptSalt">
         /// Encrypts the drawn salt to <paramref name="modulus"/> via RSA-OAEP (label <c>"SECRET"</c>, TPM 2.0
-        /// Library Part 1, Annex B.10.2) — an explicit per-call delegate, no closure capture. A
+        /// Library Part 1, clause 16.6.13) — an explicit per-call delegate, no closure capture. A
         /// <c>TpmRsaSigningBackend.EncryptOaep</c> delegate instance composes directly.
         /// </param>
         /// <param name="pool">The memory pool for the drawn salt and the OAEP scratch buffer.</param>
@@ -155,8 +155,8 @@ public static class StartAuthSessionInputExtensions
         /// <see cref="Sessions.TpmSession.CreateBoundAsync"/> and then dispose <c>Salt</c>.
         /// </returns>
         /// <remarks>
-        /// The salt is drawn via the entropy provider at <c>digestSize(tpmKeyNameAlg)</c> octets (Annex B.10.1's
-        /// cap); the wire <c>encryptedSalt</c> is the flat OAEP ciphertext (Part 2, Table 209/210).
+        /// The salt is drawn via the entropy provider at <c>digestSize(tpmKeyNameAlg)</c> octets (clause 43.10.1's
+        /// cap); the wire <c>encryptedSalt</c> is the flat OAEP ciphertext (Part 2, Table 223/224).
         /// </remarks>
         public static ValueTask<(StartAuthSessionInput Input, IMemoryOwner<byte> Salt, int SaltLength)> CreateSaltedHmacSession(
             uint tpmKey,
@@ -208,19 +208,19 @@ public static class StartAuthSessionInputExtensions
         /// <param name="tpmKeyPublicPoint">tpmKey's own exported public point, SEC1 uncompressed (<c>0x04 ‖ X ‖ Y</c>).</param>
         /// <param name="curve">The ECC curve tpmKey lives on.</param>
         /// <param name="tpmKeyNameAlg">
-        /// tpmKey's own Name algorithm — sizes the drawn salt and keys <c>KDFe</c> (TPM 2.0 Library Part 1, Annex
-        /// C.6.1/C.6.2); independent of <paramref name="authHash"/> (a mixed-hash session is legal and must NOT
+        /// tpmKey's own Name algorithm — sizes the drawn salt and keys <c>KDFe</c> (TPM 2.0 Library Part 1, clauses
+        /// 44.7.1 and 16.6.13); independent of <paramref name="authHash"/> (a mixed-hash session is legal and must NOT
         /// leak <paramref name="authHash"/> into this derivation).
         /// </param>
         /// <param name="authHash">The hash algorithm for the session.</param>
         /// <param name="generateEphemeralKey">
-        /// Generates the one-time ephemeral key pair this session's initiator role requires (Annex C.6.1) — an
+        /// Generates the one-time ephemeral key pair this session's initiator role requires (clause 44.7.1) — an
         /// explicit per-call delegate, no closure capture. A <c>TpmEccSigningBackend.GenerateKey</c> delegate
         /// instance composes directly.
         /// </param>
         /// <param name="computeSharedSecret">
         /// Computes the ECDH shared value <c>Z</c> between the ephemeral private scalar and
-        /// <paramref name="tpmKeyPublicPoint"/> (Annex C.6.1) — an explicit per-call delegate, no closure capture.
+        /// <paramref name="tpmKeyPublicPoint"/> (clause 44.7.1) — an explicit per-call delegate, no closure capture.
         /// A <c>TpmEccSigningBackend.ComputeSharedSecret</c> delegate instance composes directly.
         /// </param>
         /// <param name="pool">The memory pool for the ephemeral key, the shared value, and the derived salt.</param>
@@ -233,7 +233,7 @@ public static class StartAuthSessionInputExtensions
         /// </returns>
         /// <remarks>
         /// The wire <c>encryptedSalt</c> is a marshaled <c>TPMS_ECC_POINT</c> (two size-prefixed coordinates)
-        /// carrying the ephemeral public point — not a flat buffer (TPM 2.0 Library Part 2, Table 209/210).
+        /// carrying the ephemeral public point — not a flat buffer (TPM 2.0 Library Part 2, Table 223/224).
         /// </remarks>
         public static ValueTask<(StartAuthSessionInput Input, IMemoryOwner<byte> Salt, int SaltLength)> CreateSaltedHmacSession(
             uint tpmKey,
@@ -493,12 +493,12 @@ public static class StartAuthSessionInputExtensions
         /// <param name="exponent">tpmKey's public exponent.</param>
         /// <param name="tpmKeyNameAlg">
         /// tpmKey's own Name algorithm — sizes the drawn salt and drives OAEP's <c>lhash</c>/MGF1 (TPM 2.0
-        /// Library Part 1, Annex B.10.1); independent of <paramref name="authHash"/>.
+        /// Library Part 1, clause 43.10.1); independent of <paramref name="authHash"/>.
         /// </param>
         /// <param name="authHash">The hash algorithm for the session.</param>
         /// <param name="encryptSalt">
         /// Encrypts the drawn salt to <paramref name="modulus"/> via RSA-OAEP (label <c>"SECRET"</c>, TPM 2.0
-        /// Library Part 1, Annex B.10.2) — an explicit per-call delegate, no closure capture. A
+        /// Library Part 1, clause 16.6.13) — an explicit per-call delegate, no closure capture. A
         /// <c>TpmRsaSigningBackend.EncryptOaep</c> delegate instance composes directly.
         /// </param>
         /// <param name="pool">The memory pool for the drawn salt and the OAEP scratch buffer.</param>
@@ -516,7 +516,7 @@ public static class StartAuthSessionInputExtensions
         /// Per TPM 2.0 Library Part 3, Section 11.1.1, <c>TPM2_StartAuthSession</c> derives sessionKey identically
         /// for every sessionType — a salted POLICY session's key comes from the same OAEP-salt KDFa recipe (Part 1
         /// §17.6.11) as a salted HMAC session. What differs is the policy session's own context defaults: a fresh
-        /// POLICY session is never "bound" in the auth-omission sense an HMAC session is (Part 1 §17.6.10's
+        /// POLICY session is never "bound" in the auth-omission sense an HMAC session is (Part 1 §16.6.10's
         /// bind-entity-authValue-omission optimization) — whether the per-command authHMAC additionally layers the
         /// authorized entity's authValue on top of sessionKey (equations 26/27) is governed solely by the policy
         /// session's isAuthValueNeeded/isPasswordNeeded state (set by TPM2_PolicyAuthValue/TPM2_PolicyPassword),
@@ -524,8 +524,8 @@ public static class StartAuthSessionInputExtensions
         /// term alone.
         /// </para>
         /// <para>
-        /// The salt is drawn via the entropy provider at <c>digestSize(tpmKeyNameAlg)</c> octets (Annex B.10.1's
-        /// cap); the wire <c>encryptedSalt</c> is the flat OAEP ciphertext (Part 2, Table 209/210).
+        /// The salt is drawn via the entropy provider at <c>digestSize(tpmKeyNameAlg)</c> octets (clause 43.10.1's
+        /// cap); the wire <c>encryptedSalt</c> is the flat OAEP ciphertext (Part 2, Table 223/224).
         /// </para>
         /// </remarks>
         public static ValueTask<(StartAuthSessionInput Input, IMemoryOwner<byte> Salt, int SaltLength)> CreateSaltedPolicySession(
@@ -561,8 +561,8 @@ public static class StartAuthSessionInputExtensions
         /// <remarks>
         /// Per TPM 2.0 Library Part 3, Section 11.1.1, sessionKey derivation is identical to the RSA
         /// <c>CreateBoundAndSaltedHmacSession</c> overload — the KDFa key folds <paramref name="bind"/>'s authValue
-        /// then the salt (Part 1 §17.6.12, equation 25) regardless of sessionType. The distinction is downstream
-        /// of key derivation: a POLICY session is never "bound" in the auth-omission sense (Part 1 §17.6.10) —
+        /// then the salt (Part 1 §16.6.12, equation 25) regardless of sessionType. The distinction is downstream
+        /// of key derivation: a POLICY session is never "bound" in the auth-omission sense (Part 1 §16.6.10) —
         /// <paramref name="bind"/>'s authValue strengthens the derived sessionKey only, once, here. It is never
         /// folded a second time into the per-command authHMAC merely because the session is bound; that fold
         /// happens only when the policy session's isAuthValueNeeded/isPasswordNeeded flag is SET (equation 26, Part
@@ -589,19 +589,19 @@ public static class StartAuthSessionInputExtensions
         /// <param name="tpmKeyPublicPoint">tpmKey's own exported public point, SEC1 uncompressed (<c>0x04 ‖ X ‖ Y</c>).</param>
         /// <param name="curve">The ECC curve tpmKey lives on.</param>
         /// <param name="tpmKeyNameAlg">
-        /// tpmKey's own Name algorithm — sizes the drawn salt and keys <c>KDFe</c> (TPM 2.0 Library Part 1, Annex
-        /// C.6.1/C.6.2); independent of <paramref name="authHash"/> (a mixed-hash session is legal and must NOT
+        /// tpmKey's own Name algorithm — sizes the drawn salt and keys <c>KDFe</c> (TPM 2.0 Library Part 1, clauses
+        /// 44.7.1 and 16.6.13); independent of <paramref name="authHash"/> (a mixed-hash session is legal and must NOT
         /// leak <paramref name="authHash"/> into this derivation).
         /// </param>
         /// <param name="authHash">The hash algorithm for the session.</param>
         /// <param name="generateEphemeralKey">
-        /// Generates the one-time ephemeral key pair this session's initiator role requires (Annex C.6.1) — an
+        /// Generates the one-time ephemeral key pair this session's initiator role requires (clause 44.7.1) — an
         /// explicit per-call delegate, no closure capture. A <c>TpmEccSigningBackend.GenerateKey</c> delegate
         /// instance composes directly.
         /// </param>
         /// <param name="computeSharedSecret">
         /// Computes the ECDH shared value <c>Z</c> between the ephemeral private scalar and
-        /// <paramref name="tpmKeyPublicPoint"/> (Annex C.6.1) — an explicit per-call delegate, no closure capture.
+        /// <paramref name="tpmKeyPublicPoint"/> (clause 44.7.1) — an explicit per-call delegate, no closure capture.
         /// A <c>TpmEccSigningBackend.ComputeSharedSecret</c> delegate instance composes directly.
         /// </param>
         /// <param name="pool">The memory pool for the ephemeral key, the shared value, and the derived salt.</param>
@@ -616,13 +616,13 @@ public static class StartAuthSessionInputExtensions
         /// <para>
         /// Per TPM 2.0 Library Part 3, Section 11.1.1, sessionKey derivation is identical for every sessionType —
         /// a salted POLICY session's key comes from the same ECDH+<c>KDFe</c> recipe as a salted HMAC session. A
-        /// fresh POLICY session is never "bound" in the auth-omission sense an HMAC session is (Part 1 §17.6.10);
+        /// fresh POLICY session is never "bound" in the auth-omission sense an HMAC session is (Part 1 §16.6.10);
         /// this unbound-salted factory has no bind entity in the first place, so the point is moot here — see the
         /// ECC <c>CreateBoundAndSaltedPolicySession</c> overload for the case where it applies.
         /// </para>
         /// <para>
         /// The wire <c>encryptedSalt</c> is a marshaled <c>TPMS_ECC_POINT</c> (two size-prefixed coordinates)
-        /// carrying the ephemeral public point — not a flat buffer (TPM 2.0 Library Part 2, Table 209/210).
+        /// carrying the ephemeral public point — not a flat buffer (TPM 2.0 Library Part 2, Table 223/224).
         /// </para>
         /// </remarks>
         public static ValueTask<(StartAuthSessionInput Input, IMemoryOwner<byte> Salt, int SaltLength)> CreateSaltedPolicySession(
@@ -661,7 +661,7 @@ public static class StartAuthSessionInputExtensions
         /// Per TPM 2.0 Library Part 3, Section 11.1.1, sessionKey derivation is identical to the ECC
         /// <c>CreateBoundAndSaltedHmacSession</c> overload — <paramref name="bind"/>'s authValue folds into the
         /// KDFa key alongside the ECDH-derived salt regardless of sessionType. The distinction is downstream of key
-        /// derivation: a POLICY session is never "bound" in the auth-omission sense (Part 1 §17.6.10) —
+        /// derivation: a POLICY session is never "bound" in the auth-omission sense (Part 1 §16.6.10) —
         /// <paramref name="bind"/>'s authValue strengthens the derived sessionKey only, once, here, and is never
         /// folded a second time into the per-command authHMAC merely because the session is bound. That fold
         /// happens only when the policy session's isAuthValueNeeded/isPasswordNeeded flag is SET (equation 26, Part
@@ -721,7 +721,7 @@ public static class StartAuthSessionInputExtensions
     }
 
     /// <summary>
-    /// The session-salt OAEP label (TPM 2.0 Library Part 1, Annex B.10.2): <c>"SECRET"</c> plus the trailing NUL
+    /// The session-salt OAEP label (TPM 2.0 Library Part 1, clause 16.6.13): <c>"SECRET"</c> plus the trailing NUL
     /// octet the <c>lhash</c> digest input requires as part of <c>L</c> (OAEP's own convention, distinct from
     /// KDFa/KDFe's auto-appended label terminator). Declared outside the <c>extension(StartAuthSessionInput)</c>
     /// block (a static property with an initializer is not permitted inside one) but still accessible to it as

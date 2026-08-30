@@ -17,8 +17,8 @@ namespace Verifiable.Tests.Tpm;
 
 /// <summary>
 /// Proves the pooled-carrier ownership of the <c>TPM2B_NAME</c> parameters three commands take on the wire —
-/// <c>TPM2_PolicyAuthorize()</c>'s <c>keySign</c> (TPM 2.0 Library Part 3, Section 23.16, Table 153),
-/// <c>TPM2_PolicyTicket()</c>'s <c>authName</c> (Section 23.5, Table 131), and
+/// <c>TPM2_PolicyAuthorize()</c>'s <c>keySign</c> (TPM 2.0 Library Part 3, Section 23.16, Table 170),
+/// <c>TPM2_PolicyTicket()</c>'s <c>authName</c> (Section 23.5, Table 148), and
 /// <c>TPM2_MakeCredential()</c>'s <c>objectName</c> (clause 12.6, Table 28) — against the in-house behavioural
 /// <see cref="TpmSimulator"/>. Each Name rides a carrier the parser rents as its last act, and each reaches the
 /// pool again on every path its command can leave by: refused before the command body runs, refused inside the
@@ -48,7 +48,7 @@ internal sealed class TpmInHouseSimulatorNameCarrierTests
     /// <summary>The policy session hash algorithm every session here is started with.</summary>
     private const TpmAlgIdConstants SessionAlg = TpmAlgIdConstants.TPM_ALG_SHA256;
 
-    /// <summary>The width of every Name these tests drive: a 2-octet nameAlg prefix plus a SHA-256 digest (TPM 2.0 Library Part 1, clause 14, Table 6).</summary>
+    /// <summary>The width of every Name these tests drive: a 2-octet nameAlg prefix plus a SHA-256 digest (TPM 2.0 Library Part 1, clause 13, Table 9).</summary>
     private const int NameSize = sizeof(ushort) + 32;
 
     /// <summary>A transient-range handle no test ever loads, so <c>TPM2_MakeCredential()</c> refuses it with <c>TPM_RC_HANDLE</c>.</summary>
@@ -153,8 +153,8 @@ internal sealed class TpmInHouseSimulatorNameCarrierTests
 
     /// <summary>
     /// A non-trial <c>TPM2_PolicyAuthorize()</c> whose <c>checkTicket</c> does not reproduce
-    /// <c>HMAC(proof, TPM_ST_VERIFIED ‖ aHash ‖ keySign)</c> is refused with <c>TPM_RC_VALUE</c> (TPM 2.0
-    /// Library Part 3, Section 23.16) — but only after the re-verification effect has run, which is the arm
+    /// <c>HMAC(proof, TPM_ST_VERIFIED ‖ aHash ‖ keySign)</c> is refused with <c>TPM_RC_POLICY</c> ("If the
+    /// ticket is not valid, the TPM shall return TPM_RC_POLICY", TPM 2.0 Library Part 3, clause 23.16.1) — but only after the re-verification effect has run, which is the arm
     /// where the Name carrier has already travelled request → action → effect → feedback. The rejecting
     /// continuation is its terminal owner there, in place of the fold that would have consumed it.
     /// </summary>
@@ -177,8 +177,8 @@ internal sealed class TpmInHouseSimulatorNameCarrierTests
             TpmResult<PolicyAuthorizeResponse> result = await AuthorizeAsync(
                 tpm, registry, trackingPool.Pool, sessionHandle, ZeroDigest(), NameWithAlg(SessionAlg)).ConfigureAwait(false);
             Assert.AreEqual(
-                TpmRcConstants.TPM_RC_VALUE, result.ResponseCode,
-                "A checkTicket that does not reproduce the expected verified-ticket HMAC is TPM_RC_VALUE, answered by the continuation the effect fed.");
+                TpmRcConstants.TPM_RC_POLICY, result.ResponseCode,
+                "A checkTicket that does not reproduce the expected verified-ticket HMAC is TPM_RC_POLICY, answered by the continuation the effect fed.");
 
             Assert.AreEqual(
                 nameRentsBefore + 2, trackingPool.RentedCountOfSize(NameSize),
@@ -236,7 +236,7 @@ internal sealed class TpmInHouseSimulatorNameCarrierTests
 
     /// <summary>
     /// A <c>TPM2_PolicyTicket()</c> whose ticket does not reproduce the equation-12 HMAC (TPM 2.0 Library Part 2,
-    /// Section 10.7.5, Table 111) is refused with <c>TPM_RC_TICKET</c> only after the recompute effect has run,
+    /// Section 10.6.6, Table 114) is refused with <c>TPM_RC_TICKET</c> only after the recompute effect has run,
     /// which is the arm where the Name carrier has already travelled request → action → effect → feedback. The
     /// rejecting continuation is its terminal owner there, in place of the fold that would have consumed it.
     /// </summary>
@@ -309,7 +309,7 @@ internal sealed class TpmInHouseSimulatorNameCarrierTests
     /// <summary>
     /// A successful <c>TPM2_MakeCredential()</c> transfers the parse-rented <c>objectName</c> carrier into the
     /// wrap action, whose effect binds the credential's symmetric and HMAC keys to that Name (TPM 2.0 Library
-    /// Part 1, clause 24) and is its terminal owner — so the carrier reaches the pool once the response has been
+    /// Part 1, clause 21) and is its terminal owner — so the carrier reaches the pool once the response has been
     /// consumed, exactly as it does on the refusing arm.
     /// </summary>
     [TestMethod]
@@ -366,7 +366,7 @@ internal sealed class TpmInHouseSimulatorNameCarrierTests
     {
         using PolicyAuthorizeInput input = PolicyAuthorizeInput.Create(
             policySession, approvedPolicy, PolicyRef, keySign,
-            (ushort)TpmStConstants.TPM_ST_VERIFIED, (uint)TpmRh.TPM_RH_OWNER, ZeroDigest(), pool);
+            (ushort)TpmStConstants.TPM_ST_VERIFIED, (uint)TpmRh.TPM_RH_OWNER, checkTicketMetadata: null, ZeroDigest(), pool);
 
         return await TpmCommandExecutor.ExecuteAsync<PolicyAuthorizeResponse>(
             tpm, input, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);

@@ -37,7 +37,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// for zero-length buffers.
 /// </para>
 /// <para>
-/// See TPM 2.0 Part 2, Section 10.4.2.
+/// See TPM 2.0 Part 2, Section 10.3.2.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -45,8 +45,8 @@ public sealed class Tpm2bDigest: SensitiveMemory, ITpmWireType
 {
     /// <summary>
     /// The largest digest a <c>TPM2B_DIGEST</c> buffer may carry: <c>sizeof(TPMU_HA)</c>, the widest member of
-    /// the hash union (64 octets, SHA-512), which is the bound Table 92 places on the buffer field
-    /// (<c>buffer[size]{:sizeof(TPMU_HA)}</c>, TPM 2.0 Library Part 2, clause 10.4.2). The size prefix is not
+    /// the hash union (64 octets, SHA-512), which is the bound Table 90 places on the buffer field
+    /// (<c>buffer[size]{:sizeof(TPMU_HA)}</c>, TPM 2.0 Library Part 2, clause 10.3.2). The size prefix is not
     /// part of it — unlike <see cref="Tpm2bData.MaxSize"/>, whose table bounds the buffer by the whole
     /// <c>TPMT_HA</c> structure and therefore includes the algorithm identifier.
     /// </summary>
@@ -79,7 +79,7 @@ public sealed class Tpm2bDigest: SensitiveMemory, ITpmWireType
 
     /// <summary>
     /// Gets the shared Zero Digest of <paramref name="hashAlg"/>'s width — a buffer of that many zero octets,
-    /// the value TPM 2.0 Library Part 1, clause 17.7 gives an enhanced-authorization session's policyDigest
+    /// the value TPM 2.0 Library Part 1, clause 16.7 gives an enhanced-authorization session's policyDigest
     /// before its first assertion and again after the context reset of Part 3, Section 23.2.4.
     /// </summary>
     /// <remarks>
@@ -92,7 +92,7 @@ public sealed class Tpm2bDigest: SensitiveMemory, ITpmWireType
     /// interchangeable.
     /// </para>
     /// <para>
-    /// The admitted widths are those of <c>TPMU_HA</c> (Table 92), not those of any one consumer: the widths a
+    /// The admitted widths are those of <c>TPMU_HA</c> (Table 88), not those of any one consumer: the widths a
     /// policy session can actually name are the four the <c>policyDigest</c> formula sizes for (20, 32, 48 and
     /// 64 octets), and the 24-octet truncated width is here for the completeness of this Spec structure rather
     /// than for the policy path, which never reaches it.
@@ -149,10 +149,17 @@ public sealed class Tpm2bDigest: SensitiveMemory, ITpmWireType
     /// <summary>
     /// Parses a digest from a TPM reader.
     /// </summary>
+    /// <remarks>
+    /// The declared size is checked against <see cref="TpmReader.Remaining"/> before any pooled buffer is
+    /// rented, so a truncated buffer throws the same <see cref="ArgumentOutOfRangeException"/>
+    /// <see cref="TpmReader.ReadBytes(int)"/> would have thrown for the same input, but without renting first —
+    /// a rent-then-read ordering would otherwise orphan the rental on that throw.
+    /// </remarks>
     /// <param name="reader">The reader positioned at the digest.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The parsed digest.</returns>
     /// <exception cref="InvalidOperationException">The declared size exceeds <see cref="MaxSize"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The declared size exceeds the octets remaining in <paramref name="reader"/>.</exception>
     public static Tpm2bDigest Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
@@ -165,6 +172,11 @@ public sealed class Tpm2bDigest: SensitiveMemory, ITpmWireType
         if(size > MaxSize)
         {
             throw new InvalidOperationException($"Digest size {size} exceeds maximum {MaxSize}.");
+        }
+
+        if(size > reader.Remaining)
+        {
+            throw new ArgumentOutOfRangeException(nameof(reader), size, $"Digest size {size} exceeds the {reader.Remaining} octets remaining in the reader.");
         }
 
         IMemoryOwner<byte> storage = pool.Rent(size);

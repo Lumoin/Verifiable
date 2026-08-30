@@ -1,9 +1,13 @@
 using System;
 using System.Buffers.Binary;
+using System.Collections.Generic;
 using System.Security.Cryptography;
+using Verifiable.Cryptography;
 using Verifiable.Tpm.Infrastructure;
+using Verifiable.Tpm.Spec.Attributes;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
+using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -71,7 +75,7 @@ internal sealed class TpmPolicyDigestTests
 
     /// <summary>
     /// Verifies that an in-test transcription of the marshaled TPMS_NV_PUBLIC for the well-known RSA EK
-    /// Certificate NV Index I-1 reproduces its published Name (TCG EK Credential Profile, Annex B.6.3, Table 34):
+    /// Certificate NV Index I-1 reproduces its published Name (TCG EK Credential Profile, Annex B.6.3, Table 37):
     /// <c>Name = nameAlg || H_nameAlg(nvIndex || nameAlg || attributes || authPolicy-with-size || dataSize)</c>,
     /// Part 1's Name computation applied to the marshaled public area. <see cref="PolicyAHex"/> is the Index's
     /// authPolicy (already pinned by <see cref="ExtendForSecretReproducesTheEndorsementPolicy"/>).
@@ -159,6 +163,35 @@ internal sealed class TpmPolicyDigestTests
             PolicyBHex,
             Convert.ToHexStringLower(destination),
             "ExtendForOr over [PolicyA, PolicyC] must reproduce the published PolicyB.");
+    }
+
+    /// <summary>
+    /// Verifies the <see cref="TpmlDigest"/> overload of <see cref="TpmPolicyDigest.ExtendForOr(TpmlDigest, TpmAlgIdConstants, Span{byte}, BaseMemoryPool)"/>
+    /// — the one the simulator's single-copy <c>TPM2_PolicyOR()</c> parse path folds through — reproduces the
+    /// same published "PolicyB" value (TCG EK Credential Profile, Annex B.6.5, Table 36) as
+    /// <see cref="ExtendForOrReproducesThePublishedPolicyB"/>, over a <see cref="TpmlDigest"/> built the way the
+    /// parse path builds it: one <see cref="Tpm2bDigest"/> rented per branch, adopted into the list with no
+    /// second pooled copy (<see cref="TpmlDigest.Adopt"/>).
+    /// </summary>
+    [TestMethod]
+    public void ExtendForOrOverTpmlDigestReproducesThePublishedPolicyB()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        var branches = new List<Tpm2bDigest>
+        {
+            Tpm2bDigest.Create(Convert.FromHexString(PolicyAHex), pool),
+            Tpm2bDigest.Create(Convert.FromHexString(PolicyCHex), pool)
+        };
+        using TpmlDigest branchList = TpmlDigest.Adopt(branches);
+        Span<byte> destination = stackalloc byte[TpmPolicyDigest.Size(TpmAlgIdConstants.TPM_ALG_SHA256)];
+
+        int written = TpmPolicyDigest.ExtendForOr(branchList, TpmAlgIdConstants.TPM_ALG_SHA256, destination, pool);
+
+        Assert.AreEqual(32, written, "SHA-256 PolicyB is 32 octets.");
+        Assert.AreEqual(
+            PolicyBHex,
+            Convert.ToHexStringLower(destination),
+            "ExtendForOr(TpmlDigest, ...) over the adopted [PolicyA, PolicyC] list must reproduce the published PolicyB.");
     }
 
     /// <summary>
@@ -390,7 +423,7 @@ internal sealed class TpmPolicyDigestTests
     }
 
     /// <summary>
-    /// Verifies <see cref="TpmPolicyDigest.ExtendForSigned"/> (Part 3, §23.3 TPM2_PolicySigned, eq. (14)) against
+    /// Verifies <see cref="TpmPolicyDigest.ExtendForSigned"/> (Part 3, §23.3 TPM2_PolicySigned via the §23.2.3 PolicyUpdate() fold) against
     /// an in-test SHA-256 transcription of the two-step fold <c>H(H(current || TPM_CC_PolicySigned || authName) ||
     /// policyRef)</c>, across an empty and a non-empty <c>policyRef</c> — the second hash must always run, even
     /// when <c>policyRef</c> is empty (mirrors <see cref="TpmPolicyDigest.ExtendForSecret"/>'s own KAT shape).
@@ -479,5 +512,321 @@ internal sealed class TpmPolicyDigestTests
                 expected.SequenceEqual(destination[..written]),
                 "ExtendForAuthorize must match an independent reset-then-two-step SHA-256 transcription.");
         }
+    }
+
+    /// <summary>
+    /// Verifies <see cref="TpmPolicyDigest.ExtendForPassword"/> (Part 3, §23.18 TPM2_PolicyPassword) folds the
+    /// SAME extend value as <see cref="TpmPolicyDigest.ExtendForAuthValue"/> — the spec text itself is the oracle
+    /// ("the same extend value as used with TPM2_PolicyAuthValue()") — so this test compares the two production
+    /// methods directly rather than re-deriving a fold already pinned independently by
+    /// <see cref="ExtendForAuthValueMatchesAnIndependentTranscriptionFromZeroAndNonZeroAccumulators"/>.
+    /// </summary>
+    [TestMethod]
+    public void ExtendForPasswordEqualsExtendForAuthValue()
+    {
+        Span<byte> current = stackalloc byte[32];
+        _ = SHA256.HashData("password-prior-stage"u8, current);
+        Span<byte> passwordDigest = stackalloc byte[TpmPolicyDigest.Size(TpmAlgIdConstants.TPM_ALG_SHA256)];
+        Span<byte> authValueDigest = stackalloc byte[TpmPolicyDigest.Size(TpmAlgIdConstants.TPM_ALG_SHA256)];
+
+        int writtenPassword = TpmPolicyDigest.ExtendForPassword(current, TpmAlgIdConstants.TPM_ALG_SHA256, passwordDigest);
+        int writtenAuthValue = TpmPolicyDigest.ExtendForAuthValue(current, TpmAlgIdConstants.TPM_ALG_SHA256, authValueDigest);
+
+        Assert.AreEqual(writtenAuthValue, writtenPassword);
+        Assert.IsTrue(
+            authValueDigest[..writtenAuthValue].SequenceEqual(passwordDigest[..writtenPassword]),
+            "TPM2_PolicyPassword must fold the same extend value as TPM2_PolicyAuthValue (Part 3, §23.18).");
+    }
+
+    /// <summary>
+    /// Verifies <see cref="TpmPolicyDigest.ExtendForCpHash"/> (Part 3, §23.13 TPM2_PolicyCpHash) against an
+    /// in-test SHA-256 transcription of <c>H(current || TPM_CC_PolicyCpHash || cpHashA)</c>.
+    /// </summary>
+    [TestMethod]
+    public void ExtendForCpHashMatchesAnIndependentTranscription()
+    {
+        Span<byte> current = stackalloc byte[32];
+        _ = SHA256.HashData("cphash-prior-stage"u8, current);
+        Span<byte> cpHashA = stackalloc byte[32];
+        _ = SHA256.HashData("cphash-value"u8, cpHashA);
+        Span<byte> destination = stackalloc byte[TpmPolicyDigest.Size(TpmAlgIdConstants.TPM_ALG_SHA256)];
+
+        int written = TpmPolicyDigest.ExtendForCpHash(current, cpHashA, TpmAlgIdConstants.TPM_ALG_SHA256, destination);
+
+        Span<byte> transcription = stackalloc byte[current.Length + sizeof(uint) + cpHashA.Length];
+        current.CopyTo(transcription);
+        BinaryPrimitives.WriteUInt32BigEndian(transcription[current.Length..], (uint)TpmCcConstants.TPM_CC_PolicyCpHash);
+        cpHashA.CopyTo(transcription[(current.Length + sizeof(uint))..]);
+
+        Span<byte> expected = stackalloc byte[32];
+        _ = SHA256.HashData(transcription, expected);
+
+        Assert.AreEqual(32, written);
+        Assert.IsTrue(
+            expected.SequenceEqual(destination[..written]),
+            "ExtendForCpHash must match an independent SHA-256 transcription.");
+    }
+
+    /// <summary>
+    /// Verifies <see cref="TpmPolicyDigest.ExtendForNameHash"/> (Part 3, §23.14 TPM2_PolicyNameHash) against an
+    /// in-test SHA-256 transcription of <c>H(current || TPM_CC_PolicyNameHash || nameHash)</c>.
+    /// </summary>
+    [TestMethod]
+    public void ExtendForNameHashMatchesAnIndependentTranscription()
+    {
+        Span<byte> current = stackalloc byte[32];
+        _ = SHA256.HashData("namehash-prior-stage"u8, current);
+        Span<byte> nameHash = stackalloc byte[32];
+        _ = SHA256.HashData("namehash-value"u8, nameHash);
+        Span<byte> destination = stackalloc byte[TpmPolicyDigest.Size(TpmAlgIdConstants.TPM_ALG_SHA256)];
+
+        int written = TpmPolicyDigest.ExtendForNameHash(current, nameHash, TpmAlgIdConstants.TPM_ALG_SHA256, destination);
+
+        Span<byte> transcription = stackalloc byte[current.Length + sizeof(uint) + nameHash.Length];
+        current.CopyTo(transcription);
+        BinaryPrimitives.WriteUInt32BigEndian(transcription[current.Length..], (uint)TpmCcConstants.TPM_CC_PolicyNameHash);
+        nameHash.CopyTo(transcription[(current.Length + sizeof(uint))..]);
+
+        Span<byte> expected = stackalloc byte[32];
+        _ = SHA256.HashData(transcription, expected);
+
+        Assert.AreEqual(32, written);
+        Assert.IsTrue(
+            expected.SequenceEqual(destination[..written]),
+            "ExtendForNameHash must match an independent SHA-256 transcription.");
+    }
+
+    /// <summary>
+    /// Verifies <see cref="TpmPolicyDigest.ExtendForDuplicationSelect"/> with <c>includeObject</c> YES (Part 3,
+    /// §23.15 TPM2_PolicyDuplicationSelect, equation (8)) against an in-test SHA-256 transcription of
+    /// <c>H(current || TPM_CC_PolicyDuplicationSelect || objectName.name || newParentName.name || 0x01)</c> — the
+    /// Names without their size prefixes, includeObject as one octet.
+    /// </summary>
+    [TestMethod]
+    public void ExtendForDuplicationSelectWithIncludeObjectMatchesAnIndependentTranscription()
+    {
+        Span<byte> current = stackalloc byte[32];
+        _ = SHA256.HashData("duplicationselect-prior-stage"u8, current);
+        Span<byte> objectName = stackalloc byte[34];
+        objectName[1] = 0x0B;
+        _ = SHA256.HashData("duplicationselect-object"u8, objectName[2..]);
+        Span<byte> newParentName = stackalloc byte[34];
+        newParentName[1] = 0x0B;
+        _ = SHA256.HashData("duplicationselect-new-parent"u8, newParentName[2..]);
+        Span<byte> destination = stackalloc byte[TpmPolicyDigest.Size(TpmAlgIdConstants.TPM_ALG_SHA256)];
+
+        int written = TpmPolicyDigest.ExtendForDuplicationSelect(current, objectName, newParentName, isObjectIncluded: true, TpmAlgIdConstants.TPM_ALG_SHA256, destination);
+
+        Span<byte> transcription = stackalloc byte[current.Length + sizeof(uint) + objectName.Length + newParentName.Length + 1];
+        int offset = 0;
+        current.CopyTo(transcription);
+        offset += current.Length;
+        BinaryPrimitives.WriteUInt32BigEndian(transcription[offset..], (uint)TpmCcConstants.TPM_CC_PolicyDuplicationSelect);
+        offset += sizeof(uint);
+        objectName.CopyTo(transcription[offset..]);
+        offset += objectName.Length;
+        newParentName.CopyTo(transcription[offset..]);
+        offset += newParentName.Length;
+        transcription[offset] = 0x01;
+
+        Span<byte> expected = stackalloc byte[32];
+        _ = SHA256.HashData(transcription, expected);
+
+        Assert.AreEqual(32, written);
+        Assert.IsTrue(
+            expected.SequenceEqual(destination[..written]),
+            "ExtendForDuplicationSelect (includeObject YES) must match an independent SHA-256 transcription.");
+    }
+
+    /// <summary>
+    /// Verifies <see cref="TpmPolicyDigest.ExtendForDuplicationSelect"/> with <c>includeObject</c> NO (Part 3,
+    /// §23.15 TPM2_PolicyDuplicationSelect: "If includeObject is NO, policySession→policyDigest is updated by
+    /// H(policyDigestold || code || newParentName.name || includeObject)") against an in-test SHA-256
+    /// transcription that carries NO object Name — the fold must not read it.
+    /// </summary>
+    [TestMethod]
+    public void ExtendForDuplicationSelectWithoutIncludeObjectMatchesAnIndependentTranscription()
+    {
+        Span<byte> current = stackalloc byte[32];
+        _ = SHA256.HashData("duplicationselect-prior-stage"u8, current);
+        Span<byte> objectName = stackalloc byte[34];
+        objectName[1] = 0x0B;
+        _ = SHA256.HashData("duplicationselect-object"u8, objectName[2..]);
+        Span<byte> newParentName = stackalloc byte[34];
+        newParentName[1] = 0x0B;
+        _ = SHA256.HashData("duplicationselect-new-parent"u8, newParentName[2..]);
+        Span<byte> destination = stackalloc byte[TpmPolicyDigest.Size(TpmAlgIdConstants.TPM_ALG_SHA256)];
+
+        int written = TpmPolicyDigest.ExtendForDuplicationSelect(current, objectName, newParentName, isObjectIncluded: false, TpmAlgIdConstants.TPM_ALG_SHA256, destination);
+
+        Span<byte> transcription = stackalloc byte[current.Length + sizeof(uint) + newParentName.Length + 1];
+        int offset = 0;
+        current.CopyTo(transcription);
+        offset += current.Length;
+        BinaryPrimitives.WriteUInt32BigEndian(transcription[offset..], (uint)TpmCcConstants.TPM_CC_PolicyDuplicationSelect);
+        offset += sizeof(uint);
+        newParentName.CopyTo(transcription[offset..]);
+        offset += newParentName.Length;
+        transcription[offset] = 0x00;
+
+        Span<byte> expected = stackalloc byte[32];
+        _ = SHA256.HashData(transcription, expected);
+
+        Assert.AreEqual(32, written);
+        Assert.IsTrue(
+            expected.SequenceEqual(destination[..written]),
+            "ExtendForDuplicationSelect (includeObject NO) must match an independent SHA-256 transcription without the object Name.");
+    }
+
+    /// <summary>
+    /// Verifies <see cref="TpmPolicyDigest.ExtendForParameters"/> (Part 3, §23.24 TPM2_PolicyParameters) against
+    /// an in-test SHA-256 transcription of <c>H(current || TPM_CC_PolicyParameters || pHash)</c>.
+    /// </summary>
+    [TestMethod]
+    public void ExtendForParametersMatchesAnIndependentTranscription()
+    {
+        Span<byte> current = stackalloc byte[32];
+        _ = SHA256.HashData("parameters-prior-stage"u8, current);
+        Span<byte> parametersHash = stackalloc byte[32];
+        _ = SHA256.HashData("parameters-value"u8, parametersHash);
+        Span<byte> destination = stackalloc byte[TpmPolicyDigest.Size(TpmAlgIdConstants.TPM_ALG_SHA256)];
+
+        int written = TpmPolicyDigest.ExtendForParameters(current, parametersHash, TpmAlgIdConstants.TPM_ALG_SHA256, destination);
+
+        Span<byte> transcription = stackalloc byte[current.Length + sizeof(uint) + parametersHash.Length];
+        current.CopyTo(transcription);
+        BinaryPrimitives.WriteUInt32BigEndian(transcription[current.Length..], (uint)TpmCcConstants.TPM_CC_PolicyParameters);
+        parametersHash.CopyTo(transcription[(current.Length + sizeof(uint))..]);
+
+        Span<byte> expected = stackalloc byte[32];
+        _ = SHA256.HashData(transcription, expected);
+
+        Assert.AreEqual(32, written);
+        Assert.IsTrue(
+            expected.SequenceEqual(destination[..written]),
+            "ExtendForParameters must match an independent SHA-256 transcription.");
+    }
+
+    /// <summary>
+    /// Verifies <see cref="TpmPolicyDigest.ExtendForTemplate"/> (Part 3, §23.21 TPM2_PolicyTemplate) against an
+    /// in-test SHA-256 transcription of <c>H(current || TPM_CC_PolicyTemplate || templateHash)</c>.
+    /// </summary>
+    [TestMethod]
+    public void ExtendForTemplateMatchesAnIndependentTranscription()
+    {
+        Span<byte> current = stackalloc byte[32];
+        _ = SHA256.HashData("template-prior-stage"u8, current);
+        Span<byte> templateHash = stackalloc byte[32];
+        _ = SHA256.HashData("template-value"u8, templateHash);
+        Span<byte> destination = stackalloc byte[TpmPolicyDigest.Size(TpmAlgIdConstants.TPM_ALG_SHA256)];
+
+        int written = TpmPolicyDigest.ExtendForTemplate(current, templateHash, TpmAlgIdConstants.TPM_ALG_SHA256, destination);
+
+        Span<byte> transcription = stackalloc byte[current.Length + sizeof(uint) + templateHash.Length];
+        current.CopyTo(transcription);
+        BinaryPrimitives.WriteUInt32BigEndian(transcription[current.Length..], (uint)TpmCcConstants.TPM_CC_PolicyTemplate);
+        templateHash.CopyTo(transcription[(current.Length + sizeof(uint))..]);
+
+        Span<byte> expected = stackalloc byte[32];
+        _ = SHA256.HashData(transcription, expected);
+
+        Assert.AreEqual(32, written);
+        Assert.IsTrue(
+            expected.SequenceEqual(destination[..written]),
+            "ExtendForTemplate must match an independent SHA-256 transcription.");
+    }
+
+    /// <summary>
+    /// Verifies <see cref="TpmPolicyDigest.ExtendForLocality"/> (Part 3, §23.8 TPM2_PolicyLocality) against an
+    /// in-test SHA-256 transcription of <c>H(current || TPM_CC_PolicyLocality || locality)</c>, across a
+    /// standard locality octet (0x01, TPM_LOC_ZERO) and an extended locality octet (0x20).
+    /// </summary>
+    [TestMethod]
+    public void ExtendForLocalityMatchesAnIndependentTranscription()
+    {
+        Span<byte> current = stackalloc byte[32];
+        _ = SHA256.HashData("locality-prior-stage"u8, current);
+        Span<byte> destination = stackalloc byte[TpmPolicyDigest.Size(TpmAlgIdConstants.TPM_ALG_SHA256)];
+
+        AssertLocalityFold(current, (TpmaLocality)0x01, destination);
+        AssertLocalityFold(current, (TpmaLocality)0x20, destination);
+
+        static void AssertLocalityFold(ReadOnlySpan<byte> current, TpmaLocality locality, Span<byte> destination)
+        {
+            int written = TpmPolicyDigest.ExtendForLocality(current, locality, TpmAlgIdConstants.TPM_ALG_SHA256, destination);
+
+            Span<byte> transcription = stackalloc byte[current.Length + sizeof(uint) + sizeof(byte)];
+            current.CopyTo(transcription);
+            BinaryPrimitives.WriteUInt32BigEndian(transcription[current.Length..], (uint)TpmCcConstants.TPM_CC_PolicyLocality);
+            transcription[^1] = (byte)locality;
+
+            Span<byte> expected = stackalloc byte[32];
+            _ = SHA256.HashData(transcription, expected);
+
+            Assert.AreEqual(32, written);
+            Assert.IsTrue(
+                expected.SequenceEqual(destination[..written]),
+                $"ExtendForLocality must match an independent SHA-256 transcription for locality octet '{(byte)locality:X2}'.");
+        }
+    }
+
+    /// <summary>
+    /// Verifies <see cref="TpmPolicyDigest.ExtendForNvWritten"/> (Part 3, §23.20 TPM2_PolicyNvWritten) against
+    /// an in-test SHA-256 transcription of <c>H(current || TPM_CC_PolicyNvWritten || writtenSet)</c>, for both
+    /// YES (octet 0x01) and NO (octet 0x00), and that the two fold to different digests.
+    /// </summary>
+    [TestMethod]
+    public void ExtendForNvWrittenMatchesAnIndependentTranscription()
+    {
+        Span<byte> current = stackalloc byte[32];
+        _ = SHA256.HashData("nvwritten-prior-stage"u8, current);
+
+        Span<byte> yesDestination = stackalloc byte[32];
+        AssertNvWrittenFold(current, isWrittenSet: true, expectedOctet: 0x01, yesDestination);
+
+        Span<byte> noDestination = stackalloc byte[32];
+        AssertNvWrittenFold(current, isWrittenSet: false, expectedOctet: 0x00, noDestination);
+
+        Assert.IsFalse(yesDestination.SequenceEqual(noDestination), "YES and NO must fold to different policyDigests.");
+
+        static void AssertNvWrittenFold(ReadOnlySpan<byte> current, bool isWrittenSet, byte expectedOctet, Span<byte> destination)
+        {
+            int written = TpmPolicyDigest.ExtendForNvWritten(current, isWrittenSet, TpmAlgIdConstants.TPM_ALG_SHA256, destination);
+
+            Span<byte> transcription = stackalloc byte[current.Length + sizeof(uint) + sizeof(byte)];
+            current.CopyTo(transcription);
+            BinaryPrimitives.WriteUInt32BigEndian(transcription[current.Length..], (uint)TpmCcConstants.TPM_CC_PolicyNvWritten);
+            transcription[^1] = expectedOctet;
+
+            Span<byte> expected = stackalloc byte[32];
+            _ = SHA256.HashData(transcription, expected);
+
+            Assert.AreEqual(32, written);
+            Assert.IsTrue(
+                expected.SequenceEqual(destination[..written]),
+                "ExtendForNvWritten must match an independent SHA-256 transcription.");
+        }
+    }
+
+    /// <summary>
+    /// Verifies <see cref="TpmPolicyDigest.ExtendForAuthorizeNv"/> (Part 3, §23.22 TPM2_PolicyAuthorizeNV,
+    /// equation 9) reproduces the published TPM2_PolicyAuthorizeNV fold over NV Index I-1's Name ("PolicyC", TCG
+    /// EK Credential Profile, Annex B.6.4, Table 35) — the same published vector
+    /// <see cref="PolicyAuthorizeNvFoldMatchesThePublishedPolicyC"/> pins with an in-test transcription, here
+    /// exercised through the production method itself.
+    /// </summary>
+    [TestMethod]
+    public void ExtendForAuthorizeNvReproducesThePublishedPolicyC()
+    {
+        ReadOnlyMemory<byte> nvName = Convert.FromHexString(PolicyIndexNameHex);
+        Span<byte> destination = stackalloc byte[TpmPolicyDigest.Size(TpmAlgIdConstants.TPM_ALG_SHA256)];
+
+        int written = TpmPolicyDigest.ExtendForAuthorizeNv(nvName.Span, TpmAlgIdConstants.TPM_ALG_SHA256, destination);
+
+        Assert.AreEqual(32, written, "SHA-256 PolicyC is 32 octets.");
+        Assert.AreEqual(
+            PolicyCHex,
+            Convert.ToHexStringLower(destination),
+            "ExtendForAuthorizeNv over NV Index I-1's Name must reproduce the published PolicyC.");
     }
 }

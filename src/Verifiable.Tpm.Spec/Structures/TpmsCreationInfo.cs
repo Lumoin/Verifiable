@@ -25,7 +25,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// } TPMS_CREATION_INFO;
 /// </code>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 10.12.7, Table 127.
+/// Specification reference: TPM 2.0 Library Part 2, Section 10.11.7, Table 149.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -96,6 +96,11 @@ public sealed class TpmsCreationInfo: ITpmWireType, IDisposable
     /// <summary>
     /// Parses a creation-info structure from a TPM reader.
     /// </summary>
+    /// <remarks>
+    /// A malformed <c>creationHash</c> throws after <see cref="ObjectName"/> is already rented from
+    /// <paramref name="pool"/>; the catch block disposes it before the exception leaves, following the same
+    /// try/catch/dispose/rethrow shape as <see cref="Tpm2bCreationData.FromMarshaled"/>.
+    /// </remarks>
     /// <param name="reader">The reader.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The parsed creation info.</returns>
@@ -103,9 +108,17 @@ public sealed class TpmsCreationInfo: ITpmWireType, IDisposable
     {
         ArgumentNullException.ThrowIfNull(pool);
         Tpm2bName objectName = Tpm2bName.Parse(ref reader, pool);
-        Tpm2bDigest creationHash = Tpm2bDigest.Parse(ref reader, pool);
+        try
+        {
+            Tpm2bDigest creationHash = Tpm2bDigest.Parse(ref reader, pool);
 
-        return new TpmsCreationInfo(objectName, creationHash);
+            return new TpmsCreationInfo(objectName, creationHash);
+        }
+        catch
+        {
+            objectName.Dispose();
+            throw;
+        }
     }
 
     /// <summary>

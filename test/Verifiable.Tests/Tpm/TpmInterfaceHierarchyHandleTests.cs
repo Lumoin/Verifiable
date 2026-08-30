@@ -52,7 +52,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_NV_INDEX (Part 2, clause 9.25, Table 72): the ordinary NV index range
+    /// TPMI_RH_NV_INDEX (Part 2, clause 9.25, Table 71): the ordinary NV index range
     /// (<c>{NV_INDEX_FIRST:NV_INDEX_LAST}</c>) parses and writes back byte-identical at both range endpoints.
     /// </summary>
     [TestMethod]
@@ -75,9 +75,9 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_NV_INDEX (Part 2, clause 9.25, Table 72): the external NV index range parses and writes back
-    /// byte-identical at both range endpoints. <c>TPM_HT_EXTERNAL_NV</c> is 0x11 (Part 2, clause 7.2, Table 35);
-    /// shifted into the handle's MSO (<c>HR_SHIFT</c> = 24, Part 2, clause 7.5, Table 37) that is
+    /// TPMI_RH_NV_INDEX (Part 2, clause 9.25, Table 71): the external NV index range parses and writes back
+    /// byte-identical at both range endpoints. <c>TPM_HT_EXTERNAL_NV</c> is 0x11 (Part 2, clause 7.2, Table 33);
+    /// shifted into the handle's MSO (<c>HR_SHIFT</c> = 24, Part 2, clause 7.5, Table 35) that is
     /// <c>EXTERNAL_NV_FIRST</c> = 0x1100_0000 and <c>EXTERNAL_NV_LAST</c> = <c>EXTERNAL_NV_FIRST</c> +
     /// 0x00FF_FFFF = 0x11FF_FFFF.
     /// </summary>
@@ -101,9 +101,9 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_NV_INDEX (Part 2, clause 9.25, Table 72): the permanent NV index range parses and writes back
+    /// TPMI_RH_NV_INDEX (Part 2, clause 9.25, Table 71): the permanent NV index range parses and writes back
     /// byte-identical at both range endpoints. <c>TPM_HT_PERMANENT_NV</c> is 0x12 (Part 2, clause 7.3,
-    /// Table 35); shifted into the handle's MSO (<c>HR_SHIFT</c> = 24, Part 2, clause 7.5, Table 37) that is
+    /// Table 33); shifted into the handle's MSO (<c>HR_SHIFT</c> = 24, Part 2, clause 7.5, Table 35) that is
     /// <c>PERMANENT_NV_FIRST</c> = 0x1200_0000 and <c>PERMANENT_NV_LAST</c> = <c>PERMANENT_NV_FIRST</c> +
     /// 0x00FF_FFFF = 0x12FF_FFFF.
     /// </summary>
@@ -127,7 +127,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_NV_INDEX (Part 2, clause 9.25, Table 72): a permanent hierarchy handle falls outside every
+    /// TPMI_RH_NV_INDEX (Part 2, clause 9.25, Table 71): a permanent hierarchy handle falls outside every
     /// admitted range and is refused with <c>TPM_RC_VALUE</c>.
     /// </summary>
     [TestMethod]
@@ -167,7 +167,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_NV_DEFINED_INDEX (Part 2, clause 9.26, Table 73): the ordinary NV index range
+    /// TPMI_RH_NV_DEFINED_INDEX (Part 2, clause 9.26, Table 72): the ordinary NV index range
     /// (<c>{NV_INDEX_FIRST:NV_INDEX_LAST}</c>) parses and writes back byte-identical at both range endpoints.
     /// </summary>
     [TestMethod]
@@ -190,10 +190,10 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_NV_DEFINED_INDEX (Part 2, clause 9.26, Table 73): the second admitted row,
+    /// TPMI_RH_NV_DEFINED_INDEX (Part 2, clause 9.26, Table 72): the second admitted row,
     /// <c>{EXTERNAL_NV_FIRST:EXTERNAL_NV_LAST}</c>, parses and writes back byte-identical at both range
-    /// endpoints. <c>TPM_HT_EXTERNAL_NV</c> is 0x11 (Part 2, clause 7.2, Table 35); shifted into the handle's
-    /// MSO (<c>HR_SHIFT</c> = 24, Part 2, clause 7.5, Table 37) that is <c>EXTERNAL_NV_FIRST</c> = 0x1100_0000
+    /// endpoints. <c>TPM_HT_EXTERNAL_NV</c> is 0x11 (Part 2, clause 7.2, Table 33); shifted into the handle's
+    /// MSO (<c>HR_SHIFT</c> = 24, Part 2, clause 7.5, Table 35) that is <c>EXTERNAL_NV_FIRST</c> = 0x1100_0000
     /// and <c>EXTERNAL_NV_LAST</c> = 0x11FF_FFFF.
     /// </summary>
     [TestMethod]
@@ -216,8 +216,8 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_NV_DEFINED_INDEX (Part 2, clause 9.26, Table 73): the permanent NV index range is the one row
-    /// TPMI_RH_NV_INDEX (Table 72) carries and this type does not — "It does not apply to permanent NV Indexes,
+    /// TPMI_RH_NV_DEFINED_INDEX (Part 2, clause 9.26, Table 72): the permanent NV index range is the one row
+    /// TPMI_RH_NV_INDEX (Table 71) carries and this type does not — "It does not apply to permanent NV Indexes,
     /// which are architecturally defined" — so both range endpoints are out of range and refused with
     /// <c>TPM_RC_VALUE</c>, while <see cref="TpmiRhNvIndex"/> admits the very same values.
     /// </summary>
@@ -262,7 +262,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_NV_LEGACY_INDEX (Part 2, clause 9.27, Table 74): the single admitted row,
+    /// TPMI_RH_NV_LEGACY_INDEX (Part 2, clause 9.27, Table 73): the single admitted row,
     /// <c>{NV_INDEX_FIRST:NV_INDEX_LAST}</c>, parses and writes back byte-identical at both range endpoints.
     /// </summary>
     [TestMethod]
@@ -285,8 +285,8 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_NV_LEGACY_INDEX (Part 2, clause 9.27, Table 74): the external NV index range is the row
-    /// TPMI_RH_NV_DEFINED_INDEX (Table 73) carries and this type does not, so both range endpoints are out of
+    /// TPMI_RH_NV_LEGACY_INDEX (Part 2, clause 9.27, Table 73): the external NV index range is the row
+    /// TPMI_RH_NV_DEFINED_INDEX (Table 72) carries and this type does not, so both range endpoints are out of
     /// range and refused with <c>TPM_RC_VALUE</c>, while <see cref="TpmiRhNvDefinedIndex"/> admits the very
     /// same values.
     /// </summary>
@@ -303,7 +303,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_NV_LEGACY_INDEX (Part 2, clause 9.27, Table 74): the permanent NV index range is likewise absent
+    /// TPMI_RH_NV_LEGACY_INDEX (Part 2, clause 9.27, Table 73): the permanent NV index range is likewise absent
     /// from the table's single admitted row, so both range endpoints are refused with <c>TPM_RC_VALUE</c>.
     /// </summary>
     [TestMethod]
@@ -346,7 +346,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_NV_AUTH (Part 2, clause 9.23, Table 70): <c>TPM_RH_PLATFORM</c> parses and writes back
+    /// TPMI_RH_NV_AUTH (Part 2, clause 9.23, Table 69): <c>TPM_RH_PLATFORM</c> parses and writes back
     /// byte-identical.
     /// </summary>
     [TestMethod]
@@ -366,7 +366,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_NV_AUTH (Part 2, clause 9.23, Table 70): <c>TPM_RH_OWNER</c> parses and writes back
+    /// TPMI_RH_NV_AUTH (Part 2, clause 9.23, Table 69): <c>TPM_RH_OWNER</c> parses and writes back
     /// byte-identical.
     /// </summary>
     [TestMethod]
@@ -386,7 +386,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_NV_AUTH (Part 2, clause 9.23, Table 70): the NV index range (<c>{NV_INDEX_FIRST:NV_INDEX_LAST}</c>,
+    /// TPMI_RH_NV_AUTH (Part 2, clause 9.23, Table 69): the NV index range (<c>{NV_INDEX_FIRST:NV_INDEX_LAST}</c>,
     /// the index's own <c>authValue</c>) parses and writes back byte-identical.
     /// </summary>
     [TestMethod]
@@ -405,7 +405,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_NV_AUTH (Part 2, clause 9.23, Table 70): the Lockout Authorization is not one of the three
+    /// TPMI_RH_NV_AUTH (Part 2, clause 9.23, Table 69): the Lockout Authorization is not one of the three
     /// admitted selectors and is refused with <c>TPM_RC_VALUE</c>.
     /// </summary>
     [TestMethod]
@@ -445,7 +445,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_ENDORSEMENT (Part 2, clause 9.20, Table 67): <c>TPM_RH_ENDORSEMENT</c> parses and writes back
+    /// TPMI_RH_ENDORSEMENT (Part 2, clause 9.20, Table 66): <c>TPM_RH_ENDORSEMENT</c> parses and writes back
     /// byte-identical.
     /// </summary>
     [TestMethod]
@@ -465,7 +465,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_ENDORSEMENT (Part 2, clause 9.20, Table 67): the bare form refuses <c>TPM_RH_NULL</c> — the
+    /// TPMI_RH_ENDORSEMENT (Part 2, clause 9.20, Table 66): the bare form refuses <c>TPM_RH_NULL</c> — the
     /// table's <c>+TPM_RH_NULL</c> row applies only when the caller opts in.
     /// </summary>
     [TestMethod]
@@ -477,7 +477,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_ENDORSEMENT (Part 2, clause 9.20, Table 67): the <c>+TPM_RH_NULL</c> form admits and round-trips
+    /// TPMI_RH_ENDORSEMENT (Part 2, clause 9.20, Table 66): the <c>+TPM_RH_NULL</c> form admits and round-trips
     /// the null hierarchy.
     /// </summary>
     [TestMethod]
@@ -499,7 +499,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_ENDORSEMENT (Part 2, clause 9.20, Table 67): a hierarchy other than endorsement is refused
+    /// TPMI_RH_ENDORSEMENT (Part 2, clause 9.20, Table 66): a hierarchy other than endorsement is refused
     /// regardless of whether the null form is admitted.
     /// </summary>
     [TestMethod]
@@ -539,7 +539,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_PROVISION (Part 2, clause 9.21, Table 68): <c>TPM_RH_OWNER</c> parses and writes back
+    /// TPMI_RH_PROVISION (Part 2, clause 9.21, Table 67): <c>TPM_RH_OWNER</c> parses and writes back
     /// byte-identical.
     /// </summary>
     [TestMethod]
@@ -559,7 +559,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_PROVISION (Part 2, clause 9.21, Table 68): <c>TPM_RH_PLATFORM</c> parses and writes back
+    /// TPMI_RH_PROVISION (Part 2, clause 9.21, Table 67): <c>TPM_RH_PLATFORM</c> parses and writes back
     /// byte-identical.
     /// </summary>
     [TestMethod]
@@ -579,7 +579,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_PROVISION (Part 2, clause 9.21, Table 68): the endorsement hierarchy is not one of the two
+    /// TPMI_RH_PROVISION (Part 2, clause 9.21, Table 67): the endorsement hierarchy is not one of the two
     /// admitted selectors and is refused with <c>TPM_RC_VALUE</c>.
     /// </summary>
     [TestMethod]
@@ -619,7 +619,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_PLATFORM (Part 2, clause 9.18, Table 65): <c>TPM_RH_PLATFORM</c> parses and writes back
+    /// TPMI_RH_PLATFORM (Part 2, clause 9.18, Table 64): <c>TPM_RH_PLATFORM</c> parses and writes back
     /// byte-identical.
     /// </summary>
     [TestMethod]
@@ -639,7 +639,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_PLATFORM (Part 2, clause 9.18, Table 65): this table admits exactly one value; any other
+    /// TPMI_RH_PLATFORM (Part 2, clause 9.18, Table 64): this table admits exactly one value; any other
     /// hierarchy, such as <c>TPM_RH_OWNER</c>, is refused with <c>TPM_RC_VALUE</c>.
     /// </summary>
     [TestMethod]
@@ -679,7 +679,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_OWNER (Part 2, clause 9.19, Table 66): <c>TPM_RH_OWNER</c> parses and writes back byte-identical.
+    /// TPMI_RH_OWNER (Part 2, clause 9.19, Table 65): <c>TPM_RH_OWNER</c> parses and writes back byte-identical.
     /// </summary>
     [TestMethod]
     public void TpmiRhOwnerRoundTripsOwnerHierarchy()
@@ -698,7 +698,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_OWNER (Part 2, clause 9.19, Table 66): the bare form refuses <c>TPM_RH_NULL</c> — the table's
+    /// TPMI_RH_OWNER (Part 2, clause 9.19, Table 65): the bare form refuses <c>TPM_RH_NULL</c> — the table's
     /// <c>+TPM_RH_NULL</c> row applies only when the caller opts in.
     /// </summary>
     [TestMethod]
@@ -710,7 +710,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_OWNER (Part 2, clause 9.19, Table 66): the <c>+TPM_RH_NULL</c> form admits and round-trips the
+    /// TPMI_RH_OWNER (Part 2, clause 9.19, Table 65): the <c>+TPM_RH_NULL</c> form admits and round-trips the
     /// null hierarchy.
     /// </summary>
     [TestMethod]
@@ -732,7 +732,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_OWNER (Part 2, clause 9.19, Table 66): a hierarchy other than owner is refused regardless of
+    /// TPMI_RH_OWNER (Part 2, clause 9.19, Table 65): a hierarchy other than owner is refused regardless of
     /// whether the null form is admitted.
     /// </summary>
     [TestMethod]
@@ -772,7 +772,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_LOCKOUT (Part 2, clause 9.24, Table 71): <c>TPM_RH_LOCKOUT</c> parses and writes back
+    /// TPMI_RH_LOCKOUT (Part 2, clause 9.24, Table 70): <c>TPM_RH_LOCKOUT</c> parses and writes back
     /// byte-identical.
     /// </summary>
     [TestMethod]
@@ -792,7 +792,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_LOCKOUT (Part 2, clause 9.24, Table 71): this table admits exactly one value; any other
+    /// TPMI_RH_LOCKOUT (Part 2, clause 9.24, Table 70): this table admits exactly one value; any other
     /// hierarchy, such as <c>TPM_RH_PLATFORM</c>, is refused with <c>TPM_RC_VALUE</c>.
     /// </summary>
     [TestMethod]
@@ -832,7 +832,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_CLEAR (Part 2, clause 9.22, Table 69): <c>TPM_RH_LOCKOUT</c> parses and writes back
+    /// TPMI_RH_CLEAR (Part 2, clause 9.22, Table 68): <c>TPM_RH_LOCKOUT</c> parses and writes back
     /// byte-identical.
     /// </summary>
     [TestMethod]
@@ -852,7 +852,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_CLEAR (Part 2, clause 9.22, Table 69): <c>TPM_RH_PLATFORM</c> parses and writes back
+    /// TPMI_RH_CLEAR (Part 2, clause 9.22, Table 68): <c>TPM_RH_PLATFORM</c> parses and writes back
     /// byte-identical.
     /// </summary>
     [TestMethod]
@@ -872,7 +872,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_CLEAR (Part 2, clause 9.22, Table 69): the owner hierarchy is not one of the two admitted
+    /// TPMI_RH_CLEAR (Part 2, clause 9.22, Table 68): the owner hierarchy is not one of the two admitted
     /// selectors and is refused with <c>TPM_RC_VALUE</c>.
     /// </summary>
     [TestMethod]
@@ -912,7 +912,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_BASE_HIERARCHY (Part 2, clause 9.17, Table 64): <c>TPM_RH_OWNER</c> parses and writes back
+    /// TPMI_RH_BASE_HIERARCHY (Part 2, clause 9.17, Table 63): <c>TPM_RH_OWNER</c> parses and writes back
     /// byte-identical.
     /// </summary>
     [TestMethod]
@@ -932,7 +932,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_BASE_HIERARCHY (Part 2, clause 9.17, Table 64): <c>TPM_RH_PLATFORM</c> parses and writes back
+    /// TPMI_RH_BASE_HIERARCHY (Part 2, clause 9.17, Table 63): <c>TPM_RH_PLATFORM</c> parses and writes back
     /// byte-identical.
     /// </summary>
     [TestMethod]
@@ -952,7 +952,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_BASE_HIERARCHY (Part 2, clause 9.17, Table 64): <c>TPM_RH_ENDORSEMENT</c> parses and writes
+    /// TPMI_RH_BASE_HIERARCHY (Part 2, clause 9.17, Table 63): <c>TPM_RH_ENDORSEMENT</c> parses and writes
     /// back byte-identical.
     /// </summary>
     [TestMethod]
@@ -972,8 +972,8 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_BASE_HIERARCHY (Part 2, clause 9.17, Table 64): unlike its TPMI_RH_HIERARCHY_AUTH sibling
-    /// (Table 62), this table carries no Lockout Authorization row, so <c>TPM_RH_LOCKOUT</c> is refused with
+    /// TPMI_RH_BASE_HIERARCHY (Part 2, clause 9.17, Table 63): unlike its TPMI_RH_HIERARCHY_AUTH sibling
+    /// (Table 61), this table carries no Lockout Authorization row, so <c>TPM_RH_LOCKOUT</c> is refused with
     /// <c>TPM_RC_VALUE</c>.
     /// </summary>
     [TestMethod]
@@ -1014,7 +1014,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_ENABLES (Part 2, clause 9.14, Table 61): <c>TPM_RH_OWNER</c> parses and writes back
+    /// TPMI_RH_ENABLES (Part 2, clause 9.14, Table 60): <c>TPM_RH_OWNER</c> parses and writes back
     /// byte-identical.
     /// </summary>
     [TestMethod]
@@ -1034,7 +1034,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_ENABLES (Part 2, clause 9.14, Table 61): <c>TPM_RH_PLATFORM</c> parses and writes back
+    /// TPMI_RH_ENABLES (Part 2, clause 9.14, Table 60): <c>TPM_RH_PLATFORM</c> parses and writes back
     /// byte-identical.
     /// </summary>
     [TestMethod]
@@ -1054,7 +1054,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_ENABLES (Part 2, clause 9.14, Table 61): <c>TPM_RH_ENDORSEMENT</c> parses and writes back
+    /// TPMI_RH_ENABLES (Part 2, clause 9.14, Table 60): <c>TPM_RH_ENDORSEMENT</c> parses and writes back
     /// byte-identical.
     /// </summary>
     [TestMethod]
@@ -1074,7 +1074,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_ENABLES (Part 2, clause 9.14, Table 61): <c>TPM_RH_PLATFORM_NV</c> parses and writes back
+    /// TPMI_RH_ENABLES (Part 2, clause 9.14, Table 60): <c>TPM_RH_PLATFORM_NV</c> parses and writes back
     /// byte-identical.
     /// </summary>
     [TestMethod]
@@ -1094,7 +1094,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_ENABLES (Part 2, clause 9.14, Table 61): the bare form refuses <c>TPM_RH_NULL</c> — the
+    /// TPMI_RH_ENABLES (Part 2, clause 9.14, Table 60): the bare form refuses <c>TPM_RH_NULL</c> — the
     /// table's <c>+TPM_RH_NULL</c> row applies only when the caller opts in.
     /// </summary>
     [TestMethod]
@@ -1106,7 +1106,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_ENABLES (Part 2, clause 9.14, Table 61): the <c>+TPM_RH_NULL</c> form admits and round-trips
+    /// TPMI_RH_ENABLES (Part 2, clause 9.14, Table 60): the <c>+TPM_RH_NULL</c> form admits and round-trips
     /// the null hierarchy.
     /// </summary>
     [TestMethod]
@@ -1128,7 +1128,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_ENABLES (Part 2, clause 9.14, Table 61): the Lockout Authorization is not one of the four named
+    /// TPMI_RH_ENABLES (Part 2, clause 9.14, Table 60): the Lockout Authorization is not one of the four named
     /// selectors and is refused with <c>TPM_RC_VALUE</c>, regardless of whether the null form is admitted.
     /// </summary>
     [TestMethod]
@@ -1168,7 +1168,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_HIERARCHY_POLICY (Part 2, clause 9.16, Table 63): <c>TPM_RH_OWNER</c> parses and writes back
+    /// TPMI_RH_HIERARCHY_POLICY (Part 2, clause 9.16, Table 62): <c>TPM_RH_OWNER</c> parses and writes back
     /// byte-identical.
     /// </summary>
     [TestMethod]
@@ -1188,7 +1188,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_HIERARCHY_POLICY (Part 2, clause 9.16, Table 63): <c>TPM_RH_PLATFORM</c> parses and writes
+    /// TPMI_RH_HIERARCHY_POLICY (Part 2, clause 9.16, Table 62): <c>TPM_RH_PLATFORM</c> parses and writes
     /// back byte-identical.
     /// </summary>
     [TestMethod]
@@ -1208,7 +1208,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_HIERARCHY_POLICY (Part 2, clause 9.16, Table 63): <c>TPM_RH_ENDORSEMENT</c> parses and writes
+    /// TPMI_RH_HIERARCHY_POLICY (Part 2, clause 9.16, Table 62): <c>TPM_RH_ENDORSEMENT</c> parses and writes
     /// back byte-identical.
     /// </summary>
     [TestMethod]
@@ -1228,7 +1228,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_HIERARCHY_POLICY (Part 2, clause 9.16, Table 63): <c>TPM_RH_LOCKOUT</c> parses and writes back
+    /// TPMI_RH_HIERARCHY_POLICY (Part 2, clause 9.16, Table 62): <c>TPM_RH_LOCKOUT</c> parses and writes back
     /// byte-identical.
     /// </summary>
     [TestMethod]
@@ -1248,7 +1248,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_HIERARCHY_POLICY (Part 2, clause 9.16, Table 63): the Authenticated Countdown Timer range
+    /// TPMI_RH_HIERARCHY_POLICY (Part 2, clause 9.16, Table 62): the Authenticated Countdown Timer range
     /// (<c>{TPM_RH_ACT_0:TPM_RH_ACT_F}</c>) parses and writes back byte-identical at both range endpoints.
     /// </summary>
     [TestMethod]
@@ -1271,7 +1271,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_HIERARCHY_POLICY (Part 2, clause 9.16, Table 63): unlike its TPMI_RH_HIERARCHY_AUTH and
+    /// TPMI_RH_HIERARCHY_POLICY (Part 2, clause 9.16, Table 62): unlike its TPMI_RH_HIERARCHY_AUTH and
     /// TPMI_RH_ENABLES siblings (Tables 62 and 61), this table carries no <c>+TPM_RH_NULL</c> row, so
     /// <c>TPM_RH_NULL</c> is refused with <c>TPM_RC_VALUE</c>.
     /// </summary>
@@ -1313,7 +1313,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_HIERARCHY_AUTH (Part 2, clause 9.15, Table 62): <c>TPM_RH_OWNER</c> parses and writes back
+    /// TPMI_RH_HIERARCHY_AUTH (Part 2, clause 9.15, Table 61): <c>TPM_RH_OWNER</c> parses and writes back
     /// byte-identical.
     /// </summary>
     [TestMethod]
@@ -1333,7 +1333,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_HIERARCHY_AUTH (Part 2, clause 9.15, Table 62): <c>TPM_RH_PLATFORM</c> parses and writes back
+    /// TPMI_RH_HIERARCHY_AUTH (Part 2, clause 9.15, Table 61): <c>TPM_RH_PLATFORM</c> parses and writes back
     /// byte-identical.
     /// </summary>
     [TestMethod]
@@ -1353,7 +1353,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_HIERARCHY_AUTH (Part 2, clause 9.15, Table 62): <c>TPM_RH_ENDORSEMENT</c> parses and writes
+    /// TPMI_RH_HIERARCHY_AUTH (Part 2, clause 9.15, Table 61): <c>TPM_RH_ENDORSEMENT</c> parses and writes
     /// back byte-identical.
     /// </summary>
     [TestMethod]
@@ -1373,7 +1373,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_HIERARCHY_AUTH (Part 2, clause 9.15, Table 62): <c>TPM_RH_LOCKOUT</c> parses and writes back
+    /// TPMI_RH_HIERARCHY_AUTH (Part 2, clause 9.15, Table 61): <c>TPM_RH_LOCKOUT</c> parses and writes back
     /// byte-identical.
     /// </summary>
     [TestMethod]
@@ -1393,7 +1393,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_HIERARCHY_AUTH (Part 2, clause 9.15, Table 62): the bare form refuses <c>TPM_RH_NULL</c> — the
+    /// TPMI_RH_HIERARCHY_AUTH (Part 2, clause 9.15, Table 61): the bare form refuses <c>TPM_RH_NULL</c> — the
     /// table's <c>+TPM_RH_NULL</c> row applies only when the caller opts in.
     /// </summary>
     [TestMethod]
@@ -1405,7 +1405,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_HIERARCHY_AUTH (Part 2, clause 9.15, Table 62): the <c>+TPM_RH_NULL</c> form admits and
+    /// TPMI_RH_HIERARCHY_AUTH (Part 2, clause 9.15, Table 61): the <c>+TPM_RH_NULL</c> form admits and
     /// round-trips the null hierarchy.
     /// </summary>
     [TestMethod]
@@ -1427,7 +1427,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     }
 
     /// <summary>
-    /// TPMI_RH_HIERARCHY_AUTH (Part 2, clause 9.15, Table 62): unlike its TPMI_RH_ENABLES sibling (Table 61),
+    /// TPMI_RH_HIERARCHY_AUTH (Part 2, clause 9.15, Table 61): unlike its TPMI_RH_ENABLES sibling (Table 60),
     /// this table carries no Platform NV row, so <c>TPM_RH_PLATFORM_NV</c> is refused with <c>TPM_RC_VALUE</c>,
     /// regardless of whether the null form is admitted.
     /// </summary>

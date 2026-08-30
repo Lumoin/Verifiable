@@ -12,7 +12,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// Carries the bulk payload of the commands Part 2 names for it — <c>TPM2_Hash()</c>,
 /// <c>TPM2_SequenceUpdate()</c>, <c>TPM2_FieldUpgradeData()</c> — and of <c>TPM2_AC_Send()</c>'s
 /// <c>acDataIn</c>. It is NOT the NV data type: the NV commands' <c>data</c> parameter is a
-/// <c>TPM2B_MAX_NV_BUFFER</c> bounded by <c>MAX_NV_BUFFER_SIZE</c> (Part 2, clause 10.4.9, Table 99), which
+/// <c>TPM2B_MAX_NV_BUFFER</c> bounded by <c>MAX_NV_BUFFER_SIZE</c> (Part 2, clause 10.3.9, Table 97), which
 /// <see cref="Tpm2bMaxNvBuffer"/> carries. The content is public — it is caller-supplied input to a hashing or
 /// transport command — so this carrier holds no <see cref="Verifiable.Cryptography.SensitiveMemory"/> tag,
 /// matching <see cref="Tpm2bName"/> and <see cref="Tpm2bData"/> rather than the secret-shaped
@@ -28,22 +28,22 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// } TPM2B_MAX_BUFFER;
 /// </code>
 /// <para>
-/// Table 98 bounds the payload by <c>MAX_2B_BUFFER_SIZE</c> (<c>buffer[size] {:MAX_2B_BUFFER_SIZE}</c>), and
-/// clause 10.4.8's own prose above that table states only the constant's floor: "MAX_2B_BUFFER_SIZE is
+/// Table 96 bounds the payload by <c>MAX_2B_BUFFER_SIZE</c> (<c>buffer[size] {:MAX_2B_BUFFER_SIZE}</c>), and
+/// clause 10.3.8's own prose above that table states only the constant's floor: "MAX_2B_BUFFER_SIZE is
 /// TPM-dependent but is required to be at least 1,024." A real TPM reports its own bound through
 /// <c>TPM_PT_INPUT_BUFFER</c>. <see cref="MaxSize"/> (1024 octets) is this library's own
 /// <c>MAX_2B_BUFFER_SIZE</c>, that stated floor.
 /// </para>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, clause 10.4.8, Table 98, printed page 135.
+/// Specification reference: TPM 2.0 Library Part 2, clause 10.3.8, Table 96, printed page 135.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 public sealed class Tpm2bMaxBuffer: IDisposable
 {
     /// <summary>
-    /// This library's implementation bound for the buffer payload, in octets: Table 98's
-    /// <c>{:MAX_2B_BUFFER_SIZE}</c>, a constant clause 10.4.8's prose (printed page 135) declares
+    /// This library's implementation bound for the buffer payload, in octets: Table 96's
+    /// <c>{:MAX_2B_BUFFER_SIZE}</c>, a constant clause 10.3.8's prose (printed page 135) declares
     /// TPM-dependent and required to be at least 1,024.
     /// </summary>
     public const int MaxSize = 1024;

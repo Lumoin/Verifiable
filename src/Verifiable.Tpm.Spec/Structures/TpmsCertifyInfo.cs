@@ -24,7 +24,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// } TPMS_CERTIFY_INFO;
 /// </code>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 10.12.3, Table 169.
+/// Specification reference: TPM 2.0 Library Part 2, Section 10.11.3, Table 145.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]

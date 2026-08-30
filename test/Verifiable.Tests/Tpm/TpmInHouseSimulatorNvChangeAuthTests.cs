@@ -43,7 +43,7 @@ namespace Verifiable.Tests.Tpm;
 /// <b>ADMIN role has no authValue path on an NV Index.</b> Part 3, Section 31.15.1 states the requirement
 /// unconditionally: the command "requires that a policy session be used for authorization of nvIndex so that
 /// the ADMIN role may be asserted and that commandCode in the policy session context shall be
-/// TPM_CC_NV_ChangeAuth". Part 1, Section 17.2's ADMIN bullet offers an authValue alternative only for an
+/// TPM_CC_NV_ChangeAuth". Part 1, Section 16.2's ADMIN bullet offers an authValue alternative only for an
 /// object whose <c>adminWithPolicy</c> is CLEAR, and an NV Index carries no such attribute, so a password or
 /// plain HMAC session can never authorize this command - the negatives below pin exactly that.
 /// </para>
@@ -54,13 +54,13 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
     /// <summary>The session and policy hash algorithm used throughout; also the Name algorithm every PIN Fail Index the verbs define carries.</summary>
     private const TpmAlgIdConstants SessionAlg = TpmAlgIdConstants.TPM_ALG_SHA256;
 
-    /// <summary>The SHA-256 digest width in octets - the <c>newAuth</c> ceiling for a SHA-256 nameAlg Index (Part 1, Section 17.6.4.2).</summary>
+    /// <summary>The SHA-256 digest width in octets - the <c>newAuth</c> ceiling for a SHA-256 nameAlg Index (Part 1, Section 16.6.4.2).</summary>
     private const int Sha256DigestSize = 32;
 
     /// <summary>Every RSA storage-parent-shaped template this simulator builds fixes nameAlg to SHA-256.</summary>
     private const TpmAlgIdConstants TpmKeyNameAlg = TpmAlgIdConstants.TPM_ALG_SHA256;
 
-    /// <summary>The RSA public exponent the framework RSA key generator uses (TPM 2.0 Library Part 2, Table 215).</summary>
+    /// <summary>The RSA public exponent the framework RSA key generator uses (TPM 2.0 Library Part 2, Table 228).</summary>
     private const uint DefaultRsaExponent = 65537;
 
     /// <summary>The declared data area size of a <c>TPM_NT_PIN_FAIL</c> Index: the whole 8-octet <c>TPMS_NV_PIN_COUNTER_PARAMETERS</c> (Part 2, Section 13.3).</summary>
@@ -192,8 +192,8 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
     /// A rotation attempt is a PIN attempt: the composed policy folds <c>TPM2_PolicyAuthValue</c>, so a wrong
     /// old PIN is an HMAC mismatch answered with a session-encoded <c>TPM_RC_BAD_AUTH</c> and it burns a retry
     /// against the surviving counter (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM
-    /// 2.0 Library Specification</see>, Part 1, Section 17.6.5's policy note on the authValue term of the HMAC
-    /// key, and Section 35.2.6.6's pinCount rule, which is written in terms of the authorization outcome). The
+    /// 2.0 Library Specification</see>, Part 1, Section 16.6.5's policy note on the authValue term of the HMAC
+    /// key, and Section 34.2.6.6's pinCount rule, which is written in terms of the authorization outcome). The
     /// Index authValue must be left alone, so the genuine old PIN still authorizes afterwards - rotation is
     /// not a throttle bypass.
     /// </summary>
@@ -238,7 +238,7 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
     /// Once <c>pinCount</c> reaches <c>pinLimit</c> the at-limit gate refuses the rotation with
     /// <c>TPM_RC_AUTH_UNAVAILABLE</c> even for the CORRECT old PIN, before any HMAC work runs
     /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 1, Section 35.2.6.6) - so the code carries no session-index modifier at all.
+    /// Specification</see>, Part 1, Section 34.2.6.6) - so the code carries no session-index modifier at all.
     /// Recovery is the owner's, not the PIN holder's: an owner-authorized counter reset restores the Index and
     /// the very same rotation then succeeds.
     /// </summary>
@@ -281,7 +281,7 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
     /// on an NV Index has no authValue path at all, so a password session is the wrong KIND of authorization
     /// rather than a wrong value (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM
     /// 2.0 Library Specification</see>, Part 3, Section 31.15.1's unconditional "requires that a policy session
-    /// be used"; Part 1, Section 17.2 offers the authValue alternative only for an object with
+    /// be used"; Part 1, Section 16.2 offers the authValue alternative only for an object with
     /// <c>adminWithPolicy</c> CLEAR, an attribute no NV Index has). The password carries the Index's genuine
     /// authValue here, so nothing but the authorization type can be what is refused.
     /// </summary>
@@ -316,7 +316,7 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
     /// A plain HMAC session on <c>nvIndex</c> - a genuine cryptographic channel keyed on the Index's own
     /// authValue, everything short of a policy session - is refused with <c>TPM_RC_AUTH_TYPE</c> for the same
     /// reason the password arm is: Part 3, Section 31.15.1 requires a POLICY session, and the ADMIN role's
-    /// authValue alternative in Part 1, Section 17.2 is scoped to objects with an <c>adminWithPolicy</c>
+    /// authValue alternative in Part 1, Section 16.2 is scoped to objects with an <c>adminWithPolicy</c>
     /// attribute that NV Indexes do not have
     /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
     /// Specification</see>). This is the case a design that treated "HMAC is stronger than a password" as
@@ -369,7 +369,7 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
     /// requirement is a conjunction, and its second half - "commandCode in the policy session context shall be
     /// TPM_CC_NV_ChangeAuth"
     /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 3, Section 31.15.1; Part 1, Section 17.2's ADMIN note repeats it) - is
+    /// Specification</see>, Part 3, Section 31.15.1; Part 1, Section 16.2's ADMIN note repeats it) - is
     /// unsatisfiable for a session that bound no command code, not merely unmatched. The Index here is defined
     /// with exactly the <c>PolicyAuthValue</c>-only digest the session reaches, so the digest half genuinely
     /// passes and only the missing command-code binding can be the refusal.
@@ -430,7 +430,7 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
 
     /// <summary>
     /// The <c>decrypt</c> attribute on the AUTHORIZING policy session is refused with a session-encoded
-    /// <c>TPM_RC_ATTRIBUTES</c> rather than honoured. Part 1, Section 19.1's note is the reason: "A policy
+    /// <c>TPM_RC_ATTRIBUTES</c> rather than honoured. Part 1, Section 18.1's note is the reason: "A policy
     /// session that is used for parameter encryption uses authValue to calculate sessionValue even if the
     /// policy does not include TPM2_PolicyAuthValue()"
     /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
@@ -484,8 +484,8 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
     /// The size gate strips before it measures, and the order is normative rather than an optimization:
     /// "Trailing octets of zero are to be removed from any string before it is used as an authValue"
     /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 1, Section 17.6.4.3) and only the remainder is measured against "the size of
-    /// the digest produced by the nameAlg of the NV Index" (Part 3, Section 31.15.1; Part 1, Section 17.6.4.2).
+    /// Specification</see>, Part 1, Section 16.6.4.3) and only the remainder is measured against "the size of
+    /// the digest produced by the nameAlg of the NV Index" (Part 3, Section 31.15.1; Part 1, Section 16.6.4.2).
     /// Against a SHA-256 nameAlg Index a genuine 33-octet value is therefore <c>TPM_RC_SIZE</c> while a
     /// 32-octet value padded out with trailing zeros is accepted - and the value actually installed is the
     /// stripped one, proven by verifying with the 32-octet form afterwards. A gate that measured first would
@@ -544,7 +544,7 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
     /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
     /// Specification</see>) - and it IS required here, because the composed policy asserts
     /// <c>TPM2_PolicyAuthValue</c>. This test recomputes both candidate response HMACs off-wire from the
-    /// captured exchange (Part 1, Section 17.6.5's equation 17 over Section 16.8's rpHash): the NEW-keyed one
+    /// captured exchange (Part 1, Section 16.6.5's equation 17 over Section 15.8's rpHash): the NEW-keyed one
     /// must equal what the TPM actually framed, and an active transport that swaps in the OLD-keyed one - the
     /// exact response a TPM that had not yet committed the rotation would produce - must be REJECTED by the
     /// host session with <c>TPM_RC_AUTH_FAIL</c>. A host that failed to move its own key would accept it.
@@ -622,7 +622,7 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
     /// <summary>
     /// The replacement value rides <c>TPM2_NV_ChangeAuth</c>'s <c>newAuth</c> parameter under a decrypt
     /// session, so it never appears as wire content, and the value being rotated away from never appears
-    /// either - it only ever enters as the authorizing session's HMAC key term (Part 1, Section 17.6.5's
+    /// either - it only ever enters as the authorizing session's HMAC key term (Part 1, Section 16.6.5's
     /// equation 17, <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0
     /// Library Specification</see>). Every command byte the verb sends is captured and searched.
     /// </summary>
@@ -660,11 +660,11 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
     /// derivation, mirroring the enrollment KAT. A session that is neither bound nor salted has
     /// <c>sessionKey</c> = the Empty Buffer
     /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 1, Section 17.6.9), and a decrypt-only session's <c>sessionValue</c> is that
-    /// session key alone (Section 19.1), so the XOR keystream over <c>newAuth</c> (Section 19.2) derives from
+    /// Specification</see>, Part 1, Section 16.6.9), and a decrypt-only session's <c>sessionValue</c> is that
+    /// session key alone (Section 18.1), so the XOR keystream over <c>newAuth</c> (Section 18.2) derives from
     /// the public <c>TPM2_StartAuthSession</c> nonces and nothing else: the unsalted default's encryption is
     /// structural, and this test recovers the replacement PIN form from the captured exchange to say so
-    /// honestly. The salted overload folds a salt only the TPM can recover (Section 17.6.12, equation 25), so
+    /// honestly. The salted overload folds a salt only the TPM can recover (Section 16.6.12, equation 25), so
     /// the SAME derivation no longer recovers it - that is where genuine confidentiality lives.
     /// </summary>
     [TestMethod]
@@ -730,11 +730,11 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
     /// <c>TPMS_NV_PUBLIC</c> and therefore inside the Name: <c>Name = nameAlg ‖ H_nameAlg(handle ‖
     /// TPMS_NV_PUBLIC)</c>
     /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 1, Section 14, Table 6; Part 2, Section 13.6, Table 235). This transcribes
+    /// Specification</see>, Part 1, Section 13, Table 9; Part 2, Section 13.6, Table 251). This transcribes
     /// that recipe independently - from the marshaled field order, with the policy digest re-derived from Part
     /// 3, Section 23.17's and Section 23.11's own extend formulas - and requires the Name the TPM reports to
     /// equal it. An enrollment that installed an Empty Policy (which can never satisfy an ADMIN check, Part 1,
-    /// Section 11.2) would produce a different Name and fail here.
+    /// Section 10.2) would produce a different Name and fail here.
     /// </summary>
     [TestMethod]
     public async Task AnEnrolledPinIndexNameFoldsTheNonEmptyRotationAuthPolicy()
@@ -770,12 +770,12 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
     /// <summary>
     /// A rotation authorized by a policy that folds ONLY <c>TPM2_PolicyCommandCode(TPM_CC_NV_ChangeAuth)</c> is
     /// <c>pinCount</c>-neutral in BOTH directions. Part 3, Section 31.15.1 asks for nothing beyond that assertion
-    /// to satisfy ADMIN role, and Part 1, Section 17.6.5's policy note confines the authValue term of the session
+    /// to satisfy ADMIN role, and Part 1, Section 16.6.5's policy note confines the authValue term of the session
     /// HMAC key to a policy that ALSO asserted <c>TPM2_PolicyAuthValue</c>
     /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>) - so this session proves nothing about the current PIN, and Section 35.2.6.6's
+    /// Specification</see>) - so this session proves nothing about the current PIN, and Section 34.2.6.6's
     /// counter rule, written entirely in terms of the authorization outcome, has no outcome to record. The
-    /// session is unbound and unsalted, so its session key is the Empty Buffer (Section 17.6.9) and the whole
+    /// session is unbound and unsalted, so its session key is the Empty Buffer (Section 16.6.9) and the whole
     /// HMAC key is empty: the command authorization is recomputed here from public transcript data alone, which
     /// is what "no authValue term" means concretely. The counter must therefore neither advance nor reset, and an
     /// Index AT its limit must still rotate - the at-limit gate hangs off the same authValue fold - while the
@@ -862,15 +862,75 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
 
     /// <summary>
     /// A command-HMAC failure on the DECRYPT companion refuses the rotation without moving <c>pinCount</c> in
-    /// either direction. Part 1, Section 35.2.6.6 ties the counter to the authorization of the Index - "If the
+    /// either direction. Part 1, Section 34.2.6.6 ties the counter to the authorization of the Index - "If the
     /// authorization fails, pinCount is incremented for a PIN Fail Index"
     /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>) - and the companion session authorizes no entity at all (Part 1, Section 19.1: a
+    /// Specification</see>) - and the companion session authorizes no entity at all (Part 1, Section 18.1: a
     /// session used only for parameter encryption keys on its own session key), so its failure says nothing about
     /// whether the caller knew the PIN. The counter is deliberately parked at one before the attempt: a refusal
     /// that burned a retry would read two, and one that credited the authorizing session's success would read
     /// zero, so only "untouched" passes.
     /// </summary>
+    /// <summary>
+    /// An NV Index whose <c>authPolicy</c> is the Empty Policy has no policy path at all: Part 4
+    /// <c>IsAuthPolicyAvailable</c>'s NV arm tests the policy's SIZE ("If the policy size is not zero, check if
+    /// policy can be used"), so <c>TPM2_NV_ChangeAuth()</c> over a policy session is refused
+    /// <c>TPM_RC_AUTH_UNAVAILABLE</c> before the digest is ever compared — unlike a loaded object, whose policy is
+    /// always available and whose empty authPolicy fails the compare instead.
+    /// <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Part 3, clause 5.6; clause 31.13; Part 4 CheckAuthSession/IsAuthPolicyAvailable</see>.
+    /// </summary>
+    [TestMethod]
+    public async Task NvChangeAuthOnAnIndexWithNoAuthPolicyIsRefusedWithAuthUnavailable()
+    {
+        const uint IndexHandle = 0x0100_00C9;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRotationRegistry();
+        await DefineOrdinaryIndexAsync(device, pool, registry, IndexHandle, ReadOnlyMemory<byte>.Empty).ConfigureAwait(false);
+
+        TpmResult<NvChangeAuthResponse> result = await RotateOverCommandCodeOnlyPolicySessionAsync(device, pool, registry, IndexHandle, NewPinHash).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsSuccess, "An Index with no authPolicy must not be rotated over a policy session.");
+        Assert.AreEqual(TpmRcConstants.TPM_RC_AUTH_UNAVAILABLE, result.ResponseCode, "An NV Index with an empty authPolicy has no policy path: TPM_RC_AUTH_UNAVAILABLE.");
+    }
+
+    /// <summary>
+    /// A <c>TPM2_PolicyParameters()</c> binding on the rotation policy is judged against
+    /// <c>TPM2_NV_ChangeAuth()</c>'s real parameter area — <c>H(TPM_CC_NV_ChangeAuth || newAuth)</c> with the Index
+    /// Name skipped: the policy <c>PolicyCommandCode(TPM_CC_NV_ChangeAuth)</c> then <c>PolicyParameters(pHash)</c>
+    /// admits the rotation to exactly the bound <c>newAuth</c> and refuses any other value with a bare
+    /// <c>TPM_RC_POLICY_FAIL</c> — a policy may pin the value an Index may be rotated TO.
+    /// <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Part 3, clause 23.24; clause 31.13, Table 269; Part 4 CompareParametersHash</see>.
+    /// </summary>
+    [TestMethod]
+    public async Task NvChangeAuthUnderAParametersBindingRotatesOnlyToTheBoundNewAuth()
+    {
+        const uint IndexHandle = 0x0100_00CA;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRotationRegistry();
+
+        //pHash = SHA-256(TPM_CC_NV_ChangeAuth || TPM2B_AUTH(newAuth)) over the value the policy admits — an
+        //independent in-test oracle over the wire shape of the command's one parameter.
+        byte[] parametersHash = ComputeNvChangeAuthParametersHash(NewPinHash);
+        byte[] policy = ComputePolicyDigest(new TpmPolicyBuilder()
+            .WithCommandCode(TpmCcConstants.TPM_CC_NV_ChangeAuth)
+            .WithParameters(parametersHash)
+            .Build());
+        await DefineOrdinaryIndexAsync(device, pool, registry, IndexHandle, policy).ConfigureAwait(false);
+
+        TpmResult<NvChangeAuthResponse> otherResult = await RotateOverParametersPolicySessionAsync(
+            device, pool, registry, IndexHandle, parametersHash, SecondNewPinHash).ConfigureAwait(false);
+        Assert.IsFalse(otherResult.IsSuccess, "A newAuth other than the bound one must be refused.");
+        Assert.AreEqual(TpmRcConstants.TPM_RC_POLICY_FAIL, otherResult.ResponseCode, "The pHash binding mismatch is the policy's own bare TPM_RC_POLICY_FAIL.");
+
+        TpmResult<NvChangeAuthResponse> boundResult = await RotateOverParametersPolicySessionAsync(
+            device, pool, registry, IndexHandle, parametersHash, NewPinHash).ConfigureAwait(false);
+        Assert.IsTrue(boundResult.IsSuccess, $"The bound newAuth must rotate: '{boundResult.ResponseCode}'.");
+    }
+
     [TestMethod]
     public async Task NvChangeAuthWithATamperedDecryptSessionHmacIsRefusedWithoutMovingThePinCounter()
     {
@@ -926,11 +986,11 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
 
     /// <summary>
     /// Every refusal that precedes command-HMAC evaluation leaves <c>pinCount</c> exactly where it found it. Part
-    /// 1, Section 35.2.6.6 makes the counter a function of the Index's own authorization outcome
+    /// 1, Section 34.2.6.6 makes the counter a function of the Index's own authorization outcome
     /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
     /// Specification</see>), and a structural refusal - wrong authorization KIND (Part 3, Section 31.15.1), a
-    /// policy of the wrong shape or scope (Part 1, Section 17.2's ADMIN note), or an inadmissible session
-    /// attribute (Part 1, Section 19.1's note, refused by Part 3, Section 5.5 before Section 5.6's check 9 ever
+    /// policy of the wrong shape or scope (Part 1, Section 16.2's ADMIN note), or an inadmissible session
+    /// attribute (Part 1, Section 18.1's note, refused by Part 3, Section 5.5 before Section 5.6's check 9 ever
     /// runs) - never produces such an outcome. The counter is parked at one first, so a burned retry and a
     /// credited success are both visible failures.
     /// </summary>
@@ -1012,14 +1072,14 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
 
     /// <summary>
     /// The offline oracle a captured rotation leaves behind, closed by salting BOTH of the verb's sessions. On the
-    /// unsalted default every session key is the Empty Buffer (TPM 2.0 Library Part 1, Section 17.6.9), so the
-    /// authorizing session's HMAC key is the stored PIN form alone (Section 17.6.5, equation 17): a transcript
+    /// unsalted default every session key is the Empty Buffer (TPM 2.0 Library Part 1, Section 16.6.9), so the
+    /// authorizing session's HMAC key is the stored PIN form alone (Section 16.6.5, equation 17): a transcript
     /// plus a candidate value reproduces the COMMAND authorization keyed on the OLD value and the RESPONSE
     /// authorization keyed on the NEW one - two guessing oracles over one exchange, and the second one is keyed on
     /// the value the caller was rotating TO
     /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
     /// Specification</see>, Part 3, Section 31.15.1's response-key sentence). The salted overload folds a
-    /// KDFa-derived session key only the TPM holding the salt key can reproduce (Section 17.6.12, equation 25) in
+    /// KDFa-derived session key only the TPM holding the salt key can reproduce (Section 16.6.12, equation 25) in
     /// FRONT of that term on both legs, so the same recomputation fails both ways. The two sessions must draw
     /// independent salts, and the authorizing one must negotiate no symmetric algorithm at all - a policy session
     /// carrying decrypt or encrypt would key parameter encryption on the authValue regardless of what the policy
@@ -1138,7 +1198,7 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
         StartAuthSessionWireFields authorizing = ReadStartAuthSessionCommand(authorizingExchange.Command);
 
         Assert.AreEqual(TpmSeConstants.TPM_SE_POLICY, authorizing.SessionType, "The session that authorizes an ADMIN-role command must be a POLICY session (Part 3, Section 31.15.1).");
-        Assert.AreEqual((uint)TpmRh.TPM_RH_NULL, authorizing.Bind, "The authorizing session is unbound: Part 1, Section 35.2.8.3 forbids binding a session to a PIN Index outright.");
+        Assert.AreEqual((uint)TpmRh.TPM_RH_NULL, authorizing.Bind, "The authorizing session is unbound: Part 1, Section 34.2.8.3 forbids binding a session to a PIN Index outright.");
         Assert.AreNotEqual((uint)TpmRh.TPM_RH_NULL, authorizing.TpmKey, "The authorizing session of the salted overload is salted, so tpmKey names a loaded decrypt key.");
         Assert.AreEqual(
             TpmAlgIdConstants.TPM_ALG_NULL, authorizing.SymmetricAlgorithm,
@@ -1210,8 +1270,8 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
     /// Composes <c>TPM2_NV_ChangeAuth</c> over a policy session that asserts <c>TPM2_PolicyCommandCode</c> and
     /// NOTHING else - the minimal shape Part 3, Section 31.15.1's ADMIN requirement actually demands. No
     /// authorization value is ever set on the session, so its HMAC key stays the Empty Buffer the unbound,
-    /// unsalted session key already is (TPM 2.0 Library Part 1, Section 17.6.9) and the Index's own authValue
-    /// takes no part in the authorization (Section 17.6.5's policy note).
+    /// unsalted session key already is (TPM 2.0 Library Part 1, Section 16.6.9) and the Index's own authValue
+    /// takes no part in the authorization (Section 16.6.5's policy note).
     /// </summary>
     /// <param name="device">The TPM device.</param>
     /// <param name="pool">The memory pool.</param>
@@ -1219,6 +1279,63 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
     /// <param name="nvIndex">The Index to rotate.</param>
     /// <param name="newAuthValue">The replacement authorization value to send.</param>
     /// <returns>The rotation's raw result.</returns>
+    /// <summary>
+    /// The pHash <c>TPM2_PolicyParameters()</c> binds a rotation to: <c>SHA-256(TPM_CC_NV_ChangeAuth || TPM2B_AUTH(newAuth))</c>
+    /// — the command code and the command's one parameter as framed, the Index Name skipped (TPM 2.0 Library Part
+    /// 3, clause 23.24; clause 31.13, Table 269).
+    /// </summary>
+    /// <param name="newAuth">The replacement authValue the policy admits.</param>
+    /// <returns>The pHash.</returns>
+    private static byte[] ComputeNvChangeAuthParametersHash(ReadOnlySpan<byte> newAuth)
+    {
+        byte[] input = new byte[sizeof(uint) + sizeof(ushort) + newAuth.Length];
+        BinaryPrimitives.WriteUInt32BigEndian(input, (uint)TpmCcConstants.TPM_CC_NV_ChangeAuth);
+        BinaryPrimitives.WriteUInt16BigEndian(input.AsSpan(sizeof(uint)), (ushort)newAuth.Length);
+        newAuth.CopyTo(input.AsSpan(sizeof(uint) + sizeof(ushort)));
+
+        return SHA256.HashData(input);
+    }
+
+    /// <summary>
+    /// Rotates the Index authValue over a REAL policy session asserting <c>PolicyCommandCode(TPM_CC_NV_ChangeAuth)</c>
+    /// then <c>PolicyParameters(<paramref name="parametersHash"/>)</c>, sending <paramref name="newAuthValue"/>.
+    /// </summary>
+    /// <param name="device">The device.</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <param name="registry">The response codec registry.</param>
+    /// <param name="nvIndex">The Index to rotate.</param>
+    /// <param name="parametersHash">The pHash the session binds to.</param>
+    /// <param name="newAuthValue">The replacement authValue sent.</param>
+    /// <returns>The command result.</returns>
+    private async Task<TpmResult<NvChangeAuthResponse>> RotateOverParametersPolicySessionAsync(
+        TpmDevice device, BaseMemoryPool pool, TpmResponseRegistry registry, uint nvIndex, ReadOnlyMemory<byte> parametersHash, ReadOnlyMemory<byte> newAuthValue)
+    {
+        byte[] indexName = await ReadNameAsync(device, nvIndex).ConfigureAwait(false);
+        TpmResult<StartAuthSessionResponse> startResult = await device.StartPolicySessionAsync(SessionAlg, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(startResult.IsSuccess, $"StartPolicySessionAsync failed: '{startResult.ResponseCode}'.");
+        StartAuthSessionResponse started = startResult.Value;
+        uint sessionHandle = started.SessionHandle.Value;
+        try
+        {
+            using TpmSession session = new(new TpmHandle(sessionHandle), started.NonceTPM, SessionAlg, pool);
+            TpmResult<PolicyCommandCodeResponse> commandCodeResult = await device.PolicyCommandCodeAsync(
+                sessionHandle, TpmCcConstants.TPM_CC_NV_ChangeAuth, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(commandCodeResult.IsSuccess, $"PolicyCommandCodeAsync failed: '{commandCodeResult.ResponseCode}'.");
+            TpmResult<PolicyParametersResponse> parametersResult = await device.PolicyParametersAsync(sessionHandle, parametersHash, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(parametersResult.IsSuccess, $"PolicyParametersAsync failed: '{parametersResult.ResponseCode}'.");
+
+            using Tpm2bAuth newAuth = Tpm2bAuth.Create(newAuthValue.Span, pool);
+            using NvChangeAuthInput input = new(nvIndex, newAuth);
+
+            return await TpmCommandExecutor.ExecuteAsync<NvChangeAuthResponse>(
+                device, input, [session], [indexName], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _ = await device.FlushContextAsync(sessionHandle, CancellationToken.None).ConfigureAwait(false);
+        }
+    }
+
     private async Task<TpmResult<NvChangeAuthResponse>> RotateOverCommandCodeOnlyPolicySessionAsync(
         TpmDevice device,
         BaseMemoryPool pool,
@@ -1296,7 +1413,7 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
     /// <summary>
     /// Writes a PIN Index's whole <c>TPMS_NV_PIN_COUNTER_PARAMETERS</c> window over the owner-authorized
     /// <c>TPM2_NV_Write</c> arm - the only write path a PIN Index has, since its own authValue authorizes reads
-    /// alone (TPM 2.0 Library Part 1, Section 35.2.6.1) - so a test can establish an exact counter state without
+    /// alone (TPM 2.0 Library Part 1, Section 34.2.6.1) - so a test can establish an exact counter state without
     /// producing any authorization outcome of its own.
     /// </summary>
     /// <param name="device">The TPM device.</param>
@@ -1446,7 +1563,7 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
     /// requires - from its single extend formula: <c>policyDigest = H(policyDigest ‖ TPM_CC_PolicyCommandCode ‖
     /// TPM_CC_NV_ChangeAuth)</c> (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM
     /// 2.0 Library Specification</see>, Part 3, Section 23.11) folded over the all-zero starting digest a fresh
-    /// policy session carries (Part 1, Section 17.7). Written out with <see cref="BinaryPrimitives"/> and the
+    /// policy session carries (Part 1, Section 16.7). Written out with <see cref="BinaryPrimitives"/> and the
     /// project's registered digest seam, never through the policy builder.
     /// </summary>
     /// <param name="pool">The memory pool.</param>
@@ -1467,7 +1584,7 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
     /// Independently transcribes an NV Index's Name: <c>nameAlg ‖ H_nameAlg(nvIndex ‖ nameAlg ‖ attributes ‖
     /// authPolicy ‖ dataSize)</c>, the whole marshaled <c>TPMS_NV_PUBLIC</c>
     /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 2, Section 13.6, Table 235) hashed per Part 1, Section 14, Table 6. Uses
+    /// Specification</see>, Part 2, Section 13.6, Table 251) hashed per Part 1, Section 13, Table 9. Uses
     /// <see cref="BinaryPrimitives"/> and the project's registered digest seam directly, never
     /// <c>TpmsNvPublic.WriteTo</c> or the production Name helper.
     /// </summary>
@@ -1512,7 +1629,7 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
     /// <c>rpHash ‖ nonceTPM ‖ nonceCaller ‖ sessionAttributes</c>, where
     /// <c>rpHash = H(responseCode ‖ commandCode ‖ parameters)</c> and <c>TPM2_NV_ChangeAuth</c> has no response
     /// parameters at all (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM
-    /// 2.0 Library Specification</see>, Part 1, clauses 16.8 and 17.6.5).
+    /// 2.0 Library Specification</see>, Part 1, clauses 15.8 and 16.6.5).
     /// </summary>
     /// <param name="responseBytes">The captured response bytes, whose header supplies the response code.</param>
     /// <param name="responseNonceTpm">The session entry's rolled nonceTPM.</param>
@@ -1549,9 +1666,9 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
     /// <summary>
     /// Computes a session authorization HMAC: <c>HMAC_sessionAlg(sessionKey ‖ authValue, data)</c>
     /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 1, Section 17.6.5, equation 17). Callers supply the whole concatenated key: for
+    /// Specification</see>, Part 1, Section 16.6.5, equation 17). Callers supply the whole concatenated key: for
     /// an unbound, unsalted session it reduces to the authorization value alone, since such a session's key is
-    /// the Empty Buffer (Section 17.6.9); for a salted session it is the term a transcript observer cannot
+    /// the Empty Buffer (Section 16.6.9); for a salted session it is the term a transcript observer cannot
     /// reconstruct, which is what makes the same recomputation fail there.
     /// </summary>
     /// <param name="sessionValue">The concatenated HMAC key, trailing zeros already removed from its authValue term.</param>
@@ -1569,9 +1686,9 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
     /// <summary>
     /// Assembles a command parameter hash: <c>cpHash = H(commandCode ‖ handleNames ‖ parameters)</c>
     /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 1, Section 16.7, equation 15), over the parameter area exactly as it crossed the
+    /// Specification</see>, Part 1, Section 15.7, equation 15), over the parameter area exactly as it crossed the
     /// wire - encrypted, when a decrypt session encrypted it, because parameter encryption precedes the hash
-    /// (Section 19.1).
+    /// (Section 18.1).
     /// </summary>
     /// <param name="pool">The memory pool.</param>
     /// <param name="commandCode">The command code being hashed.</param>
@@ -1596,7 +1713,7 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
     /// Recomputes the AUTHORIZING session's command authorization HMAC from captured wire data and a candidate
     /// key: <c>HMAC_sessionAlg(key, cpHash ‖ nonceCaller ‖ nonceTPM ‖ foldedNonces ‖ sessionAttributes)</c>
     /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 1, Section 17.6.5, equation 17, with Section 17.6.3.4's
+    /// Specification</see>, Part 1, Section 16.6.5, equation 17, with Section 16.6.3.4's
     /// <c>nonceTPMdecrypt</c> fold, which applies to the first session of a command that authorizes an entity).
     /// The session's <c>nonceTPM</c> is still its <c>TPM2_StartAuthSession</c> response nonce, since a policy
     /// assertion is a command handle rather than an authorization and rolls no nonce.
@@ -1667,8 +1784,8 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
     /// Recovers what a passive bus observer would read out of a captured rotation's encrypted <c>newAuth</c>
     /// parameter, assuming the decrypt session is neither bound nor salted and its session key is therefore the
     /// Empty Buffer (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0
-    /// Library Specification</see>, Part 1, Section 17.6.9): XOR-decrypts with the command-direction mask keyed
-    /// on that value (Section 19.2, <c>nonceNewer</c> = nonceCaller, <c>nonceOlder</c> = the session's nonceTPM,
+    /// Library Specification</see>, Part 1, Section 16.6.9): XOR-decrypts with the command-direction mask keyed
+    /// on that value (Section 18.2, <c>nonceNewer</c> = nonceCaller, <c>nonceOlder</c> = the session's nonceTPM,
     /// still the <c>TPM2_StartAuthSession</c> response nonce for the session's first command). Uses the
     /// project's own parameter-encryption primitive, so a match means the keystream was genuinely public and a
     /// mismatch means it was not.
@@ -1697,7 +1814,7 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
     /// <summary>
     /// Locates the <c>TPM2_StartAuthSession</c> exchange that created <paramref name="sessionHandle"/> and
     /// returns the nonceTPM its response carried - the session's <c>nonceOlder</c> for the first command sent
-    /// over it (TPM 2.0 Library Part 1, Section 19.2).
+    /// over it (TPM 2.0 Library Part 1, Section 18.2).
     /// </summary>
     /// <param name="pairs">The recorded command/response triples.</param>
     /// <param name="sessionHandle">The session handle to find.</param>
@@ -1775,7 +1892,7 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
     /// Reads a captured <c>TPM2_StartAuthSession</c> command's declared shape straight off the wire: the two
     /// handles, then <c>nonceCaller ‖ encryptedSalt ‖ sessionType ‖ symmetric ‖ authHash</c> (TPM 2.0 Library
     /// Part 3, Section 11.1). <c>TPMT_SYM_DEF</c>'s <c>keyBits</c>/<c>mode</c> unions collapse to nothing under
-    /// <c>TPM_ALG_NULL</c> (Part 2, Section 11.1.6, Table 159), and <c>authHash</c> is the last parameter, so the
+    /// <c>TPM_ALG_NULL</c> (Part 2, Section 11.1.6, Table 162), and <c>authHash</c> is the last parameter, so the
     /// octets the definition occupied are what remains once <c>authHash</c> is set aside - which is what lets a
     /// caller assert that no symmetric algorithm was negotiated at all rather than merely selected as null.
     /// </summary>
@@ -1874,7 +1991,7 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
     /// Walks a built command's authorization area and yields each session entry's handle, caller nonce,
     /// attributes octet, and the position of its <c>hmac</c> field's data octets: handle area,
     /// <c>authorizationSize</c>, then one <c>sessionHandle ‖ nonceCaller ‖ sessionAttributes ‖ hmac</c> entry per
-    /// session until the declared size is consumed (TPM 2.0 Library Part 1, Section 18.5).
+    /// session until the declared size is consumed (TPM 2.0 Library Part 1, Section 17.5).
     /// </summary>
     /// <param name="command">The captured command bytes.</param>
     /// <param name="handleCount">The number of handles in the command's handle area.</param>
@@ -1912,7 +2029,7 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
     /// <summary>
     /// Reads a built command's whole parameter area - everything past the declared authorization area - so a test
     /// can hash it as the <c>parameters</c> term of <c>cpHash</c> exactly as it crossed the wire (TPM 2.0 Library
-    /// Part 1, Section 16.7, equation 15).
+    /// Part 1, Section 15.7, equation 15).
     /// </summary>
     /// <param name="command">The captured command bytes.</param>
     /// <param name="handleCount">The number of handles in the command's handle area.</param>
@@ -1935,7 +2052,7 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
     /// <summary>
     /// Reads the (encrypted) <c>newAuth</c> parameter's data octets out of a built <c>TPM2_NV_ChangeAuth</c>
     /// command: the command's sole parameter, a <c>TPM2B_AUTH</c> whose size field is never encrypted (TPM 2.0
-    /// Library Part 1, Section 19.1).
+    /// Library Part 1, Section 18.1).
     /// </summary>
     /// <param name="command">The captured command bytes.</param>
     /// <param name="handleCount">The number of handles in the command's handle area.</param>
@@ -1998,7 +2115,7 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
 
     /// <summary>
     /// Removes trailing zero octets, the transformation an authorization value always undergoes before it is
-    /// used in an authorization computation (TPM 2.0 Library Part 1, Section 17.6.4.3).
+    /// used in an authorization computation (TPM 2.0 Library Part 1, Section 16.6.4.3).
     /// </summary>
     /// <param name="value">The value to strip.</param>
     /// <returns>The value with trailing zero octets removed.</returns>

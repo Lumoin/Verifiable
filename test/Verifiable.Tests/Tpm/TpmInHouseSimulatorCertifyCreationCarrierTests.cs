@@ -16,7 +16,7 @@ namespace Verifiable.Tests.Tpm;
 
 /// <summary>
 /// Proves the pooled-carrier ownership of <c>TPM2_CertifyCreation()</c>'s wire parameters (TPM 2.0 Library Part
-/// 3, clause 18.3, Table 88) against the in-house behavioural <see cref="TpmSimulator"/>: the
+/// 3, clause 18.3, Table 99) against the in-house behavioural <see cref="TpmSimulator"/>: the
 /// <c>qualifyingData</c> (<c>TPM2B_DATA</c>), the <c>creationHash</c> (<c>TPM2B_DIGEST</c>), and the creation
 /// ticket's own digest each ride a carrier the parser rents, and each reaches the pool again on every path a
 /// command can leave by — refused at the entry transition, refused at the session continuation, refused for a
@@ -219,7 +219,7 @@ internal sealed class TpmInHouseSimulatorCertifyCreationCarrierTests
     /// the response has been consumed: the qualifying data, the creation hash, and the ticket digest transferred
     /// out of the request into the certify-creation action, so it is the attesting effect — not the continuation
     /// — that is their terminal owner, and the ticket comparison and the attestation have read their octets by
-    /// the time it releases them (TPM 2.0 Library Part 3, clause 18.3; Part 1, clause 16.6.1 for the response
+    /// the time it releases them (TPM 2.0 Library Part 3, clause 18.3; Part 1, clause 15.6.1 for the response
     /// entry).
     /// </summary>
     [TestMethod]
@@ -252,8 +252,8 @@ internal sealed class TpmInHouseSimulatorCertifyCreationCarrierTests
 
     /// <summary>
     /// A <c>qualifyingData</c> wider than <c>TPM2B_DATA</c>'s declared bound — <c>sizeof(TPMT_HA)</c>, the
-    /// 2-octet algorithm identifier plus the largest supported digest (TPM 2.0 Library Part 2, clause 10.4.3,
-    /// Table 93) — is refused with <c>TPM_RC_SIZE</c> while the frame is still being parsed, so the parse rents
+    /// 2-octet algorithm identifier plus the largest supported digest (TPM 2.0 Library Part 2, clause 10.3.3,
+    /// Table 91) — is refused with <c>TPM_RC_SIZE</c> while the frame is still being parsed, so the parse rents
     /// nothing at all: the pool balance does not move, and the refusal is a response code rather than an
     /// exception escaping the command surface.
     /// </summary>
@@ -298,7 +298,7 @@ internal sealed class TpmInHouseSimulatorCertifyCreationCarrierTests
                 tpm, overBoundInput, [overBoundAuth], null, trackingPool.Pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
             Assert.AreEqual(
                 TpmRcConstants.TPM_RC_SIZE, overBoundResult.ResponseCode,
-                "A qualifyingData wider than sizeof(TPMT_HA) is TPM_RC_SIZE (TPM 2.0 Library Part 2, clause 10.4.3, Table 93).");
+                "A qualifyingData wider than sizeof(TPMT_HA) is TPM_RC_SIZE (TPM 2.0 Library Part 2, clause 10.3.3, Table 91).");
 
             Assert.AreEqual(
                 overBoundRentsBefore, trackingPool.RentedCountOfSize(overBound.Length),
@@ -335,7 +335,7 @@ internal sealed class TpmInHouseSimulatorCertifyCreationCarrierTests
     /// Certifies <paramref name="subject"/>'s creation with <paramref name="ak"/> over a fresh, real, unbound and
     /// unsalted HMAC sign session carrying <paramref name="signSlotAuthValue"/>, flushing the session on the way
     /// out. The session lives entirely inside this call, so the nonce carrier it adopts from the response (TPM
-    /// 2.0 Library Part 1, clause 16.6.1) is released before a caller reads the pool balance.
+    /// 2.0 Library Part 1, clause 15.6.1) is released before a caller reads the pool balance.
     /// </summary>
     /// <param name="tpm">The TPM device.</param>
     /// <param name="registry">The response codec registry.</param>

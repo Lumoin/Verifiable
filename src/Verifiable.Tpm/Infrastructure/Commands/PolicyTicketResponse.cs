@@ -1,7 +1,7 @@
 namespace Verifiable.Tpm.Infrastructure.Commands;
 
 /// <summary>
-/// Response for TPM2_PolicyTicket. This command has no response handles and no response parameters (Table 132),
+/// Response for TPM2_PolicyTicket. This command has no response handles and no response parameters (Table 149),
 /// so the response is the 10-byte header alone — symmetric with TPM2_PolicyAuthorize's response shape.
 /// </summary>
 /// <remarks>

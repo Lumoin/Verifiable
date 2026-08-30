@@ -20,7 +20,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </para>
 /// <para>
 /// Owner-hierarchy persistent handles occupy 0x81000000-0x817FFFFF. This command is authorized, so it is sent
-/// with <c>TPM_ST_SESSIONS</c>. See TPM 2.0 Library Part 3, Section 28.5 (Table 196). It has no response
+/// with <c>TPM_ST_SESSIONS</c>. See TPM 2.0 Library Part 3, Section 28.5 (Table 230). It has no response
 /// parameters.
 /// </para>
 /// </remarks>

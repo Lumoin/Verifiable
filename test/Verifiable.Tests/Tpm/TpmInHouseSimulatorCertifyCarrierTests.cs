@@ -17,8 +17,8 @@ namespace Verifiable.Tests.Tpm;
 
 /// <summary>
 /// Proves the pooled-carrier ownership of <c>TPM2_Certify()</c>'s <c>qualifyingData</c> parameter
-/// (<c>TPM2B_DATA</c>, TPM 2.0 Library Part 2, clause 10.4.3, Table 93; the command is Part 3, clause 18.2,
-/// Table 89) against the in-house behavioural <see cref="TpmSimulator"/>: the caller nonce rides a carrier the
+/// (<c>TPM2B_DATA</c>, TPM 2.0 Library Part 2, clause 10.3.3, Table 91; the command is Part 3, clause 18.2,
+/// Table 97) against the in-house behavioural <see cref="TpmSimulator"/>: the caller nonce rides a carrier the
 /// parser rents, and it reaches the pool again on every path the command can leave by — refused at the entry
 /// transition, refused at the session continuation, refused for a mismatched command HMAC at either of the two
 /// authorization slots, and certified successfully — while a frame the parser itself refuses rents nothing at
@@ -41,7 +41,7 @@ namespace Verifiable.Tests.Tpm;
 /// </para>
 /// <para>
 /// Every balance is taken with the client-side <see cref="TpmSession"/> already disposed, because a session
-/// adopts the nonceTPM carrier its response entry carries (Part 1, clause 16.6.1) and holds it until the session
+/// adopts the nonceTPM carrier its response entry carries (Part 1, clause 15.6.1) and holds it until the session
 /// itself is released — a balance read while the session is alive is one rental high.
 /// </para>
 /// </remarks>
@@ -54,7 +54,7 @@ internal sealed class TpmInHouseSimulatorCertifyCarrierTests
     /// <summary>
     /// The certified object's authValue for the session-authorized fixtures. It stays inside the SHA-256
     /// nameAlg's 32-octet digest width, the bound an object's authValue may not exceed (TPM 2.0 Library Part 1,
-    /// clause 17.6.4.2).
+    /// clause 16.6.4.2).
     /// </summary>
     private const string SubjectPassword = "certify-carrier-subject-auth";
 
@@ -230,7 +230,7 @@ internal sealed class TpmInHouseSimulatorCertifyCarrierTests
     /// the parser rented once the response has been consumed: the qualifying data transferred out of the request
     /// into the certify action, so it is the attesting effect — not the continuation — that is its terminal
     /// owner, and the attestation has copied its octets into <c>extraData</c> by the time it releases them (TPM
-    /// 2.0 Library Part 3, clause 18.2; Part 1, clause 16.6.1 for the response entries).
+    /// 2.0 Library Part 3, clause 18.2; Part 1, clause 15.6.1 for the response entries).
     /// </summary>
     [TestMethod]
     public async Task SuccessfulCertifyOverSessionReturnsTheParseRentedCarriersToPool()
@@ -269,7 +269,7 @@ internal sealed class TpmInHouseSimulatorCertifyCarrierTests
     /// <para>
     /// A password authorization has no nonce: the reference settles it while unmarshaling the session area — "the
     /// nonce size must be zero", answered <c>TPM_RCS_NONCE + errorIndex</c> — and the response side of the same
-    /// fact is TPM 2.0 Library Part 1, clause 16.6.2.2, Table 11's "will be zero for a password authorization".
+    /// fact is TPM 2.0 Library Part 1, clause 15.6.2.2, Table 14's "will be zero for a password authorization".
     /// The refusal is structural, so it precedes every authorization check (Part 3, clause 5.5 precedes clause
     /// 5.6) and the planted octets are never keyed into anything.
     /// </para>
@@ -339,8 +339,8 @@ internal sealed class TpmInHouseSimulatorCertifyCarrierTests
 
     /// <summary>
     /// A <c>qualifyingData</c> wider than <c>TPM2B_DATA</c>'s declared bound — <c>sizeof(TPMT_HA)</c>, the
-    /// 2-octet algorithm identifier plus the largest supported digest (TPM 2.0 Library Part 2, clause 10.4.3,
-    /// Table 93) — is refused with <c>TPM_RC_SIZE</c> while the frame is still being parsed, so the parse rents
+    /// 2-octet algorithm identifier plus the largest supported digest (TPM 2.0 Library Part 2, clause 10.3.3,
+    /// Table 91) — is refused with <c>TPM_RC_SIZE</c> while the frame is still being parsed, so the parse rents
     /// nothing at all: the pool balance does not move, and the refusal is a response code rather than an
     /// exception escaping the command surface.
     /// </summary>
@@ -385,7 +385,7 @@ internal sealed class TpmInHouseSimulatorCertifyCarrierTests
                 tpm, overBoundInput, [overBoundObjectAuth, overBoundSignAuth], null, trackingPool.Pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
             Assert.AreEqual(
                 TpmRcConstants.TPM_RC_SIZE, overBoundResult.ResponseCode,
-                "A qualifyingData wider than sizeof(TPMT_HA) is TPM_RC_SIZE (TPM 2.0 Library Part 2, clause 10.4.3, Table 93).");
+                "A qualifyingData wider than sizeof(TPMT_HA) is TPM_RC_SIZE (TPM 2.0 Library Part 2, clause 10.3.3, Table 91).");
 
             Assert.AreEqual(
                 overBoundRentsBefore, trackingPool.RentedCountOfSize(overBound.Length),
@@ -401,7 +401,7 @@ internal sealed class TpmInHouseSimulatorCertifyCarrierTests
     /// Certifies <paramref name="subject"/> with <paramref name="ak"/> over two fresh, real, unbound and
     /// unsalted HMAC sessions — one per authorization slot, in handle order — flushing both on the way out. The
     /// sessions live entirely inside this call, so the nonce carriers they adopt from the response entries (TPM
-    /// 2.0 Library Part 1, clause 16.6.1) are released before a caller reads the pool balance.
+    /// 2.0 Library Part 1, clause 15.6.1) are released before a caller reads the pool balance.
     /// </summary>
     /// <param name="tpm">The TPM device.</param>
     /// <param name="registry">The response codec registry.</param>
@@ -450,7 +450,7 @@ internal sealed class TpmInHouseSimulatorCertifyCarrierTests
     /// <c>TPM_RS_PW</c> object slot and one fresh, real, unbound and unsalted HMAC sign session — issuing the
     /// command through <paramref name="plantingTpm"/> so the password slot arrives carrying a non-empty
     /// <c>nonceCaller</c>, and flushing the session on the way out. The session lives entirely inside this call,
-    /// so the nonce carrier it adopts from its response entry (TPM 2.0 Library Part 1, clause 16.6.1) is released
+    /// so the nonce carrier it adopts from its response entry (TPM 2.0 Library Part 1, clause 15.6.1) is released
     /// before a caller reads the pool balance.
     /// </summary>
     /// <param name="plainTpm">The untouched TPM device, used for the session lifecycle commands.</param>
@@ -607,7 +607,7 @@ internal sealed class TpmInHouseSimulatorCertifyCarrierTests
     /// <summary>
     /// Creates a dictionary-attack-exempt primary ECC P-256 signing key under the given hierarchy carrying a
     /// NON-EMPTY authValue — the fixture the session-authorized paths need so a wrong authValue is a plain
-    /// <c>TPM_RC_BAD_AUTH</c> that moves no lockout counter (TPM 2.0 Library Part 1, clause 17.8.1).
+    /// <c>TPM_RC_BAD_AUTH</c> that moves no lockout counter (TPM 2.0 Library Part 1, clause 16.8.1).
     /// </summary>
     /// <param name="tpm">The TPM device.</param>
     /// <param name="registry">The response codec registry.</param>

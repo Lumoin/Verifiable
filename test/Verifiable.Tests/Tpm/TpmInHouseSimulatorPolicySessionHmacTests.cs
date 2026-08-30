@@ -19,7 +19,7 @@ namespace Verifiable.Tests.Tpm;
 
 /// <summary>
 /// Drives <c>TPM2_PolicySecret()</c>'s POLICY-session authorization arm — equations 26/27 (TPM 2.0 Library Part
-/// 1, clause 17.6.12) and the PolicySecret-scoped <c>TPM_RC_MODE</c> gate (Part 3, Section 23.4.1) — plus the
+/// 1, clause 16.6.12) and the PolicySecret-scoped <c>TPM_RC_MODE</c> gate (Part 3, Section 23.4.1) — plus the
 /// salted/bound POLICY session factories (Part 3, Section 11.1.1) against the in-house behavioural
 /// <see cref="TpmSimulator"/> — entirely in-process, with no external assets — through the same production
 /// command path the production code uses (<see cref="TpmCommandExecutor"/> with the real
@@ -37,7 +37,7 @@ namespace Verifiable.Tests.Tpm;
 /// <para>
 /// <b>A hierarchy must be given a policy before a POLICY session can authorize it at all.</b> "When the
 /// authPolicy is empty, it cannot match any policyDigest value so the use of authPolicy is disabled" (TPM 2.0
-/// Library Part 1, clause 11.2, Table 5), so every test here first installs one through
+/// Library Part 1, clause 10.2, Table 8), so every test here first installs one through
 /// <c>TPM2_SetPrimaryPolicy</c> (Part 3, Section 24.3) — otherwise the authorizer is refused with
 /// <c>TPM_RC_AUTH_UNAVAILABLE</c> before any of the mechanics below is reached. The digest installed is the one
 /// the test's own session will accumulate: the <c>TPM2_PolicyAuthValue</c> fold for the tests that run it, and
@@ -46,7 +46,7 @@ namespace Verifiable.Tests.Tpm;
 /// </para>
 /// <para>
 /// <b>eq. 26 vs. eq. 27.</b> Equation 26's key is <c>sessionKey ‖ authValue</c>; equation 27's is
-/// <c>sessionKey</c> alone, and <c>isAuthValueNeeded</c> decides between them (Part 1, clause 17.6.12).
+/// <c>sessionKey</c> alone, and <c>isAuthValueNeeded</c> decides between them (Part 1, clause 16.6.12).
 /// Equation 27 is unreachable for <c>PolicySecret</c> specifically: <c>TPM_RC_MODE</c> categorically refuses an
 /// isAuthValueNeeded-CLEAR policy-session authorizer before any HMAC is ever evaluated (see
 /// <see cref="PolicySecretOverPolicySessionWithoutPolicyAuthValueReturnsMode"/>), and no other command in this
@@ -57,7 +57,7 @@ namespace Verifiable.Tests.Tpm;
 /// rather than by inspection;
 /// <see cref="IndependentlyTranscribedEquation26AuthHmacMatchesWhatTheSimulatorAccepted"/> pins the same
 /// equation byte-for-byte against an independent transcription over an unbound, unsalted session whose
-/// <c>PolicySessionState.SessionKey</c> is itself the Empty Buffer (clause 17.6.9 — no bind entity, no salt, no
+/// <c>PolicySessionState.SessionKey</c> is itself the Empty Buffer (clause 16.6.9 — no bind entity, no salt, no
 /// KDFa run at all). The salted E2E tests
 /// (<see cref="SaltedUnboundPolicySessionAuthorizesPolicySecretRsa"/>,
 /// <see cref="SaltedUnboundPolicySessionAuthorizesPolicySecretEcc"/>) are where a genuine, non-empty
@@ -76,7 +76,7 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
     /// <summary>Every RSA/ECC storage-parent-shaped template this simulator builds fixes nameAlg to SHA-256.</summary>
     private const TpmAlgIdConstants TpmKeyNameAlg = TpmAlgIdConstants.TPM_ALG_SHA256;
 
-    /// <summary>The RSA public exponent the framework RSA key generator uses (Table 215's "0" default).</summary>
+    /// <summary>The RSA public exponent the framework RSA key generator uses (Table 228's "0" default).</summary>
     private const uint DefaultRsaExponent = 65537;
 
     /// <summary>Gets or sets the per-test context (supplies the cancellation token).</summary>
@@ -85,12 +85,12 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
     /// <summary>
     /// Part 3, Section 23.4.1 verbatim: "If a policy session is used and use of the authValue of authHandle is
     /// not required, the TPM will return TPM_RC_MODE." A fresh POLICY session's isAuthValueNeeded/isPasswordNeeded
-    /// both default CLEAR (Part 1, clause 17.7.8), so authorizing PolicySecret with one before running
+    /// both default CLEAR (Part 1, clause 16.7.8), so authorizing PolicySecret with one before running
     /// <c>TPM2_PolicyAuthValue()</c> must be refused — before any HMAC is ever evaluated.
     /// </summary>
     /// <remarks>
     /// The policy installed on the endorsement hierarchy is the Zero Digest, which is exactly what a fresh
-    /// session's policyDigest already is (Part 1, clause 17.7.1), so the session satisfies the hierarchy's policy
+    /// session's policyDigest already is (Part 1, clause 16.7.1), so the session satisfies the hierarchy's policy
     /// and the refusal can only be the isAuthValueNeeded gate. Installing the <c>TPM2_PolicyAuthValue</c> digest
     /// instead would pre-empt it with <c>TPM_RC_POLICY_FAIL</c>, and installing nothing at all would pre-empt it
     /// with <c>TPM_RC_AUTH_UNAVAILABLE</c> — each a different rung of the same ladder.
@@ -130,7 +130,7 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
     /// <summary>
     /// The positive counterpart: once <c>TPM2_PolicyAuthValue()</c> SETs isAuthValueNeeded (Part 1, clause
     /// 17.7.7.6), the SAME session authorizing the SAME command now succeeds via equation 26 (TPM 2.0 Library Part
-    /// 1, clause 17.6.12) — proving the flag
+    /// 1, clause 16.6.12) — proving the flag
     /// genuinely gates <c>TPM_RC_MODE</c> rather than the command being unconditionally refused for a POLICY
     /// authorizer.
     /// </summary>
@@ -172,11 +172,11 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
     /// <summary>
     /// Equation 26 over a genuinely non-empty authorization value, which is where its key composition becomes
     /// observable rather than merely stated: <c>authHMAC = HMAC(sessionKey ‖ authValue, …)</c> (TPM 2.0 Library
-    /// Part 1, clause 17.6.12). <c>TPM2_HierarchyChangeAuth</c> gives the endorsement hierarchy a real
+    /// Part 1, clause 16.6.12). <c>TPM2_HierarchyChangeAuth</c> gives the endorsement hierarchy a real
     /// authorization value first (Part 3, Section 24.8.1), so the two candidate keys differ; the session that
     /// folds that value into its own key authorizes, and an otherwise identical session that folds nothing is
     /// refused with a session-encoded <c>TPM_RC_BAD_AUTH</c> - the endorsement hierarchy is a
-    /// dictionary-attack-exempt permanent entity (Part 1, clause 17.8.1), so its mismatch moves no counter. An
+    /// dictionary-attack-exempt permanent entity (Part 1, clause 16.8.1), so its mismatch moves no counter. An
     /// implementation that keyed a policy-session authorizer on the session key alone would accept both.
     /// </summary>
     [TestMethod]
@@ -249,10 +249,10 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
 
 
     /// <summary>
-    /// The equation 26 (TPM 2.0 Library Part 1, clause 17.6.12) authValue term enters the session HMAC key with
+    /// The equation 26 (TPM 2.0 Library Part 1, clause 16.6.12) authValue term enters the session HMAC key with
     /// trailing zero octets removed (TPM 2.0
-    /// Library Part 1, clause 17.6.4.3: "Trailing octets of zero are to be removed from any string before it is
-    /// used as an authValue"; clause 17.6.5's Note applies the same rule to the HMAC computation). The hierarchy
+    /// Library Part 1, clause 16.6.4.3: "Trailing octets of zero are to be removed from any string before it is
+    /// used as an authValue"; clause 16.6.5's Note applies the same rule to the HMAC computation). The hierarchy
     /// is rotated to a value ENDING in zero octets and the authorizing session receives that same zero-tailed
     /// form: the host session strips before keying, so the authorization succeeds only if the simulator strips
     /// its stored term identically — a simulator folding the raw stored bytes diverges and refuses.
@@ -301,7 +301,7 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
         }
 
         //The password arm accepts the same secret in its zero-padded shape: both compare operands strip
-        //(Part 1, clause 17.6.4.3), so whichever form the caller retained — padded or already stripped —
+        //(Part 1, clause 16.6.4.3), so whichever form the caller retained — padded or already stripped —
         //authorizes the next rotation.
         TpmResult<HierarchyChangeAuthResponse> paddedRotation = await tpm.ChangeHierarchyAuthWithPasswordAsync(
             TpmRh.TPM_RH_ENDORSEMENT, zeroTailedAuth, ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false);
@@ -444,9 +444,9 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
     }
 
     /// <summary>
-    /// Independently transcribes equation 26's exact authHMAC (TPM 2.0 Library Part 1, clause 17.6.12: <c>authHMAC
+    /// Independently transcribes equation 26's exact authHMAC (TPM 2.0 Library Part 1, clause 16.6.12: <c>authHMAC
     /// = HMAC(sessionKey ‖ authValue, cpHash ‖ nonceCaller ‖ nonceTPM ‖ sessionAttributes)</c>) over a genuine
-    /// POLICY-table session — sessionKey is the Empty Buffer (clause 17.6.9: this session is unbound and
+    /// POLICY-table session — sessionKey is the Empty Buffer (clause 16.6.9: this session is unbound and
     /// unsalted, so no KDFa runs at all), cpHash and the HMAC itself via <c>CryptographicKeyEvents</c>'s
     /// registered digest/HMAC seam — from the raw wire bytes the session actually sent, proving the simulator's
     /// accept path against an independently-assembled transcription (see the class remarks for why authValue is
@@ -496,7 +496,7 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
 
             BaseMemoryPool oraclePool = BaseMemoryPool.Shared;
 
-            //Part 1, clause 17.6.9: a session that is neither bound nor salted has sessionKey = an Empty Buffer —
+            //Part 1, clause 16.6.9: a session that is neither bound nor salted has sessionKey = an Empty Buffer —
             //no KDFa is run at all, unlike the bound/salted recipes (equations 20/23/25).
             ReadOnlyMemory<byte> sessionKey = ReadOnlyMemory<byte>.Empty;
 
@@ -515,7 +515,7 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
             using DigestValue cpHash = await CryptographicKeyEvents.ComputeDigestAsync(
                 cpHashInputOwner.Memory[..cpHashInputLength], outputByteLength: DigestSize, tag: DigestTag(), pool: oraclePool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-            //Equation 26 (TPM 2.0 Library Part 1, clause 17.6.12): authHMAC = HMAC(sessionKey ‖ authValue, cpHash ‖ nonceCaller ‖ nonceTPM ‖
+            //Equation 26 (TPM 2.0 Library Part 1, clause 16.6.12): authHMAC = HMAC(sessionKey ‖ authValue, cpHash ‖ nonceCaller ‖ nonceTPM ‖
             //sessionAttributes). authValue is the endorsement hierarchy's own authorization value (empty, per the
             //class remarks) — the key reduces to sessionKey, but the KEY COMPOSITION itself (not merely its
             //accidental value) is what this transcription exercises.
@@ -642,7 +642,7 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
     /// <summary>
     /// A salted AND bound POLICY session (RSA tpmKey, bound to the owner hierarchy) authorizes PolicySecret end to
     /// end: the distinction that the bind entity's authValue strengthens the KDFa sessionKey once, at
-    /// establishment — Part 1, clause 17.6.12 equation 25 — and is never re-folded into the per-command authHMAC
+    /// establishment — Part 1, clause 16.6.12 equation 25 — and is never re-folded into the per-command authHMAC
     /// merely because the session is bound) is exercised structurally here since the bind entity (owner) and the
     /// authorized entity (endorsement) are DIFFERENT, so no bind-entity-omission question could arise even for an
     /// HMAC session; equation 26/27 alone (isAuthValueNeeded) decides the authValue fold, exactly as for the
@@ -844,7 +844,7 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
     /// Installs <paramref name="policyDigest"/> as the endorsement hierarchy's authorization policy through
     /// <c>TPM2_SetPrimaryPolicy</c> (TPM 2.0 Library Part 3, Section 24.3), the precondition every
     /// policy-session authorizer in this file needs: an entity whose authPolicy is the Empty Buffer is outside
-    /// the policy path entirely (Part 1, clause 11.2, Table 5).
+    /// the policy path entirely (Part 1, clause 10.2, Table 8).
     /// </summary>
     /// <param name="tpm">The TPM device.</param>
     /// <param name="policyDigest">The digest the authorizing session will accumulate.</param>
@@ -883,7 +883,7 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
     }
 
     /// <summary>
-    /// The Zero Digest a fresh policy session's policyDigest starts at (TPM 2.0 Library Part 1, clause 17.7.1) -
+    /// The Zero Digest a fresh policy session's policyDigest starts at (TPM 2.0 Library Part 1, clause 16.7.1) -
     /// a legitimate <see cref="DigestSize"/>-octet policy value, and a different thing from the Empty Buffer,
     /// which disables policy authorization altogether.
     /// </summary>
@@ -927,7 +927,7 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
     /// <summary>
     /// Starts an unbound, unsalted POLICY session through the production <c>TPM2_StartAuthSession()</c> path and
     /// wraps it as a <see cref="TpmSession"/> via the plain constructor, whose sessionKey is the Empty Buffer
-    /// (TPM 2.0 Library Part 1, clause 17.6.9) — no bind entity, no salt, so no KDFa runs. Also returns copies of
+    /// (TPM 2.0 Library Part 1, clause 16.6.9) — no bind entity, no salt, so no KDFa runs. Also returns copies of
     /// the two start nonces (captured before nonceTPM's ownership transfers into the session) for tests that need
     /// an independent oracle.
     /// </summary>

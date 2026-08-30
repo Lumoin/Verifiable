@@ -32,7 +32,7 @@ namespace Verifiable.Tests.Tpm;
 /// <para>
 /// The two OAEP delegates (credential-protection seed transport) are NOT implemented here: the framework RSA
 /// OAEP surface exposes no custom label parameter, so it cannot reproduce TPM 2.0's <c>"IDENTITY"</c>-labelled
-/// encoding (TPM 2.0 Library Part 1, Annex B.4, B.10.3, B.10.4). <see cref="Create"/> composes them in from
+/// encoding (TPM 2.0 Library Part 1, clause 43.4, 20.3.2.3, 21.3). <see cref="Create"/> composes them in from
 /// <see cref="BouncyCastleTpmRsaOaepBackend"/> instead, so every caller of this factory gets a complete,
 /// five-delegate <see cref="TpmRsaSigningBackend"/> without needing to know that split.
 /// </para>

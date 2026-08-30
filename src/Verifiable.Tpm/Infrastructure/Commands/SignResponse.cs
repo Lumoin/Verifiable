@@ -11,7 +11,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Response structure (TPM 2.0 Part 3, Section 20.2): a single TPMT_SIGNATURE whose active member
+/// Response structure (TPM 2.0 Part 3, Section 20.5): a single TPMT_SIGNATURE whose active member
 /// is selected by the signing algorithm.
 /// </para>
 /// <list type="bullet">

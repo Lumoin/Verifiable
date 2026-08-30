@@ -19,7 +19,7 @@ namespace Verifiable.Tests.Tpm;
 /// Coverage for the <see cref="TpmSimulator"/> NV-Index authorization surface (V.5b-1): defining a
 /// DA-protected NV Index with the owner hierarchy, then authorizing a read against it through a password
 /// session. The authorization outcomes modelled here — bad-authorization vs. dictionary-attack-affecting
-/// auth-failure (TPM 2.0 Library Part 1, clause 17.8) — are the substrate the PIN/lockout flow is built
+/// auth-failure (TPM 2.0 Library Part 1, clause 16.8) — are the substrate the PIN/lockout flow is built
 /// on. Commands are driven through <see cref="TpmCommandExecutor"/> with a real
 /// <see cref="TpmPasswordSession"/>, which frames the TPM_ST_SESSIONS authorization area the simulator
 /// parses; no real TPM hardware is touched.
@@ -31,7 +31,7 @@ internal sealed class TpmSimulatorNvTests
     private const uint NvIndexHandle = 0x0100_0001;
 
     //Index attributes that authorize read/write with the Index authValue. Without TPMA_NV_NO_DA the Index
-    //is dictionary-attack protected, so a wrong authValue is an auth-failure (clause 17.8.3).
+    //is dictionary-attack protected, so a wrong authValue is an auth-failure (clause 16.8.3).
     private const TpmaNv DaProtectedAttributes = TpmaNv.TPMA_NV_AUTHREAD | TpmaNv.TPMA_NV_AUTHWRITE;
 
     //The same Index, opted out of dictionary-attack protection: a wrong authValue is a plain bad-auth.
@@ -141,7 +141,7 @@ internal sealed class TpmSimulatorNvTests
 
         await DefineDaIndexAsync(device, pool, registry).ConfigureAwait(false);
 
-        //A wrong authValue against a DA-protected Index is an auth-failure (clause 17.8.3): in the next
+        //A wrong authValue against a DA-protected Index is an auth-failure (clause 16.8.3): in the next
         //slice it increments the lockout counter.
         TpmResult<NvReadResponse> result = await ReadIndexAsync(device, pool, registry, WrongAuth).ConfigureAwait(false);
 
@@ -163,7 +163,7 @@ internal sealed class TpmSimulatorNvTests
             Assert.IsTrue(defineResult.IsSuccess, $"Define must succeed, got '{defineResult.ResponseCode}'.");
         }
 
-        //A wrong authValue against a non-DA Index is a plain bad-authorization (clause 17.8.1): it does not
+        //A wrong authValue against a non-DA Index is a plain bad-authorization (clause 16.8.1): it does not
         //affect the lockout counter.
         TpmResult<NvReadResponse> result = await ReadIndexAsync(device, pool, registry, WrongAuth).ConfigureAwait(false);
 
@@ -174,7 +174,7 @@ internal sealed class TpmSimulatorNvTests
     /// Verifies the Index arm's <c>TPMA_NV_AUTHREAD</c> availability gate (TPM 2.0 Library Part 3, clause 5.6,
     /// check 7.2.2) refuses <c>TPM2_NV_Read()</c> BEFORE the authValue compare: with the attribute clear, the
     /// Index authValue is not an available authorization mechanism for a read at all (TPM 2.0 Library Part 1,
-    /// clause 35.2.5), so a CORRECT authValue and a WRONG authValue are refused identically with
+    /// clause 34.2.5), so a CORRECT authValue and a WRONG authValue are refused identically with
     /// <c>TPM_RC_AUTH_UNAVAILABLE</c>, and neither attempt moves the dictionary-attack <c>failedTries</c>
     /// counter — that counter is charged only on <c>TPM_RC_AUTH_FAIL</c> (TPM 2.0 Library Part 1, clause
     /// 17.8.2), which this gate never reaches.

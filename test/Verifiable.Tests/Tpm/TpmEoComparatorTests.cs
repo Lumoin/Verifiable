@@ -5,7 +5,7 @@ using Verifiable.Tpm.Spec.Constants;
 namespace Verifiable.Tests.Tpm;
 
 /// <summary>
-/// Unit tests for <see cref="TpmEoComparator"/> (TPM 2.0 Library Part 2, Section 6.8, Table 22), the shared
+/// Unit tests for <see cref="TpmEoComparator"/> (TPM 2.0 Library Part 2, Section 6.8, Table 20), the shared
 /// TPM_EO evaluator <c>TPM2_PolicyCounterTimer</c> and <c>TPM2_PolicyNV</c>'s live-session arm both call. Each of
 /// the 12 operations is exercised with an equal-and-a-differing operand pair, plus the zero-length-operand
 /// rejection and the mismatched-length guard.

@@ -57,7 +57,7 @@ namespace Verifiable.Tpm.Automata;
 /// <c>TPM2_SelfTest()</c> on a TPM configured to fail, not via init-time power-on self-test.
 /// <c>TPM2_Shutdown()</c> records the orderly shutdown type and leaves the TPM operational until the
 /// next <c>_TPM_Init</c>; the rule that a state-modifying command issued after Shutdown(STATE)
-/// invalidates the saved state (Part 1, clause 10.2.4) is modelled when such commands are added.
+/// invalidates the saved state (Part 1, clause 9.2.4) is modelled when such commands are added.
 /// A disorderly power loss is not modelled — power-on is always the orderly <c>_TPM_Init</c>.
 /// </para>
 /// </remarks>
@@ -197,7 +197,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         Automaton.Subscribe(observer);
 
     /// <summary>
-    /// Releases every owned carrier the live state still holds: all five entity dictionaries' records, the
+    /// Releases every owned carrier the live state still holds: all seven entity dictionaries' records, the
     /// four hierarchy authorization values, the four hierarchy authorization policy digests, and the storage
     /// proof seed. The dispose-immune shared empties
     /// make the blanket walk safe, and carrier disposal is idempotent, so state already released by
@@ -238,7 +238,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             persistent.Dispose();
         }
 
-        foreach(SealedObjectState sealedObject in state.LoadedSealedObjects.Values)
+        foreach(KeyedHashObjectState sealedObject in state.LoadedKeyedHashObjects.Values)
         {
             sealedObject.Dispose();
         }
@@ -246,6 +246,11 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         foreach(NvIndexState index in state.NvIndexes.Values)
         {
             index.Dispose();
+        }
+
+        foreach(SequenceObjectState sequence in state.SequenceObjects.Values)
+        {
+            sequence.Dispose();
         }
 
         state.OwnerAuth.Dispose();
@@ -340,12 +345,30 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         {
             TpmRngAction rngAction => GenerateRandom(rngAction, context),
             TpmCreateEccKeyAction createAction => await CreateEccKeyAsync(createAction, context, cancellationToken).ConfigureAwait(false),
+            TpmCreateEccKemKeyAction createKemAction => await CreateEccKemKeyAsync(createKemAction, context, cancellationToken).ConfigureAwait(false),
             TpmCreateRsaKeyAction createRsaAction => await CreateRsaKeyAsync(createRsaAction, context, cancellationToken).ConfigureAwait(false),
             TpmEccSignAction signAction => await SignEccDigestAsync(signAction, context, cancellationToken).ConfigureAwait(false),
             TpmRsaSignAction rsaSignAction => await SignRsaDigestAsync(rsaSignAction, context, cancellationToken).ConfigureAwait(false),
+            TpmEccSignDigestWithTicketAction signDigestWithTicketAction => await SignEccDigestWithTicketAsync(signDigestWithTicketAction, context, cancellationToken).ConfigureAwait(false),
+            TpmRsaSignDigestWithTicketAction rsaSignDigestWithTicketAction => await SignRsaDigestWithTicketAsync(rsaSignDigestWithTicketAction, context, cancellationToken).ConfigureAwait(false),
+            TpmSequenceStartAction sequenceStartAction => StartSequence(sequenceStartAction, context),
+            TpmEccSignSequenceAction eccSignSequenceAction => await SignSequenceEccAsync(eccSignSequenceAction, context, cancellationToken).ConfigureAwait(false),
+            TpmRsaSignSequenceAction rsaSignSequenceAction => await SignSequenceRsaAsync(rsaSignSequenceAction, context, cancellationToken).ConfigureAwait(false),
+            TpmDigestAction digestAction => await ComputeDigestAndTicketAsync(digestAction, context, cancellationToken).ConfigureAwait(false),
+            TpmHmacAction hmacAction => await ComputeKeyedHmacAsync(hmacAction, context, cancellationToken).ConfigureAwait(false),
+            TpmHmacSequenceStartAction hmacSequenceStartAction => await StartHmacSequenceAsync(hmacSequenceStartAction, context, cancellationToken).ConfigureAwait(false),
+            TpmHmacSignAction hmacSignAction => await SignHmacDigestAsync(hmacSignAction, context, cancellationToken).ConfigureAwait(false),
+            TpmHmacSignSequenceAction hmacSignSequenceAction => await SignSequenceHmacAsync(hmacSignSequenceAction, context, cancellationToken).ConfigureAwait(false),
+            TpmHmacVerifySignatureAction hmacVerifySignatureAction => await VerifySignatureHmacAsync(hmacVerifySignatureAction, context, cancellationToken).ConfigureAwait(false),
+            TpmHmacVerifySequenceAction hmacVerifySequenceAction => await VerifySequenceHmacAsync(hmacVerifySequenceAction, context, cancellationToken).ConfigureAwait(false),
+            TpmPcrExtendAction pcrExtendAction => await ExtendPcrAsync(pcrExtendAction, context, cancellationToken).ConfigureAwait(false),
+            TpmNvExtendAction nvExtendAction => await ExtendNvIndexAsync(nvExtendAction, context, cancellationToken).ConfigureAwait(false),
+            TpmPcrEventAction pcrEventAction => await DigestEventAsync(pcrEventAction, context, cancellationToken).ConfigureAwait(false),
+            TpmEccVerifySequenceAction eccVerifySequenceAction => await VerifySequenceEccAsync(eccVerifySequenceAction, context, cancellationToken).ConfigureAwait(false),
+            TpmRsaVerifySequenceAction rsaVerifySequenceAction => await VerifySequenceRsaAsync(rsaVerifySequenceAction, context, cancellationToken).ConfigureAwait(false),
             TpmCreateStorageParentAction storageParentAction => await CreateStorageParentAsync(storageParentAction, context, cancellationToken).ConfigureAwait(false),
             TpmCreateRsaStorageParentAction rsaStorageParentAction => await CreateRsaStorageParentAsync(rsaStorageParentAction, context, cancellationToken).ConfigureAwait(false),
-            TpmSealDataAction sealAction => await SealDataAsync(sealAction, context, cancellationToken).ConfigureAwait(false),
+            TpmCreateKeyedHashAction sealAction => await SealDataAsync(sealAction, context, cancellationToken).ConfigureAwait(false),
             TpmLoadObjectAction loadAction => await LoadObjectAsync(loadAction, context, cancellationToken).ConfigureAwait(false),
             TpmCertifyAction certifyAction => await CertifyObjectAsync(certifyAction, context, cancellationToken).ConfigureAwait(false),
             TpmRsaCertifyAction rsaCertifyAction => await CertifyObjectRsaAsync(rsaCertifyAction, context, cancellationToken).ConfigureAwait(false),
@@ -359,6 +382,10 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             TpmRsaNvCertifyAction rsaNvCertifyAction => await CertifyNvIndexRsaAsync(rsaNvCertifyAction, context, cancellationToken).ConfigureAwait(false),
             TpmVerifySignatureAction verifySignatureAction => await VerifySignatureEccAsync(verifySignatureAction, context, cancellationToken).ConfigureAwait(false),
             TpmRsaVerifySignatureAction rsaVerifySignatureAction => await VerifySignatureRsaAsync(rsaVerifySignatureAction, context, cancellationToken).ConfigureAwait(false),
+            TpmVerifyDigestSignatureAction verifyDigestSignatureAction => await VerifyDigestSignatureEccAsync(verifyDigestSignatureAction, context, cancellationToken).ConfigureAwait(false),
+            TpmRsaVerifyDigestSignatureAction rsaVerifyDigestSignatureAction => await VerifyDigestSignatureRsaAsync(rsaVerifyDigestSignatureAction, context, cancellationToken).ConfigureAwait(false),
+            TpmEncapsulateAction encapsulateAction => await EncapsulateEccAsync(encapsulateAction, context, cancellationToken).ConfigureAwait(false),
+            TpmDecapsulateAction decapsulateAction => await DecapsulateEccAsync(decapsulateAction, context, cancellationToken).ConfigureAwait(false),
             TpmVerifyPolicySignedAction verifyPolicySignedAction => await VerifyPolicySignedEccAsync(verifyPolicySignedAction, context, cancellationToken).ConfigureAwait(false),
             TpmRsaVerifyPolicySignedAction rsaVerifyPolicySignedAction => await VerifyPolicySignedRsaAsync(rsaVerifyPolicySignedAction, context, cancellationToken).ConfigureAwait(false),
             TpmVerifyPolicyAuthorizeTicketAction verifyPolicyAuthorizeTicketAction => await VerifyPolicyAuthorizeTicketAsync(verifyPolicyAuthorizeTicketAction, context, cancellationToken).ConfigureAwait(false),
@@ -371,9 +398,12 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             TpmDecryptNvChangeAuthAction decryptNvChangeAuthAction => await DecryptNvChangeAuthAsync(decryptNvChangeAuthAction, context, cancellationToken).ConfigureAwait(false),
             TpmDecryptHierarchyChangeAuthAction decryptHierarchyChangeAuthAction => await DecryptHierarchyChangeAuthAsync(decryptHierarchyChangeAuthAction, context, cancellationToken).ConfigureAwait(false),
             TpmDecryptAttestQualifyingDataAction decryptAttestQualifyingDataAction => await DecryptAttestQualifyingDataAsync(decryptAttestQualifyingDataAction, context, cancellationToken).ConfigureAwait(false),
+            TpmDecryptKeyedHashParameterAction decryptKeyedHashParameterAction => await DecryptKeyedHashParameterAsync(decryptKeyedHashParameterAction, context, cancellationToken).ConfigureAwait(false),
+            TpmDecryptFirstParameterAction decryptFirstParameterAction => await DecryptFirstParameterAsync(decryptFirstParameterAction, context, cancellationToken).ConfigureAwait(false),
+            TpmFrameOverSessionsResponseAction frameOverSessionsResponseAction => await FrameOverSessionsResponseAsync(frameOverSessionsResponseAction, context, cancellationToken).ConfigureAwait(false),
             TpmGenerateStorageProofSeedAction generateStorageProofSeedAction => GenerateStorageProofSeed(generateStorageProofSeedAction, context),
             TpmPersistObjectAction persistObjectAction => PersistObject(persistObjectAction, context),
-            TpmSealDataOverSessionsAction sealDataOverSessionsAction => await SealDataOverSessionsAsync(sealDataOverSessionsAction, context, cancellationToken).ConfigureAwait(false),
+            TpmCreateKeyedHashOverSessionsAction sealDataOverSessionsAction => await SealDataOverSessionsAsync(sealDataOverSessionsAction, context, cancellationToken).ConfigureAwait(false),
             TpmStartHmacSessionAction startHmacAction => await StartHmacSessionAsync(startHmacAction, context, cancellationToken).ConfigureAwait(false),
             TpmRecoverRsaSessionSaltAction recoverRsaSaltAction => await RecoverRsaSessionSaltAsync(recoverRsaSaltAction, context, cancellationToken).ConfigureAwait(false),
             TpmRecoverEccSessionSaltAction recoverEccSaltAction => await RecoverEccSessionSaltAsync(recoverEccSaltAction, context, cancellationToken).ConfigureAwait(false),
@@ -383,6 +413,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             TpmRsaMakeCredentialAction rsaMakeCredentialAction => await MakeCredentialRsaAsync(rsaMakeCredentialAction, context, cancellationToken).ConfigureAwait(false),
             TpmActivateCredentialAction activateCredentialAction => await ActivateCredentialAsync(activateCredentialAction, context, cancellationToken).ConfigureAwait(false),
             TpmRsaActivateCredentialAction rsaActivateCredentialAction => await ActivateCredentialRsaAsync(rsaActivateCredentialAction, context, cancellationToken).ConfigureAwait(false),
+            TpmDuplicateObjectAction duplicateObjectAction => await DuplicateObjectAsync(duplicateObjectAction, context, cancellationToken).ConfigureAwait(false),
+            TpmImportObjectAction importObjectAction => await ImportObjectAsync(importObjectAction, context, cancellationToken).ConfigureAwait(false),
             TpmComputeNvNameAction computeNvNameAction => await ComputeNvNameForPolicyAsync(computeNvNameAction, context, cancellationToken).ConfigureAwait(false),
             TpmFramePolicySecretSessionResponseAction frameSessionResponseAction => await FramePolicySecretSessionResponseAsync(frameSessionResponseAction, context, cancellationToken).ConfigureAwait(false),
             TpmComputeNvPublicNameAction computeNvPublicNameAction => await ComputeNvPublicNameAsync(computeNvPublicNameAction, context, cancellationToken).ConfigureAwait(false),
@@ -404,9 +436,9 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
     /// <summary>
     /// The MSb of a <c>TPM2B_TIMEOUT</c>'s raw UINT64 value: a flag (never itself part of the equation 12
-    /// (TPM 2.0 Library Part 2, Section 10.7.5, Table 111) HMAC input, which hashes the raw timeout with this
+    /// (TPM 2.0 Library Part 2, Section 10.6.6, Table 114) HMAC input, which hashes the raw timeout with this
     /// bit already cleared) indicating a ticket expires on TPM
-    /// Reset or TPM Restart (TPM 2.0 Library Part 2, Section 10.4.10's own note; Part 1, clause 7.4.1's
+    /// Reset or TPM Restart (TPM 2.0 Library Part 2, Section 10.3.10's own note; Part 1, clause 6.4.1's
     /// big-endian rule).
     /// </summary>
     /// <remarks>
@@ -417,27 +449,93 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
     /// <summary>
     /// The simulator's synthetic firmware version, reported in every attestation's firmwareVersion field (TPM
-    /// 2.0 Library Part 2, clause 10.12.12): a UINT32 major half of 1 and a minor half of 184, the same v184
+    /// 2.0 Library Part 2, clause 10.11.12): a UINT32 major half of 1 and a minor half of 185, the same v185
     /// spec-corpus revision <c>TPM2_GetCapability()</c> reports as <c>TPM_PT_REVISION</c>
     /// (<c>TpmLifecycleTransitions.SimSpecRevision</c>), so the two surfaces agree on which spec edition this
     /// TPM models.
     /// </summary>
-    private const ulong SimulatedFirmwareVersion = (1UL << 32) | 184UL;
+    private const ulong SimulatedFirmwareVersion = (1UL << 32) | 185UL;
 
     /// <summary>
-    /// The marshaled <c>TPMS_CREATION_DATA</c> for a primary under a permanent hierarchy: empty pcrSelect
-    /// (UINT32 count 0), pcrDigest (TPM2B of the SHA-256 digest), locality (BYTE), parentNameAlg (UINT16 =
-    /// <c>TPM_ALG_NULL</c>), parentName (TPM2B of the 4-octet parent handle), parentQualifiedName (the same),
-    /// and outsideInfo (empty TPM2B).
+    /// The locality this software model reports for every object creation: the value <c>_plat__LocalityGet()</c>
+    /// returns for this platform (TPM 2.0 Library Part 2, clause 8.5, Table 39, <c>TPMA_LOCALITY</c> — "no more
+    /// than one of the locality attributes shall be set in the creation data"). This model implements no
+    /// locality concept beyond this fixed value (locality 0), which makes the constant faithful rather than a
+    /// gap: every command this simulator executes runs at locality 0, so every creation data's <c>locality</c>
+    /// field is truthfully this value, never a placeholder.
     /// </summary>
-    private const int CreationDataSize =
-        sizeof(uint)
-        + (sizeof(ushort) + CreationDigestSize)
-        + sizeof(byte)
-        + sizeof(ushort)
-        + (sizeof(ushort) + sizeof(uint))
-        + (sizeof(ushort) + sizeof(uint))
-        + sizeof(ushort);
+    private const TpmaLocality ModelPlatformLocality = TpmaLocality.TPM_LOC_ZERO;
+
+    /// <summary>
+    /// Discriminates the parent identity a creation data's <c>parentNameAlg</c>/<c>parentName</c>/
+    /// <c>parentQualifiedName</c> triple is derived from (TPM 2.0 Library Part 2, clause 15.1, Table 261, printed
+    /// page 206): a permanent hierarchy handle for <c>TPM2_CreatePrimary()</c>, whose triple is the normative
+    /// handle form — "If the parent is a permanent handle ... parentName and parentQualifiedName will be set to
+    /// the parent handle value and parentNameAlg will be TPM_ALG_NULL" — or a loaded storage object for
+    /// <c>TPM2_Create()</c>, whose triple is the parent's own Name and Qualified Name under the parent's own
+    /// nameAlg (Part 4 <c>FillInCreationData</c>, printed pages 722-723).
+    /// </summary>
+    private readonly struct TpmCreationDataParent
+    {
+        /// <summary>The permanent hierarchy handle; meaningful only when <see cref="LoadedName"/> is <see langword="null"/>.</summary>
+        public uint PermanentHandle { get; }
+
+        /// <summary>
+        /// The loaded parent's own Name — BORROWED from the parent's durable <see cref="TransientKeyState"/> and
+        /// never disposed by the creation-data builder — or <see langword="null"/> for the permanent-handle form.
+        /// </summary>
+        public Tpm2bName? LoadedName { get; }
+
+        /// <summary>The hierarchy the loaded parent belongs to; meaningful only alongside <see cref="LoadedName"/>.</summary>
+        public TpmiRhHierarchy LoadedHierarchy { get; }
+
+        /// <summary>
+        /// Initializes the discriminator from either arm; only <see cref="Permanent"/> and <see cref="Loaded"/>
+        /// construct instances, so the two arms can never be confused by a caller.
+        /// </summary>
+        /// <param name="permanentHandle">The permanent hierarchy handle, meaningful only when <paramref name="loadedName"/> is <see langword="null"/>.</param>
+        /// <param name="loadedName">The loaded parent's own Name, or <see langword="null"/> for the permanent-handle form.</param>
+        /// <param name="loadedHierarchy">The hierarchy the loaded parent belongs to.</param>
+        private TpmCreationDataParent(uint permanentHandle, Tpm2bName? loadedName, TpmiRhHierarchy loadedHierarchy)
+        {
+            PermanentHandle = permanentHandle;
+            LoadedName = loadedName;
+            LoadedHierarchy = loadedHierarchy;
+        }
+
+        /// <summary>
+        /// Creates the discriminator for a <c>TPM2_CreatePrimary()</c> parent: a permanent hierarchy handle.
+        /// </summary>
+        /// <param name="hierarchyHandle">The permanent hierarchy handle the primary is created under.</param>
+        /// <returns>The permanent-handle discriminator.</returns>
+        public static TpmCreationDataParent Permanent(uint hierarchyHandle) => new(hierarchyHandle, null, default);
+
+        /// <summary>
+        /// Creates the discriminator for a <c>TPM2_Create()</c> parent: a loaded storage object. Every parent
+        /// this model can hold is a primary (no Create child is itself loadable as a storage parent), so the
+        /// parent's Qualified Name is computed against the hierarchy it was created under, exactly as
+        /// <see cref="ComputeHierarchyQualifiedNameAsync"/> already does for the attestation commands. The
+        /// invariant that <paramref name="name"/> is a digest-form Name (never a bare handle) is enforced HERE,
+        /// not left to surface as an opaque failure out of <see cref="ParentNameAlg"/> or the builder's own
+        /// digest-sizing step.
+        /// </summary>
+        /// <param name="name">The parent's own Name — BORROWED, never disposed by the creation-data builder.</param>
+        /// <param name="hierarchy">The hierarchy the parent belongs to.</param>
+        /// <returns>The loaded-parent discriminator.</returns>
+        /// <exception cref="ArgumentException"><paramref name="name"/> is not a digest-form Name.</exception>
+        public static TpmCreationDataParent Loaded(Tpm2bName name, TpmiRhHierarchy hierarchy) =>
+            name.IsDigestName
+                ? new(0, name, hierarchy)
+                : throw new ArgumentException("A loaded creation-data parent's Name must be a digest form (nameAlg || H(TPMT_PUBLIC)); every parent this model holds is a primary, never a bare handle.", nameof(name));
+
+        /// <summary>
+        /// Gets the <c>parentNameAlg</c> this discriminator writes: <c>TPM_ALG_NULL</c> for the permanent-handle
+        /// form (Table 261's own rule), the loaded parent's own nameAlg (its Name's first two octets) otherwise.
+        /// </summary>
+        public TpmAlgIdConstants ParentNameAlg => LoadedName is Tpm2bName name
+            ? (TpmAlgIdConstants)name.NameAlgorithm
+            : TpmAlgIdConstants.TPM_ALG_NULL;
+    }
 
     /// <summary>
     /// <c>TPM2_CreatePrimary()</c>: draw a key from the injected backend, build the exported public area and
@@ -446,55 +544,81 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// — through the registered digest and HMAC seams.
     /// </summary>
     /// <remarks>
-    /// The generated key carrier is disposed once everything is copied out of it. The action's userAuth
-    /// carrier is owned by the action until the durable key state's construction adopts it; a throw from the
-    /// backend generation step or from the artifact-building rents leaves that rental unreturned until the
-    /// pool is collected (the automaton itself recovers — the next command clears the pending action — so a
-    /// retrying caller repeats the orphan, and the segment is not zeroed until returned).
+    /// The generated key carrier is disposed once everything is copied out of it. The action's authPolicy and
+    /// userAuth carriers are owned by the action until <see cref="BuildKeyArtifacts"/> adopts them onto the
+    /// durable key state; a failure BEFORE that adoption releases them directly, and a failure AFTER it releases
+    /// them through the key state's own <see cref="TransientKeyState.Dispose"/> — the catch arm below tells the
+    /// two cases apart by whether a key state was ever built.
     /// </remarks>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the public area and the by-products buffer transfers to the returned TpmPrimaryKeyCreated, then to the TpmCreatePrimaryResponse intent, and is released by SerializeResponse after framing.")]
     private static async ValueTask<TpmSimulatorInput> CreateEccKeyAsync(TpmCreateEccKeyAction action, TpmActionContext context, CancellationToken cancellationToken)
     {
-        TpmEccSigningBackend backend = context.SigningBackend
-            ?? throw new InvalidOperationException("TPM2_CreatePrimary() requires a signing backend, but none was supplied.");
-
-        Tpm2bPublic outPublic;
-        TransientKeyState keyState;
-        using(TpmGeneratedEccKey key = await backend.GenerateKey(action.Curve.Value, context.Pool, cancellationToken).ConfigureAwait(false))
-        {
-            (outPublic, keyState) = BuildKeyArtifacts(action, key, context.Pool);
-        }
-
+        TransientKeyState? keyState = null;
         try
         {
+            TpmEccSigningBackend backend = context.SigningBackend
+                ?? throw new InvalidOperationException("TPM2_CreatePrimary() requires a signing backend, but none was supplied.");
+
+            Tpm2bPublic outPublic;
+            using(TpmGeneratedEccKey key = await backend.GenerateKey(action.Curve.Value, context.Pool, cancellationToken).ConfigureAwait(false))
+            {
+                (outPublic, keyState) = BuildKeyArtifacts(action, key, context.Pool);
+            }
+
             //name = nameAlg || H_nameAlg(TPMT_PUBLIC), computed once: retained on the key state (so a later
             //TPM2_Certify() can bind it into the attestation without recomputing) and shared with the creation
             //by-products. The Name width depends on nameAlg (agile per TpmObjectName), so its length travels with it.
             (IMemoryOwner<byte> name, int nameLength) = await ComputeObjectNameAsync(outPublic, action.NameAlg, context.Pool, cancellationToken).ConfigureAwait(false);
             using(name)
             {
-                keyState = keyState with { Name = Tpm2bName.Create(name.Memory.Span[..nameLength], context.Pool) };
+                keyState = await WithRetainedIdentityAsync(keyState, action.Hierarchy.Value, name.Memory[..nameLength], context, cancellationToken).ConfigureAwait(false);
 
                 (Tpm2bCreationData creationData, Tpm2bDigest creationHash, TpmtTkCreation creationTicket, Tpm2bName framedName) =
-                    await BuildCreationByProductsAsync(name.Memory[..nameLength], action.Hierarchy.Value, action.Hierarchy, includeName: true, context, cancellationToken).ConfigureAwait(false);
+                    await BuildCreationByProductsAsync(
+                        name.Memory[..nameLength], TpmCreationDataParent.Permanent(action.Hierarchy.Value), action.Hierarchy, includeName: true,
+                        action.OutsideInfo, action.CreationPcr, action.CreationPcrValues, context, cancellationToken).ConfigureAwait(false);
 
                 return new TpmPrimaryKeyCreated(outPublic, keyState, creationData, creationHash, creationTicket, framedName);
             }
         }
         catch
         {
-            //The half-built key state's only owner is this frame until the install transition adopts it, so a
-            //failing Name/by-products step must release its private-key carrier or the pinned rental is orphaned.
-            keyState.Dispose();
+            //Before BuildKeyArtifacts adopts them, action.AuthPolicy/UserAuth are this frame's own carriers to
+            //release; once adopted, keyState is their owner and its Dispose releases them (and the private-key
+            //carrier) instead — releasing both here would double-free. This arm is defensive against an
+            //effect-level failure (the backend guard above throwing, or key generation itself failing) before
+            //keyState is ever assigned: the parse-time capability gate (TPM_RC_COMMAND_CODE, checked once when
+            //the command code is dispatched and again per-template in TryBuildCreatePrimaryRequest) already
+            //fronts every request this effect runs for, so a real device never reaches this arm through that path.
+            if(keyState is null)
+            {
+                action.AuthPolicy.Dispose();
+                action.UserAuth.Dispose();
+            }
+            else
+            {
+                keyState.Dispose();
+            }
+
             throw;
+        }
+        finally
+        {
+            //This effect is the terminal owner of the action's outsideInfo and creationPCR carriers on every
+            //path, including a backend-resolution or key-generation failure the try now covers.
+            action.OutsideInfo.Dispose();
+            action.CreationPcr.Dispose();
         }
     }
 
     /// <summary>
     /// Splits the generated point into its X and Y coordinates, builds the exported public area, and copies the
     /// scalar into an owned, pinned <see cref="PrivateKeyMemory"/> carrier for the durable key state.
-    /// Synchronous so the point spans never cross an await.
+    /// Synchronous so the point spans never cross an await. The durable state retains
+    /// <c>TPM_ALG_ECDSA</c> and <paramref name="action"/>'s scheme hash as its own
+    /// <see cref="TransientKeyState.SigningScheme"/>/<see cref="TransientKeyState.SigningSchemeHashAlg"/> — the
+    /// only scheme the ECC signing branch of <c>TryBuildCreatePrimaryRequest</c> admits.
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the built public area transfers to the caller, which carries it to the response intent disposed by SerializeResponse; ownership of the private-key and authValue carriers transfers to the returned TransientKeyState, which the installing transition stores and eviction disposes.")]
@@ -514,9 +638,128 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
         //The Name is filled by the caller once it has been computed from the exported public area (through the
         //asynchronous digest seam, which this synchronous point-splitting step must not cross). The SEC1 point is
-        //retained so a later ECDH-based command can use this object's public key (TPM 2.0 Library Part 1, clause 24).
+        //retained so a later ECDH-based command can use this object's public key (TPM 2.0 Library Part 1, clause 21).
         var keyState = new TransientKeyState(
-            action.Handle, action.Hierarchy, TpmiAlgPublic.FromValue(TpmAlgIdConstants.TPM_ALG_ECC), action.Curve, CopyToPrivateKeyCarrier(scalar, EccPrivateKeyTag(action.Curve.Value), pool), Tpm2bName.Empty, action.Attributes, point.ToArray(), Tpm2bPublicKeyRsa.Empty, action.AuthPolicy, action.UserAuth);
+            action.Handle, action.Hierarchy, TpmiAlgPublic.FromValue(TpmAlgIdConstants.TPM_ALG_ECC), action.Curve, TpmiAlgSigScheme.FromValue(TpmAlgIdConstants.TPM_ALG_ECDSA), action.SchemeHashAlg, null, null, CopyToPrivateKeyCarrier(scalar, EccPrivateKeyTag(action.Curve.Value), pool), Tpm2bName.Empty, action.Attributes, point.ToArray(), Tpm2bPublicKeyRsa.Empty, action.AuthPolicy, action.UserAuth, Tpm2bDigest.Empty, ClonePublicArea(outPublic, pool), Tpm2bName.Empty);
+
+        return (outPublic, keyState);
+    }
+
+    /// <summary>
+    /// <c>TPM2_CreatePrimary()</c> for an ECC KEM key: draw a key from the injected ECC backend, build the
+    /// exported public area and durable key state from it (<see cref="BuildKemKeyArtifacts"/>, synchronous so
+    /// the point spans never cross an await), then compute the same faithful creation by-products the signing
+    /// and storage-parent paths do. Mirrors <see cref="CreateEccKeyAsync"/>; the only difference is the
+    /// public-area shape (<c>TpmsEccParms.ForKeyEncapsulation</c>, TPM 2.0 Library Part 2, Table 229) and the
+    /// durable state's retained <see cref="TransientKeyState.KemKdfScheme"/>/<see cref="TransientKeyState.KemKdfHashAlg"/>
+    /// in place of a digest-capable <see cref="TransientKeyState.SigningScheme"/>.
+    /// </summary>
+    /// <remarks>
+    /// The generated key carrier is disposed once everything is copied out of it. The action's authPolicy and
+    /// userAuth carriers are owned by the action until <see cref="BuildKemKeyArtifacts"/> adopts them onto the
+    /// durable key state; a failure BEFORE that adoption releases them directly, and a failure AFTER it releases
+    /// them through the key state's own <see cref="TransientKeyState.Dispose"/> — the catch arm below tells the
+    /// two cases apart by whether a key state was ever built.
+    /// </remarks>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the public area and the by-products buffer transfers to the returned TpmPrimaryKeyCreated, then to the TpmCreatePrimaryResponse intent, and is released by SerializeResponse after framing.")]
+    private static async ValueTask<TpmSimulatorInput> CreateEccKemKeyAsync(TpmCreateEccKemKeyAction action, TpmActionContext context, CancellationToken cancellationToken)
+    {
+        TransientKeyState? keyState = null;
+        try
+        {
+            TpmEccSigningBackend backend = context.SigningBackend
+                ?? throw new InvalidOperationException("TPM2_CreatePrimary() for an ECC KEM key requires a signing backend, but none was supplied.");
+
+            Tpm2bPublic outPublic;
+            using(TpmGeneratedEccKey key = await backend.GenerateKey(action.Curve.Value, context.Pool, cancellationToken).ConfigureAwait(false))
+            {
+                (outPublic, keyState) = BuildKemKeyArtifacts(action, key, context.Pool);
+            }
+
+            //name = nameAlg || H_nameAlg(TPMT_PUBLIC), computed once: retained on the key state (so a later
+            //TPM2_Certify() can bind it into the attestation without recomputing) and shared with the creation
+            //by-products. The Name width depends on nameAlg (agile per TpmObjectName), so its length travels with it.
+            (IMemoryOwner<byte> name, int nameLength) = await ComputeObjectNameAsync(outPublic, action.NameAlg, context.Pool, cancellationToken).ConfigureAwait(false);
+            using(name)
+            {
+                keyState = await WithRetainedIdentityAsync(keyState, action.Hierarchy.Value, name.Memory[..nameLength], context, cancellationToken).ConfigureAwait(false);
+
+                (Tpm2bCreationData creationData, Tpm2bDigest creationHash, TpmtTkCreation creationTicket, Tpm2bName framedName) =
+                    await BuildCreationByProductsAsync(
+                        name.Memory[..nameLength], TpmCreationDataParent.Permanent(action.Hierarchy.Value), action.Hierarchy, includeName: true,
+                        action.OutsideInfo, action.CreationPcr, action.CreationPcrValues, context, cancellationToken).ConfigureAwait(false);
+
+                return new TpmPrimaryKeyCreated(outPublic, keyState, creationData, creationHash, creationTicket, framedName);
+            }
+        }
+        catch
+        {
+            //Before BuildKemKeyArtifacts adopts them, action.AuthPolicy/UserAuth are this frame's own carriers
+            //to release; once adopted, keyState is their owner and its Dispose releases them (and the
+            //private-key carrier) instead — releasing both here would double-free. This arm is defensive
+            //against an effect-level failure (the backend guard above throwing, or key generation itself
+            //failing) before keyState is ever assigned: the parse-time capability gate (TPM_RC_COMMAND_CODE,
+            //checked once when the command code is dispatched and again per-template in
+            //TryBuildCreatePrimaryRequest) already fronts every request this effect runs for, so a real device
+            //never reaches this arm through that path.
+            if(keyState is null)
+            {
+                action.AuthPolicy.Dispose();
+                action.UserAuth.Dispose();
+            }
+            else
+            {
+                keyState.Dispose();
+            }
+
+            throw;
+        }
+        finally
+        {
+            //This effect is the terminal owner of the action's outsideInfo and creationPCR carriers on every
+            //path, including a backend-resolution or key-generation failure the try now covers.
+            action.OutsideInfo.Dispose();
+            action.CreationPcr.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Splits the generated point into its X and Y coordinates, builds the exported KEM public area, and
+    /// copies the scalar into an owned, pinned <see cref="PrivateKeyMemory"/> carrier for the durable key
+    /// state. Mirrors <see cref="BuildKeyArtifacts"/>; synchronous so the point spans never cross an await.
+    /// The durable state retains <c>TPM_ALG_HKDF</c> and <paramref name="action"/>'s KDF hash as its own
+    /// <see cref="TransientKeyState.KemKdfScheme"/>/<see cref="TransientKeyState.KemKdfHashAlg"/> — never
+    /// <see cref="TransientKeyState.SigningScheme"/>, since a KEM key's scheme is <c>TPM_ALG_ECDH</c>, not a
+    /// digest-signing scheme (TPM 2.0 Library Part 3, clause 20.7.1). The exported public area's
+    /// <c>scheme.details.ecdh.hashAlg</c> echoes <paramref name="action"/>'s own <c>SchemeHashAlg</c> — the
+    /// template's field, not the KDF hash — so the object Name reproduces deterministically from the caller's
+    /// template (Part 3, clause 24.1.1).
+    /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the built public area transfers to the caller, which carries it to the response intent disposed by SerializeResponse; ownership of the private-key and authValue carriers transfers to the returned TransientKeyState, which the installing transition stores and eviction disposes.")]
+    private static (Tpm2bPublic OutPublic, TransientKeyState KeyState) BuildKemKeyArtifacts(TpmCreateEccKemKeyAction action, TpmGeneratedEccKey key, BaseMemoryPool pool)
+    {
+        //The exported point is SEC1 uncompressed (0x04 || X || Y), so X and Y are each the field-width halves
+        //after the leading tag octet.
+        ReadOnlySpan<byte> point = key.PublicPoint.AsReadOnlySpan();
+        int fieldWidth = (point.Length - 1) / 2;
+        ReadOnlySpan<byte> x = point.Slice(1, fieldWidth);
+        ReadOnlySpan<byte> y = point.Slice(1 + fieldWidth, fieldWidth);
+        ReadOnlySpan<byte> scalar = key.PrivateScalar.AsReadOnlySpan();
+
+        TpmsEccPoint eccPoint = TpmsEccPoint.Create(x, y, pool);
+        Tpm2bPublic outPublic = Tpm2bPublic.CreateEccKemKey(
+            action.NameAlg.Value, action.Attributes, action.Curve.Value, action.SchemeHashAlg.Value, action.KdfHashAlg.Value, eccPoint, pool, action.AuthPolicy.AsReadOnlySpan());
+
+        //The Name is filled by the caller once it has been computed from the exported public area (through the
+        //asynchronous digest seam, which this synchronous point-splitting step must not cross). The SEC1 point
+        //is retained so TPM2_Encapsulate()/TPM2_Decapsulate() can use this object's public key without
+        //reconstructing it. KemKdfScheme non-NULL is the "is this a KEM key" predicate those two commands gate
+        //on (TPM_RC_KEY otherwise); SigningScheme/SigningSchemeHashAlg stay NULL, since TPM_ALG_ECDH is not a
+        //digest-signing scheme.
+        var keyState = new TransientKeyState(
+            action.Handle, action.Hierarchy, TpmiAlgPublic.FromValue(TpmAlgIdConstants.TPM_ALG_ECC), action.Curve, null, null, TpmiAlgKdf.FromValue(TpmAlgIdConstants.TPM_ALG_HKDF), action.KdfHashAlg, CopyToPrivateKeyCarrier(scalar, EccPrivateKeyTag(action.Curve.Value), pool), Tpm2bName.Empty, action.Attributes, point.ToArray(), Tpm2bPublicKeyRsa.Empty, action.AuthPolicy, action.UserAuth, Tpm2bDigest.Empty, ClonePublicArea(outPublic, pool), Tpm2bName.Empty);
 
         return (outPublic, keyState);
     }
@@ -577,55 +820,80 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// <c>TPMT_PUBLIC</c>, which now carries the modulus).
     /// </summary>
     /// <remarks>
-    /// The generated key carrier is disposed once everything is copied out of it. The action's userAuth
-    /// carrier is owned by the action until the durable key state's construction adopts it; a throw from the
-    /// backend generation step or from the artifact-building rents leaves that rental unreturned until the
-    /// pool is collected (the automaton itself recovers — the next command clears the pending action — so a
-    /// retrying caller repeats the orphan, and the segment is not zeroed until returned).
+    /// The generated key carrier is disposed once everything is copied out of it. The action's authPolicy and
+    /// userAuth carriers are owned by the action until <see cref="BuildRsaKeyArtifacts"/> adopts them onto the
+    /// durable key state; a failure BEFORE that adoption releases them directly, and a failure AFTER it releases
+    /// them through the key state's own <see cref="TransientKeyState.Dispose"/> — the catch arm below tells the
+    /// two cases apart by whether a key state was ever built.
     /// </remarks>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the public area and the by-products buffer transfers to the returned TpmPrimaryKeyCreated, then to the TpmCreatePrimaryResponse intent, and is released by SerializeResponse after framing.")]
     private static async ValueTask<TpmSimulatorInput> CreateRsaKeyAsync(TpmCreateRsaKeyAction action, TpmActionContext context, CancellationToken cancellationToken)
     {
-        TpmRsaSigningBackend backend = context.RsaSigningBackend
-            ?? throw new InvalidOperationException("TPM2_CreatePrimary() for an RSA key requires an RSA signing backend, but none was supplied.");
-
-        Tpm2bPublic outPublic;
-        TransientKeyState keyState;
-        using(TpmGeneratedRsaKey key = await backend.GenerateKey(action.KeyBits.Value, context.Pool, cancellationToken).ConfigureAwait(false))
-        {
-            (outPublic, keyState) = BuildRsaKeyArtifacts(action, key, context.Pool);
-        }
-
+        TransientKeyState? keyState = null;
         try
         {
+            TpmRsaSigningBackend backend = context.RsaSigningBackend
+                ?? throw new InvalidOperationException("TPM2_CreatePrimary() for an RSA key requires an RSA signing backend, but none was supplied.");
+
+            Tpm2bPublic outPublic;
+            using(TpmGeneratedRsaKey key = await backend.GenerateKey(action.KeyBits.Value, context.Pool, cancellationToken).ConfigureAwait(false))
+            {
+                (outPublic, keyState) = BuildRsaKeyArtifacts(action, key, context.Pool);
+            }
+
             //name = nameAlg || H_nameAlg(TPMT_PUBLIC), computed once: retained on the key state and shared with the
             //by-products (the Name hashes the marshaled TPMT_PUBLIC, which for an RSA key carries the modulus). The
             //Name width depends on nameAlg (agile per TpmObjectName), so its length travels with it.
             (IMemoryOwner<byte> name, int nameLength) = await ComputeObjectNameAsync(outPublic, action.NameAlg, context.Pool, cancellationToken).ConfigureAwait(false);
             using(name)
             {
-                keyState = keyState with { Name = Tpm2bName.Create(name.Memory.Span[..nameLength], context.Pool) };
+                keyState = await WithRetainedIdentityAsync(keyState, action.Hierarchy.Value, name.Memory[..nameLength], context, cancellationToken).ConfigureAwait(false);
 
                 (Tpm2bCreationData creationData, Tpm2bDigest creationHash, TpmtTkCreation creationTicket, Tpm2bName framedName) =
-                    await BuildCreationByProductsAsync(name.Memory[..nameLength], action.Hierarchy.Value, action.Hierarchy, includeName: true, context, cancellationToken).ConfigureAwait(false);
+                    await BuildCreationByProductsAsync(
+                        name.Memory[..nameLength], TpmCreationDataParent.Permanent(action.Hierarchy.Value), action.Hierarchy, includeName: true,
+                        action.OutsideInfo, action.CreationPcr, action.CreationPcrValues, context, cancellationToken).ConfigureAwait(false);
 
                 return new TpmPrimaryKeyCreated(outPublic, keyState, creationData, creationHash, creationTicket, framedName);
             }
         }
         catch
         {
-            //The half-built key state's only owner is this frame until the install transition adopts it, so a
-            //failing Name/by-products step must release its private-key carrier or the pinned rental is orphaned.
-            keyState.Dispose();
+            //Before BuildRsaKeyArtifacts adopts them, action.AuthPolicy/UserAuth are this frame's own carriers to
+            //release; once adopted, keyState is their owner and its Dispose releases them (and the private-key
+            //carrier) instead — releasing both here would double-free. This arm is defensive against an
+            //effect-level failure (the backend guard above throwing, or key generation itself failing) before
+            //keyState is ever assigned: the parse-time capability gate (TPM_RC_COMMAND_CODE, checked once when
+            //the command code is dispatched and again per-template in TryBuildCreatePrimaryRequest) already
+            //fronts every request this effect runs for, so a real device never reaches this arm through that path.
+            if(keyState is null)
+            {
+                action.AuthPolicy.Dispose();
+                action.UserAuth.Dispose();
+            }
+            else
+            {
+                keyState.Dispose();
+            }
+
             throw;
+        }
+        finally
+        {
+            //This effect is the terminal owner of the action's outsideInfo and creationPCR carriers on every
+            //path, including a backend-resolution or key-generation failure the try now covers.
+            action.OutsideInfo.Dispose();
+            action.CreationPcr.Dispose();
         }
     }
 
     /// <summary>
     /// Builds the exported public area carrying the generated modulus and copies the private key into an owned,
     /// pinned <see cref="PrivateKeyMemory"/> carrier for the durable key state. Synchronous so the key spans
-    /// never cross an await.
+    /// never cross an await. The durable state retains <see cref="ResolveRetainedRsaSigningScheme"/>'s reading of
+    /// <paramref name="action"/>'s template scheme as its own <see cref="TransientKeyState.SigningScheme"/>/
+    /// <see cref="TransientKeyState.SigningSchemeHashAlg"/>.
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the built public area transfers to the caller, which carries it to the response intent disposed by SerializeResponse; ownership of the private-key and authValue carriers transfers to the returned TransientKeyState, which the installing transition stores and eviction disposes.")]
@@ -642,11 +910,31 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         //the retained public point is empty (the ECDH-based credential commands model only ECC credential keys).
         //The public modulus is likewise not retained here — only the RSA storage-parent effect
         //(BuildRsaStorageParentArtifacts) retains it, since a signing key needs no RSA-OAEP secret transport.
+        (TpmiAlgSigScheme? signingScheme, TpmiAlgHash? signingSchemeHashAlg) = ResolveRetainedRsaSigningScheme(action.Scheme);
         var keyState = new TransientKeyState(
-            action.Handle, action.Hierarchy, TpmiAlgPublic.FromValue(TpmAlgIdConstants.TPM_ALG_RSA), default, CopyToPrivateKeyCarrier(privateKey, RsaPrivateKeyTag(action.KeyBits.Value), pool), Tpm2bName.Empty, action.Attributes, ReadOnlyMemory<byte>.Empty, Tpm2bPublicKeyRsa.Empty, action.AuthPolicy, action.UserAuth);
+            action.Handle, action.Hierarchy, TpmiAlgPublic.FromValue(TpmAlgIdConstants.TPM_ALG_RSA), default, signingScheme, signingSchemeHashAlg, null, null, CopyToPrivateKeyCarrier(privateKey, RsaPrivateKeyTag(action.KeyBits.Value), pool), Tpm2bName.Empty, action.Attributes, ReadOnlyMemory<byte>.Empty, Tpm2bPublicKeyRsa.Empty, action.AuthPolicy, action.UserAuth, Tpm2bDigest.Empty, ClonePublicArea(outPublic, pool), Tpm2bName.Empty);
 
         return (outPublic, keyState);
     }
+
+    /// <summary>
+    /// Resolves the retained (<see cref="TransientKeyState.SigningScheme"/>,
+    /// <see cref="TransientKeyState.SigningSchemeHashAlg"/>) pair from an RSA key's creation-template scheme
+    /// (<c>TPMS_RSA_PARMS.scheme</c>, TPM 2.0 Library Part 2, clause 12.2.3.6, Table 229): <c>TPM_ALG_RSASSA</c>
+    /// and <c>TPM_ALG_RSAPSS</c> retain their own hash algorithm. Every other value — <c>TPM_ALG_NULL</c> (an
+    /// unrestricted signing key with no template-fixed scheme, resolved per <c>TPM2_Sign()</c> call instead) or
+    /// an encryption scheme (<c>TPM_ALG_RSAES</c>/<c>TPM_ALG_OAEP</c>) — is not "a signing scheme that supports
+    /// signing a digest" (TPM 2.0 Library Part 3, clause 20.7.1), so it retains as <see langword="null"/>.
+    /// </summary>
+    /// <param name="scheme">The RSA key's creation-template scheme.</param>
+    /// <returns>The retained signing scheme and its hash, or both <see langword="null"/>.</returns>
+    private static (TpmiAlgSigScheme? Scheme, TpmiAlgHash? HashAlg) ResolveRetainedRsaSigningScheme(TpmtRsaScheme scheme) =>
+        scheme.Scheme switch
+        {
+            TpmAlgIdConstants.TPM_ALG_RSASSA or TpmAlgIdConstants.TPM_ALG_RSAPSS =>
+                (TpmiAlgSigScheme.FromValue(scheme.Scheme), TpmiAlgHash.FromValue(scheme.HashAlg)),
+            _ => (null, null)
+        };
 
     /// <summary>
     /// Computes the faithful object-creation by-products (TPM 2.0 Library Part 3, clauses 24.1 and 12.1; Part 2,
@@ -658,46 +946,62 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// <c>TPM2_CreatePrimary()</c> returns the Name (includeName true); <c>TPM2_Create()</c> does not
     /// (includeName false), and then the returned Name is the dispose-immune empty sentinel. The already-computed
     /// Name is passed in (the caller computes it once and also retains it on the key state) because the creation
-    /// ticket HMACs over it; the copy returned here is a rental of its own, so the framed response and the key
-    /// state never co-own one buffer. This step is in the effectful layer because the creation hash and the
-    /// ticket HMAC need the asynchronous digest/HMAC seams.
+    /// ticket HMACs over it, and because the object's OWN nameAlg — read back out of the Name's own two-octet
+    /// prefix, exactly as <see cref="ComputeHierarchyQualifiedNameAsync"/> already does — sizes and tags the
+    /// <c>creationHash</c> below through the shared <see cref="TpmObjectName"/> seam; the copy
+    /// returned here is a rental of its own, so the framed response and the key state never co-own one buffer.
+    /// This step is in the effectful layer because the creation hash and the ticket HMAC need the asynchronous
+    /// digest/HMAC seams.
     /// </remarks>
-    /// <param name="name">The object's already-computed Name, which the ticket HMACs over.</param>
-    /// <param name="parentHandle">
-    /// The handle the creation DATA names as the parent: a permanent hierarchy for
-    /// <c>TPM2_CreatePrimary()</c>, the parent object's transient handle for <c>TPM2_Create()</c>.
-    /// </param>
+    /// <param name="name">The object's already-computed Name, which the ticket HMACs over and whose nameAlg prefix sizes and tags the creationHash.</param>
+    /// <param name="parent">The parent identity the creation data names: the permanent-handle form for <c>TPM2_CreatePrimary()</c>, or a loaded storage object's own Name and hierarchy for <c>TPM2_Create()</c>.</param>
     /// <param name="ticketHierarchy">
     /// The hierarchy the creation TICKET names and whose proof keys its HMAC — the hierarchy containing the
-    /// created object's Name (Part 2, clause 10.7.3, Table 109). For <c>TPM2_CreatePrimary()</c> that is the
+    /// created object's Name (Part 2, clause 10.6.3, Table 110). For <c>TPM2_CreatePrimary()</c> that is the
     /// primary handle itself; for <c>TPM2_Create()</c> it is the hierarchy the parent object belongs to, never
     /// the parent's own handle, which is not a <c>TPMI_RH_HIERARCHY</c> value at all.
     /// </param>
     /// <param name="includeName">Whether the object Name is one of the returned by-products.</param>
+    /// <param name="outsideInfo">The caller's <c>outsideInfo</c> parameter to echo verbatim into the creation data (Table 261) — read only here; the caller retains ownership and disposal.</param>
+    /// <param name="creationPcr">The creationPCR selection, already FILTERED to the implemented banks and registers by the declaring transition, to echo into the creation data's <c>pcrSelect</c> — read only here; the caller retains ownership and disposal.</param>
+    /// <param name="pcrValues">The filtered selection's own register values, gathered from the durable PCR bank in selector order, to concatenate and hash into <c>pcrDigest</c> under the object's own nameAlg.</param>
     /// <param name="context">The action context carrying the proof seeds and the memory pool.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The four by-product carriers. Ownership transfers to the caller.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of all four by-product carriers transfers to the caller; the intermediate buffers are released by their using declarations and a failure part-way through releases every carrier already built.")]
     private static async ValueTask<(Tpm2bCreationData CreationData, Tpm2bDigest CreationHash, TpmtTkCreation CreationTicket, Tpm2bName Name)> BuildCreationByProductsAsync(
-        ReadOnlyMemory<byte> name, uint parentHandle, TpmiRhHierarchy ticketHierarchy, bool includeName, TpmActionContext context, CancellationToken cancellationToken)
+        ReadOnlyMemory<byte> name, TpmCreationDataParent parent, TpmiRhHierarchy ticketHierarchy, bool includeName,
+        Tpm2bData outsideInfo, TpmlPcrSelection creationPcr, ImmutableArray<ReadOnlyMemory<byte>> pcrValues,
+        TpmActionContext context, CancellationToken cancellationToken)
     {
+        //The object's OWN nameAlg — its Name's two-octet prefix — sizes and tags the creationHash below and,
+        //when creationPcr is non-empty, the creation-data builder's pcrDigest: one TpmObjectName seam, never the
+        //fixed context-integrity width the creation TICKET keeps.
+        var objectNameAlg = (TpmAlgIdConstants)BinaryPrimitives.ReadUInt16BigEndian(name.Span[..sizeof(ushort)]);
+
         //creationData (a TPM2B_CREATION_DATA over the marshaled TPMS_CREATION_DATA); creationHash =
-        //H_nameAlg(creationData).
-        Tpm2bCreationData creationData = await BuildCreationDataAsync(parentHandle, context.Pool, cancellationToken).ConfigureAwait(false);
+        //H_objectNameAlg(creationData) (Part 3, Table 19/Table 192: "digest of creationData.creationData using
+        //nameAlg of outPublic").
+        Tpm2bCreationData creationData = await BuildCreationDataAsync(
+            parent, creationPcr, pcrValues, objectNameAlg, outsideInfo, context.Pool, cancellationToken).ConfigureAwait(false);
         Tpm2bDigest creationHash = Tpm2bDigest.Empty;
         TpmtTkCreation creationTicket = TpmtTkCreation.Null;
         try
         {
+            int objectDigestSize = TpmObjectName.DigestSize(objectNameAlg);
+            Tag objectDigestTag = TpmObjectName.DigestTag(objectNameAlg);
             using(DigestValue computedHash = await CryptographicKeyEvents.ComputeDigestAsync(
-                creationData.GetRawMemory(), CreationDigestSize, CryptoTags.Sha256Digest, context.Pool, cancellationToken: cancellationToken).ConfigureAwait(false))
+                creationData.GetRawMemory(), objectDigestSize, objectDigestTag, context.Pool, cancellationToken: cancellationToken).ConfigureAwait(false))
             {
                 creationHash = Tpm2bDigest.Create(computedHash.AsReadOnlySpan(), context.Pool);
             }
 
             //creationTicket digest = HMAC(proof, TPM_ST_CREATION || name || creationHash), keyed on the proof of
-            //the hierarchy the ticket names. The HMAC step rents the digest octets itself, so the ticket adopts
-            //that rental rather than copying it.
+            //the hierarchy the ticket names. The ticket's own digest stays the fixed context-integrity pair
+            //(CreationDigestSize/SHA-256, Part 2, clause 10.6.3's "HMAC_contextAlg") regardless of the object's
+            //nameAlg. The HMAC step rents the digest octets itself, so the ticket adopts that rental rather than
+            //copying it.
             using IMemoryOwner<byte> proof = await DeriveHierarchyProofAsync(context, ticketHierarchy.Value, cancellationToken).ConfigureAwait(false);
             IMemoryOwner<byte> ticketDigest = await ComputeCreationTicketDigestAsync(
                 proof.Memory[..CreationDigestSize], name, creationHash.AsReadOnlyMemory(), context.Pool, cancellationToken).ConfigureAwait(false);
@@ -723,7 +1027,57 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     }
 
     /// <summary>
-    /// Computes <c>name = nameAlg || H_nameAlg(marshaled TPMT_PUBLIC)</c> (TPM 2.0 Library Part 1, clause 14, Table 6).
+    /// Completes a freshly created primary's retained identity once its Name is known: the Name itself and the
+    /// Qualified Name <c>H_nameAlg(hierarchy handle ‖ Name)</c> (TPM 2.0 Library Part 1, clause 23.5 — "both the
+    /// Name and Qualified Name for a Primary Seed are the handle of the Primary Seed"), each in an owned pooled
+    /// carrier on the object's eviction lifecycle. Shared by every <c>TPM2_CreatePrimary()</c> effect so the
+    /// recipe <c>TPM2_ReadPublic()</c> answers from (Part 3, clause 12.4, Table 25) has exactly one site.
+    /// </summary>
+    /// <param name="keyState">The key state the artifact builder produced, its Name and Qualified Name still the empty sentinels.</param>
+    /// <param name="hierarchy">The permanent hierarchy handle the primary was created under — the root of its ancestry.</param>
+    /// <param name="name">The computed Name octets (<c>nameAlg ‖ digest</c>, no size prefix), borrowed from the caller's rental.</param>
+    /// <param name="context">The effect context supplying the memory pool.</param>
+    /// <param name="cancellationToken">A token observed across the digest computation.</param>
+    /// <returns>The key state with its Name and Qualified Name populated.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the Name and Qualified Name carriers transfers to the returned TransientKeyState, which the installing transition stores and eviction disposes.")]
+    private static async ValueTask<TransientKeyState> WithRetainedIdentityAsync(TransientKeyState keyState, uint hierarchy, ReadOnlyMemory<byte> name, TpmActionContext context, CancellationToken cancellationToken)
+    {
+        (IMemoryOwner<byte> qualifiedName, int qualifiedNameLength) = await ComputeHierarchyQualifiedNameAsync(hierarchy, name, context.Pool, cancellationToken).ConfigureAwait(false);
+        using(qualifiedName)
+        {
+            return keyState with
+            {
+                Name = Tpm2bName.Create(name.Span, context.Pool),
+                QualifiedName = Tpm2bName.Create(qualifiedName.Memory.Span[..qualifiedNameLength], context.Pool)
+            };
+        }
+    }
+
+    /// <summary>
+    /// Clones a public area through its own wire form — marshal the <c>TPM2B_PUBLIC</c>, parse it back — so the
+    /// copy owns storage of its own and carries the identical marshaled <c>TPMT_PUBLIC</c> octets the Name was
+    /// hashed over (TPM 2.0 Library Part 2, clause 12.2.5, Table 236). The object's durable state and the framed
+    /// response are separate owners whose lifetimes do not nest, so each holds its own instance — the two-carriers
+    /// rule <see cref="LoadObjectAsync"/> applies to the Name.
+    /// </summary>
+    /// <param name="source">The public area to clone; the caller stays its owner.</param>
+    /// <param name="pool">The memory pool backing the clone.</param>
+    /// <returns>An independently owned copy.</returns>
+    private static Tpm2bPublic ClonePublicArea(Tpm2bPublic source, BaseMemoryPool pool)
+    {
+        int size = source.GetSerializedSize();
+        using IMemoryOwner<byte> marshaled = pool.Rent(size);
+        var writer = new TpmWriter(marshaled.Memory.Span[..size]);
+        source.WriteTo(ref writer);
+
+        var reader = new TpmReader(marshaled.Memory.Span[..size]);
+
+        return Tpm2bPublic.Parse(ref reader, pool);
+    }
+
+    /// <summary>
+    /// Computes <c>name = nameAlg || H_nameAlg(marshaled TPMT_PUBLIC)</c> (TPM 2.0 Library Part 1, clause 13, Table 9).
     /// Marshals the public area and delegates the nameAlg-agile digest+framing to the shared
     /// <see cref="TpmObjectName"/> helper.
     /// </summary>
@@ -742,7 +1096,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// Computes <c>name = nameAlg || H_nameAlg(TPMT_PUBLIC)</c> over already-marshaled public-area bytes — the
     /// form <c>TPM2_Load()</c> has (it receives the marshaled <c>TPMT_PUBLIC</c> in inPublic) and the digest step
     /// <see cref="ComputeObjectNameAsync"/> shares. Delegates to the shared nameAlg-agile
-    /// <see cref="TpmObjectName"/> helper (TPM 2.0 Library Part 1, clause 14, Table 6).
+    /// <see cref="TpmObjectName"/> helper (TPM 2.0 Library Part 1, clause 13, Table 9).
     /// </summary>
     private static ValueTask<(IMemoryOwner<byte> Owner, int Length)> ComputeObjectNameFromBytesAsync(ReadOnlyMemory<byte> publicAreaBytes, TpmiAlgHash nameAlg, BaseMemoryPool pool, CancellationToken cancellationToken) =>
         TpmObjectName.ComputeNameAsync(publicAreaBytes, (ushort)nameAlg.Value, pool, cancellationToken);
@@ -758,80 +1112,166 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     }
 
     /// <summary>
-    /// The marshaled <c>TPMS_CREATION_DATA</c> both creation commands report (TPM 2.0 Library Part 2, clause
-    /// 15.1, Table 246): a <c>TPM2_CreatePrimary()</c> primary under a permanent hierarchy and a
-    /// <c>TPM2_Create()</c> child under a loaded parent object. The parent Name and Qualified Name are the
-    /// 4-octet handle form, the pcrDigest is the hash of the empty PCR selection, and the locality is the
-    /// command locality (0 for this software model).
+    /// Marshals the <c>TPMS_CREATION_DATA</c> both creation commands report (TPM 2.0 Library Part 2, clause
+    /// 15.1, Table 261): a <c>TPM2_CreatePrimary()</c> primary under a permanent hierarchy, or a
+    /// <c>TPM2_Create()</c> child under a loaded storage parent.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Two of the fields this frame writes diverge from Part 2's own normative text for a
-    /// <c>TPM2_Create()</c> child, whose parent is a loaded transient object rather than a permanent handle.
+    /// <c>parentNameAlg</c>/<c>parentName</c>/<c>parentQualifiedName</c>: clause 15.1, printed page 206, states
+    /// "If the parent is a permanent handle (TPM_RH_OWNER, TPM_RH_PLATFORM, TPM_RH_ENDORSEMENT, or TPM_RH_NULL),
+    /// then parentName and parentQualifiedName will be set to the parent handle value and parentNameAlg will be
+    /// TPM_ALG_NULL" — <see cref="TpmCreationDataParent.Permanent"/> below. A loaded storage parent is neither a
+    /// permanent handle nor a hierarchy handle, so Table 261's <c>parentName</c> row ("size will match digest
+    /// size associated with parentNameAlg unless it is TPM_ALG_NULL") instead owes the parent's OWN Name and
+    /// Qualified Name under the parent's OWN nameAlg — exactly what Part 4's <c>FillInCreationData()</c>
+    /// (printed pages 722-723) writes — <see cref="TpmCreationDataParent.Loaded"/> below.
     /// </para>
     /// <para>
-    /// The parent Name and Qualified Name: clause 15.1, printed page 206, states "If the parent is a permanent
-    /// handle (TPM_RH_OWNER, TPM_RH_PLATFORM, TPM_RH_ENDORSEMENT, or TPM_RH_NULL), then parentName and
-    /// parentQualifiedName will be set to the parent handle value and parentNameAlg will be TPM_ALG_NULL", and
-    /// Table 246's <c>parentName</c> row on the same page states "Name of the parent at time of creation. The
-    /// size will match digest size associated with parentNameAlg unless it is TPM_ALG_NULL, in which case the
-    /// size will be 4 and parentName will be the hierarchy handle." A loaded parent object is neither a
-    /// permanent handle nor a hierarchy handle, so its child's creation data owes the parent's own Name and
-    /// Qualified Name under the parent's own <c>nameAlg</c> — which is what Part 4's
-    /// <c>FillInCreationData()</c> (printed pages 722-723) writes. This model writes the handle form with
-    /// <c>parentNameAlg = TPM_ALG_NULL</c> for both parents.
+    /// <c>pcrDigest</c>: Table 261's own row states "digest of the selected PCR using nameAlg of the object for
+    /// which this structure is being created. pcrDigest.size shall be zero if the pcrSelect list is empty." An
+    /// empty (filtered) <paramref name="creationPcr"/> writes size 0 with no octets. A non-empty selection —
+    /// including one whose entries the transition's <c>RetainImplementedPcrs</c> filter left with every bit
+    /// clear, naming a bank this model has not allocated — is hashed in FULL WIDTH under the object's own
+    /// nameAlg even over zero gathered <paramref name="pcrValues"/> (Part 1, clause 14.5: "No value is included
+    /// in the concatenation of PCR for an unimplemented PCR"): "empty" means the filtered list's <c>Count</c> is
+    /// zero, never that its gathered values are.
     /// </para>
     /// <para>
-    /// The pcrDigest: Table 246's <c>pcrDigest</c> row, printed page 206, states "digest of the selected PCR
-    /// using nameAlg of the object for which this structure is being created. pcrDigest.size shall be zero if
-    /// the pcrSelect list is empty." This model frames a <c>TPML_PCR_SELECTION</c> of count 0 and then a
-    /// full-width digest of the empty hash input rather than the zero-size buffer that "shall" requires.
+    /// This builder deliberately departs from the vendored Reference Code on exactly this row: its
+    /// <c>FillInCreationData()</c> (<c>Object_spt.c</c>, printed pages 722-723 of Part 4; vendor line 752-753)
+    /// calls <c>PCRComputeCurrentDigest()</c> unconditionally, and that routine (<c>PCR.c</c>, vendor lines
+    /// 762/788) runs <c>CryptHashStart</c>/<c>CryptHashEnd2B</c> outside its selection loop — so a TPM built
+    /// from the Reference Code emits the FULL-WIDTH hash of zero concatenated values for an empty
+    /// <c>creationPCR</c>, never the size-0 <c>pcrDigest</c> Table 261's own text requires. Part 1, clause 2.5,
+    /// printed page 18 ranks Part 2's tables as normative over the Reference Code ("should provide equivalent
+    /// or, in most cases, identical results", never identical by mandate), so this builder follows Table 261
+    /// instead. Should that ruling ever be overturned, the empty-list ternary at the top of
+    /// <see cref="BuildCreationDataAsync"/>
+    /// (<c>pcrDigestSize = creationPcr.Count > 0 ? TpmObjectName.DigestSize(objectNameAlg) : 0</c>) is the ONE
+    /// line to flip, together with the expected <c>PcrDigest.Size</c> in
+    /// <c>TpmInHouseSimulatorCreationDataTests.EmptyCreationPcrYieldsSizeZeroPcrDigestOnBothCommands</c>; the
+    /// host parser (<c>TpmsCreationData.Parse</c>) already accepts both the size-0 and the full-width form, so
+    /// flipping this line needs no further change on the read side.
     /// </para>
     /// <para>
-    /// Both are wire-visible: <c>TPMS_CREATION_DATA</c> is hashed into <c>creationHash</c>, thence into the
-    /// creation ticket (clause 10.7.3, equation (4), printed page 140) and into
-    /// <c>TPM2_CertifyCreation()</c>'s attestation.
+    /// <c>locality</c>: this model's fixed platform locality, <see cref="ModelPlatformLocality"/> (TPM 2.0
+    /// Library Part 2, clause 8.5, Table 39) — faithful, not a simplification.
+    /// </para>
+    /// <para>
+    /// <c>outsideInfo</c>: the caller's own parameter, echoed verbatim (Table 261: "the contents of the
+    /// outsideInfo parameter in TPM2_Create() or TPM2_CreatePrimary()").
+    /// </para>
+    /// <para>
+    /// The whole structure is wire-visible: it is hashed into <c>creationHash</c>, thence into the creation
+    /// ticket (clause 10.6.3, equation (4), printed page 140) and into <c>TPM2_CertifyCreation()</c>'s
+    /// attestation.
     /// </para>
     /// </remarks>
-    /// <param name="parentHandle">
-    /// The handle the creation data names as the parent: a permanent hierarchy for <c>TPM2_CreatePrimary()</c>,
-    /// the parent object's transient handle for <c>TPM2_Create()</c>.
-    /// </param>
-    /// <param name="pool">The memory pool the marshaled octets are rented from.</param>
-    /// <param name="cancellationToken">A cancellation token observed across the pcrDigest computation.</param>
+    /// <param name="parent">The parent identity: the permanent-handle form for <c>TPM2_CreatePrimary()</c>, or a loaded storage object's Name and hierarchy for <c>TPM2_Create()</c>.</param>
+    /// <param name="creationPcr">The creationPCR selection, already FILTERED to the implemented banks and registers, echoed verbatim as <c>pcrSelect</c>.</param>
+    /// <param name="pcrValues">The filtered selection's own register values, in selector order, concatenated and hashed into <c>pcrDigest</c>.</param>
+    /// <param name="objectNameAlg">The created object's own Name algorithm, which sizes and tags <c>pcrDigest</c>.</param>
+    /// <param name="outsideInfo">The caller's <c>outsideInfo</c> parameter, echoed verbatim.</param>
+    /// <param name="pool">The memory pool the marshaled octets, and every intermediate rental, are drawn from.</param>
+    /// <param name="cancellationToken">A cancellation token observed across the pcrDigest and Qualified Name computations.</param>
     /// <returns>The marshaled creation data. Ownership transfers to the caller.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-        Justification = "Ownership of the creation-data carrier transfers to the caller, which releases it or hands it onward; a failure between the rental and the adoption releases the rental.")]
-    private static async ValueTask<Tpm2bCreationData> BuildCreationDataAsync(uint parentHandle, BaseMemoryPool pool, CancellationToken cancellationToken)
+        Justification = "Ownership of the creation-data carrier transfers to the caller, which releases it or hands it onward; a failure between the rental and the adoption releases the rental, and the pcrDigest/loaded-parent-QN intermediate rentals are released by this frame's own finally on every path.")]
+    private static async ValueTask<Tpm2bCreationData> BuildCreationDataAsync(
+        TpmCreationDataParent parent, TpmlPcrSelection creationPcr, ImmutableArray<ReadOnlyMemory<byte>> pcrValues,
+        TpmAlgIdConstants objectNameAlg, Tpm2bData outsideInfo, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
-        //pcrDigest of the empty PCR selection is the hash of no PCR data (an empty hash input).
-        using DigestValue pcrDigest = await CryptographicKeyEvents.ComputeDigestAsync(
-            ReadOnlyMemory<byte>.Empty, CreationDigestSize, CryptoTags.Sha256Digest, pool, cancellationToken: cancellationToken).ConfigureAwait(false);
-
-        IMemoryOwner<byte> owner = pool.Rent(CreationDataSize);
+        int pcrDigestSize = creationPcr.Count > 0 ? TpmObjectName.DigestSize(objectNameAlg) : 0;
+        DigestValue? pcrDigestValue = null;
+        IMemoryOwner<byte>? parentQualifiedNameOwner = null;
+        int parentQualifiedNameLength = 0;
         try
         {
-            var writer = new TpmWriter(owner.Memory.Span[..CreationDataSize]);
-            writer.WriteUInt32(0);                                          //pcrSelect: TPML_PCR_SELECTION count 0.
-            writer.WriteUInt16((ushort)CreationDigestSize);                 //pcrDigest: TPM2B_DIGEST size.
-            writer.WriteBytes(pcrDigest.AsReadOnlySpan());                  //pcrDigest.
-            writer.WriteByte((byte)TpmaLocality.TPM_LOC_ZERO);             //locality (locality 0).
-            writer.WriteUInt16((ushort)TpmAlgIdConstants.TPM_ALG_NULL);     //parentNameAlg (the handle form names no algorithm).
-            writer.WriteUInt16((ushort)sizeof(uint));                      //parentName: TPM2B_NAME size = handle width.
-            writer.WriteUInt32(parentHandle);                               //parentName = the parent handle.
-            writer.WriteUInt16((ushort)sizeof(uint));                      //parentQualifiedName: size = handle width.
-            writer.WriteUInt32(parentHandle);                               //parentQualifiedName = the parent handle.
-            writer.WriteUInt16(0);                                          //outsideInfo: empty TPM2B_DATA.
-        }
-        catch
-        {
-            owner.Dispose();
-            throw;
-        }
+            //pcrDigest is computed ahead of the writer pass below (TpmWriter is a ref struct and cannot cross
+            //an await): the empty-list case leaves pcrDigestValue null and pcrDigestSize 0; a non-empty
+            //list hashes the gathered values in full width even when none were gathered. The computed digest is
+            //held onto (rather than copied into a second rented buffer) until the writer pass below reads its
+            //span directly; this frame's own finally releases it on every path.
+            if(pcrDigestSize > 0)
+            {
+                Tag objectDigestTag = TpmObjectName.DigestTag(objectNameAlg);
+                using IMemoryOwner<byte> composite = ConcatenatePcrValues(pcrValues, pool, out int compositeLength);
+                pcrDigestValue = await CryptographicKeyEvents.ComputeDigestAsync(
+                    composite.Memory[..compositeLength], pcrDigestSize, objectDigestTag, pool, cancellationToken: cancellationToken).ConfigureAwait(false);
+            }
 
-        //The marshaling step rents the octets itself, so the TPM2B_CREATION_DATA carrier adopts that rental
-        //rather than copying it; a rejected adoption releases the rental before the exception leaves.
-        return Tpm2bCreationData.FromMarshaled(owner, CreationDataSize, pool);
+            //The loaded-parent form's Qualified Name is likewise computed ahead of the writer pass; the
+            //permanent-handle form needs no such step, its parentQualifiedName being the same 4-octet handle
+            //parentName already is.
+            if(parent.LoadedName is Tpm2bName loadedName)
+            {
+                (parentQualifiedNameOwner, parentQualifiedNameLength) = await ComputeHierarchyQualifiedNameAsync(
+                    parent.LoadedHierarchy.Value, loadedName.AsReadOnlyMemory(), pool, cancellationToken).ConfigureAwait(false);
+            }
+
+            int parentNameSize = parent.LoadedName?.Size ?? sizeof(uint);
+            int parentQualifiedNameSize = parent.LoadedName is null ? sizeof(uint) : parentQualifiedNameLength;
+
+            int creationDataSize =
+                creationPcr.GetSerializedSize()
+                + sizeof(ushort) + pcrDigestSize
+                + sizeof(byte)
+                + sizeof(ushort)
+                + sizeof(ushort) + parentNameSize
+                + sizeof(ushort) + parentQualifiedNameSize
+                + outsideInfo.SerializedSize;
+
+            IMemoryOwner<byte> owner = pool.Rent(creationDataSize);
+            try
+            {
+                var writer = new TpmWriter(owner.Memory.Span[..creationDataSize]);
+                creationPcr.WriteTo(ref writer);                          //pcrSelect: TPML_PCR_SELECTION, filtered and echoed.
+                writer.WriteUInt16((ushort)pcrDigestSize);                //pcrDigest: TPM2B_DIGEST size.
+                if(pcrDigestValue is not null)
+                {
+                    writer.WriteBytes(pcrDigestValue.AsReadOnlySpan());
+                }
+
+                writer.WriteByte((byte)ModelPlatformLocality);            //locality.
+                writer.WriteUInt16((ushort)parent.ParentNameAlg);         //parentNameAlg.
+                writer.WriteUInt16((ushort)parentNameSize);               //parentName: TPM2B_NAME size.
+                if(parent.LoadedName is Tpm2bName name)
+                {
+                    writer.WriteBytes(name.Span);                        //parentName = the loaded parent's own Name.
+                }
+                else
+                {
+                    writer.WriteUInt32(parent.PermanentHandle);           //parentName = the hierarchy handle.
+                }
+
+                writer.WriteUInt16((ushort)parentQualifiedNameSize);      //parentQualifiedName: size.
+                if(parentQualifiedNameOwner is not null)
+                {
+                    writer.WriteBytes(parentQualifiedNameOwner.Memory.Span[..parentQualifiedNameLength]); //parentQualifiedName = the computed QN.
+                }
+                else
+                {
+                    writer.WriteUInt32(parent.PermanentHandle);           //parentQualifiedName = the hierarchy handle.
+                }
+
+                outsideInfo.WriteTo(ref writer);                          //outsideInfo: TPM2B_DATA, echoed verbatim.
+            }
+            catch
+            {
+                owner.Dispose();
+                throw;
+            }
+
+            //The marshaling step rents the octets itself, so the TPM2B_CREATION_DATA carrier adopts that rental
+            //rather than copying it; a rejected adoption releases the rental before the exception leaves.
+            return Tpm2bCreationData.FromMarshaled(owner, creationDataSize, pool);
+        }
+        finally
+        {
+            pcrDigestValue?.Dispose();
+            parentQualifiedNameOwner?.Dispose();
+        }
     }
 
     /// <summary>
@@ -840,11 +1280,11 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// Seed changes, and the construction-fixed platform seed for everything else.
     /// </summary>
     /// <remarks>
-    /// TPM 2.0 Library Part 1, clause 12.5: "A Platform hierarchy proof (phProof)... changes when the PPS
+    /// TPM 2.0 Library Part 1, clause 11.5: "A Platform hierarchy proof (phProof)... changes when the PPS
     /// changes. An shProof, used for the Storage and Endorsement hierarchies, changes when the SPS changes."
     /// Splitting the two here is what lets <c>TPM2_Clear()</c> kill outstanding owner and endorsement tickets by
     /// drawing a new storage seed while every platform-hierarchy ticket keeps verifying. A creation ticket names
-    /// the hierarchy containing the created object (Part 2, clause 10.7.3, Table 109), so an ordinary object
+    /// the hierarchy containing the created object (Part 2, clause 10.6.3, Table 110), so an ordinary object
     /// created under an owner-hierarchy parent takes the owner proof and rotates with the storage seed exactly
     /// as a primary under that hierarchy does. Handles outside the permanent-hierarchy range still reach this
     /// selector — a caller-supplied ticket hierarchy on <c>TPM2_PolicyTicket()</c>/<c>TPM2_CertifyCreation()</c>
@@ -955,7 +1395,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
     /// <summary>
     /// Computes <c>creationTicket digest = HMAC_contextAlg(proof, TPM_ST_CREATION || Name || creationHash)</c>
-    /// (TPM 2.0 Library Part 2, clause 10.7; the context integrity algorithm is SHA-256 for this model).
+    /// (TPM 2.0 Library Part 2, clause 10.6; the context integrity algorithm is SHA-256 for this model).
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the ticket-digest buffer transfers to the caller, which releases it via a using declaration.")]
@@ -993,6 +1433,45 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     }
 
     /// <summary>
+    /// Signs a digest directly with a retained ECC scalar through the injected backend — the cryptographic core
+    /// <see cref="SignEccDigestAsync"/> shares with <see cref="SignEccDigestWithTicketAsync"/>, which calls it
+    /// only after its hash-check ticket has validated (TPM 2.0 Library Part 3, clauses 20.5 and 20.7).
+    /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the returned TpmtSignature transfers to the caller, which carries it into the response pipeline and is released by SerializeResponse after framing.")]
+    private static async ValueTask<TpmtSignature> SignEccDigestCoreAsync(
+        PrivateKeyMemory scalar, ReadOnlyMemory<byte> digest, TpmiEccCurve curve, TpmiAlgHash hashAlg, TpmActionContext context, CancellationToken cancellationToken)
+    {
+        TpmEccSigningBackend backend = context.SigningBackend
+            ?? throw new InvalidOperationException("Signing over an ECC key requires an ECC signing backend, but none was supplied.");
+
+        using Signature signature = await backend.SignDigest(
+            scalar.AsReadOnlyMemory(), digest, curve.Value, context.Pool, cancellationToken).ConfigureAwait(false);
+
+        return TpmtSignature.Create(TpmAlgIdConstants.TPM_ALG_ECDSA, hashAlg.Value, signature.AsReadOnlySpan(), context.Pool);
+    }
+
+    /// <summary>
+    /// Signs a digest directly with a retained RSA key under the requested scheme through the injected backend —
+    /// the cryptographic core <see cref="SignRsaDigestAsync"/> shares with
+    /// <see cref="SignRsaDigestWithTicketAsync"/>, which calls it only after its hash-check ticket has validated
+    /// (TPM 2.0 Library Part 3, clauses 20.5 and 20.7).
+    /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the returned TpmtSignature transfers to the caller, which carries it into the response pipeline and is released by SerializeResponse after framing.")]
+    private static async ValueTask<TpmtSignature> SignRsaDigestCoreAsync(
+        PrivateKeyMemory privateKey, ReadOnlyMemory<byte> digest, TpmiAlgSigScheme scheme, TpmiAlgHash hashAlg, TpmActionContext context, CancellationToken cancellationToken)
+    {
+        TpmRsaSigningBackend backend = context.RsaSigningBackend
+            ?? throw new InvalidOperationException("Signing over an RSA key requires an RSA signing backend, but none was supplied.");
+
+        using Signature signature = await backend.SignDigest(
+            privateKey.AsReadOnlyMemory(), digest, scheme.Value, hashAlg.Value, context.Pool, cancellationToken).ConfigureAwait(false);
+
+        return TpmtSignature.Create(scheme.Value, hashAlg.Value, signature.AsReadOnlySpan(), context.Pool);
+    }
+
+    /// <summary>
     /// <c>TPM2_Sign()</c> over an ECC key: sign the digest directly with the retained scalar through the
     /// injected backend.
     /// </summary>
@@ -1001,21 +1480,23 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// <c>TpmSignResponse</c> intent, and is released by <see cref="SerializeResponse"/> after the r and s
     /// parameters are framed.
     /// </remarks>
-    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-        Justification = "Ownership of the signature transfers to the returned TpmMessageSigned and is released by SerializeResponse after framing.")]
     private static async ValueTask<TpmSimulatorInput> SignEccDigestAsync(TpmEccSignAction action, TpmActionContext context, CancellationToken cancellationToken)
     {
-        //The effect is the digest carrier's terminal owner: the signing primitive is its only reader, so the
-        //using declaration releases it on the throwing arm as well as the successful one.
-        using Tpm2bDigest digest = action.Digest;
+        try
+        {
+            //The effect is the digest carrier's terminal owner: the signing primitive is its only reader, so the
+            //using declaration releases it on the throwing arm as well as the successful one.
+            using Tpm2bDigest digest = action.Digest;
 
-        TpmEccSigningBackend backend = context.SigningBackend
-            ?? throw new InvalidOperationException("TPM2_Sign() over an ECC key requires an ECC signing backend, but none was supplied.");
+            TpmtSignature signature = await SignEccDigestCoreAsync(
+                action.Scalar, digest.AsReadOnlyMemory(), action.Curve, action.HashAlg, context, cancellationToken).ConfigureAwait(false);
 
-        using Signature signature = await backend.SignDigest(
-            action.Scalar.AsReadOnlyMemory(), digest.AsReadOnlyMemory(), action.Curve.Value, context.Pool, cancellationToken).ConfigureAwait(false);
-
-        return new TpmMessageSigned(TpmtSignature.Create(TpmAlgIdConstants.TPM_ALG_ECDSA, action.HashAlg.Value, signature.AsReadOnlySpan(), context.Pool));
+            return await CompleteSignatureAsync(signature, action.OverSessions, context, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            ReleaseResponseSessionNonces(action.OverSessions);
+        }
     }
 
     /// <summary>
@@ -1027,21 +1508,931 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// <c>TpmSignResponse</c> intent, and is released by <see cref="SerializeResponse"/> after the single RSA
     /// signature buffer is framed.
     /// </remarks>
-    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-        Justification = "Ownership of the signature transfers to the returned TpmMessageSigned and is released by SerializeResponse after framing.")]
     private static async ValueTask<TpmSimulatorInput> SignRsaDigestAsync(TpmRsaSignAction action, TpmActionContext context, CancellationToken cancellationToken)
     {
-        //The effect is the digest carrier's terminal owner: the signing primitive is its only reader, so the
-        //using declaration releases it on the throwing arm as well as the successful one.
+        try
+        {
+            //The effect is the digest carrier's terminal owner: the signing primitive is its only reader, so the
+            //using declaration releases it on the throwing arm as well as the successful one.
+            using Tpm2bDigest digest = action.Digest;
+
+            TpmtSignature signature = await SignRsaDigestCoreAsync(
+                action.PrivateKey, digest.AsReadOnlyMemory(), action.Scheme, action.HashAlg, context, cancellationToken).ConfigureAwait(false);
+
+            return await CompleteSignatureAsync(signature, action.OverSessions, context, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            ReleaseResponseSessionNonces(action.OverSessions);
+        }
+    }
+
+    /// <summary>
+    /// <c>TPM2_SignDigest()</c> over an ECC restricted signing key, or an unrestricted key given a caller-supplied
+    /// non-NULL ticket: recompute the caller's <c>TPMT_TK_HASHCHECK</c> via <see cref="VerifyHashcheckTicketAsync"/>
+    /// and, only when it validates, sign through <see cref="SignEccDigestCoreAsync"/> — a forged or tampered
+    /// ticket answers <c>TPM_RC_TICKET</c> without the digest ever reaching the signing primitive (TPM 2.0
+    /// Library Part 3, clause 20.7).
+    /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the signature transfers to the returned TpmDigestSigned and is released by SerializeResponse after framing.")]
+    private static async ValueTask<TpmSimulatorInput> SignEccDigestWithTicketAsync(TpmEccSignDigestWithTicketAction action, TpmActionContext context, CancellationToken cancellationToken)
+    {
+        try
+        {
+            //The effect is the ticket-digest and digest carriers' terminal owner: the ticket validator and the
+            //signing primitive are their only readers, so the using declarations release both on every arm.
+            using Tpm2bDigest ticketDigest = action.TicketDigest;
+            using Tpm2bDigest digest = action.Digest;
+
+            bool isTicketValid = await VerifyHashcheckTicketAsync(
+                action.TicketHierarchy.Value, digest.AsReadOnlyMemory(), ticketDigest.AsReadOnlyMemory(), context, cancellationToken).ConfigureAwait(false);
+
+            if(!isTicketValid)
+            {
+                return new TpmDigestSigned(TpmRcConstants.TPM_RC_TICKET, Signature: null);
+            }
+
+            TpmtSignature signature = await SignEccDigestCoreAsync(
+                action.Scalar, digest.AsReadOnlyMemory(), action.Curve, action.HashAlg, context, cancellationToken).ConfigureAwait(false);
+
+            return await CompleteDigestSignatureAsync(signature, action.OverSessions, context, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            ReleaseResponseSessionNonces(action.OverSessions);
+        }
+    }
+
+    /// <summary>
+    /// The RSA counterpart of <see cref="SignEccDigestWithTicketAsync"/>: recompute the caller's
+    /// <c>TPMT_TK_HASHCHECK</c> and, only when it validates, sign through <see cref="SignRsaDigestCoreAsync"/>.
+    /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the signature transfers to the returned TpmDigestSigned and is released by SerializeResponse after framing.")]
+    private static async ValueTask<TpmSimulatorInput> SignRsaDigestWithTicketAsync(TpmRsaSignDigestWithTicketAction action, TpmActionContext context, CancellationToken cancellationToken)
+    {
+        try
+        {
+            //The effect is the ticket-digest and digest carriers' terminal owner: the ticket validator and the
+            //signing primitive are their only readers, so the using declarations release both on every arm.
+            using Tpm2bDigest ticketDigest = action.TicketDigest;
+            using Tpm2bDigest digest = action.Digest;
+
+            bool isTicketValid = await VerifyHashcheckTicketAsync(
+                action.TicketHierarchy.Value, digest.AsReadOnlyMemory(), ticketDigest.AsReadOnlyMemory(), context, cancellationToken).ConfigureAwait(false);
+
+            if(!isTicketValid)
+            {
+                return new TpmDigestSigned(TpmRcConstants.TPM_RC_TICKET, Signature: null);
+            }
+
+            TpmtSignature signature = await SignRsaDigestCoreAsync(
+                action.PrivateKey, digest.AsReadOnlyMemory(), action.Scheme, action.HashAlg, context, cancellationToken).ConfigureAwait(false);
+
+            return await CompleteDigestSignatureAsync(signature, action.OverSessions, context, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            ReleaseResponseSessionNonces(action.OverSessions);
+        }
+    }
+
+    /// <summary>
+    /// <c>TPM2_SignSequenceStart()</c>'s and <c>TPM2_VerifySequenceStart()</c>'s shared deferred deep copy: builds
+    /// the new sequence context, deep-copying the key's Name against the injected memory pool — the one step
+    /// <c>OnSignSequenceStart</c>/<c>OnVerifySequenceStart</c> cannot perform itself, being pure transitions.
+    /// <see cref="TpmSequenceStartAction.Kind"/> carries straight onto the built <see cref="SequenceObjectState.Kind"/>,
+    /// so the same effect serves both Start commands.
+    /// </summary>
+    /// <remarks>
+    /// Synchronous: unlike every other action executor in this switch, no backend, RNG, or registered digest
+    /// seam is involved — only a pooled copy of octets already resolved by the declaring transition. Mirrors
+    /// <see cref="PersistObject"/>'s equally synchronous deferred deep copy for <c>TPM2_EvictControl()</c>'s
+    /// persist arm.
+    /// </remarks>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the deep-copied Name and the adopted SequenceAuth transfers to the built SequenceObjectState, then to the returned TpmSequenceStarted, whose consuming transition installs it into SequenceObjects and whose Dispose() releases both on eviction — once the Name copy has actually succeeded; a failing copy releases the still-unadopted SequenceAuth itself before rethrowing.")]
+    private static TpmSequenceStarted StartSequence(TpmSequenceStartAction action, TpmActionContext context)
+    {
+        Tpm2bName startingKeyName;
+
+        try
+        {
+            startingKeyName = Tpm2bName.Create(action.KeyName.Span, context.Pool);
+        }
+        catch
+        {
+            action.SequenceAuth.Dispose();
+            throw;
+        }
+
+        var sequence = new SequenceObjectState(
+            action.Handle, action.Kind, startingKeyName, action.Scheme, action.HashAlg,
+            action.SequenceAuth, ImmutableList<Tpm2bMaxBuffer>.Empty, TpmSequenceFirstBlock.NotYetPresented, Tpm2bSensitiveData.Empty);
+
+        return new TpmSequenceStarted(action.Handle, sequence);
+    }
+
+    /// <summary>
+    /// <c>TPM2_SignSequenceComplete()</c> over an ECC key: chain the sequence's accumulated segments and the
+    /// completing command's own trailing buffer into one <c>ReadOnlySequence{byte}</c> with no copy
+    /// (<see cref="SequenceObjectState.BuildMessageSequence"/>), hash it through the registered digest seam
+    /// under the sequence's own retained hash algorithm, and sign the digest directly with the retained scalar
+    /// through <see cref="SignEccDigestCoreAsync"/> — the same core <see cref="SignEccDigestAsync"/> and
+    /// <see cref="SignEccDigestWithTicketAsync"/> share.
+    /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the returned TpmtSignature transfers to the returned TpmSequenceSigned and is released by SerializeResponse after framing; the action's owned TrailingBuffer is this effect's terminal responsibility, released by the using declaration on every arm.")]
+    private static async ValueTask<TpmSimulatorInput> SignSequenceEccAsync(TpmEccSignSequenceAction action, TpmActionContext context, CancellationToken cancellationToken)
+    {
+        try
+        {
+            //The effect is the trailing buffer's terminal owner: building the hash input is its only reader, so the
+            //using declaration releases it on the throwing arm as well as the successful one. Segments remain
+            //owned by the live SequenceObjectState, which the continuation flushes separately.
+            using Tpm2bMaxBuffer trailingBuffer = action.TrailingBuffer;
+
+            ReadOnlySequence<byte> messageSequence = SequenceObjectState.BuildMessageSequence(action.Segments, trailingBuffer.AsReadOnlyMemory());
+
+            using DigestValue digest = await CryptographicKeyEvents.ComputeDigestAsync(
+                messageSequence, SessionDigestSize(action.HashAlg), SessionDigestTag(action.HashAlg), context.Pool, cancellationToken: cancellationToken).ConfigureAwait(false);
+
+            TpmtSignature signature = await SignEccDigestCoreAsync(
+                action.PrivateKey, digest.AsReadOnlyMemory(), action.Curve, action.HashAlg, context, cancellationToken).ConfigureAwait(false);
+
+            return await CompleteSequenceSignatureAsync(action.SequenceHandle, signature, action.OverSessions, context, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            ReleaseResponseSessionNonces(action.OverSessions);
+        }
+    }
+
+    /// <summary>
+    /// The RSA counterpart of <see cref="SignSequenceEccAsync"/>: chain and hash the accumulated message
+    /// exactly the same way, then sign the digest through <see cref="SignRsaDigestCoreAsync"/> under the
+    /// sequence's own retained scheme.
+    /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the returned TpmtSignature transfers to the returned TpmSequenceSigned and is released by SerializeResponse after framing; the action's owned TrailingBuffer is this effect's terminal responsibility, released by the using declaration on every arm.")]
+    private static async ValueTask<TpmSimulatorInput> SignSequenceRsaAsync(TpmRsaSignSequenceAction action, TpmActionContext context, CancellationToken cancellationToken)
+    {
+        try
+        {
+            //The effect is the trailing buffer's terminal owner: building the hash input is its only reader, so the
+            //using declaration releases it on the throwing arm as well as the successful one. Segments remain
+            //owned by the live SequenceObjectState, which the continuation flushes separately.
+            using Tpm2bMaxBuffer trailingBuffer = action.TrailingBuffer;
+
+            ReadOnlySequence<byte> messageSequence = SequenceObjectState.BuildMessageSequence(action.Segments, trailingBuffer.AsReadOnlyMemory());
+
+            using DigestValue digest = await CryptographicKeyEvents.ComputeDigestAsync(
+                messageSequence, SessionDigestSize(action.HashAlg), SessionDigestTag(action.HashAlg), context.Pool, cancellationToken: cancellationToken).ConfigureAwait(false);
+
+            TpmtSignature signature = await SignRsaDigestCoreAsync(
+                action.PrivateKey, digest.AsReadOnlyMemory(), action.Scheme, action.HashAlg, context, cancellationToken).ConfigureAwait(false);
+
+            return await CompleteSequenceSignatureAsync(action.SequenceHandle, signature, action.OverSessions, context, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            ReleaseResponseSessionNonces(action.OverSessions);
+        }
+    }
+
+    /// <summary>
+    /// The digest effect <c>TPM2_SequenceComplete()</c> and <c>TPM2_Hash()</c> share: chain the borrowed
+    /// segments and the owned trailing block into one <c>ReadOnlySequence{byte}</c> with no copy
+    /// (<see cref="SequenceObjectState.BuildMessageSequence"/>), hash it through the registered digest seam
+    /// under the action's algorithm, and then mint the <c>TPMT_TK_HASHCHECK</c>: the NULL ticket when the
+    /// hierarchy is <c>TPM_RH_NULL</c> or the octets were not safe to sign (TPM 2.0 Library Part 3, clauses
+    /// 15.4.1 and 17.8.1), otherwise <c>HMAC(proof_hierarchy, TPM_ST_HASHCHECK ‖ digest)</c> through the same
+    /// <see cref="ComputeHashcheckTicketDigestAsync"/> + <see cref="DeriveHierarchyProofAsync(TpmActionContext, uint, CancellationToken)"/>
+    /// pair <see cref="VerifyHashcheckTicketAsync"/> re-derives for <c>TPM2_SignDigest()</c> (Part 2, clause
+    /// 10.6.7, Table 115).
+    /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the digest carrier and the ticket transfers to the returned TpmDigestComputed, then to the TpmDigestResponse the transition frames, and both are released by SerializeResponse after framing; the action's owned TrailingBuffer is released by the using declaration.")]
+    private static async ValueTask<TpmSimulatorInput> ComputeDigestAndTicketAsync(TpmDigestAction action, TpmActionContext context, CancellationToken cancellationToken)
+    {
+        //The effect is the trailing block's terminal owner: building the hash input is its only reader, so the
+        //using declaration releases it on the throwing arm as well as the successful one. Segments remain
+        //owned by the live SequenceObjectState, which the continuation flushes separately.
+        using Tpm2bMaxBuffer trailingBuffer = action.TrailingBuffer;
+
+        ReadOnlySequence<byte> messageSequence = SequenceObjectState.BuildMessageSequence(action.Segments, trailingBuffer.AsReadOnlyMemory());
+
+        using DigestValue digest = await CryptographicKeyEvents.ComputeDigestAsync(
+            messageSequence, SessionDigestSize(action.HashAlg), SessionDigestTag(action.HashAlg), context.Pool, cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        Tpm2bDigest result = Tpm2bDigest.Create(digest.AsReadOnlySpan(), context.Pool);
+        try
+        {
+            if(action.TicketHierarchy.IsNull || !action.IsSafeToSign)
+            {
+                return new TpmDigestComputed(action.SequenceHandle, result, TpmtTkHashcheck.Null);
+            }
+
+            using IMemoryOwner<byte> proof = await DeriveHierarchyProofAsync(context, action.TicketHierarchy.Value, cancellationToken).ConfigureAwait(false);
+            using IMemoryOwner<byte> ticketDigest = await ComputeHashcheckTicketDigestAsync(
+                proof.Memory[..CreationDigestSize], result.AsReadOnlyMemory(), context.Pool, cancellationToken).ConfigureAwait(false);
+
+            TpmtTkHashcheck validation = TpmtTkHashcheck.Create(action.TicketHierarchy, ticketDigest.Memory.Span[..CreationDigestSize], context.Pool);
+
+            return new TpmDigestComputed(action.SequenceHandle, result, validation);
+        }
+        catch
+        {
+            result.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Computes <c>HMAC_hashAlg(key, Segments ‖ TrailingBuffer)</c> for a <c>TPM2_HMAC()</c> or the HMAC arm of a
+    /// <c>TPM2_SequenceComplete()</c> (TPM 2.0 Library Part 3, clauses 15.5 and 17.8; Part 4 <c>HMAC.c</c>,
+    /// <c>SequenceComplete.c</c>), keying the registered HMAC seam with the loaded key's sensitive value and
+    /// reporting <see cref="TpmHmacComputed"/>. The message is chained from the accumulated segments exactly as
+    /// <see cref="ComputeDigestAndTicketAsync"/> chains a digest's, so an HMAC sequence and a hash sequence read
+    /// their accumulated data through one code path. A one-shot authorized by a real session
+    /// (<see cref="TpmHmacAction.ResponseSession"/>) additionally frames the <c>outHMAC</c> parameter area into
+    /// this effect's own rental — rpHash covers the very octets the response frames (Part 1, clause 15.8,
+    /// equation 16) — and the session's response entry (<see cref="FrameKeyedHashSessionEntryAsync"/>),
+    /// reporting <see cref="TpmHmacComputedOverSession"/> instead.
+    /// </summary>
+    /// <param name="action">The declared HMAC action carrying the borrowed key bits, the segments, the owned trailing buffer, and the optional response-session material.</param>
+    /// <param name="context">The action context (pool, RNG, registered crypto seams).</param>
+    /// <param name="cancellationToken">Propagates cancellation to the HMAC seam.</param>
+    /// <returns>The <see cref="TpmHmacComputed"/> feedback carrying the owned result, or <see cref="TpmHmacComputedOverSession"/> for the session form.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the result digest transfers to the returned TpmHmacComputed, then to the TpmHmacResponse or TpmDigestResponse intent, and is released by SerializeResponse after framing; on the session form the framed parameter area and the entry's carriers transfer to the returned TpmHmacComputedOverSession, then to the TpmHmacOverSessionResponse intent, released the same way, and the catch releases the still-unadopted parameter rental; the trailing buffer is released by the using declaration on every path.")]
+    private static async ValueTask<TpmSimulatorInput> ComputeKeyedHmacAsync(TpmHmacAction action, TpmActionContext context, CancellationToken cancellationToken)
+    {
+        //The effect is the trailing block's terminal owner: building the message is its only reader, so the
+        //using declaration releases it on the throwing arm as well as the successful one. Segments and the key
+        //bits remain owned by the live state (the loaded key, or the sequence the continuation flushes). On the
+        //session form the effect is likewise the terminal owner of the caller nonce the continuation transferred
+        //into the response-session entry: the response HMAC is its last reader.
+        using Tpm2bMaxBuffer trailingBuffer = action.TrailingBuffer;
+        try
+        {
+            ReadOnlySequence<byte> messageSequence = SequenceObjectState.BuildMessageSequence(action.Segments, trailingBuffer.AsReadOnlyMemory());
+
+            using HmacValue hmac = await CryptographicKeyEvents.ComputeHmacAsync(
+                messageSequence, action.KeyBits, SessionDigestSize(action.HashAlg), SessionHmacTag(action.HashAlg), context.Pool, cancellationToken: cancellationToken).ConfigureAwait(false);
+
+            if(action.ResponseSession is not { } responseSession)
+            {
+                return new TpmHmacComputed(action.SequenceHandle, Tpm2bDigest.Create(hmac.AsReadOnlySpan(), context.Pool));
+            }
+
+            //outHMAC (TPM2B_DIGEST, Table 72) is laid out first, into this effect's own rental, because rpHash is
+            //computed over the very octets the response frames.
+            int parameterLength = sizeof(ushort) + SessionDigestSize(action.HashAlg);
+            IMemoryOwner<byte> parameterArea = context.Pool.Rent(parameterLength);
+            try
+            {
+                var parameterWriter = new TpmWriter(parameterArea.Memory.Span[..parameterLength]);
+                parameterWriter.WriteTpm2b(hmac.AsReadOnlySpan());
+
+                TpmHmacFramedSession entry = await FrameKeyedHashSessionEntryAsync(
+                    TpmCcConstants.TPM_CC_HMAC, parameterArea.Memory[..parameterLength], responseSession, context, cancellationToken).ConfigureAwait(false);
+
+                return new TpmHmacComputedOverSession(TpmParameterArea.Adopt(parameterArea, parameterLength), entry);
+            }
+            catch
+            {
+                parameterArea.Memory.Span[..parameterLength].Clear();
+                parameterArea.Dispose();
+                throw;
+            }
+        }
+        finally
+        {
+            action.ResponseSession?.NonceCaller.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Signs a digest with a KEYEDHASH HMAC key for the KEYEDHASH arm of <c>TPM2_Sign()</c> — Table 115's HMAC
+    /// row (TPM 2.0 Library Part 3, clauses 20.1 and 20.5): <c>HMAC_hashAlg(bits, digest)</c> through the
+    /// registered HMAC seam, framed as <c>TPMT_SIGNATURE(TPM_ALG_HMAC, TPMT_HA(hashAlg, hmac))</c> and fed
+    /// back as the same <see cref="TpmMessageSigned"/> the asymmetric signing effects feed, so
+    /// <c>OnMessageSigned</c> frames the response unchanged.
+    /// </summary>
+    /// <param name="action">The declared HMAC signing action carrying the borrowed key bits and the owned digest.</param>
+    /// <param name="context">The action context (pool, RNG, registered crypto seams).</param>
+    /// <param name="cancellationToken">Propagates cancellation to the HMAC seam.</param>
+    /// <returns>The <see cref="TpmMessageSigned"/> feedback carrying the owned signature.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the built TPMT_SIGNATURE transfers to the returned TpmMessageSigned, then to the TpmSignResponse intent, and is released by SerializeResponse after framing; the action's owned digest is released by the using declaration on every arm.")]
+    private static async ValueTask<TpmSimulatorInput> SignHmacDigestAsync(TpmHmacSignAction action, TpmActionContext context, CancellationToken cancellationToken)
+    {
+        try
+        {
+            //The effect is the digest carrier's terminal owner: the HMAC seam is its only reader. The key bits
+            //remain owned by the live loaded object.
+            using Tpm2bDigest digest = action.Digest;
+
+            using HmacValue hmac = await CryptographicKeyEvents.ComputeHmacAsync(
+                new ReadOnlySequence<byte>(digest.AsReadOnlyMemory()), action.KeyBits, SessionDigestSize(action.HashAlg), SessionHmacTag(action.HashAlg), context.Pool, cancellationToken: cancellationToken).ConfigureAwait(false);
+
+            return await CompleteSignatureAsync(TpmtSignature.Hmac(action.HashAlg, hmac.AsReadOnlySpan(), context.Pool), action.OverSessions, context, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            ReleaseResponseSessionNonces(action.OverSessions);
+        }
+    }
+
+    /// <summary>
+    /// Signs an accumulated sequence message with a KEYEDHASH HMAC key for the KEYEDHASH arm of
+    /// <c>TPM2_SignSequenceComplete()</c> — Table 115's HMAC row "Signs/verifies the message" (TPM 2.0 Library
+    /// Part 3, clauses 20.1 and 20.6): the message chained from the accumulated segments and the trailing
+    /// buffer exactly as <see cref="ComputeKeyedHmacAsync"/> chains it, the HMAC framed as
+    /// <c>TPMT_SIGNATURE(TPM_ALG_HMAC, TPMT_HA(hashAlg, hmac))</c> and fed back as the same
+    /// <see cref="TpmSequenceSigned"/> the asymmetric sequence-signing effects feed, so
+    /// <c>OnSequenceSigned</c> frames the response and flushes the sequence unchanged.
+    /// </summary>
+    /// <param name="action">The declared HMAC sequence-signing action carrying the borrowed segments and key bits, and the owned trailing buffer.</param>
+    /// <param name="context">The action context (pool, RNG, registered crypto seams).</param>
+    /// <param name="cancellationToken">Propagates cancellation to the HMAC seam.</param>
+    /// <returns>The <see cref="TpmSequenceSigned"/> feedback carrying the owned signature.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the built TPMT_SIGNATURE transfers to the returned TpmSequenceSigned, then to the TpmSignResponse intent, and is released by SerializeResponse after framing; the action's owned trailing buffer is released by the using declaration on every arm. Segments remain owned by the live SequenceObjectState, which the continuation flushes separately.")]
+    private static async ValueTask<TpmSimulatorInput> SignSequenceHmacAsync(TpmHmacSignSequenceAction action, TpmActionContext context, CancellationToken cancellationToken)
+    {
+        try
+        {
+            //The effect is the trailing block's terminal owner: building the message is its only reader. Segments
+            //and the key bits remain owned by the live state (the sequence the continuation flushes, and the
+            //loaded key).
+            using Tpm2bMaxBuffer trailingBuffer = action.TrailingBuffer;
+
+            ReadOnlySequence<byte> messageSequence = SequenceObjectState.BuildMessageSequence(action.Segments, trailingBuffer.AsReadOnlyMemory());
+
+            using HmacValue hmac = await CryptographicKeyEvents.ComputeHmacAsync(
+                messageSequence, action.KeyBits, SessionDigestSize(action.HashAlg), SessionHmacTag(action.HashAlg), context.Pool, cancellationToken: cancellationToken).ConfigureAwait(false);
+
+            return await CompleteSequenceSignatureAsync(
+                action.SequenceHandle, TpmtSignature.Hmac(action.HashAlg, hmac.AsReadOnlySpan(), context.Pool), action.OverSessions, context, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            ReleaseResponseSessionNonces(action.OverSessions);
+        }
+    }
+
+    /// <summary>
+    /// Verifies a claimed HMAC signature over a digest for the KEYEDHASH arm of <c>TPM2_VerifySignature()</c>
+    /// (TPM 2.0 Library Part 3, clause 20.2): recomputes <c>HMAC_hashAlg(bits, digest)</c> and constant-time
+    /// compares it against the signature's <c>TPMT_HA</c> digest — the symmetric verification that consumes
+    /// the loaded object's SENSITIVE bits. A mismatch is <c>TPM_RC_SIGNATURE</c> with no ticket; a match mints
+    /// the <c>TPM_ST_VERIFIED</c> <c>TPMT_TK_VERIFIED</c> exactly as <see cref="VerifySignatureEccAsync"/>
+    /// mints it, with the NULL-hierarchy empty-hmac short-circuit (clause 20.2.1).
+    /// </summary>
+    /// <param name="action">The declared HMAC verification action carrying the borrowed key bits and Name, and the owned digest and signature.</param>
+    /// <param name="context">The action context (pool, RNG, registered crypto seams).</param>
+    /// <param name="cancellationToken">Propagates cancellation to the HMAC seams.</param>
+    /// <returns>The <see cref="TpmSignatureVerified"/> feedback carrying the validation ticket or the mismatch outcome.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the ticket-digest buffer transfers to the TPMT_TK_VERIFIED carried by the returned TpmSignatureVerified, then to the TpmVerifySignatureResponse intent, and is released by SerializeResponse after framing; the action's owned digest and signature are released by the using declarations on every arm.")]
+    private static async ValueTask<TpmSimulatorInput> VerifySignatureHmacAsync(TpmHmacVerifySignatureAction action, TpmActionContext context, CancellationToken cancellationToken)
+    {
+        //The effect is the digest and signature carriers' terminal owner: the recomputation and the compare
+        //are their only readers. The key bits and Name remain owned by the live loaded object.
         using Tpm2bDigest digest = action.Digest;
+        using TpmtSignature signature = action.Signature;
 
-        TpmRsaSigningBackend backend = context.RsaSigningBackend
-            ?? throw new InvalidOperationException("TPM2_Sign() over an RSA key requires an RSA signing backend, but none was supplied.");
+        using HmacValue recomputed = await CryptographicKeyEvents.ComputeHmacAsync(
+            new ReadOnlySequence<byte>(digest.AsReadOnlyMemory()), action.KeyBits, SessionDigestSize(action.HashAlg), SessionHmacTag(action.HashAlg), context.Pool, cancellationToken: cancellationToken).ConfigureAwait(false);
 
-        using Signature signature = await backend.SignDigest(
-            action.PrivateKey.AsReadOnlyMemory(), digest.AsReadOnlyMemory(), action.Scheme.Value, action.HashAlg.Value, context.Pool, cancellationToken).ConfigureAwait(false);
+        bool isVerified = signature.HmacDigest is { } claimed
+            && CryptographicOperations.FixedTimeEquals(recomputed.AsReadOnlySpan(), claimed.Span);
 
-        return new TpmMessageSigned(TpmtSignature.Create(action.Scheme.Value, action.HashAlg.Value, signature.AsReadOnlySpan(), context.Pool));
+        if(!isVerified)
+        {
+            return new TpmSignatureVerified(TpmRcConstants.TPM_RC_SIGNATURE, Validation: null);
+        }
+
+        if(action.KeyHierarchy.IsNull)
+        {
+            IMemoryOwner<byte> emptyHmac = context.Pool.Rent(1);
+
+            return new TpmSignatureVerified(
+                TpmRcConstants.TPM_RC_SUCCESS,
+                TpmtTkVerified.FromMarshaled(TpmStConstants.TPM_ST_VERIFIED, action.KeyHierarchy, metadata: null, emptyHmac, hmacLength: 0));
+        }
+
+        using IMemoryOwner<byte> proof = await DeriveHierarchyProofAsync(context, action.KeyHierarchy.Value, cancellationToken).ConfigureAwait(false);
+        IMemoryOwner<byte> ticketDigest = await ComputeVerifiedTicketDigestAsync(
+            proof.Memory[..CreationDigestSize], TpmStConstants.TPM_ST_VERIFIED, digest.AsReadOnlyMemory(), action.KeyName.AsReadOnlyMemory(), metadata: null, context.Pool, cancellationToken).ConfigureAwait(false);
+
+        //The digest helper rents the ticket octets itself, so the whole-ticket carrier adopts that rental.
+        return new TpmSignatureVerified(
+            TpmRcConstants.TPM_RC_SUCCESS,
+            TpmtTkVerified.FromMarshaled(TpmStConstants.TPM_ST_VERIFIED, action.KeyHierarchy, metadata: null, ticketDigest, CreationDigestSize));
+    }
+
+    /// <summary>
+    /// Verifies a claimed HMAC signature over an accumulated sequence message for the KEYEDHASH arm of
+    /// <c>TPM2_VerifySequenceComplete()</c> (TPM 2.0 Library Part 3, clause 20.3): recomputes
+    /// <c>HMAC_hashAlg(bits, message)</c> over the chained segments (no trailing buffer — this command carries
+    /// none) and constant-time compares it against the signature's <c>TPMT_HA</c> digest. On a match the
+    /// minted <c>TPM_ST_MESSAGE_VERIFIED</c> ticket's <c>digestOrMessage</c> term is the RAW accumulated
+    /// message, exactly as <see cref="VerifySequenceEccAsync"/> folds it (Part 2, clause 10.6.5); on a
+    /// mismatch the rejection carries no ticket and the continuation leaves the sequence retained.
+    /// </summary>
+    /// <param name="action">The declared HMAC sequence-verification action carrying the borrowed segments, key bits and Name, and the owned signature.</param>
+    /// <param name="context">The action context (pool, RNG, registered crypto seams).</param>
+    /// <param name="cancellationToken">Propagates cancellation to the HMAC seams.</param>
+    /// <returns>The <see cref="TpmSequenceSignatureVerified"/> feedback carrying the validation ticket or the mismatch outcome.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the ticket-digest buffer transfers to the TPMT_TK_VERIFIED carried by the returned TpmSequenceSignatureVerified, then to the TpmVerifySequenceCompleteResponse intent, and is released by SerializeResponse after framing; the action's owned Signature is released by the using declaration on every arm. Segments remain owned by the live SequenceObjectState, which the continuation flushes separately.")]
+    private static async ValueTask<TpmSimulatorInput> VerifySequenceHmacAsync(TpmHmacVerifySequenceAction action, TpmActionContext context, CancellationToken cancellationToken)
+    {
+        try
+        {
+            //The effect is the signature carrier's terminal owner: the compare is its only reader. Segments, the
+            //key bits and the Name remain owned by the live state.
+            using TpmtSignature signature = action.Signature;
+
+            ReadOnlySequence<byte> messageSequence = SequenceObjectState.BuildMessageSequence(action.Segments);
+
+            using HmacValue recomputed = await CryptographicKeyEvents.ComputeHmacAsync(
+                messageSequence, action.KeyBits, SessionDigestSize(action.HashAlg), SessionHmacTag(action.HashAlg), context.Pool, cancellationToken: cancellationToken).ConfigureAwait(false);
+
+            bool isVerified = signature.HmacDigest is { } claimed
+                && CryptographicOperations.FixedTimeEquals(recomputed.AsReadOnlySpan(), claimed.Span);
+
+            if(!isVerified)
+            {
+                return new TpmSequenceSignatureVerified(TpmRcConstants.TPM_RC_SIGNATURE, action.SequenceHandle, Validation: null);
+            }
+
+            if(action.KeyHierarchy.IsNull)
+            {
+                IMemoryOwner<byte> emptyHmac = context.Pool.Rent(1);
+
+                return await CompleteSequenceVerificationAsync(
+                    action.SequenceHandle, TpmtTkVerified.FromMarshaled(TpmStConstants.TPM_ST_MESSAGE_VERIFIED, action.KeyHierarchy, metadata: null, emptyHmac, hmacLength: 0), action.OverSessions, context, cancellationToken).ConfigureAwait(false);
+            }
+
+            using IMemoryOwner<byte> proof = await DeriveHierarchyProofAsync(context, action.KeyHierarchy.Value, cancellationToken).ConfigureAwait(false);
+            IMemoryOwner<byte> ticketDigest = await ComputeVerifiedTicketDigestAsync(
+                proof.Memory[..CreationDigestSize], TpmStConstants.TPM_ST_MESSAGE_VERIFIED, messageSequence, action.KeyName.AsReadOnlyMemory(), metadata: null, context.Pool, cancellationToken).ConfigureAwait(false);
+
+            //The digest helper rents the ticket octets itself, so the whole-ticket carrier adopts that rental.
+            return await CompleteSequenceVerificationAsync(
+                    action.SequenceHandle, TpmtTkVerified.FromMarshaled(TpmStConstants.TPM_ST_MESSAGE_VERIFIED, action.KeyHierarchy, metadata: null, ticketDigest, CreationDigestSize), action.OverSessions, context, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            ReleaseResponseSessionNonces(action.OverSessions);
+        }
+    }
+
+    /// <summary>
+    /// Opens the HMAC sequence a <c>TPM2_HMAC_Start()</c> asks for (<see cref="StartHmacSequence"/>) and, when
+    /// the command was authorized by a real session (<see cref="TpmHmacSequenceStartAction.ResponseSession"/>),
+    /// frames that session's response entry over the empty parameter area — Table 81 returns only
+    /// <c>sequenceHandle</c>, which rides the handle area rpHash never covers (TPM 2.0 Library Part 1, clause
+    /// 15.8, equation 16) — reporting <see cref="TpmHmacSequenceStartedOverSession"/>; the password form reports
+    /// the plain <see cref="TpmSequenceStarted"/>.
+    /// </summary>
+    /// <param name="action">The declared HMAC-sequence-start action.</param>
+    /// <param name="context">The action context (pool, RNG, registered crypto seams).</param>
+    /// <param name="cancellationToken">Propagates cancellation to the digest and HMAC seams.</param>
+    /// <returns>The feedback carrying the new sequence, and the session's entry on the session form.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the built sequence transfers to the returned feedback exactly as StartHmacSequence's does; on the session form the entry's carriers transfer with it to the returned TpmHmacSequenceStartedOverSession, then to the TpmHmacStartOverSessionResponse intent, and a failing framing releases the already-built sequence in the catch before rethrowing.")]
+    private static async ValueTask<TpmSimulatorInput> StartHmacSequenceAsync(TpmHmacSequenceStartAction action, TpmActionContext context, CancellationToken cancellationToken)
+    {
+        TpmSequenceStarted started = StartHmacSequence(action, context);
+
+        if(action.ResponseSession is not { } responseSession)
+        {
+            return started;
+        }
+
+        //This effect is the terminal owner of the caller nonce the continuation transferred into the entry: the
+        //response HMAC is its last reader, and the release wraps the whole framing so a fault leaves none outstanding.
+        try
+        {
+            TpmHmacFramedSession entry = await FrameKeyedHashSessionEntryAsync(
+                TpmCcConstants.TPM_CC_HMAC_Start, Memory<byte>.Empty, responseSession, context, cancellationToken).ConfigureAwait(false);
+
+            return new TpmHmacSequenceStartedOverSession(started.Handle, started.State, entry);
+        }
+        catch
+        {
+            started.Dispose();
+            throw;
+        }
+        finally
+        {
+            responseSession.NonceCaller.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Frames the single authorizing session's response entry for a session-authorized <c>TPM2_HMAC()</c> or
+    /// <c>TPM2_HMAC_Start()</c> (TPM 2.0 Library Part 1, clauses 15.6.1 and 16.6.5; Part 4
+    /// <c>BuildSingleResponseAuth</c>): rolls a fresh nonceTPM, encrypts <c>outHMAC</c>'s data portion when the
+    /// slot carries the <c>encrypt</c> attribute, computes rpHash over the framed parameter area, and keys the
+    /// response HMAC on the SAME <c>sessionKey ‖ StripTrailingZeros(authValue)</c> the command's verification
+    /// used — or frames the empty hmac where Part 4 does: a <c>TPM2_PolicyPassword()</c> session, or an empty key
+    /// that answered an empty supplied hmac (<c>ComputeResponseHMAC</c>'s "if the HMAC key size is 0, the
+    /// response HMAC is computed according to the input HMAC"). The nonce is rolled in every case
+    /// (<c>UpdateAllNonceTPM</c>: every non-password session).
+    /// </summary>
+    /// <param name="commandCode">The command the response answers, rpHash's <c>commandCode</c> term.</param>
+    /// <param name="parameterArea">The framed response parameter octets rpHash covers (empty for <c>TPM2_HMAC_Start()</c>), transformed in place when the session encrypts.</param>
+    /// <param name="session">The session's entry material; its caller nonce is BORROWED here and released by the calling effect.</param>
+    /// <param name="context">The effect context supplying the RNG backend and the memory pool.</param>
+    /// <param name="cancellationToken">A token observed across the encryption, rpHash and HMAC computations.</param>
+    /// <returns>The framed entry, whose rolled nonces and HMAC the completing transition and the serializer own.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the rolled nonce pair and the HMAC buffer transfers to the returned TpmHmacFramedSession, whose completing transition installs the retained nonce and whose serializer releases the framed nonce and the HMAC; the catch releases the pair when the framing faults before the entry adopts it.")]
+    private static async ValueTask<TpmHmacFramedSession> FrameKeyedHashSessionEntryAsync(
+        TpmCcConstants commandCode, Memory<byte> parameterArea, TpmHmacResponseSession session, TpmActionContext context, CancellationToken cancellationToken)
+    {
+        (Tpm2bNonce framedNonceTpm, Tpm2bNonce retainedNonceTpm) = RollSessionNonce(session.SessionAlg, context);
+        try
+        {
+            //An encrypt-attributed slot protects the data portion of the first response parameter — outHMAC
+            //after its 2-octet size, which is never protected — between the nonce roll and rpHash ("Parameters
+            //in responses are encrypted before any rpHash is computed", Part 1, clause 18.1), keyed sessionKey ‖
+            //the key's LIVE authValue with the binding ignored, in the response direction (nonceNewer = the
+            //rolled nonceTPM, nonceOlder = nonceCaller, clause 18.2). TPM2_HMAC_Start() returns no parameter and
+            //its area gate refuses the attribute, so the empty area never reaches this arm.
+            if(session.Encrypts && !parameterArea.IsEmpty)
+            {
+                ushort outHmacSize = BinaryPrimitives.ReadUInt16BigEndian(parameterArea.Span[..sizeof(ushort)]);
+                await ApplyResponseEncryptionAsync(
+                    session.Symmetric, session.SessionAlg, session.SessionKey, session.EntityAuthValue,
+                    framedNonceTpm.AsReadOnlyMemory(), session.NonceCaller.AsReadOnlyMemory(),
+                    parameterArea.Slice(sizeof(ushort), outHmacSize), context.Pool, cancellationToken).ConfigureAwait(false);
+            }
+
+            if(session.IsResponseHmacEmpty)
+            {
+                return new TpmHmacFramedSession(session.SessionHandle, session.IsPolicySession, framedNonceTpm, retainedNonceTpm, session.SessionAttributes, Tpm2bAuth.Empty);
+            }
+
+            int digestSize = SessionDigestSize(session.SessionAlg);
+            using IMemoryOwner<byte> rpHash = await ComputeSessionRpHashAsync(
+                session.SessionAlg, commandCode, parameterArea, context.Pool, cancellationToken).ConfigureAwait(false);
+
+            ReadOnlyMemory<byte> sessionKeyBytes = session.SessionKey.AsReadOnlyMemory();
+            ReadOnlyMemory<byte> authValueBytes = TpmLifecycleTransitions.StripTrailingZeros(session.AuthValue.AsReadOnlyMemory());
+            int sessionValueLength = sessionKeyBytes.Length + authValueBytes.Length;
+            using IMemoryOwner<byte> sessionValueOwner = context.Pool.Rent(Math.Max(sessionValueLength, 1), AllocationKind.Pinned);
+            Memory<byte> sessionValue = sessionValueOwner.Memory[..sessionValueLength];
+            sessionKeyBytes.CopyTo(sessionValue);
+            authValueBytes.CopyTo(sessionValue[sessionKeyBytes.Length..]);
+            try
+            {
+                Tpm2bAuth hmac = await ComputeResponseHmacAsync(
+                    session.SessionAlg, sessionValue, rpHash.Memory[..digestSize], framedNonceTpm.AsReadOnlyMemory(), session.NonceCaller.AsReadOnlyMemory(),
+                    session.SessionAttributes, context.Pool, cancellationToken).ConfigureAwait(false);
+
+                return new TpmHmacFramedSession(session.SessionHandle, session.IsPolicySession, framedNonceTpm, retainedNonceTpm, session.SessionAttributes, hmac);
+            }
+            finally
+            {
+                sessionValueOwner.Memory.Span[..sessionValueLength].Clear();
+            }
+        }
+        catch
+        {
+            //The rolled pair's only owner is this frame until the entry adopts it.
+            retainedNonceTpm.Dispose();
+            framedNonceTpm.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Opens the HMAC sequence a <c>TPM2_HMAC_Start()</c> asks for (TPM 2.0 Library Part 3, clause 17.2; Part 4
+    /// <c>ObjectCreateHMACSequence</c>): deep-copies the key's sensitive value into a carrier the new
+    /// <see cref="SequenceObjectState"/> owns — so the sequence outlives the key being flushed — and installs the
+    /// action's owned sequence authorization value. Mirrors <see cref="StartSequence"/> for the signing/verifying
+    /// sequences, adding the bound HMAC key.
+    /// </summary>
+    /// <param name="action">The declared HMAC-sequence-start action carrying the new handle, the borrowed key bits, the hash, and the owned sequence authorization.</param>
+    /// <param name="context">The action context (pool).</param>
+    /// <returns>The <see cref="TpmSequenceStarted"/> feedback carrying the new sequence.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the deep-copied HMAC key and the adopted SequenceAuth transfers to the built SequenceObjectState, then to the returned TpmSequenceStarted, whose consuming transition installs it into SequenceObjects and whose Dispose() releases both on eviction; a failing key copy releases the still-unadopted SequenceAuth itself before rethrowing.")]
+    private static TpmSequenceStarted StartHmacSequence(TpmHmacSequenceStartAction action, TpmActionContext context)
+    {
+        Tpm2bSensitiveData hmacKey;
+
+        try
+        {
+            hmacKey = Tpm2bSensitiveData.Create(action.KeyBits.Span, context.Pool);
+        }
+        catch
+        {
+            action.SequenceAuth.Dispose();
+            throw;
+        }
+
+        var sequence = new SequenceObjectState(
+            action.Handle, TpmSequenceKind.Hmac, Tpm2bName.Empty, TpmiAlgSigScheme.FromValue(TpmAlgIdConstants.TPM_ALG_HMAC), action.HashAlg,
+            action.SequenceAuth, ImmutableList<Tpm2bMaxBuffer>.Empty, TpmSequenceFirstBlock.NotYetPresented, hmacKey);
+
+        return new TpmSequenceStarted(action.Handle, sequence);
+    }
+
+    /// <summary>
+    /// The ordered set of hash algorithms this simulator implements — the digest seam's SHA-1, SHA-256, SHA-384
+    /// and SHA-512 in the reference's algorithm-table order; the same set
+    /// <see cref="TpmLifecycleTransitions.IsImplementedSequenceHash"/> answers as a predicate.
+    /// <c>TPM2_PCR_Event()</c> and <c>TPM2_EventSequenceComplete()</c> return one digest per member (TPM 2.0
+    /// Library Part 1, clause 14.4: "The digests are the digests of the event data using each implemented hash
+    /// algorithm"; Part 4 <c>HASH_COUNT</c>), and a <c>TPML_DIGEST_VALUES</c> presented to
+    /// <c>TPM2_PCR_Extend()</c> may hold at most this many entries (Part 2, Table 127).
+    /// </summary>
+    private static ImmutableArray<TpmiAlgHash> ImplementedHashAlgorithms { get; } =
+    [
+        TpmiAlgHash.FromValue(TpmAlgIdConstants.TPM_ALG_SHA1),
+        TpmiAlgHash.FromValue(TpmAlgIdConstants.TPM_ALG_SHA256),
+        TpmiAlgHash.FromValue(TpmAlgIdConstants.TPM_ALG_SHA384),
+        TpmiAlgHash.FromValue(TpmAlgIdConstants.TPM_ALG_SHA512)
+    ];
+
+    /// <summary>
+    /// The <c>TPM2_PCR_Extend()</c> effect: fold every SHA-256 entry of the list into the register in list order,
+    /// <c>PCRnew = H(PCRold ‖ digest)</c> (TPM 2.0 Library Part 1, clause 14.2, equation 13; Part 3, clause
+    /// 22.2.1), through the registered digest seam. An entry tagged for a bank the simulator does not implement
+    /// is skipped — "the digest value is not used" — so a list with no SHA-256 entry returns the register
+    /// unchanged with a zero extend count. The action's digest list is this effect's terminal owner's
+    /// responsibility, released by the using declaration on every arm.
+    /// </summary>
+    private static async ValueTask<TpmSimulatorInput> ExtendPcrAsync(TpmPcrExtendAction action, TpmActionContext context, CancellationToken cancellationToken)
+    {
+        using TpmlDigestValues digests = action.Digests;
+
+        ReadOnlyMemory<byte> register = action.CurrentValue;
+        int extendCount = 0;
+        foreach(TpmtHa entry in digests.Digests)
+        {
+            if(entry.HashAlg.Value != TpmAlgIdConstants.TPM_ALG_SHA256)
+            {
+                continue;
+            }
+
+            register = await ExtendSha256RegisterAsync(register, entry.AsReadOnlyMemory(), context.Pool, cancellationToken).ConfigureAwait(false);
+            extendCount++;
+        }
+
+        return new TpmPcrExtended(action.PcrHandle, register, extendCount);
+    }
+
+    /// <summary>
+    /// The event-digest effect <c>TPM2_PCR_Event()</c> and <c>TPM2_EventSequenceComplete()</c> share: chain the
+    /// borrowed segments and the owned trailing block into one <c>ReadOnlySequence{byte}</c> with no copy
+    /// (<see cref="SequenceObjectState.BuildMessageSequence"/>), digest it once per implemented hash algorithm
+    /// (<see cref="ImplementedHashAlgorithms"/>) into a <c>TPML_DIGEST_VALUES</c> — TPM 2.0 Library Part 3,
+    /// clauses 22.3.1 and 17.9.1; Part 4 <c>PCR_Event.c</c>/<c>EventSequenceComplete.c</c>'s <c>HASH_COUNT</c>
+    /// loops — and, when a register was named, extend it with the SHA-256 digest exactly as
+    /// <see cref="ExtendPcrAsync"/> would.
+    /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of every TPMT_HA entry transfers to the adopted TPML_DIGEST_VALUES, then to the TpmPcrEventDigested result, then to the TpmDigestValuesResponse the transition frames, and is released by SerializeResponse after framing; a throwing arm releases the entries built so far. The action's owned trailing carrier is released by the using declaration.")]
+    private static async ValueTask<TpmSimulatorInput> DigestEventAsync(TpmPcrEventAction action, TpmActionContext context, CancellationToken cancellationToken)
+    {
+        //The effect is the trailing block's terminal owner: building the hash input is its only reader, so the
+        //using declaration releases it on the throwing arm as well as the successful one. Segments remain
+        //owned by the live SequenceObjectState, which the continuation flushes separately.
+        using IDisposable trailingOwner = action.TrailingOwner;
+
+        ReadOnlySequence<byte> message = SequenceObjectState.BuildMessageSequence(action.Segments, action.TrailingBlock);
+
+        var entries = new List<TpmtHa>(ImplementedHashAlgorithms.Length);
+        ReadOnlyMemory<byte>? extendedRegister = null;
+        try
+        {
+            foreach(TpmiAlgHash hashAlg in ImplementedHashAlgorithms)
+            {
+                using DigestValue digest = await CryptographicKeyEvents.ComputeDigestAsync(
+                    message, SessionDigestSize(hashAlg), SessionDigestTag(hashAlg), context.Pool, cancellationToken: cancellationToken).ConfigureAwait(false);
+
+                entries.Add(TpmtHa.Create(hashAlg, digest.AsReadOnlySpan(), context.Pool));
+
+                if(action.CurrentValue is { } currentValue && hashAlg.Value == TpmAlgIdConstants.TPM_ALG_SHA256)
+                {
+                    extendedRegister = await ExtendSha256RegisterAsync(currentValue, digest.AsReadOnlyMemory(), context.Pool, cancellationToken).ConfigureAwait(false);
+                }
+            }
+        }
+        catch
+        {
+            foreach(TpmtHa entry in entries)
+            {
+                entry.Dispose();
+            }
+
+            throw;
+        }
+
+        return new TpmPcrEventDigested(action.SequenceHandle, action.PcrHandle, TpmlDigestValues.Adopt(entries), extendedRegister);
+    }
+
+    /// <summary>
+    /// One PCR extend step on the SHA-256 bank: <c>H_SHA-256(register ‖ digest)</c> (TPM 2.0 Library Part 1,
+    /// clause 14.2, equation 13) over a pooled <c>register ‖ digest</c> block, through the registered digest
+    /// seam. The new register image is copied out of the pooled digest into an array because the bank holds its
+    /// registers as durable model state with the simulator's own lifetime (<see cref="PcrBankState"/>); the
+    /// block and the digest carrier are released by the using declarations.
+    /// </summary>
+    /// <param name="register">The register's current value.</param>
+    /// <param name="digest">The digest to extend.</param>
+    /// <param name="pool">The memory pool the working block is rented from.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The register's new value.</returns>
+    private static async ValueTask<ReadOnlyMemory<byte>> ExtendSha256RegisterAsync(ReadOnlyMemory<byte> register, ReadOnlyMemory<byte> digest, BaseMemoryPool pool, CancellationToken cancellationToken)
+    {
+        int length = register.Length + digest.Length;
+        using IMemoryOwner<byte> block = pool.Rent(length);
+        register.Span.CopyTo(block.Memory.Span);
+        digest.Span.CopyTo(block.Memory.Span[register.Length..]);
+
+        TpmiAlgHash sha256 = TpmiAlgHash.FromValue(TpmAlgIdConstants.TPM_ALG_SHA256);
+        using DigestValue extended = await CryptographicKeyEvents.ComputeDigestAsync(
+            block.Memory[..length], SessionDigestSize(sha256), SessionDigestTag(sha256), pool, cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        byte[] image = new byte[PcrBankState.Sha256DigestSize];
+        extended.AsReadOnlySpan().CopyTo(image);
+
+        return image;
+    }
+
+    /// <summary>
+    /// The <c>TPM2_NV_Extend()</c> effect: <c>nvIndex→data_new = H_nameAlg(nvIndex→data_old ‖ data.buffer)</c>
+    /// (TPM 2.0 Library Part 1, clause 34.2.6.5, equation 56; Part 3, clause 31.9.1) through the registered
+    /// digest seam under the Index's own nameAlg — the NV counterpart of <see cref="ExtendSha256RegisterAsync"/>,
+    /// whose hash and width the Index fixes rather than a bank. The old value is the Index's current data when
+    /// the action carries one and the Zero Digest of the nameAlg's width otherwise ("If TPMA_NV_WRITTEN is
+    /// CLEAR, then nvIndex→data_old is a Zero Digest"), so the hash input is always <c>digestSize + data.size</c>
+    /// octets laid out in one pooled block. The action's data carrier is released by the using declaration on
+    /// every arm; the digest carrier rides the feedback to the installing transition.
+    /// </summary>
+    /// <param name="action">The declared action carrying the Index, its nameAlg, its current value when written, the data to fold in, and the request to resume.</param>
+    /// <param name="context">The effect context supplying the memory pool.</param>
+    /// <param name="cancellationToken">A token observed across the digest computation.</param>
+    /// <returns>The new value paired with the request to resume, fed back to <c>OnNvExtended</c>.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the digest carrier transfers to the returned TpmNvExtended, whose installing transition (OnNvExtended) is its sole terminal owner and releases it once the value has been stored into the Index; the fold-back is not cancellation-gated.")]
+    private static async ValueTask<TpmSimulatorInput> ExtendNvIndexAsync(TpmNvExtendAction action, TpmActionContext context, CancellationToken cancellationToken)
+    {
+        using Tpm2bMaxNvBuffer data = action.Data;
+
+        int digestSize = SessionDigestSize(action.NameAlg);
+        int length = digestSize + data.Length;
+        using IMemoryOwner<byte> block = context.Pool.Rent(length);
+        Memory<byte> hashInput = block.Memory[..length];
+
+        //The old value occupies the first digestSize octets: the Index's data when it has been written, the
+        //Zero Digest otherwise. The width is the nameAlg's by construction — TPM2_NV_DefineSpace() fixed the
+        //Index's dataSize at exactly that digest size (Part 3, clause 31.3.1) and only this command writes it.
+        hashInput.Span[..digestSize].Clear();
+        if(action.PreviousValue is { } previousValue)
+        {
+            previousValue.Span.CopyTo(hashInput.Span[..digestSize]);
+        }
+
+        data.Span.CopyTo(hashInput.Span[digestSize..]);
+
+        DigestValue digest = await CryptographicKeyEvents.ComputeDigestAsync(
+            hashInput, digestSize, SessionDigestTag(action.NameAlg), context.Pool, cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        return new TpmNvExtended(action.NvIndex, digest, action.Resume);
+    }
+
+    /// <summary>
+    /// <c>TPM2_VerifySequenceComplete()</c> over an ECC key (TPM 2.0 Library Part 3, clause 20.3): chain the
+    /// sequence's accumulated segments into one <c>ReadOnlySequence{byte}</c> with no copy
+    /// (<see cref="SequenceObjectState.BuildMessageSequence"/>, no trailing buffer — this command carries none),
+    /// hash it under the sequence's own retained hash algorithm, and verify it against the retained public point
+    /// through the injected ECC backend's verify delegate — the sequence-command counterpart of
+    /// <see cref="VerifyDigestSignatureEccAsync"/>.
+    /// </summary>
+    /// <remarks>
+    /// On a successful verification the minted ticket's <c>digestOrMessage</c> term is the RAW accumulated
+    /// message rather than its digest (Part 2, clause 10.6.5's "the signed digest or message"; Part 3, clause
+    /// 20.3.1: "takes a message ... rather than a digest") — the <c>ReadOnlySequence{byte}</c> core of
+    /// <see cref="ComputeVerifiedTicketDigestAsync"/> folds the chained message straight into the HMAC input
+    /// with no concatenation buffer. A NULL-hierarchy key short-circuits to the NULL ticket tuple, exactly as
+    /// <see cref="VerifyDigestSignatureEccAsync"/> does. A failed verification needs no ticket at all, so the
+    /// rejection is decided here rather than the pure transition.
+    /// </remarks>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the ticket-digest buffer transfers to the TPMT_TK_VERIFIED carried by the returned TpmSequenceSignatureVerified, then to the TpmVerifySequenceCompleteResponse intent, and is released by SerializeResponse after framing; the action's owned Signature is this effect's terminal responsibility, released by the using declaration on every arm. Segments remain owned by the live SequenceObjectState, which the continuation flushes separately.")]
+    private static async ValueTask<TpmSimulatorInput> VerifySequenceEccAsync(TpmEccVerifySequenceAction action, TpmActionContext context, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using TpmtSignature signature = action.Signature;
+
+            ReadOnlySequence<byte> messageSequence = SequenceObjectState.BuildMessageSequence(action.Segments);
+
+            using DigestValue digest = await CryptographicKeyEvents.ComputeDigestAsync(
+                messageSequence, SessionDigestSize(action.HashAlg), SessionDigestTag(action.HashAlg), context.Pool, cancellationToken: cancellationToken).ConfigureAwait(false);
+
+            TpmEccSigningBackend backend = context.SigningBackend
+                ?? throw new InvalidOperationException("TPM2_VerifySequenceComplete() over an ECC key requires a signing backend, but none was supplied.");
+
+            //TpmuSignature keeps signatureR and signatureS as two separate carriers rather than one pre-joined
+            //buffer, so the fixed-width P1363 r ‖ s the verify delegate takes is rebuilt once here, into pool-rented
+            //scratch released in this same scope once the verify call has consumed it — each component read as the
+            //integer it is, so a short or zero-padded encoding verifies exactly as a real TPM verifies it.
+            TpmuSignature signatureMember = signature.Signature;
+            int componentWidth = TpmLifecycleTransitions.EccComponentWidth(action.PublicPoint);
+            using IMemoryOwner<byte> concatenatedSignature = context.Pool.Rent(Math.Max(2 * componentWidth, 1));
+
+            bool verified = TpmLifecycleTransitions.TryWriteNormalizedEcdsaSignature(signatureMember, componentWidth, concatenatedSignature.Memory.Span)
+                && await backend.VerifyDigest(
+                    action.PublicPoint, digest.AsReadOnlyMemory(), concatenatedSignature.Memory[..(2 * componentWidth)], action.Curve.Value, cancellationToken).ConfigureAwait(false);
+
+            if(!verified)
+            {
+                return new TpmSequenceSignatureVerified(TpmRcConstants.TPM_RC_SIGNATURE, action.SequenceHandle, Validation: null);
+            }
+
+            if(action.KeyHierarchy.IsNull)
+            {
+                IMemoryOwner<byte> emptyHmac = context.Pool.Rent(1);
+
+                return await CompleteSequenceVerificationAsync(
+                    action.SequenceHandle, TpmtTkVerified.FromMarshaled(TpmStConstants.TPM_ST_MESSAGE_VERIFIED, action.KeyHierarchy, metadata: null, emptyHmac, hmacLength: 0), action.OverSessions, context, cancellationToken).ConfigureAwait(false);
+            }
+
+            using IMemoryOwner<byte> proof = await DeriveHierarchyProofAsync(context, action.KeyHierarchy.Value, cancellationToken).ConfigureAwait(false);
+            IMemoryOwner<byte> ticketDigest = await ComputeVerifiedTicketDigestAsync(
+                proof.Memory[..CreationDigestSize], TpmStConstants.TPM_ST_MESSAGE_VERIFIED, messageSequence, action.KeyName.AsReadOnlyMemory(), metadata: null, context.Pool, cancellationToken).ConfigureAwait(false);
+
+            //The digest helper rents the ticket octets itself, so the whole-ticket carrier adopts that rental.
+            return await CompleteSequenceVerificationAsync(
+                    action.SequenceHandle, TpmtTkVerified.FromMarshaled(TpmStConstants.TPM_ST_MESSAGE_VERIFIED, action.KeyHierarchy, metadata: null, ticketDigest, CreationDigestSize), action.OverSessions, context, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            ReleaseResponseSessionNonces(action.OverSessions);
+        }
+    }
+
+    /// <summary>
+    /// The RSA counterpart of <see cref="VerifySequenceEccAsync"/>: same hash-then-verify-then-ticket flow,
+    /// verified through the injected RSA backend's verify delegate under the sequence's own retained scheme.
+    /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the ticket-digest buffer transfers to the TPMT_TK_VERIFIED carried by the returned TpmSequenceSignatureVerified, then to the TpmVerifySequenceCompleteResponse intent, and is released by SerializeResponse after framing; the action's owned Signature is this effect's terminal responsibility, released by the using declaration on every arm. Segments remain owned by the live SequenceObjectState, which the continuation flushes separately.")]
+    private static async ValueTask<TpmSimulatorInput> VerifySequenceRsaAsync(TpmRsaVerifySequenceAction action, TpmActionContext context, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using TpmtSignature signature = action.Signature;
+
+            ReadOnlySequence<byte> messageSequence = SequenceObjectState.BuildMessageSequence(action.Segments);
+
+            using DigestValue digest = await CryptographicKeyEvents.ComputeDigestAsync(
+                messageSequence, SessionDigestSize(action.HashAlg), SessionDigestTag(action.HashAlg), context.Pool, cancellationToken: cancellationToken).ConfigureAwait(false);
+
+            TpmRsaSigningBackend backend = context.RsaSigningBackend
+                ?? throw new InvalidOperationException("TPM2_VerifySequenceComplete() over an RSA key requires an RSA signing backend, but none was supplied.");
+
+            bool verified = await backend.VerifyDigest(
+                action.PrivateKey.AsReadOnlyMemory(), digest.AsReadOnlyMemory(), signature.Signature.RsaSignature.AsReadOnlyMemory(), action.Scheme.Value, action.HashAlg.Value, cancellationToken).ConfigureAwait(false);
+
+            if(!verified)
+            {
+                return new TpmSequenceSignatureVerified(TpmRcConstants.TPM_RC_SIGNATURE, action.SequenceHandle, Validation: null);
+            }
+
+            if(action.KeyHierarchy.IsNull)
+            {
+                IMemoryOwner<byte> emptyHmac = context.Pool.Rent(1);
+
+                return await CompleteSequenceVerificationAsync(
+                    action.SequenceHandle, TpmtTkVerified.FromMarshaled(TpmStConstants.TPM_ST_MESSAGE_VERIFIED, action.KeyHierarchy, metadata: null, emptyHmac, hmacLength: 0), action.OverSessions, context, cancellationToken).ConfigureAwait(false);
+            }
+
+            using IMemoryOwner<byte> proof = await DeriveHierarchyProofAsync(context, action.KeyHierarchy.Value, cancellationToken).ConfigureAwait(false);
+            IMemoryOwner<byte> ticketDigest = await ComputeVerifiedTicketDigestAsync(
+                proof.Memory[..CreationDigestSize], TpmStConstants.TPM_ST_MESSAGE_VERIFIED, messageSequence, action.KeyName.AsReadOnlyMemory(), metadata: null, context.Pool, cancellationToken).ConfigureAwait(false);
+
+            //The digest helper rents the ticket octets itself, so the whole-ticket carrier adopts that rental.
+            return await CompleteSequenceVerificationAsync(
+                    action.SequenceHandle, TpmtTkVerified.FromMarshaled(TpmStConstants.TPM_ST_MESSAGE_VERIFIED, action.KeyHierarchy, metadata: null, ticketDigest, CreationDigestSize), action.OverSessions, context, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            ReleaseResponseSessionNonces(action.OverSessions);
+        }
     }
 
     /// <summary>
@@ -1051,51 +2442,84 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// </summary>
     /// <remarks>
     /// A real TPM generates a real key for a storage primary (its public point is what an endorsement-key
-    /// certificate is issued over); the simulator still models no parent-key wrapping of children, so a storage
-    /// parent is only used as a handle for <c>TPM2_Create()</c>, but its exported point is now the genuine
-    /// generated point. The result reuses the <see cref="TpmPrimaryKeyCreated"/> input the signing paths feed
-    /// back. The action's userAuth carrier is owned by the action until the durable parent state's
-    /// construction adopts it; a throw from the backend generation step or from the artifact-building rents
-    /// leaves that rental unreturned until the pool is collected (the automaton itself recovers — the next
-    /// command clears the pending action — so a retrying caller repeats the orphan, and the segment is not
-    /// zeroed until returned).
+    /// certificate is issued over); the exported point is the genuine generated point, and the durable parent
+    /// state carries the protection seed every child blob's wrap keys derive from (Part 1, Clause 19). The result reuses the <see cref="TpmPrimaryKeyCreated"/> input the signing paths feed
+    /// back. The action's authPolicy and userAuth carriers are owned by the action until
+    /// <see cref="BuildStorageParentArtifacts"/> adopts them onto the durable parent state; a failure BEFORE
+    /// that adoption releases them directly, and a failure AFTER it releases them through the parent state's
+    /// own <see cref="TransientKeyState.Dispose"/> — the catch arm below tells the two cases apart by whether a
+    /// parent state was ever built.
     /// </remarks>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the public area and the by-products buffer transfers to the returned TpmPrimaryKeyCreated, then to the TpmCreatePrimaryResponse intent, and is released by SerializeResponse after framing.")]
     private static async ValueTask<TpmSimulatorInput> CreateStorageParentAsync(TpmCreateStorageParentAction action, TpmActionContext context, CancellationToken cancellationToken)
     {
-        TpmEccSigningBackend backend = context.SigningBackend
-            ?? throw new InvalidOperationException("TPM2_CreatePrimary() for an ECC storage parent requires a signing backend, but none was supplied.");
-
-        Tpm2bPublic outPublic;
-        TransientKeyState keyState;
-        using(TpmGeneratedEccKey key = await backend.GenerateKey(action.Curve.Value, context.Pool, cancellationToken).ConfigureAwait(false))
-        {
-            (outPublic, keyState) = BuildStorageParentArtifacts(action, key, context.Pool);
-        }
-
+        TransientKeyState? keyState = null;
+        Tpm2bDigest? protectionSeed = null;
         try
         {
+            TpmEccSigningBackend backend = context.SigningBackend
+                ?? throw new InvalidOperationException("TPM2_CreatePrimary() for an ECC storage parent requires a signing backend, but none was supplied.");
+
+            //Derived before the key so the synchronous artifact builder never crosses an await: a primary's
+            //sensitive values are a deterministic function of the hierarchy's primary seed and the template
+            //(Part 1, clause 14), which is what lets a caller flush a storage parent and later recreate it
+            //from the same template with children created under the first instance still loading.
+            protectionSeed = await DeriveProtectionSeedAsync(
+                action.Hierarchy.Value, action.NameAlg, (ushort)TpmAlgIdConstants.TPM_ALG_ECC, (ushort)action.Curve.Value,
+                action.Attributes, action.AuthPolicy, context, cancellationToken).ConfigureAwait(false);
+
+            Tpm2bPublic outPublic;
+            using(TpmGeneratedEccKey key = await backend.GenerateKey(action.Curve.Value, context.Pool, cancellationToken).ConfigureAwait(false))
+            {
+                (outPublic, keyState) = BuildStorageParentArtifacts(action, key, protectionSeed, context);
+            }
+
             //name = nameAlg || H_nameAlg(TPMT_PUBLIC), computed once from the exported public area (which now carries
             //the generated point): retained on the parent state and shared with the creation by-products. The Name
             //width depends on nameAlg (agile per TpmObjectName), so its length travels with it.
             (IMemoryOwner<byte> name, int nameLength) = await ComputeObjectNameAsync(outPublic, action.NameAlg, context.Pool, cancellationToken).ConfigureAwait(false);
             using(name)
             {
-                keyState = keyState with { Name = Tpm2bName.Create(name.Memory.Span[..nameLength], context.Pool) };
+                keyState = await WithRetainedIdentityAsync(keyState, action.Hierarchy.Value, name.Memory[..nameLength], context, cancellationToken).ConfigureAwait(false);
 
                 (Tpm2bCreationData creationData, Tpm2bDigest creationHash, TpmtTkCreation creationTicket, Tpm2bName framedName) =
-                    await BuildCreationByProductsAsync(name.Memory[..nameLength], action.Hierarchy.Value, action.Hierarchy, includeName: true, context, cancellationToken).ConfigureAwait(false);
+                    await BuildCreationByProductsAsync(
+                        name.Memory[..nameLength], TpmCreationDataParent.Permanent(action.Hierarchy.Value), action.Hierarchy, includeName: true,
+                        action.OutsideInfo, action.CreationPcr, action.CreationPcrValues, context, cancellationToken).ConfigureAwait(false);
 
                 return new TpmPrimaryKeyCreated(outPublic, keyState, creationData, creationHash, creationTicket, framedName);
             }
         }
         catch
         {
-            //The half-built parent state's only owner is this frame until the install transition adopts it, so a
-            //failing Name/by-products step must release its private-key carrier or the pinned rental is orphaned.
-            keyState.Dispose();
+            //Before BuildStorageParentArtifacts adopts them, action.AuthPolicy/UserAuth and the derived
+            //protection seed are this frame's own carriers to release; once adopted, keyState is their owner
+            //and its Dispose releases them (and the private-key carrier) instead — releasing both here would
+            //double-free. This arm is defensive against an effect-level failure (the backend guard above
+            //throwing, or key generation itself failing) before keyState is ever assigned: the parse-time
+            //capability gate (TPM_RC_COMMAND_CODE, checked once when the command code is dispatched and again
+            //per-template in TryBuildCreatePrimaryRequest) already fronts every request this effect runs for,
+            //so a real device never reaches this arm through that path.
+            if(keyState is null)
+            {
+                protectionSeed?.Dispose();
+                action.AuthPolicy.Dispose();
+                action.UserAuth.Dispose();
+            }
+            else
+            {
+                keyState.Dispose();
+            }
+
             throw;
+        }
+        finally
+        {
+            //This effect is the terminal owner of the action's outsideInfo and creationPCR carriers on every
+            //path, including a backend-resolution or key-generation failure the try now covers.
+            action.OutsideInfo.Dispose();
+            action.CreationPcr.Dispose();
         }
     }
 
@@ -1103,12 +2527,16 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// Splits the generated point into its X and Y coordinates, builds the exported storage public area carrying
     /// the point, and copies the scalar into an owned, pinned <see cref="PrivateKeyMemory"/> carrier for the
     /// durable parent state. Mirrors <see cref="BuildKeyArtifacts"/> for the storage template; synchronous so
-    /// the point spans never cross an await.
+    /// the point spans never cross an await. The durable state's <see cref="TransientKeyState.SigningScheme"/>
+    /// retains <see langword="null"/> — a storage key's template <c>scheme</c> is <c>TPM_ALG_NULL</c> (TPM 2.0
+    /// Library Part 2, Table 229), so it has no digest-capable signing scheme of its own.
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the built public area transfers to the caller, which carries it to the response intent disposed by SerializeResponse; ownership of the private-key and authValue carriers transfers to the returned TransientKeyState, which the installing transition stores and eviction disposes.")]
-    private static (Tpm2bPublic OutPublic, TransientKeyState KeyState) BuildStorageParentArtifacts(TpmCreateStorageParentAction action, TpmGeneratedEccKey key, BaseMemoryPool pool)
+    private static (Tpm2bPublic OutPublic, TransientKeyState KeyState) BuildStorageParentArtifacts(TpmCreateStorageParentAction action, TpmGeneratedEccKey key, Tpm2bDigest protectionSeed, TpmActionContext context)
     {
+        BaseMemoryPool pool = context.Pool;
+
         //The exported point is SEC1 uncompressed (0x04 || X || Y), so X and Y are each the field-width halves
         //after the leading tag octet.
         ReadOnlySpan<byte> point = key.PublicPoint.AsReadOnlySpan();
@@ -1123,8 +2551,10 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         //The Name is filled by the caller once it has been computed from the exported public area (through the
         //asynchronous digest seam, which this synchronous point-splitting step must not cross). The SEC1 point is
         //retained so credential protection (the endorsement key is a storage parent) can use this object's public key.
+        //The protection seed arrives already derived (the derivation crosses the digest seam this synchronous
+        //step must not); the state record adopts it here and owns it from this point on.
         var keyState = new TransientKeyState(
-            action.Handle, action.Hierarchy, TpmiAlgPublic.FromValue(TpmAlgIdConstants.TPM_ALG_ECC), action.Curve, CopyToPrivateKeyCarrier(scalar, EccPrivateKeyTag(action.Curve.Value), pool), Tpm2bName.Empty, action.Attributes, point.ToArray(), Tpm2bPublicKeyRsa.Empty, action.AuthPolicy, action.UserAuth);
+            action.Handle, action.Hierarchy, TpmiAlgPublic.FromValue(TpmAlgIdConstants.TPM_ALG_ECC), action.Curve, null, null, null, null, CopyToPrivateKeyCarrier(scalar, EccPrivateKeyTag(action.Curve.Value), pool), Tpm2bName.Empty, action.Attributes, point.ToArray(), Tpm2bPublicKeyRsa.Empty, action.AuthPolicy, action.UserAuth, protectionSeed, ClonePublicArea(outPublic, pool), Tpm2bName.Empty);
 
         return (outPublic, keyState);
     }
@@ -1137,47 +2567,81 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// Draws a key from the injected RSA backend, builds the exported storage public area carrying its actual
     /// modulus and the durable parent state (retaining the modulus, unlike <see cref="CreateRsaKeyAsync"/>'s
     /// signing path), then computes the same faithful creation by-products the other CreatePrimary paths do.
-    /// The action's userAuth carrier is owned by the action until the durable parent state's construction
-    /// adopts it; a throw from the backend generation step or from the artifact-building rents leaves that
-    /// rental unreturned until the pool is collected (the automaton itself recovers — the next command clears
-    /// the pending action — so a retrying caller repeats the orphan, and the segment is not zeroed until
-    /// returned).
+    /// The action's authPolicy and userAuth carriers are owned by the action until
+    /// <see cref="BuildRsaStorageParentArtifacts"/> adopts them onto the durable parent state; a failure BEFORE
+    /// that adoption releases them directly, and a failure AFTER it releases them through the parent state's
+    /// own <see cref="TransientKeyState.Dispose"/> — the catch arm below tells the two cases apart by whether a
+    /// parent state was ever built.
     /// </remarks>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the public area and the by-products buffer transfers to the returned TpmPrimaryKeyCreated, then to the TpmCreatePrimaryResponse intent, and is released by SerializeResponse after framing.")]
     private static async ValueTask<TpmSimulatorInput> CreateRsaStorageParentAsync(TpmCreateRsaStorageParentAction action, TpmActionContext context, CancellationToken cancellationToken)
     {
-        TpmRsaSigningBackend backend = context.RsaSigningBackend
-            ?? throw new InvalidOperationException("TPM2_CreatePrimary() for an RSA storage parent requires an RSA signing backend, but none was supplied.");
-
-        Tpm2bPublic outPublic;
-        TransientKeyState keyState;
-        using(TpmGeneratedRsaKey key = await backend.GenerateKey(action.KeyBits.Value, context.Pool, cancellationToken).ConfigureAwait(false))
-        {
-            (outPublic, keyState) = BuildRsaStorageParentArtifacts(action, key, context.Pool);
-        }
-
+        TransientKeyState? keyState = null;
+        Tpm2bDigest? protectionSeed = null;
         try
         {
+            TpmRsaSigningBackend backend = context.RsaSigningBackend
+                ?? throw new InvalidOperationException("TPM2_CreatePrimary() for an RSA storage parent requires an RSA signing backend, but none was supplied.");
+
+            //Derived before the key so the synchronous artifact builder never crosses an await: a primary's
+            //sensitive values are a deterministic function of the hierarchy's primary seed and the template
+            //(Part 1, clause 14), which is what lets a caller flush a storage parent and later recreate it
+            //from the same template with children created under the first instance still loading.
+            protectionSeed = await DeriveProtectionSeedAsync(
+                action.Hierarchy.Value, action.NameAlg, (ushort)TpmAlgIdConstants.TPM_ALG_RSA, action.KeyBits.Value,
+                action.Attributes, action.AuthPolicy, context, cancellationToken).ConfigureAwait(false);
+
+            Tpm2bPublic outPublic;
+            using(TpmGeneratedRsaKey key = await backend.GenerateKey(action.KeyBits.Value, context.Pool, cancellationToken).ConfigureAwait(false))
+            {
+                (outPublic, keyState) = BuildRsaStorageParentArtifacts(action, key, protectionSeed, context);
+            }
+
             //name = nameAlg || H_nameAlg(TPMT_PUBLIC), computed once from the exported public area (which now carries
             //the generated modulus): retained on the parent state and shared with the creation by-products.
             (IMemoryOwner<byte> name, int nameLength) = await ComputeObjectNameAsync(outPublic, action.NameAlg, context.Pool, cancellationToken).ConfigureAwait(false);
             using(name)
             {
-                keyState = keyState with { Name = Tpm2bName.Create(name.Memory.Span[..nameLength], context.Pool) };
+                keyState = await WithRetainedIdentityAsync(keyState, action.Hierarchy.Value, name.Memory[..nameLength], context, cancellationToken).ConfigureAwait(false);
 
                 (Tpm2bCreationData creationData, Tpm2bDigest creationHash, TpmtTkCreation creationTicket, Tpm2bName framedName) =
-                    await BuildCreationByProductsAsync(name.Memory[..nameLength], action.Hierarchy.Value, action.Hierarchy, includeName: true, context, cancellationToken).ConfigureAwait(false);
+                    await BuildCreationByProductsAsync(
+                        name.Memory[..nameLength], TpmCreationDataParent.Permanent(action.Hierarchy.Value), action.Hierarchy, includeName: true,
+                        action.OutsideInfo, action.CreationPcr, action.CreationPcrValues, context, cancellationToken).ConfigureAwait(false);
 
                 return new TpmPrimaryKeyCreated(outPublic, keyState, creationData, creationHash, creationTicket, framedName);
             }
         }
         catch
         {
-            //The half-built parent state's only owner is this frame until the install transition adopts it, so a
-            //failing Name/by-products step must release its private-key carrier or the pinned rental is orphaned.
-            keyState.Dispose();
+            //Before BuildRsaStorageParentArtifacts adopts them, action.AuthPolicy/UserAuth and the derived
+            //protection seed are this frame's own carriers to release; once adopted, keyState is their owner
+            //and its Dispose releases them (and the private-key carrier) instead — releasing both here would
+            //double-free. This arm is defensive against an effect-level failure (the backend guard above
+            //throwing, or key generation itself failing) before keyState is ever assigned: the parse-time
+            //capability gate (TPM_RC_COMMAND_CODE, checked once when the command code is dispatched and again
+            //per-template in TryBuildCreatePrimaryRequest) already fronts every request this effect runs for,
+            //so a real device never reaches this arm through that path.
+            if(keyState is null)
+            {
+                protectionSeed?.Dispose();
+                action.AuthPolicy.Dispose();
+                action.UserAuth.Dispose();
+            }
+            else
+            {
+                keyState.Dispose();
+            }
+
             throw;
+        }
+        finally
+        {
+            //This effect is the terminal owner of the action's outsideInfo and creationPCR carriers on every
+            //path, including a backend-resolution or key-generation failure the try now covers.
+            action.OutsideInfo.Dispose();
+            action.CreationPcr.Dispose();
         }
     }
 
@@ -1185,12 +2649,14 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// Builds the exported storage public area carrying the generated modulus and copies the private key into an
     /// owned, pinned <see cref="PrivateKeyMemory"/> carrier for the durable parent state. Mirrors
     /// <see cref="BuildStorageParentArtifacts"/> for the RSA storage template; synchronous so the key spans
-    /// never cross an await.
+    /// never cross an await. The durable state's <see cref="TransientKeyState.SigningScheme"/> retains
+    /// <see langword="null"/> for the same Table 229 reason <see cref="BuildStorageParentArtifacts"/> documents.
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the built public area transfers to the caller, which carries it to the response intent disposed by SerializeResponse; ownership of the private-key and authValue carriers transfers to the returned TransientKeyState, which the installing transition stores and eviction disposes.")]
-    private static (Tpm2bPublic OutPublic, TransientKeyState KeyState) BuildRsaStorageParentArtifacts(TpmCreateRsaStorageParentAction action, TpmGeneratedRsaKey key, BaseMemoryPool pool)
+    private static (Tpm2bPublic OutPublic, TransientKeyState KeyState) BuildRsaStorageParentArtifacts(TpmCreateRsaStorageParentAction action, TpmGeneratedRsaKey key, Tpm2bDigest protectionSeed, TpmActionContext context)
     {
+        BaseMemoryPool pool = context.Pool;
         ReadOnlySpan<byte> modulus = key.Modulus.AsReadOnlySpan();
         ReadOnlySpan<byte> privateKey = key.PrivateKey.AsReadOnlySpan();
 
@@ -1199,16 +2665,122 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         //The Name is filled by the caller once it has been computed from the exported public area (through the
         //asynchronous digest seam, which this synchronous copying step must not cross). The modulus is retained
         // so RSA-OAEP secret-transport (the endorsement key is a storage parent) can use this object's public key.
+        //The protection seed arrives already derived (the derivation crosses the digest seam this synchronous
+        //step must not); the state record adopts it here and owns it from this point on.
         var keyState = new TransientKeyState(
-            action.Handle, action.Hierarchy, TpmiAlgPublic.FromValue(TpmAlgIdConstants.TPM_ALG_RSA), default, CopyToPrivateKeyCarrier(privateKey, RsaPrivateKeyTag(action.KeyBits.Value), pool), Tpm2bName.Empty, action.Attributes, ReadOnlyMemory<byte>.Empty, Tpm2bPublicKeyRsa.Create(modulus, pool), action.AuthPolicy, action.UserAuth);
+            action.Handle, action.Hierarchy, TpmiAlgPublic.FromValue(TpmAlgIdConstants.TPM_ALG_RSA), default, null, null, null, null, CopyToPrivateKeyCarrier(privateKey, RsaPrivateKeyTag(action.KeyBits.Value), pool), Tpm2bName.Empty, action.Attributes, ReadOnlyMemory<byte>.Empty, Tpm2bPublicKeyRsa.Create(modulus, pool), action.AuthPolicy, action.UserAuth, protectionSeed, ClonePublicArea(outPublic, pool), Tpm2bName.Empty);
 
         return (outPublic, keyState);
     }
 
     /// <summary>
+    /// The KDFa label under which a storage primary's protection seed derives from its hierarchy's primary
+    /// seed — the reference implementation's label for exactly this derivation (TPM 2.0 Library Part 4,
+    /// <c>CryptCreateObject</c>'s seeded DRBG instantiation for a primary object).
+    /// </summary>
+    private const string PrimaryObjectCreationLabel = "Primary Object Creation";
+
+    /// <summary>
+    /// Derives a storage parent's symmetric protection seed (<c>TPMT_SENSITIVE.seedValue</c>, TPM 2.0 Library
+    /// Part 2, clause 12.3.2, Table 240) — the value every child blob's symmetric and HMAC wrap keys derive
+    /// from (Part 1, Clause 19, equations 33 and 35) — as KDFa over the hierarchy's primary seed and the
+    /// caller's template, sized to the parent's nameAlg digest.
+    /// </summary>
+    /// <remarks>
+    /// A primary object is a DETERMINISTIC function of its hierarchy's primary seed and the creation template
+    /// (Part 1, clause 14: the same template under the same hierarchy regenerates the same object until the
+    /// seed changes), and this derivation is what carries that determinism into the simulator: a caller can
+    /// flush a storage parent and recreate it later from the same template, and a child blob wrapped under the
+    /// first instance still loads under the recreation, because the wrap depends only on this seedValue.
+    /// <c>TPM2_Clear()</c> replaces the storage hierarchy's seed (<see cref="SelectHierarchyProofSeed"/>
+    /// governs which seed each hierarchy draws from), which orphans previously wrapped children exactly as on
+    /// real hardware. The asymmetric primary KEY still comes from the injected backend's own draw, so a
+    /// recreated parent's public area (and hence Name) differs across creations — deriving the key
+    /// deterministically too needs a seeded-generation seam on the signing backends and can follow; nothing in
+    /// the child wrap depends on it. The template folded in covers the fields that distinguish one storage
+    /// template from another on this simulator's creation paths: hierarchy, object type, nameAlg, attributes,
+    /// the type parameter (curve or key bits), and the authPolicy octets.
+    /// </remarks>
+    /// <param name="hierarchy">The hierarchy the primary is created under, selecting the primary seed and folded into the derivation.</param>
+    /// <param name="nameAlg">The parent's Name algorithm, keying the KDFa and sizing the seed.</param>
+    /// <param name="type">The object type (<c>TPM_ALG_ECC</c> or <c>TPM_ALG_RSA</c>), folded into the derivation.</param>
+    /// <param name="typeParameter">The type's distinguishing parameter (the ECC curve identifier or the RSA key bits), folded into the derivation.</param>
+    /// <param name="attributes">The template's object attributes, folded into the derivation.</param>
+    /// <param name="authPolicy">The template's authPolicy digest, folded into the derivation. Borrowed; never disposed here.</param>
+    /// <param name="context">The effect context supplying the hierarchy seeds and the memory pool.</param>
+    /// <param name="cancellationToken">The token to observe.</param>
+    /// <returns>The seed in an owned pooled carrier; ownership transfers to the caller.</returns>
+    private static async ValueTask<Tpm2bDigest> DeriveProtectionSeedAsync(
+        uint hierarchy, TpmiAlgHash nameAlg, ushort type, ushort typeParameter, TpmaObject attributes,
+        Tpm2bDigest authPolicy, TpmActionContext context, CancellationToken cancellationToken)
+    {
+        BaseMemoryPool pool = context.Pool;
+        int seedSize = SessionDigestSize(nameAlg);
+        HashAlgorithmName hashName = SessionHashName(nameAlg);
+        ReadOnlyMemory<byte> hierarchySeed = SelectHierarchyProofSeed(context, hierarchy);
+
+        //The template context: hierarchy ‖ type ‖ nameAlg ‖ attributes ‖ typeParameter ‖ authPolicy, all
+        //fixed-width fields big-endian as TPM marshaling writes them. Built synchronously so no span crosses
+        //the KDFa await.
+        int templateLength = sizeof(uint) + sizeof(ushort) + sizeof(ushort) + sizeof(uint) + sizeof(ushort) + authPolicy.Size;
+        using IMemoryOwner<byte> template = pool.Rent(templateLength);
+        {
+            Span<byte> region = template.Memory.Span[..templateLength];
+            BinaryPrimitives.WriteUInt32BigEndian(region, hierarchy);
+            BinaryPrimitives.WriteUInt16BigEndian(region[sizeof(uint)..], type);
+            BinaryPrimitives.WriteUInt16BigEndian(region[(sizeof(uint) + sizeof(ushort))..], (ushort)nameAlg.Value);
+            BinaryPrimitives.WriteUInt32BigEndian(region[(sizeof(uint) + 2 * sizeof(ushort))..], (uint)attributes);
+            BinaryPrimitives.WriteUInt16BigEndian(region[(2 * sizeof(uint) + 2 * sizeof(ushort))..], typeParameter);
+            authPolicy.AsReadOnlySpan().CopyTo(region[(2 * sizeof(uint) + 3 * sizeof(ushort))..]);
+        }
+
+        IMemoryOwner<byte> derived = await Kdfa.DeriveAsync(
+            hashName, hierarchySeed, PrimaryObjectCreationLabel, template.Memory[..templateLength],
+            ReadOnlyMemory<byte>.Empty, seedSize * 8, pool, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return new Tpm2bDigest(derived);
+        }
+        catch
+        {
+            derived.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Deep-copies a protection seed into its own owned, PINNED carrier — the persistence counterpart of
+    /// <see cref="GenerateProtectionSeed"/>, so a persisted storage parent's seed rests only in pinned pool
+    /// memory exactly as the transient original does. The empty sentinel copies to itself (dispose-immune).
+    /// </summary>
+    /// <param name="seed">The seed octets to copy.</param>
+    /// <param name="pool">The memory pool the pinned storage is rented from.</param>
+    /// <returns>The owned carrier; ownership transfers to the caller.</returns>
+    private static Tpm2bDigest CopySeedCarrier(ReadOnlySpan<byte> seed, BaseMemoryPool pool)
+    {
+        if(seed.IsEmpty)
+        {
+            return Tpm2bDigest.Empty;
+        }
+
+        IMemoryOwner<byte> storage = pool.Rent(seed.Length, AllocationKind.Pinned);
+        try
+        {
+            seed.CopyTo(storage.Memory.Span);
+
+            return new Tpm2bDigest(storage);
+        }
+        catch
+        {
+            storage.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
     /// <c>TPM2_Create()</c> over sessions: decrypts inSensitive's data portion in place when a decrypt session is
-    /// present (Part 1, clauses 19 and 21; sessionValue = the decrypt session's sessionKey alone, since the
-    /// decrypt session always authorizes no entity of its own — Part 1, clause 21.1's inclusion rule is
+    /// present (Part 1, clauses 18 and 20; sessionValue = the decrypt session's sessionKey alone, since the
+    /// decrypt session always authorizes no entity of its own — Part 1, clause 20.1's inclusion rule is
     /// independent of the command-HMAC bind-omission rule), THEN decodes inSensitive ‖ inPublic ‖ outsideInfo ‖
     /// creationPCR in full.
     /// </summary>
@@ -1231,7 +2803,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         //carrier's mutable view is the accessor that expresses that, and no other holder aliases it.
         Memory<byte> parameterArea = action.RawParameterArea.Memory;
 
-        //inSensitive's own outer size field (never itself encrypted, Part 1 clause 21.1) is validated only now,
+        //inSensitive's own outer size field (never itself encrypted, Part 1 clause 20.1) is validated only now,
         //after the command HMAC(s) verified: a declared size exceeding the available bytes is blamed on the
         //decrypt session (session index 1) when one is present — the size problem surfaces only while attempting
         //to decrypt — and reported bare otherwise (mirroring the plain password form's own parser).
@@ -1277,7 +2849,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             userAuthOffset = sensitiveReader.Consumed - userAuthLength;
 
             //userAuth is a TPM2B_AUTH, which the hash union bounds at sizeof(TPMU_HA) (TPM 2.0 Library Part 2,
-            //clause 10.4.5, Table 95 over clause 10.4.2, Table 92), so a recovered value wider than that is not
+            //clause 10.3.5, Table 93 over clause 10.3.2, Table 90), so a recovered value wider than that is not
             //a well-formed structure whatever key produced it — refused here, ahead of the rental whose Create
             //refuses the same bound by throwing.
             if(userAuthLength > Tpm2bAuth.MaxSize)
@@ -1292,6 +2864,14 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
             secretDataLength = secretDataOctets.Length;
             secretDataOffset = sensitiveReader.Consumed - secretDataLength;
+
+            //data is a TPM2B_SENSITIVE_DATA, bounded by sizeof(TPMU_SENSITIVE_CREATE) = MAX_SYM_DATA (TPM 2.0
+            //Library Part 2, clause 11.1.14, Tables 169 and 170), so a recovered value wider than that is not
+            //a well-formed structure whatever key produced it — refused here exactly as the userAuth bound is.
+            if(secretDataLength > Tpm2bSensitiveData.MaxSize)
+            {
+                return Fail(TpmRcConstants.TPM_RC_SIZE, sizeBlamesDecryptSession: false);
+            }
 
             if(sensitiveReader.Remaining != 0)
             {
@@ -1312,6 +2892,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         TpmiAlgHash nameAlg;
         bool noDa;
         bool userWithAuth;
+        TpmaObject templateAttributes;
+        TpmsKeyedHashParms keyedHashScheme;
         Tpm2bPublic inPublic;
         try
         {
@@ -1319,12 +2901,22 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         }
         catch(InvalidOperationException)
         {
-            //A TPM2B_DIGEST is bounded by sizeof(TPMU_HA) (TPM 2.0 Library Part 2, clause 10.4.2, Table 92) and
+            //A TPM2B_DIGEST is bounded by sizeof(TPMU_HA) (TPM 2.0 Library Part 2, clause 10.3.2, Table 90) and
             //inPublic's authPolicy is one, so a wider declared size is TPM_RC_SIZE — the structure parser's only
             //refusal channel is the throw, which this frame answers rather than letting it escape the effect
             //executor. inPublic is never encrypted (only inSensitive, the first parameter, is), so the blame is
-            //bare, exactly as every other size failure decoded out of this same unencrypted tail is.
+            //bare, exactly as every other size failure decoded out of this same unencrypted tail is. The same
+            //channel answers the public area's own interface-level refusals — a keyed-hash scheme selector outside
+            //Table 175 (#TPM_RC_VALUE) or a hash value outside Table 77 (#TPM_RC_HASH), Part 2, clauses 11.1.19 and
+            //9.31 — which this simulator collapses to TPM_RC_SIZE rather than carrying a per-field code out of the
+            //parse.
             return Fail(TpmRcConstants.TPM_RC_SIZE, sizeBlamesDecryptSession: false);
+        }
+        catch(ArgumentOutOfRangeException)
+        {
+            //A declared inPublic width past the octets that remain is a truncated frame, TPM_RC_INSUFFICIENT
+            //(Part 3, clause 5.8.2, Table 2), answered here rather than escaping the effect executor.
+            return Fail(TpmRcConstants.TPM_RC_INSUFFICIENT, sizeBlamesDecryptSession: false);
         }
 
         using(inPublic)
@@ -1338,6 +2930,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             authPolicy = Tpm2bDigest.Create(inPublic.PublicArea.AuthPolicy.AsReadOnlySpan(), context.Pool);
             noDa = (inPublic.PublicArea.ObjectAttributes & TpmaObject.NO_DA) != 0;
             userWithAuth = (inPublic.PublicArea.ObjectAttributes & TpmaObject.USER_WITH_AUTH) != 0;
+            templateAttributes = inPublic.PublicArea.ObjectAttributes;
+            keyedHashScheme = inPublic.PublicArea.Parameters.KeyedHashDetail ?? TpmsKeyedHashParms.SealedData;
         }
 
         if(objectType.Value != TpmAlgIdConstants.TPM_ALG_KEYEDHASH)
@@ -1345,20 +2939,68 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return Fail(TpmRcConstants.TPM_RC_TYPE, sizeBlamesDecryptSession: false);
         }
 
-        //Parameter: outsideInfo (TPM2B_DATA) — included in creation data; not modelled.
-        if(!TrySkipTpm2b(ref reader, out TpmRcConstants outsideInfoRc))
+        //Parameter: outsideInfo (TPM2B_DATA) — included in creation data (TPM 2.0 Library Part 2, clause
+        //10.4.3, Table 101; Part 3, clause 12.1, Table 18). Probed on a by-value reader copy first, exactly as
+        //the plain-password arm's own capture: an over-bound declared size answers TPM_RC_SIZE ahead of the
+        //truncation check, and a truncated but in-bound field still answers TPM_RC_INSUFFICIENT — either way
+        //before any carrier is rented.
+        TpmReader outsideInfoProbe = reader;
+        if(!TryProbeOutsideInfo(ref outsideInfoProbe, out TpmRcConstants outsideInfoRc))
         {
             return Fail(outsideInfoRc, sizeBlamesDecryptSession: false);
         }
 
-        //Parameter: creationPCR (TPML_PCR_SELECTION) — a UINT32 count then that many selections, skipped.
-        if(!TrySkipPcrSelection(ref reader, out TpmRcConstants creationPcrRc))
+        Tpm2bData outsideInfo;
+        try
         {
+            outsideInfo = Tpm2bData.Parse(ref reader, context.Pool);
+        }
+        catch(InvalidOperationException)
+        {
+            //TPM2B_DATA's buffer is bounded by sizeof(TPMT_HA) (TPM 2.0 Library Part 2, clause 10.3.3, Table
+            //93), so a wider declared size is TPM_RC_SIZE.
+            return Fail(TpmRcConstants.TPM_RC_SIZE, sizeBlamesDecryptSession: false);
+        }
+
+        //Parameter: creationPCR (TPML_PCR_SELECTION) — the PCR that will be used in creation data (TPM 2.0
+        //Library Part 2, clause 10.8.7, Table 128; Part 3, clause 12.1, Table 18). An over-bound declared count
+        //answers TPM_RC_SIZE ahead of the truncation check, exactly as outsideInfo's own probe above; either
+        //refusal must dispose the already-captured outsideInfo before answering.
+        TpmReader creationPcrProbe = reader;
+        if(!TrySkipPcrSelection(ref creationPcrProbe, out TpmRcConstants creationPcrRc))
+        {
+            outsideInfo.Dispose();
+
             return Fail(creationPcrRc, sizeBlamesDecryptSession: false);
+        }
+
+        TpmlPcrSelection creationPcr;
+        try
+        {
+            creationPcr = TpmlPcrSelection.Parse(ref reader, context.Pool);
+        }
+        catch(InvalidOperationException)
+        {
+            //A list naming more banks than the list admits is out of its declared bound (TPM 2.0
+            //Library Part 2, clause 10.8.7, Table 128: #TPM_RC_SIZE).
+            outsideInfo.Dispose();
+
+            return Fail(TpmRcConstants.TPM_RC_SIZE, sizeBlamesDecryptSession: false);
+        }
+        catch(ArgumentOutOfRangeException)
+        {
+            //A selection whose sizeofSelect lies outside PCR_SELECT_MIN..PCR_SELECT_MAX is out of the member's
+            //own declared bounds (TPM 2.0 Library Part 2, clause 10.5.2, Table 107: #TPM_RC_VALUE).
+            outsideInfo.Dispose();
+
+            return Fail(TpmRcConstants.TPM_RC_VALUE, sizeBlamesDecryptSession: false);
         }
 
         if(reader.Remaining != 0)
         {
+            outsideInfo.Dispose();
+            creationPcr.Dispose();
+
             return Fail(TpmRcConstants.TPM_RC_SIZE, sizeBlamesDecryptSession: false);
         }
 
@@ -1372,8 +3014,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
             return new TpmCreateSensitiveDecrypted(
                 TpmRcConstants.TPM_RC_SUCCESS, SizeFailureBlamesDecryptSession: false, action.Request,
-                nameAlg, authPolicy, noDa, userWithAuth, secretData,
-                Tpm2bAuth.Create(dataPortion.Span.Slice(userAuthOffset, userAuthLength), context.Pool));
+                nameAlg, authPolicy, noDa, userWithAuth, templateAttributes, keyedHashScheme, secretData,
+                Tpm2bAuth.Create(dataPortion.Span.Slice(userAuthOffset, userAuthLength), context.Pool), outsideInfo, creationPcr);
         }
         catch
         {
@@ -1381,6 +3023,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             //rent must release them or the pinned rentals are orphaned.
             secretData.Dispose();
             authPolicy.Dispose();
+            outsideInfo.Dispose();
+            creationPcr.Dispose();
             throw;
         }
 
@@ -1392,22 +3036,22 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             authPolicy.Dispose();
 
             return new(responseCode, sizeBlamesDecryptSession, action.Request,
-                default, Tpm2bDigest.Empty, false, false, Tpm2bSensitiveData.Empty, Tpm2bAuth.Empty);
+                default, Tpm2bDigest.Empty, false, false, default, TpmsKeyedHashParms.SealedData, Tpm2bSensitiveData.Empty, Tpm2bAuth.Empty, Tpm2bData.Empty, TpmlPcrSelection.Empty);
         }
     }
 
     /// <summary>
     /// Decrypts <c>TPM2_NV_DefineSpace()</c>'s <c>auth</c> first command parameter and reads back its plaintext
-    /// value (TPM 2.0 Library Part 3, Section 31.3; Part 1, Section 21) — the request-decrypt counterpart of
+    /// value (TPM 2.0 Library Part 3, Section 31.3; Part 1, Section 20) — the request-decrypt counterpart of
     /// <see cref="DecryptCreateSensitiveAsync"/>, run only when the authorizing session itself carries the
     /// <c>decrypt</c> attribute and strictly after that session's command HMAC verified.
     /// </summary>
     /// <remarks>
     /// The keystream is derived from the SAME sessionValue the session's command HMAC used, with the
-    /// command-direction nonce ordering (nonceNewer = nonceCaller, nonceOlder = nonceTPM, Part 1, Section 19.2),
+    /// command-direction nonce ordering (nonceNewer = nonceCaller, nonceOlder = nonceTPM, Part 1, Section 18.2),
     /// through the production <c>TpmParameterEncryption</c> primitives so it matches the host's own encryption by
     /// construction. Only the data portion after the <c>auth</c> field's 2-octet size prefix is transformed (the
-    /// size itself is never encrypted, Part 1, Section 21.1); a size field that overruns the captured parameter
+    /// size itself is never encrypted, Part 1, Section 20.1); a size field that overruns the captured parameter
     /// bytes is <c>TPM_RC_SIZE</c>.
     /// </remarks>
     /// <param name="action">The declared action carrying the encrypted parameter area and the session's decrypt keying material.</param>
@@ -1433,7 +3077,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         ushort authSize = BinaryPrimitives.ReadUInt16BigEndian(parameterArea.Span[..sizeof(ushort)]);
         //Two size rules, one answer: the declared size must fit the captured parameter area, and it must fit a
         //TPM2B_AUTH at all — the hash union bounds that structure at sizeof(TPMU_HA) (TPM 2.0 Library Part 2,
-        //clause 10.4.5, Table 95 over clause 10.4.2, Table 92), so a wider recovered value is malformed
+        //clause 10.3.5, Table 93 over clause 10.3.2, Table 90), so a wider recovered value is malformed
         //whatever key produced it. The command's own narrower per-entity rule stays on the installing tail.
         if(authSize > parameterArea.Length - sizeof(ushort) || authSize > Tpm2bAuth.MaxSize)
         {
@@ -1444,7 +3088,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
         if(!action.Symmetric.IsNull)
         {
-            //sessionValue = sessionKey ‖ StripTrailingZeros(authValue) (Part 1, clause 19.1), assembled by the
+            //sessionValue = sessionKey ‖ StripTrailingZeros(authValue) (Part 1, clause 18.1), assembled by the
             //shared request-decryption helper in pinned pooled scratch cleared before release. The entity term
             //here is the owner hierarchy's LIVE authValue, unresolved by the session's bind, because parameter
             //encryption ignores the binding even where the command HMAC key omits the term.
@@ -1458,17 +3102,17 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
     /// <summary>
     /// Decrypts <c>TPM2_NV_ChangeAuth()</c>'s <c>newAuth</c> first command parameter and reads back its plaintext
-    /// value (TPM 2.0 Library Part 3, clause 31.15; Part 1, clause 19.1) — run only when a SEPARATE session in
+    /// value (TPM 2.0 Library Part 3, clause 31.15; Part 1, clause 18.1) — run only when a SEPARATE session in
     /// the authorization area carries the <c>decrypt</c> attribute, and strictly after every session in that area
     /// has had its command HMAC verified.
     /// </summary>
     /// <remarks>
     /// The keystream is derived from the decrypt session's own <c>sessionValue</c>, which is its session key
-    /// alone because that session authorizes no entity (Part 1, clause 19.1) — the one structural difference from
+    /// alone because that session authorizes no entity (Part 1, clause 18.1) — the one structural difference from
     /// <see cref="DecryptNvDefineAuthAsync"/>, whose single session does both jobs and so folds the entity's
     /// authValue in. Command-direction nonce ordering applies (nonceNewer = nonceCaller, nonceOlder = nonceTPM,
-    /// Part 1, clause 19.2), and only the data portion after the 2-octet size prefix is transformed (the size is
-    /// never encrypted, clause 19.1); a size field overrunning the captured parameter bytes is
+    /// Part 1, clause 18.2), and only the data portion after the 2-octet size prefix is transformed (the size is
+    /// never encrypted, clause 18.1); a size field overrunning the captured parameter bytes is
     /// <c>TPM_RC_SIZE</c>. The production <c>TpmParameterEncryption</c> primitives are used, so the transform
     /// matches the host's own encryption by construction.
     /// </remarks>
@@ -1493,7 +3137,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         ushort newAuthSize = BinaryPrimitives.ReadUInt16BigEndian(parameterArea.Span[..sizeof(ushort)]);
         //Two size rules, one answer: the declared size must fit the captured parameter area, and it must fit a
         //TPM2B_AUTH at all — the hash union bounds that structure at sizeof(TPMU_HA) (TPM 2.0 Library Part 2,
-        //clause 10.4.5, Table 95 over clause 10.4.2, Table 92), so a wider recovered value is malformed
+        //clause 10.3.5, Table 93 over clause 10.3.2, Table 90), so a wider recovered value is malformed
         //whatever key produced it. The command's own narrower per-entity rule stays on the installing tail.
         if(newAuthSize > parameterArea.Length - sizeof(ushort) || newAuthSize > Tpm2bAuth.MaxSize)
         {
@@ -1506,7 +3150,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         {
             //The keystream's sessionValue is assembled by the shared request-decryption helper: this command's
             //decrypt companion authorizes no entity, so its empty entity authValue leaves the session key alone
-            //(Part 1, clause 19.1).
+            //(Part 1, clause 18.1).
             await ApplyRequestDecryptionAsync(
                 action.Symmetric, action.SessionAlg, action.SessionKey, action.EntityAuthValue,
                 action.NonceCaller.AsReadOnlyMemory(), action.NonceTpm.AsReadOnlyMemory(), newAuthData, context.Pool, action.Request as IDisposable, cancellationToken).ConfigureAwait(false);
@@ -1518,7 +3162,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// <summary>
     /// Recovers an attest command's <c>qualifyingData</c> first command parameter in plaintext — decrypting it in
     /// place over the one slot carrying the <c>decrypt</c> attribute, or reading it straight through when no slot
-    /// carried it (TPM 2.0 Library Part 3, clause 5.7; Part 1, clause 19.1) — for <c>TPM2_Certify()</c>,
+    /// carried it (TPM 2.0 Library Part 3, clause 5.7; Part 1, clause 18.1) — for <c>TPM2_Certify()</c>,
     /// <c>TPM2_CertifyCreation()</c>, <c>TPM2_Quote()</c>, <c>TPM2_GetTime()</c>, and <c>TPM2_NV_Certify()</c>
     /// alike.
     /// </summary>
@@ -1527,8 +3171,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// The step runs for every session-authorized arrival, not only an encrypted one, so the recovered value has
     /// exactly one origin and the width bound below is enforced in exactly one place. The keystream, where one
     /// applies, is derived through the shared request-decryption helper with the command-direction nonce ordering
-    /// (nonceNewer is nonceCaller, nonceOlder is nonceTPM, clause 19.2), and only the data portion after the
-    /// 2-octet size prefix is transformed — the size field is never protected (clause 19.1).
+    /// (nonceNewer is nonceCaller, nonceOlder is nonceTPM, clause 18.2), and only the data portion after the
+    /// 2-octet size prefix is transformed — the size field is never protected (clause 18.1).
     /// </para>
     /// <para>
     /// Both size failures are the ones the reference's own decryption routine names — a parameter area too short
@@ -1572,14 +3216,14 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         if(action.Decrypts && !action.Symmetric.IsNull)
         {
             //sessionValue = sessionKey ‖ StripTrailingZeros(authValue) when the decrypt session also authorizes
-            //an entity, sessionKey alone when it is a companion (Part 1, clause 19.1), assembled by the shared
+            //an entity, sessionKey alone when it is a companion (Part 1, clause 18.1), assembled by the shared
             //request-decryption helper in pinned pooled scratch cleared before release.
             await ApplyRequestDecryptionAsync(
                 action.Symmetric, action.SessionAlg, action.SessionKey, action.EntityAuthValue,
                 action.NonceCaller.AsReadOnlyMemory(), action.NonceTpm.AsReadOnlyMemory(), qualifyingData, context.Pool, action.Request as IDisposable, cancellationToken).ConfigureAwait(false);
         }
 
-        //TPM2B_DATA is bounded by sizeof(TPMT_HA) (Part 2, clause 10.4.3, Table 93). The bound belongs to the
+        //TPM2B_DATA is bounded by sizeof(TPMT_HA) (Part 2, clause 10.3.3, Table 91). The bound belongs to the
         //PLAINTEXT value, which is why it is checked here rather than at the wire parse: a decrypt session's
         //ciphertext is the same width as its plaintext, but only the recovered octets are the TPM2B_DATA the
         //bound is about. The resuming transition keeps the same check as its fail-closed backstop.
@@ -1599,16 +3243,386 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     }
 
     /// <summary>
+    /// Recovers the first command parameter of a session-authorized <c>TPM2_HMAC()</c> (<c>buffer</c>,
+    /// <c>TPM2B_MAX_BUFFER</c>, TPM 2.0 Library Part 3, clause 15.5, Table 71) or <c>TPM2_HMAC_Start()</c>
+    /// (<c>auth</c>, <c>TPM2B_AUTH</c>, clause 17.2, Table 80) in plaintext over the authorizing session's
+    /// keystream (Part 1, clause 18.1) and rebuilds the request around the recovered carrier — run only when
+    /// that session carries the <c>decrypt</c> attribute and strictly after its authorization passed.
+    /// </summary>
+    /// <remarks>
+    /// The keystream is <c>sessionValue = sessionKey ‖ StripTrailingZeros(authValue)</c> with the key's LIVE
+    /// authorization value whatever the session's bind (clause 18.1: "the binding of the session is ignored"), in
+    /// the command direction (nonceNewer = nonceCaller, nonceOlder = nonceTPM, clause 18.2), through the
+    /// production <c>TpmParameterEncryption</c> primitives so the transform matches the host's own encryption by
+    /// construction. Only the data portion after the 2-octet size field is transformed (the size is never
+    /// encrypted), and a ciphertext is as wide as its plaintext, so the parse's own bounds already bound the
+    /// recovered value: the size backstops here cannot fire on a parsed frame and fail closed if they ever do.
+    /// The request's parsed carrier held ciphertext on this path and is released as the recovered one supersedes
+    /// it.
+    /// </remarks>
+    /// <param name="action">The declared action carrying the captured parameter area and the session's keying material.</param>
+    /// <param name="context">The effect context supplying the memory pool.</param>
+    /// <param name="cancellationToken">A token observed across the keystream derivation.</param>
+    /// <returns>The request rebuilt around its plaintext first parameter, fed back to <c>OnKeyedHashParameterDecrypted</c>.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the recovered carrier transfers into the rebuilt request the returned TpmKeyedHashParameterDecrypted carries, whose resuming tail hands it to the command's effect and whose refusing arms dispose it through the input's own Dispose.")]
+    private static async ValueTask<TpmSimulatorInput> DecryptKeyedHashParameterAsync(TpmDecryptKeyedHashParameterAction action, TpmActionContext context, CancellationToken cancellationToken)
+    {
+        //The request owns this carrier and cpHash has already covered its octets as ciphertext (Part 3,
+        //clause 5.6 precedes clause 5.8), so the transform runs over the very buffer the digest read.
+        Memory<byte> parameterArea = action.RawParameterArea.Memory;
+
+        if(parameterArea.Length < sizeof(ushort))
+        {
+            return new TpmKeyedHashParameterDecrypted(TpmRcConstants.TPM_RC_INSUFFICIENT, action.CommandCode, action.Request);
+        }
+
+        ushort dataSize = BinaryPrimitives.ReadUInt16BigEndian(parameterArea.Span[..sizeof(ushort)]);
+        if(dataSize > parameterArea.Length - sizeof(ushort))
+        {
+            return new TpmKeyedHashParameterDecrypted(TpmRcConstants.TPM_RC_SIZE, action.CommandCode, action.Request);
+        }
+
+        Memory<byte> data = parameterArea.Slice(sizeof(ushort), dataSize);
+
+        if(!action.Symmetric.IsNull)
+        {
+            await ApplyRequestDecryptionAsync(
+                action.Symmetric, action.SessionAlg, action.SessionKey, action.EntityAuthValue,
+                action.NonceCaller.AsReadOnlyMemory(), action.NonceTpm.AsReadOnlyMemory(), data, context.Pool, action.Request as IDisposable, cancellationToken).ConfigureAwait(false);
+        }
+
+        //The recovered octets supersede the parsed carrier, which held the ciphertext; the rebuilt request
+        //carries the plaintext exactly where the plaintext path's parse would have put it.
+        TpmSimulatorInput resumed = action.Request switch
+        {
+            TpmHmacOverSessionRequested hmac => ReplaceBuffer(hmac, data.Span, context.Pool),
+            TpmHmacStartOverSessionRequested hmacStart => ReplaceSequenceAuth(hmacStart, data.Span, context.Pool),
+            _ => throw new InvalidOperationException($"No first parameter is defined for '{action.Request.GetType().Name}'.")
+        };
+
+        return new TpmKeyedHashParameterDecrypted(TpmRcConstants.TPM_RC_SUCCESS, action.CommandCode, resumed);
+
+        //Local one-off helpers: the recovered carrier is rented first, so a failing rent leaves the request
+        //intact for the refusing arm's release, and only then is the ciphertext carrier retired.
+        static TpmHmacOverSessionRequested ReplaceBuffer(TpmHmacOverSessionRequested request, ReadOnlySpan<byte> plaintext, BaseMemoryPool pool)
+        {
+            Tpm2bMaxBuffer recovered = Tpm2bMaxBuffer.Create(plaintext, pool);
+            request.Buffer.Dispose();
+
+            return request with { Buffer = recovered };
+        }
+
+        static TpmHmacStartOverSessionRequested ReplaceSequenceAuth(TpmHmacStartOverSessionRequested request, ReadOnlySpan<byte> plaintext, BaseMemoryPool pool)
+        {
+            Tpm2bAuth recovered = Tpm2bAuth.Create(plaintext, pool);
+            request.SequenceAuth.Dispose();
+
+            return request with { SequenceAuth = recovered };
+        }
+    }
+
+    /// <summary>
+    /// Recovers a session-authorized signing-family command's FIRST parameter in plaintext — <c>TPM2_Sign()</c>'s
+    /// <c>digest</c>, <c>TPM2_SignDigest()</c>'s <c>context</c>, <c>TPM2_SequenceUpdate()</c>'s and
+    /// <c>TPM2_SignSequenceComplete()</c>'s <c>buffer</c> — over the decrypt session's keystream where a slot
+    /// claimed the attribute (TPM 2.0 Library Part 1, clauses 18.1–18.3), bounds the PLAINTEXT by the command's
+    /// own TPM2B (<c>sizeof(TPMU_HA)</c>, 255, 1024 — the width the field is about), and rebuilds the request
+    /// around the recovered carrier in the place the password form's parse puts it.
+    /// </summary>
+    /// <remarks>
+    /// The request owns the captured area and cpHash has already covered its octets as ciphertext (Part 3,
+    /// clause 5.6 precedes clause 5.7), so the transform runs over the very buffer the digest read. A failure
+    /// carries the decrypt slot's index so the resuming transition can blame it (Part 2, clause 6.6.2).
+    /// </remarks>
+    /// <param name="action">The declared decryption step.</param>
+    /// <param name="context">The action context supplying the memory pool.</param>
+    /// <param name="cancellationToken">Propagates cancellation to the keystream primitive.</param>
+    /// <returns>The <see cref="TpmFirstParameterDecrypted"/> feedback carrying the rebuilt request, or the failure.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the recovered carrier transfers into the rebuilt request the returned TpmFirstParameterDecrypted carries, whose resuming tail hands it to the command's action and whose refusing arms dispose it through the input's own Dispose.")]
+    private static async ValueTask<TpmSimulatorInput> DecryptFirstParameterAsync(TpmDecryptFirstParameterAction action, TpmActionContext context, CancellationToken cancellationToken)
+    {
+        Memory<byte> parameterArea = action.RawParameterArea.Memory;
+
+        if(parameterArea.Length < sizeof(ushort))
+        {
+            return Fail(TpmRcConstants.TPM_RC_INSUFFICIENT);
+        }
+
+        ushort dataSize = BinaryPrimitives.ReadUInt16BigEndian(parameterArea.Span[..sizeof(ushort)]);
+        if(dataSize > parameterArea.Length - sizeof(ushort))
+        {
+            return Fail(TpmRcConstants.TPM_RC_SIZE);
+        }
+
+        Memory<byte> data = parameterArea.Slice(sizeof(ushort), dataSize);
+
+        if(action.Decrypts && !action.Symmetric.IsNull)
+        {
+            //sessionValue = sessionKey ‖ StripTrailingZeros(authValue) when the decrypt session also authorizes
+            //an entity, sessionKey alone when it is a companion (Part 1, clause 18.1), assembled by the shared
+            //request-decryption helper in pinned pooled scratch cleared before release.
+            await ApplyRequestDecryptionAsync(
+                action.Symmetric, action.SessionAlg, action.SessionKey, action.EntityAuthValue,
+                action.NonceCaller.AsReadOnlyMemory(), action.NonceTpm.AsReadOnlyMemory(), data, context.Pool, action.Request as IDisposable, cancellationToken).ConfigureAwait(false);
+        }
+
+        //The bound belongs to the PLAINTEXT value: a decrypt session's ciphertext is the same width as its
+        //plaintext, but only the recovered octets are the TPM2B the bound is about.
+        int bound = action.Request switch
+        {
+            TpmSignOverSessionRequested => Tpm2bDigest.MaxSize,
+            TpmSignDigestOverSessionRequested => Tpm2bSignatureCtx.MaxSize,
+            TpmSequenceUpdateOverSessionRequested or TpmSignSequenceCompleteOverSessionRequested => Tpm2bMaxBuffer.MaxSize,
+            _ => throw new InvalidOperationException($"No first parameter is defined for '{action.Request.GetType().Name}'.")
+        };
+        if(dataSize > bound)
+        {
+            return Fail(TpmRcConstants.TPM_RC_SIZE);
+        }
+
+        //The recovered octets supersede the parsed placeholder; the rebuilt request carries the plaintext
+        //exactly where the password form's parse would have put it.
+        TpmSimulatorInput resumed = action.Request switch
+        {
+            TpmSignOverSessionRequested sign => sign with { Digest = Tpm2bDigest.Create(data.Span, context.Pool) },
+            TpmSignDigestOverSessionRequested signDigest => signDigest with { Context = Tpm2bSignatureCtx.Create(data.Span, context.Pool) },
+            TpmSequenceUpdateOverSessionRequested sequenceUpdate => sequenceUpdate with { Buffer = Tpm2bMaxBuffer.Create(data.Span, context.Pool) },
+            TpmSignSequenceCompleteOverSessionRequested signSequenceComplete => signSequenceComplete with { Buffer = Tpm2bMaxBuffer.Create(data.Span, context.Pool) },
+            _ => throw new InvalidOperationException($"No first parameter is defined for '{action.Request.GetType().Name}'.")
+        };
+
+        return new TpmFirstParameterDecrypted(TpmRcConstants.TPM_RC_SUCCESS, action.CommandCode, action.DecryptSessionIndex, resumed);
+
+        //Local one-off helper: the uniform failure shape every early-return site above needs, carrying the slot a
+        //failure is blamed on so the resuming transition needs no rule of its own.
+        TpmFirstParameterDecrypted Fail(TpmRcConstants responseCode) =>
+            new(responseCode, action.CommandCode, action.DecryptSessionIndex, action.Request);
+    }
+
+    /// <summary>
+    /// Frames a session-authorized <c>TPM2_SequenceUpdate()</c>'s parameter-free response (TPM 2.0 Library Part 3,
+    /// clause 17.7, Table 92) over every slot's response-entry material (Part 1, clause 15.6.1): an empty
+    /// parameter area, rpHash over the command code alone, and each real slot's response HMAC keyed as its
+    /// command HMAC was.
+    /// </summary>
+    /// <param name="action">The declared framing.</param>
+    /// <param name="context">The action context supplying the RNG and the memory pool.</param>
+    /// <param name="cancellationToken">A token observed across the rpHash and HMAC computations.</param>
+    /// <returns>The <see cref="TpmResponseFramedOverSessions"/> feedback.</returns>
+    private static async ValueTask<TpmSimulatorInput> FrameOverSessionsResponseAsync(TpmFrameOverSessionsResponseAction action, TpmActionContext context, CancellationToken cancellationToken)
+    {
+        try
+        {
+            IMemoryOwner<byte> parameterArea = context.Pool.Rent(1);
+
+            return await FrameOverSessionsCoreAsync(action.Framing, parameterArea, parameterLength: 0, context, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            ReleaseResponseSessionNonces(action.Framing);
+        }
+    }
+
+    /// <summary>
+    /// Completes a <c>TPM2_Sign()</c> effect: the plain <see cref="TpmMessageSigned"/> on the password form, or —
+    /// on the session form — the response framed over every slot's entry with the <c>TPMT_SIGNATURE</c> as the
+    /// parameter area (TPM 2.0 Library Part 3, clause 20.5, Table 123; Part 1, clause 15.6.1).
+    /// </summary>
+    /// <param name="signature">The signature, whose ownership rides into the feedback or the framed area.</param>
+    /// <param name="framing">The session form's framing, or <see langword="null"/>.</param>
+    /// <param name="context">The action context.</param>
+    /// <param name="cancellationToken">A token observed across the framing.</param>
+    /// <returns>The feedback.</returns>
+    private static ValueTask<TpmSimulatorInput> CompleteSignatureAsync(TpmtSignature signature, TpmOverSessionsFraming? framing, TpmActionContext context, CancellationToken cancellationToken) =>
+        framing is null
+            ? ValueTask.FromResult<TpmSimulatorInput>(new TpmMessageSigned(signature))
+            : FrameSignatureOverSessionsAsync(framing, signature, context, cancellationToken);
+
+    /// <summary>
+    /// Completes a ticket-validated <c>TPM2_SignDigest()</c> effect: the plain <see cref="TpmDigestSigned"/> on
+    /// the password form, or — on the session form — the response framed over every slot's entry with the
+    /// <c>TPMT_SIGNATURE</c> as the parameter area (TPM 2.0 Library Part 3, clause 20.7, Table 127).
+    /// </summary>
+    /// <param name="signature">The signature, whose ownership rides into the feedback or the framed area.</param>
+    /// <param name="framing">The session form's framing, or <see langword="null"/>.</param>
+    /// <param name="context">The action context.</param>
+    /// <param name="cancellationToken">A token observed across the framing.</param>
+    /// <returns>The feedback.</returns>
+    private static ValueTask<TpmSimulatorInput> CompleteDigestSignatureAsync(TpmtSignature signature, TpmOverSessionsFraming? framing, TpmActionContext context, CancellationToken cancellationToken) =>
+        framing is null
+            ? ValueTask.FromResult<TpmSimulatorInput>(new TpmDigestSigned(TpmRcConstants.TPM_RC_SUCCESS, signature))
+            : FrameSignatureOverSessionsAsync(framing, signature, context, cancellationToken);
+
+    /// <summary>
+    /// Completes a <c>TPM2_SignSequenceComplete()</c> effect: the plain <see cref="TpmSequenceSigned"/> on the
+    /// password form, or — on the session form — the response framed over every slot's entry with the
+    /// <c>TPMT_SIGNATURE</c> as the parameter area and the completed sequence named for the flush (TPM 2.0
+    /// Library Part 3, clause 20.6, Table 125; Part 1, clause 29.4.6).
+    /// </summary>
+    /// <param name="sequenceHandle">The completed sequence's handle.</param>
+    /// <param name="signature">The signature, whose ownership rides into the feedback or the framed area.</param>
+    /// <param name="framing">The session form's framing, or <see langword="null"/>.</param>
+    /// <param name="context">The action context.</param>
+    /// <param name="cancellationToken">A token observed across the framing.</param>
+    /// <returns>The feedback.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the signature transfers to the returned TpmSequenceSigned, then to the TpmSignResponse intent, and is released by SerializeResponse after framing; on the session form it transfers into the framed parameter area instead.")]
+    private static ValueTask<TpmSimulatorInput> CompleteSequenceSignatureAsync(
+        TpmiDhObject sequenceHandle, TpmtSignature signature, TpmOverSessionsFraming? framing, TpmActionContext context, CancellationToken cancellationToken) =>
+        framing is null
+            ? ValueTask.FromResult<TpmSimulatorInput>(new TpmSequenceSigned(TpmRcConstants.TPM_RC_SUCCESS, sequenceHandle, signature))
+            : FrameSignatureOverSessionsAsync(framing, signature, context, cancellationToken);
+
+    /// <summary>
+    /// Completes a successful <c>TPM2_VerifySequenceComplete()</c> effect: the plain
+    /// <see cref="TpmSequenceSignatureVerified"/> on the password form, or — on the session form — the response
+    /// framed over every slot's entry with the <c>TPMT_TK_VERIFIED</c> as the parameter area and the completed
+    /// sequence named for the flush (TPM 2.0 Library Part 3, clause 20.3, Table 119; Part 1, clause 29.4.6).
+    /// </summary>
+    /// <param name="sequenceHandle">The completed sequence's handle.</param>
+    /// <param name="validation">The minted ticket, whose ownership rides into the feedback or the framed area.</param>
+    /// <param name="framing">The session form's framing, or <see langword="null"/>.</param>
+    /// <param name="context">The action context.</param>
+    /// <param name="cancellationToken">A token observed across the framing.</param>
+    /// <returns>The feedback.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the ticket transfers to the returned TpmSequenceSignatureVerified, then to the TpmVerifySequenceCompleteResponse intent, and is released by SerializeResponse after framing; on the session form it transfers into the framed parameter area instead.")]
+    private static ValueTask<TpmSimulatorInput> CompleteSequenceVerificationAsync(
+        TpmiDhObject sequenceHandle, TpmtTkVerified validation, TpmOverSessionsFraming? framing, TpmActionContext context, CancellationToken cancellationToken) =>
+        framing is null
+            ? ValueTask.FromResult<TpmSimulatorInput>(new TpmSequenceSignatureVerified(TpmRcConstants.TPM_RC_SUCCESS, sequenceHandle, validation))
+            : FrameValidationOverSessionsAsync(framing, validation, context, cancellationToken);
+
+    /// <summary>
+    /// Lays a <c>TPMT_SIGNATURE</c> out as a session-authorized response's whole parameter area and frames the
+    /// response session area over it (<see cref="FrameOverSessionsCoreAsync"/>). Consumes the signature: once
+    /// its octets are in the framed buffer nothing downstream needs the original.
+    /// </summary>
+    /// <param name="framing">The session form's framing.</param>
+    /// <param name="signature">The signature; disposed here.</param>
+    /// <param name="context">The action context.</param>
+    /// <param name="cancellationToken">A token observed across the framing.</param>
+    /// <returns>The <see cref="TpmResponseFramedOverSessions"/> feedback.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the framed parameter-area buffer transfers to the core framer, which releases it if any later framing step fails and otherwise hands it to the feedback.")]
+    private static async ValueTask<TpmSimulatorInput> FrameSignatureOverSessionsAsync(TpmOverSessionsFraming framing, TpmtSignature signature, TpmActionContext context, CancellationToken cancellationToken)
+    {
+        int parameterLength;
+        IMemoryOwner<byte> parameterArea;
+        using(signature)
+        {
+            parameterLength = signature.GetSerializedSize();
+            parameterArea = context.Pool.Rent(Math.Max(parameterLength, 1));
+            try
+            {
+                var writer = new TpmWriter(parameterArea.Memory.Span[..parameterLength]);
+                signature.WriteTo(ref writer);
+            }
+            catch
+            {
+                parameterArea.Dispose();
+                throw;
+            }
+        }
+
+        return await FrameOverSessionsCoreAsync(framing, parameterArea, parameterLength, context, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Lays a <c>TPMT_TK_VERIFIED</c> out as a session-authorized response's whole parameter area and frames the
+    /// response session area over it (<see cref="FrameOverSessionsCoreAsync"/>). Consumes the ticket.
+    /// </summary>
+    /// <param name="framing">The session form's framing.</param>
+    /// <param name="validation">The ticket; disposed here.</param>
+    /// <param name="context">The action context.</param>
+    /// <param name="cancellationToken">A token observed across the framing.</param>
+    /// <returns>The <see cref="TpmResponseFramedOverSessions"/> feedback.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the framed parameter-area buffer transfers to the core framer, which releases it if any later framing step fails and otherwise hands it to the feedback.")]
+    private static async ValueTask<TpmSimulatorInput> FrameValidationOverSessionsAsync(TpmOverSessionsFraming framing, TpmtTkVerified validation, TpmActionContext context, CancellationToken cancellationToken)
+    {
+        int parameterLength;
+        IMemoryOwner<byte> parameterArea;
+        using(validation)
+        {
+            parameterLength = validation.SerializedSize;
+            parameterArea = context.Pool.Rent(Math.Max(parameterLength, 1));
+            try
+            {
+                var writer = new TpmWriter(parameterArea.Memory.Span[..parameterLength]);
+                validation.WriteTo(ref writer);
+            }
+            catch
+            {
+                parameterArea.Dispose();
+                throw;
+            }
+        }
+
+        return await FrameOverSessionsCoreAsync(framing, parameterArea, parameterLength, context, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Frames a session-authorized signing-family response over an already-laid-out parameter area: every
+    /// slot's response entry through the shared <see cref="FrameSessionEntriesAsync(TpmCcConstants, IMemoryOwner{byte}, int, ImmutableArray{TpmResponseSession}, TpmActionContext, CancellationToken)"/>
+    /// — the rolled nonceTPMs, rpHash per distinct session hash (TPM 2.0 Library Part 1, clause 15.8 equation
+    /// 16), each real slot's response HMAC — with the completed sequence the framing names carried through for
+    /// the transition's flush.
+    /// </summary>
+    /// <param name="framing">The session form's framing.</param>
+    /// <param name="parameterArea">The framed response parameter area; ownership passes to the feedback, or is released here on a fault.</param>
+    /// <param name="parameterLength">The number of valid octets in <paramref name="parameterArea"/>.</param>
+    /// <param name="context">The action context.</param>
+    /// <param name="cancellationToken">A token observed across the framing.</param>
+    /// <returns>The <see cref="TpmResponseFramedOverSessions"/> feedback.</returns>
+    private static async ValueTask<TpmSimulatorInput> FrameOverSessionsCoreAsync(
+        TpmOverSessionsFraming framing, IMemoryOwner<byte> parameterArea, int parameterLength, TpmActionContext context, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var framed = (TpmResponseFramedOverSessions)await FrameSessionEntriesAsync(
+                framing.CommandCode, parameterArea, parameterLength, framing.Sessions, context, cancellationToken).ConfigureAwait(false);
+
+            return framed with { FlushedSequenceHandle = framing.FlushedSequenceHandle };
+        }
+        catch
+        {
+            //The area holds signature octets by the time framing fails; cleared before the buffer goes back to
+            //the pool, the discipline every framed response keeps.
+            parameterArea.Memory.Span[..parameterLength].Clear();
+            parameterArea.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Releases the caller-nonce carrier every response-session entry of a signing-family framing owns —
+    /// discharging the effect's terminal-owner obligation once the response HMACs have read the nonces as their
+    /// nonceOlder term (TPM 2.0 Library Part 1, clause 16.6.5), on the success, refusal, and fault paths alike.
+    /// Nothing to release on the password form.
+    /// </summary>
+    /// <param name="framing">The session form's framing, or <see langword="null"/>.</param>
+    private static void ReleaseResponseSessionNonces(TpmOverSessionsFraming? framing)
+    {
+        if(framing is not null)
+        {
+            ReleaseResponseSessionNonces(framing.Sessions);
+        }
+    }
+
+    /// <summary>
     /// Decrypts <c>TPM2_HierarchyChangeAuth()</c>'s <c>newAuth</c> first command parameter and reads back its
-    /// plaintext value (TPM 2.0 Library Part 3, clause 24.8; Part 1, clause 19.1) — the hierarchy-family
+    /// plaintext value (TPM 2.0 Library Part 3, clause 24.8; Part 1, clause 18.1) — the hierarchy-family
     /// counterpart of <see cref="DecryptNvChangeAuthAsync"/>, run only when a SEPARATE session in the
     /// authorization area carries the <c>decrypt</c> attribute and strictly after every session in that area has
     /// had its command HMAC verified.
     /// </summary>
     /// <remarks>
     /// The keystream is derived from the decrypt session's own <c>sessionValue</c>, its session key alone,
-    /// because that session authorizes no entity (Part 1, clause 19.1). Command-direction nonce ordering applies
-    /// (nonceNewer = nonceCaller, nonceOlder = nonceTPM, clause 19.2), and only the data portion after the
+    /// because that session authorizes no entity (Part 1, clause 18.1). Command-direction nonce ordering applies
+    /// (nonceNewer = nonceCaller, nonceOlder = nonceTPM, clause 18.2), and only the data portion after the
     /// 2-octet size prefix is transformed (the size is never encrypted); a size field overrunning the captured
     /// parameter bytes is <c>TPM_RC_SIZE</c>. The production <c>TpmParameterEncryption</c> primitives are used, so
     /// the transform matches the host's own encryption by construction.
@@ -1634,7 +3648,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         ushort newAuthSize = BinaryPrimitives.ReadUInt16BigEndian(parameterArea.Span[..sizeof(ushort)]);
         //Two size rules, one answer: the declared size must fit the captured parameter area, and it must fit a
         //TPM2B_AUTH at all — the hash union bounds that structure at sizeof(TPMU_HA) (TPM 2.0 Library Part 2,
-        //clause 10.4.5, Table 95 over clause 10.4.2, Table 92), so a wider recovered value is malformed
+        //clause 10.3.5, Table 93 over clause 10.3.2, Table 90), so a wider recovered value is malformed
         //whatever key produced it. The command's own narrower per-entity rule stays on the installing tail.
         if(newAuthSize > parameterArea.Length - sizeof(ushort) || newAuthSize > Tpm2bAuth.MaxSize)
         {
@@ -1647,7 +3661,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         {
             //The keystream's sessionValue is assembled by the shared request-decryption helper: this command's
             //decrypt companion authorizes no entity, so its empty entity authValue leaves the session key alone
-            //(Part 1, clause 19.1).
+            //(Part 1, clause 18.1).
             await ApplyRequestDecryptionAsync(
                 action.Symmetric, action.SessionAlg, action.SessionKey, action.EntityAuthValue,
                 action.NonceCaller.AsReadOnlyMemory(), action.NonceTpm.AsReadOnlyMemory(), newAuthData, context.Pool, action.Request as IDisposable, cancellationToken).ConfigureAwait(false);
@@ -1691,21 +3705,23 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     }
 
     /// <summary>
-    /// <c>TPM2_Create()</c> sealing: build the exported sealed-object public area (the sealed-data template,
-    /// reproduced from the template fields), the wrapped private blob (the simulator's own encoding of the
-    /// sealed octets — it models no parent-key encryption/integrity, having no parent symmetric-key custody),
-    /// and the same faithful creation by-products, minus the Name (<c>TPM2_Create()</c> returns no Name).
+    /// <c>TPM2_Create()</c> of a KEYEDHASH object: build the exported public area (the caller's template echoed
+    /// with its exact attribute word and keyed-hash scheme), the wrapped private blob — the sensitive area under
+    /// the parent's Protected Storage encryption and integrity (TPM 2.0 Library Part 1, Clause 19) — and the
+    /// same faithful creation by-products, minus the Name (<c>TPM2_Create()</c> returns no Name).
     /// </summary>
     /// <remarks>
-    /// Ownership of all three flows to <see cref="TpmObjectSealed"/>, then to the <c>TpmCreateResponse</c>
-    /// intent, and is released by <see cref="SerializeResponse"/> after framing. This effect is the terminal
-    /// owner of the action's secret, userAuth, and authorization-policy-digest carriers —
-    /// <c>TPM2_Create()</c> installs no durable state, the created object existing only as the returned blob —
-    /// so all three are released here once the artifacts are built.
+    /// Ownership of the public area, the private blob, and the by-products flows to <see cref="TpmKeyedHashCreated"/>,
+    /// then to the <c>TpmCreateResponse</c> intent, and is released by <see cref="SerializeResponse"/> after
+    /// framing. This effect is the terminal owner of the action's secret, userAuth, authorization-policy-digest,
+    /// outsideInfo, and creationPCR carriers — <c>TPM2_Create()</c> installs no durable state, the created object
+    /// existing only as the returned blob — so all five are released here once the artifacts are built.
+    /// <see cref="TpmCreateKeyedHashAction.ParentName"/> is BORROWED from the parent's durable
+    /// <see cref="TransientKeyState"/> and is never disposed by this effect.
     /// </remarks>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-        Justification = "Ownership of the public area, the private blob, and the by-products buffer transfers to the returned TpmObjectSealed, then to the TpmCreateResponse intent, and is released by SerializeResponse after framing.")]
-    private static async ValueTask<TpmSimulatorInput> SealDataAsync(TpmSealDataAction action, TpmActionContext context, CancellationToken cancellationToken)
+        Justification = "Ownership of the public area, the private blob, and the by-products buffer transfers to the returned TpmKeyedHashCreated, then to the TpmCreateResponse intent, and is released by SerializeResponse after framing.")]
+    private static async ValueTask<TpmSimulatorInput> SealDataAsync(TpmCreateKeyedHashAction action, TpmActionContext context, CancellationToken cancellationToken)
     {
         Tpm2bPublic outPublic;
         Tpm2bPrivate privateBlob;
@@ -1716,17 +3732,23 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         {
             (outPublic, privateBlob, creationData, creationHash, creationTicket) =
                 await BuildSealedObjectArtifactsAsync(
-                    action.ParentHandle.Value, action.ParentHierarchy, action.NameAlg, action.AuthPolicy, action.NoDa, action.UserWithAuth,
-                    action.SecretData.AsReadOnlyMemory(), action.UserAuth.AsReadOnlyMemory(), context, cancellationToken).ConfigureAwait(false);
+                    action.ParentHierarchy, action.ParentName, action.NameAlg, action.AuthPolicy, action.TemplateAttributes, action.KeyedHashScheme,
+                    action.SecretData.AsReadOnlyMemory(), action.UserAuth.AsReadOnlyMemory(), action.ShouldGenerateSensitiveBits, action.GeneratedBitsLength,
+                    action.OutsideInfo, action.CreationPcr, action.CreationPcrValues, action.ParentSeedValue, action.ParentNameAlg, context, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
             action.SecretData.Dispose();
             action.UserAuth.Dispose();
             action.AuthPolicy.Dispose();
+
+            //This effect is the terminal owner of outsideInfo and creationPCR on every path. ParentName is
+            //BORROWED from the parent's durable state and is never disposed here.
+            action.OutsideInfo.Dispose();
+            action.CreationPcr.Dispose();
         }
 
-        return new TpmObjectSealed(privateBlob, outPublic, creationData, creationHash, creationTicket);
+        return new TpmKeyedHashCreated(privateBlob, outPublic, creationData, creationHash, creationTicket);
     }
 
     /// <summary>
@@ -1737,19 +3759,21 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// session in this command's authorization area needs a genuine response HMAC, unlike the plain password
     /// form — frames the response parameter area (outPrivate ‖ outPublic ‖ creationByProducts, never encrypted
     /// here), rolls a fresh nonceTPM per real session, computes rpHash over it, and each real session's own
-    /// response HMAC keyed on its own sessionKey ‖ authValue (Part 1, clause 17.6.8) — mirroring
+    /// response HMAC keyed on its own sessionKey ‖ authValue (Part 1, clause 16.6.8) — mirroring
     /// <see cref="UnsealOverSessionsAsync"/>'s per-session loop. This effect is the terminal owner of the
-    /// action's secret, userAuth, and authorization-policy-digest carriers, exactly as
+    /// action's secret, userAuth, authorization-policy-digest, outsideInfo, and creationPCR carriers, exactly as
     /// <see cref="SealDataAsync"/> is: <c>TPM2_Create()</c> installs no durable state, so the wrapped private
     /// blob the artifacts step packs them into is their only use.
+    /// <see cref="TpmCreateKeyedHashOverSessionsAction.ParentName"/> is BORROWED from the parent's durable
+    /// <see cref="TransientKeyState"/> and is never disposed by this effect.
     /// </remarks>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-        Justification = "Ownership of the parameter-area and each entry's HMAC buffer transfers to the returned TpmObjectSealedOverSessions, then to the TpmCreateOverSessionsResponse intent, and is released by SerializeResponse after framing.")]
-    private static async ValueTask<TpmSimulatorInput> SealDataOverSessionsAsync(TpmSealDataOverSessionsAction action, TpmActionContext context, CancellationToken cancellationToken)
+        Justification = "Ownership of the parameter-area and each entry's HMAC buffer transfers to the returned TpmKeyedHashCreatedOverSessions, then to the TpmCreateOverSessionsResponse intent, and is released by SerializeResponse after framing.")]
+    private static async ValueTask<TpmSimulatorInput> SealDataOverSessionsAsync(TpmCreateKeyedHashOverSessionsAction action, TpmActionContext context, CancellationToken cancellationToken)
     {
         //This frame is the terminal owner of the caller-nonce carrier every response-session entry owns — the
         //TPM2B_NONCE its slot's request record transferred into it — discharging the obligation once the
-        //response HMACs have read the nonces as their nonceOlder term (Part 1, clause 17.6.5), on the success,
+        //response HMACs have read the nonces as their nonceOlder term (Part 1, clause 16.6.5), on the success,
         //sealing-failure, and framing-failure paths alike.
         try
         {
@@ -1773,8 +3797,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// <param name="cancellationToken">The token to observe.</param>
     /// <returns>The framed response pieces to feed back to the transition.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-        Justification = "Ownership of the parameter-area and each entry's HMAC buffer transfers to the returned TpmObjectSealedOverSessions, then to the TpmCreateOverSessionsResponse intent, and is released by SerializeResponse after framing.")]
-    private static async ValueTask<TpmSimulatorInput> SealDataOverSessionsCoreAsync(TpmSealDataOverSessionsAction action, TpmActionContext context, CancellationToken cancellationToken)
+        Justification = "Ownership of the parameter-area and each entry's HMAC buffer transfers to the returned TpmKeyedHashCreatedOverSessions, then to the TpmCreateOverSessionsResponse intent, and is released by SerializeResponse after framing.")]
+    private static async ValueTask<TpmSimulatorInput> SealDataOverSessionsCoreAsync(TpmCreateKeyedHashOverSessionsAction action, TpmActionContext context, CancellationToken cancellationToken)
     {
         Tpm2bPublic outPublic;
         Tpm2bPrivate privateBlob;
@@ -1785,14 +3809,20 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         {
             (outPublic, privateBlob, creationData, creationHash, creationTicket) =
                 await BuildSealedObjectArtifactsAsync(
-                    action.ParentHandle.Value, action.ParentHierarchy, action.NameAlg, action.AuthPolicy, action.NoDa, action.UserWithAuth,
-                    action.SecretData.AsReadOnlyMemory(), action.UserAuth.AsReadOnlyMemory(), context, cancellationToken).ConfigureAwait(false);
+                    action.ParentHierarchy, action.ParentName, action.NameAlg, action.AuthPolicy, action.TemplateAttributes, action.KeyedHashScheme,
+                    action.SecretData.AsReadOnlyMemory(), action.UserAuth.AsReadOnlyMemory(), action.ShouldGenerateSensitiveBits, action.GeneratedBitsLength,
+                    action.OutsideInfo, action.CreationPcr, action.CreationPcrValues, action.ParentSeedValue, action.ParentNameAlg, context, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
             action.SecretData.Dispose();
             action.UserAuth.Dispose();
             action.AuthPolicy.Dispose();
+
+            //This effect is the terminal owner of outsideInfo and creationPCR on every path. ParentName is
+            //BORROWED from the parent's durable state and is never disposed here.
+            action.OutsideInfo.Dispose();
+            action.CreationPcr.Dispose();
         }
 
         using(privateBlob)
@@ -1828,12 +3858,12 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                     //Only the password placeholder is needed (a TPM_RS_PW parent-auth session with no decrypt
                     //companion) — no rpHash/HMAC computation, mirroring how a plain policy-gated Unseal with no
                     //encrypt session needs none either.
-                    return new TpmObjectSealedOverSessions(
+                    return new TpmKeyedHashCreatedOverSessions(
                         TpmParameterArea.Adopt(parameterArea, parameterLength), action.HasPasswordPlaceholder, action.PasswordPlaceholderAttributes,
                         ImmutableArray<TpmCreateFramedSessionEntry>.Empty);
                 }
 
-                //rpHash computed once per DISTINCT session hash algorithm (Part 1, clause 16.8, equation 16): each
+                //rpHash computed once per DISTINCT session hash algorithm (Part 1, clause 15.8, equation 16): each
                 //real session verifies its response HMAC against its OWN algorithm's rpHash, never one session's
                 //hash shared by every session (the host-side mirror lives in TpmCommandExecutor.ExecuteAsync).
                 var sessionAlgs = new TpmiAlgHash[action.ResponseSessions.Length];
@@ -1870,7 +3900,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                             entries.Add(new TpmCreateFramedSessionEntry(session.SessionHandle, framedNonces[i], retainedNonces[i], session.SessionAttributes, hmac));
                         }
 
-                        return new TpmObjectSealedOverSessions(
+                        return new TpmKeyedHashCreatedOverSessions(
                             TpmParameterArea.Adopt(parameterArea, parameterLength), action.HasPasswordPlaceholder, action.PasswordPlaceholderAttributes, entries.MoveToImmutable());
                     }
                     finally
@@ -1897,31 +3927,157 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     }
 
     /// <summary>
+    /// Computes a KEYEDHASH object's public <c>unique</c> value as Part 4 <c>CryptComputeSymmetricUnique</c>
+    /// computes it, branching on the object's OWN attribute word: a restricted decryption object (a derivation
+    /// parent — <c>restricted</c> and <c>decrypt</c> both SET) takes the HMAC arm, <c>HMAC_nameAlg(seedValue,
+    /// sensitive.bits)</c> keyed by the obfuscation value; every other KEYEDHASH object — an HMAC key, a sealed
+    /// data object, an unrestricted XOR key — takes the plain-hash arm, <c>H_nameAlg(seedValue ‖ sensitive.bits)</c>
+    /// (TPM 2.0 Library Part 2, clause 12.2.3.1, equation (8); Part 1, clause 24.5.3.2, equation (48)). Both
+    /// run through the registered seams; the hash arm's concatenation lives in one pinned pooled block. The
+    /// obfuscation value is what keeps the sensitive value underivable from the public digest (Part 1, clause
+    /// 23.3, Table 35's <c>seedValue</c> row), so the block holds sensitive material and is cleared before its
+    /// rental returns.
+    /// </summary>
+    /// <param name="nameAlg">The object's Name algorithm, selecting the hash and the digest width.</param>
+    /// <param name="attributes">The object's <c>TPMA_OBJECT</c> word — the template's at create, the supplied public area's at Load and Import — whose <c>restricted</c>/<c>decrypt</c> pair selects the arm.</param>
+    /// <param name="seedValue">The object's obfuscation value (<c>TPMT_SENSITIVE.seedValue</c>).</param>
+    /// <param name="bits">The object's sensitive value (<c>TPMT_SENSITIVE.sensitive.bits</c>).</param>
+    /// <param name="context">The action context carrying the pool and the digest and HMAC seams.</param>
+    /// <param name="cancellationToken">The token to observe.</param>
+    /// <returns>The unique octets in a pooled rental of at least <paramref name="nameAlg"/>'s digest width, and that width; the caller disposes the rental.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the returned rental transfers to the caller, which releases it once the unique has been framed or compared.")]
+    private static async ValueTask<(IMemoryOwner<byte> Owner, int Length)> ComputeKeyedHashUniqueAsync(
+        TpmiAlgHash nameAlg, TpmaObject attributes, ReadOnlyMemory<byte> seedValue, ReadOnlyMemory<byte> bits, TpmActionContext context, CancellationToken cancellationToken)
+    {
+        int digestSize = SessionDigestSize(nameAlg);
+        bool isDerivationParent = (attributes & (TpmaObject.RESTRICTED | TpmaObject.DECRYPT)) == (TpmaObject.RESTRICTED | TpmaObject.DECRYPT);
+        IMemoryOwner<byte> unique = context.Pool.Rent(digestSize);
+        try
+        {
+            if(isDerivationParent)
+            {
+                using HmacValue hmac = await CryptographicKeyEvents.ComputeHmacAsync(
+                    new ReadOnlySequence<byte>(bits), seedValue, digestSize, SessionHmacTag(nameAlg), context.Pool, cancellationToken: cancellationToken).ConfigureAwait(false);
+                hmac.AsReadOnlySpan().CopyTo(unique.Memory.Span[..digestSize]);
+
+                return (unique, digestSize);
+            }
+
+            int inputLength = seedValue.Length + bits.Length;
+            using IMemoryOwner<byte> input = context.Pool.Rent(inputLength, AllocationKind.Pinned);
+            try
+            {
+                seedValue.Span.CopyTo(input.Memory.Span);
+                bits.Span.CopyTo(input.Memory.Span[seedValue.Length..]);
+
+                using DigestValue digest = await CryptographicKeyEvents.ComputeDigestAsync(
+                    input.Memory[..inputLength], digestSize, SessionDigestTag(nameAlg), context.Pool, cancellationToken: cancellationToken).ConfigureAwait(false);
+                digest.AsReadOnlySpan().CopyTo(unique.Memory.Span[..digestSize]);
+            }
+            finally
+            {
+                //The block held the obfuscation value and the sensitive bits; every exit clears it.
+                input.Memory.Span[..inputLength].Clear();
+            }
+
+            return (unique, digestSize);
+        }
+        catch
+        {
+            unique.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
     /// Shared by <see cref="SealDataAsync"/> and <see cref="SealDataOverSessionsAsync"/>: builds the exported
     /// sealed-object public area, the wrapped private blob, and the faithful creation by-products (minus the
     /// Name, which <c>TPM2_Create()</c> does not return) — the object-building logic common to both the plain
     /// password form and the session-authorized form.
     /// </summary>
+    /// <param name="parentHierarchy">The hierarchy the storage parent belongs to, which the creation ticket names.</param>
+    /// <param name="parentName">The parent's own Name — BORROWED from the parent's durable <see cref="TransientKeyState"/>, feeding the creation data's loaded-parent form (TPM 2.0 Library Part 2, clause 15.1, Table 261).</param>
+    /// <param name="nameAlg">The Name algorithm to carry in the exported public area.</param>
+    /// <param name="authPolicy">The authorization policy digest to re-emit into the exported public area.</param>
+    /// <param name="secretData">The caller-supplied sensitive value — the data to seal, or a supplied HMAC key value.</param>
+    /// <param name="userAuth">The new object's authorization value.</param>
+    /// <param name="shouldGenerateSensitiveBits">Whether the sensitive value is drawn from the RNG instead of copied from <paramref name="secretData"/> (<c>sensitiveDataOrigin</c> SET on a signing or decryption key, TPM 2.0 Library Part 3, clause 12.1, keyedHash rule 4).</param>
+    /// <param name="generatedBitsLength">The octet count drawn when <paramref name="shouldGenerateSensitiveBits"/> is set — the nameAlg's digest size.</param>
+    /// <param name="templateAttributes">The template's exact <c>TPMA_OBJECT</c> word, echoed into the exported public area.</param>
+    /// <param name="keyedHashScheme">The template's keyed-hash scheme, echoed into the exported public area.</param>
+    /// <param name="outsideInfo">The <c>outsideInfo</c> parameter to echo verbatim into the creation data — read only; the caller retains ownership and disposal.</param>
+    /// <param name="creationPcr">The FILTERED <c>creationPCR</c> selection to echo into the creation data — read only; the caller retains ownership and disposal.</param>
+    /// <param name="creationPcrValues">The filtered selection's own gathered register values, concatenated and hashed into <c>pcrDigest</c>.</param>
+    /// <param name="parentSeedValue">The Storage Parent's protection seed the wrap derives its keys from (Part 1, Clause 19, equations 33 and 35) — a borrowed carrier, never disposed here.</param>
+    /// <param name="parentNameAlg">The parent's Name algorithm (<c>pNameAlg</c>), keying and sizing the wrap's derivations and outer HMAC.</param>
+    /// <param name="context">The action context carrying the memory pool and the digest/HMAC seams.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The exported public area, the wrapped private blob, and the creation by-products. Ownership transfers to the caller.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the public area, the private blob, and the by-products buffer transfers to the caller, which carries them to whichever response intent SerializeResponse releases after framing; a failure part-way through releases every carrier already rented in this frame.")]
     private static async ValueTask<(Tpm2bPublic OutPublic, Tpm2bPrivate PrivateBlob, Tpm2bCreationData CreationData, Tpm2bDigest CreationHash, TpmtTkCreation CreationTicket)> BuildSealedObjectArtifactsAsync(
-        uint parentHandle, TpmiRhHierarchy parentHierarchy, TpmiAlgHash nameAlg, Tpm2bDigest authPolicy, bool noDa, bool userWithAuth,
-        ReadOnlyMemory<byte> secretData, ReadOnlyMemory<byte> userAuth, TpmActionContext context, CancellationToken cancellationToken)
+        TpmiRhHierarchy parentHierarchy, Tpm2bName parentName, TpmiAlgHash nameAlg, Tpm2bDigest authPolicy, TpmaObject templateAttributes, TpmsKeyedHashParms keyedHashScheme,
+        ReadOnlyMemory<byte> secretData, ReadOnlyMemory<byte> userAuth, bool shouldGenerateSensitiveBits, int generatedBitsLength,
+        Tpm2bData outsideInfo, TpmlPcrSelection creationPcr, ImmutableArray<ReadOnlyMemory<byte>> creationPcrValues,
+        Tpm2bDigest parentSeedValue, TpmiAlgHash parentNameAlg,
+        TpmActionContext context, CancellationToken cancellationToken)
     {
-        Tpm2bPublic outPublic = Tpm2bPublic.CreateSealedDataTemplate(nameAlg.Value, context.Pool, authPolicy.AsReadOnlySpan(), noDa, userWithAuth);
+        //The sensitive pieces are drawn ahead of everything: the obfuscation value (seedValue, the nameAlg's
+        //digest size, Part 1, clause 24.7.4) and the sensitive value — the caller's data, or a TPM-generated
+        //key of the nameAlg's digest size when sensitiveDataOrigin is SET (Part 3, clause 12.1, keyedHash rule
+        //4) — because the public unique digests over both (Part 2, clause 12.2.3.1, equation (8)) and the Name
+        //digests over the filled public area, so both must exist before either derived value can.
+        int obfuscationSize = SessionDigestSize(nameAlg);
+        int bitsLength = shouldGenerateSensitiveBits ? generatedBitsLength : secretData.Length;
+        using IMemoryOwner<byte> seedValue = context.Pool.Rent(obfuscationSize, AllocationKind.Pinned);
+        using IMemoryOwner<byte> bits = context.Pool.Rent(Math.Max(bitsLength, 1), AllocationKind.Pinned);
+        Tpm2bPublic? outPublic = null;
         Tpm2bPrivate privateBlob = Tpm2bPrivate.Empty;
         try
         {
-            //The packer rents the blob octets itself, so the TPM2B_PRIVATE carrier adopts that rental rather than copying it.
-            privateBlob = Tpm2bPrivate.FromMarshaled(PackSealedPrivateBlob(userAuth, secretData, context.Pool, out int privateBlobLength), privateBlobLength);
+            context.Rng(seedValue.Memory.Span[..obfuscationSize]);
+            if(shouldGenerateSensitiveBits)
+            {
+                context.Rng(bits.Memory.Span[..bitsLength]);
+            }
+            else
+            {
+                secretData.Span.CopyTo(bits.Memory.Span[..bitsLength]);
+            }
 
-            //The sealed object is not loaded, so its Name is not retained; it is still computed to key the creation
-            //ticket HMAC (TPM 2.0 Library Part 2, clause 10.7). No handle is allocated, so nothing carries the Name past here.
+            //The exported public area echoes the template as sent — its exact attribute word and keyed-hash
+            //scheme, a caller-supplied unique overwritten — with its unique FILLED as the object's attributes
+            //select (Part 2, clause 12.2.3.1, equation (8); Part 4 CryptComputeSymmetricUnique), so a sealed
+            //data object (scheme NULL) and an HMAC key (scheme HMAC, sign SET) each round-trip to a TPM2_Load()
+            //that recovers the same object kind and re-derives the same binding (TPM 2.0 Library Part 3, clause
+            //12.1: outPublic is the input template with its unique filled). The Name therefore depends on the
+            //sensitive value, obfuscated by the seedValue.
+            (IMemoryOwner<byte> unique, int uniqueLength) = await ComputeKeyedHashUniqueAsync(
+                nameAlg, templateAttributes, seedValue.Memory[..obfuscationSize], bits.Memory[..bitsLength], context, cancellationToken).ConfigureAwait(false);
+            using(unique)
+            {
+                outPublic = Tpm2bPublic.CreateKeyedHashTemplate(
+                    nameAlg.Value, templateAttributes, keyedHashScheme, authPolicy.AsReadOnlySpan(), context.Pool, unique.Memory.Span[..uniqueLength]);
+            }
+
+            //The Name comes next: the wrap's outer HMAC binds the sensitive area to it (TPM 2.0 Library
+            //Part 1, Clause 19, equation 36) and the creation ticket HMACs over the same octets (Part 2,
+            //clause 10.6), so it is computed once and serves both. The sealed object is not loaded, so no
+            //handle carries the Name past this frame.
             (IMemoryOwner<byte> name, int nameLength) = await ComputeObjectNameAsync(outPublic, nameAlg, context.Pool, cancellationToken).ConfigureAwait(false);
             using(name)
             {
+                //The wrap builder rents the blob octets itself, so the TPM2B_PRIVATE carrier adopts that rental
+                //rather than copying it.
+                (IMemoryOwner<byte> blob, int blobLength) = await BuildWrappedSensitiveBlobAsync(
+                    parentSeedValue, parentNameAlg, userAuth, seedValue.Memory[..obfuscationSize], bits.Memory[..bitsLength], name.Memory[..nameLength], context, cancellationToken).ConfigureAwait(false);
+                privateBlob = Tpm2bPrivate.FromMarshaled(blob, blobLength);
+
                 (Tpm2bCreationData creationData, Tpm2bDigest creationHash, TpmtTkCreation creationTicket, Tpm2bName framedName) =
-                    await BuildCreationByProductsAsync(name.Memory[..nameLength], parentHandle, parentHierarchy, includeName: false, context, cancellationToken).ConfigureAwait(false);
+                    await BuildCreationByProductsAsync(
+                        name.Memory[..nameLength], TpmCreationDataParent.Loaded(parentName, parentHierarchy), parentHierarchy, includeName: false,
+                        outsideInfo, creationPcr, creationPcrValues, context, cancellationToken).ConfigureAwait(false);
 
                 //TPM2_Create() returns no Name, so the by-products carry the dispose-immune empty sentinel there.
                 framedName.Dispose();
@@ -1935,35 +4091,217 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             //their only owner until the caller adopts the returned tuple, so a throw in either awaited step
             //must release them or the rentals are orphaned.
             privateBlob.Dispose();
-            outPublic.Dispose();
+            outPublic?.Dispose();
             throw;
+        }
+        finally
+        {
+            //The rentals held the obfuscation value and the sensitive bits; every exit clears them.
+            seedValue.Memory.Span[..obfuscationSize].Clear();
+            bits.Memory.Span[..bitsLength].Clear();
         }
     }
 
     /// <summary>
-    /// <c>TPM2_Load()</c>: recover the sealed data from the wrapped blob (it is the simulator's own encoding, so
-    /// the blob octets are the sealed data) and compute the object Name over the loaded public area through the
-    /// registered digest seam.
+    /// Wraps a sealed object's sensitive area under its Storage Parent's protections (TPM 2.0 Library Part 1,
+    /// Clause 19): the marshaled <c>TPM2B_SENSITIVE</c> is AES-CFB-encrypted under
+    /// <c>KDFa(pNameAlg, seedValue, "STORAGE", name, …)</c> with a RANDOM per-object <c>symIv</c> (equations 33
+    /// and 34 — Clause 19.4 reserves the zero IV for duplication and credential wraps), and the blob carries
+    /// <c>TPM2B_DIGEST(outerHMAC)</c> before the marshaled <c>TPM2B_IV</c> and the ciphertext, where the HMAC
+    /// is keyed by <c>KDFa(pNameAlg, seedValue, "INTEGRITY", …)</c> over
+    /// <c>symIv ‖ encSensitive ‖ name.buffer</c> (equations 35 and 36) — binding the sensitive area to the
+    /// public area whose Name it names. The same primitives credential protection composes, with the parent's
+    /// stored seed in place of a transported one and the random IV in place of the credential wrap's zero one.
     /// </summary>
     /// <remarks>
-    /// The Name is computed once and carried in TWO owned carriers, because the framed response and the stored
-    /// object are separate owners whose lifetimes do not nest: the first flows to <see cref="TpmObjectLoaded"/>,
-    /// then to the <c>TpmLoadResponse</c> intent, and is released by <see cref="SerializeResponse"/> after
-    /// framing; the second transfers into the stored <see cref="SealedObjectState"/> and lives until the object
-    /// is evicted. Two rentals rather than one shared buffer is the same rule <see cref="PersistObject"/>'s deep
-    /// copy applies, so neither owner's disposal can reach the other's octets. This effect is the terminal owner
-    /// of the caller-supplied public area: hashing its marshaled <c>TPMT_PUBLIC</c> into the Name is its only
-    /// use, and nothing downstream reads it, so it is released here on every path.
+    /// The sensitive area is <c>TPMT_SENSITIVE(KEYEDHASH ‖ authValue ‖ seedValue ‖ data)</c> (Part 2, clause
+    /// 12.3, Tables 224 and 225); its <c>seedValue</c> is the object's obfuscation value, drawn by the caller from
+    /// the entropy delegate and sized to the OBJECT's nameAlg (Part 1, Clause 24.7.4), while every wrap key is
+    /// derived and sized under the PARENT's nameAlg, and its <c>authValue</c> travels padded to the type's
+    /// maximum size so the blob length leaks nothing about it (clause 24.7.3). The symmetric cipher is the
+    /// storage-parent template canon, AES-128-CFB — the model discards a caller template's own symmetric
+    /// definition at the parse, so a template declaring another width is wrapped under the canon; a recorded
+    /// model constraint, not a clause reading. Plaintext scratch is pinned and cleared before its rental
+    /// returns.
+    /// </remarks>
+    /// <param name="parentSeedValue">The Storage Parent's protection seed — a borrowed carrier, never disposed here.</param>
+    /// <param name="parentNameAlg">The parent's Name algorithm (<c>pNameAlg</c>), keying and sizing the derivations and the HMAC.</param>
+    /// <param name="userAuth">The object's authorization value octets.</param>
+    /// <param name="seedValue">The object's obfuscation value, drawn by the caller — the same octets the public <c>unique</c> was computed over (Part 2, clause 12.2.3.1, equation (8)), so the wrapped area and the public area bind.</param>
+    /// <param name="bits">The object's sensitive value, drawn or copied by the caller — the same octets the public <c>unique</c> was computed over.</param>
+    /// <param name="objectName">The object's Name octets (<c>nameAlg ‖ digest</c>, no size prefix), the HMAC's binding term.</param>
+    /// <param name="context">The effect context supplying the entropy delegate and the memory pool.</param>
+    /// <param name="cancellationToken">The token to observe.</param>
+    /// <returns>The wrapped blob octets; ownership transfers to the caller.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the blob buffer transfers to the caller, whose TPM2B_PRIVATE carrier adopts it and rides it to the response intent released by SerializeResponse.")]
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility",
+        Justification = "The Protected Storage wrap uses AES-CFB, the symmetric algorithm of the storage parent's template (TPM 2.0 Library Part 1, Clause 19); this in-process behavioural simulator is a test/server-side model, not a browser target. This mirrors the credential wrap's suppression for the same primitive.")]
+    private static async ValueTask<(IMemoryOwner<byte> Owner, int Length)> BuildWrappedSensitiveBlobAsync(
+        Tpm2bDigest parentSeedValue, TpmiAlgHash parentNameAlg,
+        ReadOnlyMemory<byte> userAuth, ReadOnlyMemory<byte> seedValue, ReadOnlyMemory<byte> bits, ReadOnlyMemory<byte> objectName,
+        TpmActionContext context, CancellationToken cancellationToken)
+    {
+        BaseMemoryPool pool = context.Pool;
+
+        //sensitive = a UINT16 size prefix over TPMT_SENSITIVE(KEYEDHASH ‖ TPM2B_AUTH ‖ TPM2B_DIGEST ‖
+        //TPM2B_SENSITIVE_DATA) (Part 2, clause 12.3, Tables 224 and 225), the authValue padded to its maximum
+        //size so the blob's length cannot leak the authorization value's (Part 1, clause 24.7.3; trailing-zero
+        //stripping makes the padding semantically transparent to every authorization use, clause 16.6.4.3). The
+        //seedValue and bits arrive pre-drawn from the caller — the octets the public unique was computed over,
+        //so the wrapped area binds to the public area it was exported with.
+        int paddedAuthSize = Tpm2bAuth.MaxSize;
+        int sensitiveInteriorLength = sizeof(ushort) + (sizeof(ushort) + paddedAuthSize) + (sizeof(ushort) + seedValue.Length) + (sizeof(ushort) + bits.Length);
+        int sensitiveLength = sizeof(ushort) + sensitiveInteriorLength;
+
+        //The marshaled TPM2B_SENSITIVE is laid out in one pinned rental, then handed to the shared wrap core.
+        using IMemoryOwner<byte> sensitive = pool.Rent(sensitiveLength, AllocationKind.Pinned);
+        try
+        {
+            using(IMemoryOwner<byte> paddedAuth = pool.Rent(paddedAuthSize, AllocationKind.Pinned))
+            {
+                Span<byte> paddedAuthSpan = paddedAuth.Memory.Span[..paddedAuthSize];
+                paddedAuthSpan.Clear();
+                userAuth.Span.CopyTo(paddedAuthSpan);
+
+                var writer = new TpmWriter(sensitive.Memory.Span[..sensitiveLength]);
+                writer.WriteUInt16((ushort)sensitiveInteriorLength);
+                writer.WriteUInt16((ushort)TpmAlgIdConstants.TPM_ALG_KEYEDHASH);
+                writer.WriteTpm2b(paddedAuthSpan);
+                writer.WriteTpm2b(seedValue.Span);
+                writer.WriteTpm2b(bits.Span);
+                paddedAuthSpan.Clear();
+            }
+
+            return await WrapSensitiveAreaAsync(
+                parentSeedValue, parentNameAlg, sensitive.Memory[..sensitiveLength], objectName, context, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            //The rental held the sensitive plaintext; every exit clears it.
+            sensitive.Memory.Span[..sensitiveLength].Clear();
+        }
+    }
+
+    /// <summary>
+    /// The ordinary-storage wrap core (TPM 2.0 Library Part 1, Clause 19): one pinned rental hosts
+    /// [<c>TPM2B_IV</c> ‖ <c>TPM2B_SENSITIVE</c>], the sensitive tail is encrypted in place under a RANDOM
+    /// per-object <c>symIv</c> — clause 19.4 requires one for a child object's sensitive area, reserving the
+    /// zero IV for duplication and credential wraps — and the outer HMAC covers exactly this contiguous region
+    /// followed by the Name (equation 36's <c>symIv ‖ encSensitive ‖ name.buffer</c>). The blob is
+    /// <c>TPM2B_DIGEST(outerHMAC)</c> before the region (Clause 19.5). Shared by <c>TPM2_Create()</c>'s blob
+    /// production and <c>TPM2_Import()</c>'s re-wrap, whose sensitive areas differ only in where the marshaled
+    /// octets come from.
+    /// </summary>
+    /// <param name="parentSeedValue">The Storage Parent's protection seed — a borrowed carrier, never disposed here.</param>
+    /// <param name="parentNameAlg">The parent's Name algorithm (<c>pNameAlg</c>), keying and sizing the derivations and the HMAC.</param>
+    /// <param name="marshaledSensitive">The marshaled <c>TPM2B_SENSITIVE</c> being protected; the caller keeps and clears its own copy.</param>
+    /// <param name="objectName">The object's Name octets (<c>nameAlg ‖ digest</c>, no size prefix), the HMAC's binding term.</param>
+    /// <param name="context">The effect context supplying the entropy delegate and the memory pool.</param>
+    /// <param name="cancellationToken">The token to observe.</param>
+    /// <returns>The wrapped blob octets; ownership transfers to the caller.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the blob buffer transfers to the caller, whose TPM2B_PRIVATE carrier adopts it and rides it to the response intent released by SerializeResponse.")]
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility",
+        Justification = "The Protected Storage wrap uses AES-CFB, the symmetric algorithm of the storage parent's template (TPM 2.0 Library Part 1, Clause 19); this in-process behavioural simulator is a test/server-side model, not a browser target. This mirrors the credential wrap's suppression for the same primitive.")]
+    private static async ValueTask<(IMemoryOwner<byte> Owner, int Length)> WrapSensitiveAreaAsync(
+        Tpm2bDigest parentSeedValue, TpmiAlgHash parentNameAlg, ReadOnlyMemory<byte> marshaledSensitive,
+        ReadOnlyMemory<byte> objectName, TpmActionContext context, CancellationToken cancellationToken)
+    {
+        BaseMemoryPool pool = context.Pool;
+        int parentDigestSize = SessionDigestSize(parentNameAlg);
+        HashAlgorithmName hashName = SessionHashName(parentNameAlg);
+        const int MarshaledIvLength = sizeof(ushort) + CredentialSymmetricBlockSize;
+        int sensitiveLength = marshaledSensitive.Length;
+        int ivAndSensitiveLength = MarshaledIvLength + sensitiveLength;
+        using IMemoryOwner<byte> ivAndSensitive = pool.Rent(ivAndSensitiveLength, AllocationKind.Pinned);
+        try
+        {
+            {
+                Span<byte> region = ivAndSensitive.Memory.Span[..ivAndSensitiveLength];
+                BinaryPrimitives.WriteUInt16BigEndian(region, CredentialSymmetricBlockSize);
+                context.Rng(region.Slice(sizeof(ushort), CredentialSymmetricBlockSize));
+                marshaledSensitive.Span.CopyTo(region[MarshaledIvLength..]);
+            }
+
+            using IMemoryOwner<byte> symKey = await Kdfa.DeriveAsync(
+                hashName, parentSeedValue.AsReadOnlyMemory(), CredentialStorageLabel, objectName, ReadOnlyMemory<byte>.Empty, CredentialSymmetricKeyBits, pool, cancellationToken).ConfigureAwait(false);
+            {
+                Span<byte> region = ivAndSensitive.Memory.Span[..ivAndSensitiveLength];
+                TpmParameterEncryption.AesCfb(
+                    symKey.Memory.Span[..CredentialSymmetricKeyBytes], region.Slice(sizeof(ushort), CredentialSymmetricBlockSize), region[MarshaledIvLength..], encrypting: true);
+            }
+
+            symKey.Memory.Span[..CredentialSymmetricKeyBytes].Clear();
+
+            using IMemoryOwner<byte> hmacKey = await Kdfa.DeriveAsync(
+                hashName, parentSeedValue.AsReadOnlyMemory(), CredentialIntegrityLabel, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, parentDigestSize * 8, pool, cancellationToken).ConfigureAwait(false);
+            using IMemoryOwner<byte> outerHmac = await ComputeCredentialHmacAsync(
+                hmacKey.Memory[..parentDigestSize], ivAndSensitive.Memory[..ivAndSensitiveLength], objectName, parentNameAlg, pool, cancellationToken).ConfigureAwait(false);
+            hmacKey.Memory.Span[..parentDigestSize].Clear();
+
+            int blobLength = sizeof(ushort) + parentDigestSize + ivAndSensitiveLength;
+            IMemoryOwner<byte> owner = pool.Rent(blobLength);
+            try
+            {
+                Span<byte> blob = owner.Memory.Span[..blobLength];
+                BinaryPrimitives.WriteUInt16BigEndian(blob, (ushort)parentDigestSize);
+                outerHmac.Memory.Span[..parentDigestSize].CopyTo(blob[sizeof(ushort)..]);
+                ivAndSensitive.Memory.Span[..ivAndSensitiveLength].CopyTo(blob[(sizeof(ushort) + parentDigestSize)..]);
+
+                return (owner, blobLength);
+            }
+            catch
+            {
+                owner.Dispose();
+                throw;
+            }
+        }
+        finally
+        {
+            //Until the CFB pass completes, the region past the IV holds sensitive plaintext; every exit
+            //clears the rental.
+            ivAndSensitive.Memory.Span[..ivAndSensitiveLength].Clear();
+        }
+    }
+
+    /// <summary>
+    /// <c>TPM2_Load()</c>: compute the object Name over the loaded public area through the registered digest
+    /// seam, verify the wrapped blob's integrity against the parent's seed and THAT Name, and only then decrypt
+    /// and unmarshal the sensitive area (TPM 2.0 Library Part 3, clause 12.2; Part 1, Clause 19).
+    /// </summary>
+    /// <remarks>
+    /// The integrity check precedes decryption (clause 11.2 requires the order), and because the HMAC's binding
+    /// term is the Name of the public area the CALLER presented, a swapped or altered <c>inPublic</c> refuses
+    /// with <c>TPM_RC_INTEGRITY</c> exactly as a corrupted blob does. The Name is computed once and carried in
+    /// TWO owned carriers, because the framed response and the stored object are separate owners whose lifetimes
+    /// do not nest: the first flows to <see cref="TpmObjectLoaded"/>, then to the <c>TpmLoadResponse</c> intent,
+    /// and is released by <see cref="SerializeResponse"/> after framing; the second transfers into the stored
+    /// <see cref="KeyedHashObjectState"/> and lives until the object is evicted. Two rentals rather than one shared
+    /// buffer is the same rule <see cref="PersistObject"/>'s deep copy applies, so neither owner's disposal can
+    /// reach the other's octets. The caller-supplied public area is handed on whole: it is the loaded object's
+    /// own public area (Part 3, clause 12.4.1 — what <c>TPM2_ReadPublic()</c> answers with), so it rides the
+    /// feedback record to the stored state on success and to the input's own Dispose on refusal. The object's
+    /// Qualified Name is chained here from the parent's — <c>QN = H_nameAlg(QN_parent ‖ Name)</c> (Part 1,
+    /// clause 23.5) — and retained on the same terms as the second Name carrier. This effect is the terminal
+    /// owner of the wrapped private blob — nothing downstream reads it — and of the action's authorization-policy
+    /// carrier on every refusing path; <see cref="TpmLoadObjectAction.ParentSeedValue"/> and
+    /// <see cref="TpmLoadObjectAction.ParentQualifiedName"/> are BORROWED from the parent's durable state and
+    /// never disposed here. The recovered <see cref="TpmtSensitive"/> hands its owned carriers onward into the
+    /// feedback record, so its shell is dropped without a disposal of its own.
     /// </remarks>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-        Justification = "Ownership of both Name carriers transfers to the returned TpmObjectLoaded — one onward to the TpmLoadResponse intent released by SerializeResponse after framing, one onward to the stored SealedObjectState released at eviction — and the refusing arm disposes both through the input's own Dispose; a rent that fails after the first carrier already succeeded releases it in the catch before rethrowing.")]
+        Justification = "Ownership of both Name carriers, the Qualified Name, the public area, and the recovered sensitive-area carriers transfers to the returned TpmObjectLoaded — the response Name onward to the TpmLoadResponse intent released by SerializeResponse after framing, the rest onward to the stored KeyedHashObjectState released at eviction — and the refusing arm disposes them all through the input's own Dispose; a failure between rents releases what this frame still owns in the catch before rethrowing.")]
     private static async ValueTask<TpmSimulatorInput> LoadObjectAsync(TpmLoadObjectAction action, TpmActionContext context, CancellationToken cancellationToken)
     {
-        //The action's authorization-policy carrier is owned from the moment the effect is entered, so the Name
-        //computation runs INSIDE the guarded frame too: a digest seam that throws must reach the catch that
-        //releases it, exactly as a failing rent below does.
+        //The action's authorization-policy and public-area carriers are owned from the moment the effect is
+        //entered, so the Name computation runs INSIDE the guarded frame too: a digest seam that throws must
+        //reach the catch that releases them, exactly as a failing rent below does.
         Tpm2bName name = Tpm2bName.Empty;
         Tpm2bName retainedName = Tpm2bName.Empty;
+        Tpm2bName qualifiedName = Tpm2bName.Empty;
+        Tpm2bAuth storedAuth = Tpm2bAuth.Empty;
+        TpmtSensitive? sensitive = null;
         try
         {
             (IMemoryOwner<byte> nameStorage, int nameLength) = await ComputeObjectNameFromBytesAsync(
@@ -1971,63 +4309,122 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
             //The Name helper rents the framed octets itself, so the carrier adopts that rental rather than copying it.
             name = Tpm2bName.FromMarshaled(nameStorage, nameLength);
-            retainedName = Tpm2bName.Create(name.Span, context.Pool);
-            UnpackSealedPrivateBlob(action.PrivateBlob, context.Pool, out Tpm2bAuth userAuth, out Tpm2bSensitiveData secretData);
 
-            return new TpmObjectLoaded(action.Handle, name, retainedName, secretData, action.AuthPolicy, action.NoDa, action.UserWithAuth, userAuth);
+            sensitive = await UnwrapSensitiveBlobAsync(
+                action.ParentSeedValue, action.ParentNameAlg, action.PrivateBlob, name.AsReadOnlyMemory(), context, cancellationToken).ConfigureAwait(false);
+            if(sensitive is null)
+            {
+                //The blob did not verify under this parent's seed and this Name: the resuming transition
+                //rejects with the carried code, the record's own Dispose releases the public area, and the
+                //empty sentinels make the rest of that Dispose a no-op.
+                name.Dispose();
+                action.AuthPolicy.Dispose();
+
+                return new TpmObjectLoaded(
+                    TpmRcConstants.TPM_RC_INTEGRITY, action.IsDuplicable, action.Handle, action.ParentHierarchy, Tpm2bName.Empty, Tpm2bName.Empty,
+                    Tpm2bSensitiveData.Empty, Tpm2bDigest.Empty, action.NoDa, action.UserWithAuth, Tpm2bAuth.Empty, Tpm2bDigest.Empty,
+                    action.InPublic, Tpm2bName.Empty);
+            }
+
+            //"For all objects, the size of the key in the sensitive area shall be consistent with the key size
+            //indicated in the public area or the TPM shall return TPM_RC_KEY_SIZE" (Part 3, clause 12.2): the
+            //reference checks the recovered seedValue against the nameAlg's digest size on every load (Part 4
+            //ObjectLoad), ahead of the CryptValidateKeys checks it runs only under a parent that is not fixedTPM;
+            //this model runs the key-value width checks at TPM2_Import() and the binding compare below at both.
+            if(sensitive.SeedValue.Size != SessionDigestSize(action.NameAlg))
+            {
+                sensitive.Dispose();
+                name.Dispose();
+                action.AuthPolicy.Dispose();
+
+                return new TpmObjectLoaded(
+                    TpmRcConstants.TPM_RC_KEY_SIZE, action.IsDuplicable, action.Handle, action.ParentHierarchy, Tpm2bName.Empty, Tpm2bName.Empty,
+                    Tpm2bSensitiveData.Empty, Tpm2bDigest.Empty, action.NoDa, action.UserWithAuth, Tpm2bAuth.Empty, Tpm2bDigest.Empty,
+                    action.InPublic, Tpm2bName.Empty);
+            }
+
+            //"If there is a nameAlg, check the binding": the public unique must re-derive from the recovered
+            //sensitive area under the supplied public area's own attribute word (Part 2, clause 12.2.3.1,
+            //equation (8); Part 4 CryptComputeSymmetricUnique) or the public and sensitive areas are not the two
+            //halves of one object (Part 4 ObjectLoad → CryptValidateKeys → TPM_RC_BINDING). The gate sits behind
+            //the outer-HMAC INTEGRITY check by construction — the HMAC binds the Name, which covers the unique —
+            //so on this path it is fail-closed defense in depth; the reachable form is the bare-duplicate
+            //TPM2_Import(), which carries no integrity wrap. The compare is fixed-time as house crypto style; the
+            //unique is public, so timing is not load-bearing here.
+            (IMemoryOwner<byte> expectedUnique, int expectedUniqueLength) = await ComputeKeyedHashUniqueAsync(
+                action.NameAlg, action.InPublic.PublicArea.ObjectAttributes, sensitive.SeedValue.AsReadOnlyMemory(), sensitive.Data.AsReadOnlyMemory(), context, cancellationToken).ConfigureAwait(false);
+            using(expectedUnique)
+            {
+                if(!CryptographicOperations.FixedTimeEquals(expectedUnique.Memory.Span[..expectedUniqueLength], action.InPublic.PublicArea.Unique.GetKeyedHashUnique()))
+                {
+                    sensitive.Dispose();
+                    name.Dispose();
+                    action.AuthPolicy.Dispose();
+
+                    return new TpmObjectLoaded(
+                        TpmRcConstants.TPM_RC_BINDING, action.IsDuplicable, action.Handle, action.ParentHierarchy, Tpm2bName.Empty, Tpm2bName.Empty,
+                        Tpm2bSensitiveData.Empty, Tpm2bDigest.Empty, action.NoDa, action.UserWithAuth, Tpm2bAuth.Empty, Tpm2bDigest.Empty,
+                        action.InPublic, Tpm2bName.Empty);
+                }
+            }
+
+            retainedName = Tpm2bName.Create(name.Span, context.Pool);
+
+            //QN = H_nameAlg(QN_parent ‖ Name) under the loaded object's OWN nameAlg (Part 1, clause 23.5), the
+            //parent's Qualified Name borrowed from its durable state; the helper rents the framed octets itself.
+            (IMemoryOwner<byte> qualifiedNameStorage, int qualifiedNameLength) = await TpmObjectName.ComputeQualifiedNameAsync(
+                action.ParentQualifiedName.AsReadOnlyMemory(), name.AsReadOnlyMemory(), (ushort)action.NameAlg.Value, context.Pool, cancellationToken).ConfigureAwait(false);
+            qualifiedName = Tpm2bName.FromMarshaled(qualifiedNameStorage, qualifiedNameLength);
+
+            //The wire authValue travels padded to its maximum size (Part 1, clause 24.7.3); the stored value is
+            //its trailing-zero-stripped form, which clause 16.6.4.3 makes semantically identical for every
+            //authorization use, so the padding never reaches a compare or an HMAC fold.
+            ReadOnlySpan<byte> paddedAuth = sensitive.AuthValue.AsReadOnlySpan();
+            int strippedAuthLength = paddedAuth.Length;
+            while(strippedAuthLength > 0 && paddedAuth[strippedAuthLength - 1] == 0)
+            {
+                strippedAuthLength--;
+            }
+
+            storedAuth = Tpm2bAuth.Create(paddedAuth[..strippedAuthLength], context.Pool);
+            sensitive.AuthValue.Dispose();
+
+            return new TpmObjectLoaded(
+                TpmRcConstants.TPM_RC_SUCCESS, action.IsDuplicable, action.Handle, action.ParentHierarchy, name, retainedName,
+                sensitive.Data, action.AuthPolicy, action.NoDa, action.UserWithAuth, storedAuth, sensitive.SeedValue,
+                action.InPublic, qualifiedName);
         }
         catch
         {
             //These carriers' only owner is this frame until the feedback record adopts them, so a failing
-            //later rent must release them or the pinned rentals are orphaned.
+            //later rent must release them or the pinned rentals are orphaned; the record's construction is the
+            //adoption point and nothing throws after it. The recovered sensitive area's own Dispose is
+            //flag-guarded per carrier, so releasing it after its authValue was already replaced is safe.
+            sensitive?.Dispose();
+            storedAuth.Dispose();
+            qualifiedName.Dispose();
             retainedName.Dispose();
             name.Dispose();
             action.AuthPolicy.Dispose();
+            action.InPublic.Dispose();
             throw;
         }
         finally
         {
-            //The Name hash consumed the public area, so this effect is its terminal owner on every path.
-            action.InPublic.Dispose();
-        }
-    }
-
-    /// <summary>
-    /// Packs a sealed object's private blob: <c>TPM2_Create()</c>'s own wrapping, since the simulator models no
-    /// true parent-key encryption/integrity (it has no parent symmetric-key custody).
-    /// </summary>
-    /// <remarks>
-    /// Layout: a UINT16 big-endian userAuth length, the userAuth octets, then the secret data octets — the
-    /// length prefix lets <c>TPM2_Load()</c> recover both the authorization value and the sealed data from the
-    /// one opaque blob the caller persists and reloads (TPM 2.0 Library Part 1, clause 17.6.4; Part 3, clauses
-    /// 12.1 and 12.2).
-    /// </remarks>
-    private static IMemoryOwner<byte> PackSealedPrivateBlob(ReadOnlyMemory<byte> userAuth, ReadOnlyMemory<byte> secretData, BaseMemoryPool pool, out int length)
-    {
-        length = sizeof(ushort) + userAuth.Length + secretData.Length;
-        IMemoryOwner<byte> owner = pool.Rent(Math.Max(length, 1));
-        try
-        {
-            Span<byte> span = owner.Memory.Span[..length];
-            BinaryPrimitives.WriteUInt16BigEndian(span, (ushort)userAuth.Length);
-            userAuth.Span.CopyTo(span[sizeof(ushort)..]);
-            secretData.Span.CopyTo(span[(sizeof(ushort) + userAuth.Length)..]);
-
-            return owner;
-        }
-        catch
-        {
-            owner.Dispose();
-            throw;
+            //The unwrap read the private blob's octets, so this effect is the terminal owner of that carrier on
+            //every path; the public area instead rides the feedback record on both returning arms.
+            action.PrivateBlob.Dispose();
         }
     }
 
     /// <summary>
     /// Deep-copies a transient object into its persistent instance for <c>TPM2_EvictControl()</c>'s persist
     /// arm (TPM 2.0 Library Part 3, clause 28.5): the persistent instance rents its own private-key, Name,
-    /// policy-digest, authValue, and public-modulus carriers, so no two dictionary entries ever co-own a buffer
-    /// and either instance's later eviction is free to dispose its own. The empty-authValue, empty-policy, and
-    /// empty-modulus sentinels copy to themselves (dispose-immune).
+    /// policy-digest, authValue, public-modulus, protection-seed, public-area, and Qualified Name carriers, so no
+    /// two dictionary entries ever co-own a buffer and either instance's later eviction is free to dispose its
+    /// own. The empty-authValue, empty-policy, empty-modulus, and empty-seed sentinels copy to themselves
+    /// (dispose-immune). The Qualified Name copies unchanged: it digests the object's ancestry, which persisting
+    /// does not alter (Part 1, clause 23.5).
     /// </summary>
     /// <param name="action">The declared action carrying the borrowed transient record and the persistent handle.</param>
     /// <param name="context">The effect context supplying the memory pool.</param>
@@ -2042,35 +4439,101 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             Name = Tpm2bName.Create(action.Transient.Name.Span, context.Pool),
             AuthPolicy = Tpm2bDigest.Create(action.Transient.AuthPolicy.AsReadOnlySpan(), context.Pool),
             AuthValue = Tpm2bAuth.Create(action.Transient.AuthValue.AsReadOnlySpan(), context.Pool),
-            PublicModulus = Tpm2bPublicKeyRsa.Create(action.Transient.PublicModulus.Buffer, context.Pool)
+            PublicModulus = Tpm2bPublicKeyRsa.Create(action.Transient.PublicModulus.Buffer, context.Pool),
+            SeedValue = CopySeedCarrier(action.Transient.SeedValue.AsReadOnlySpan(), context.Pool),
+            PublicArea = ClonePublicArea(action.Transient.PublicArea, context.Pool),
+            QualifiedName = Tpm2bName.Create(action.Transient.QualifiedName.Span, context.Pool)
         });
 
     /// <summary>
-    /// Unpacks a sealed object's private blob into its authorization value and secret data — the inverse of
-    /// <see cref="PackSealedPrivateBlob"/>. Both are copied into owned, pinned carriers
-    /// (<see cref="Tpm2bAuth"/>/<see cref="Tpm2bSensitiveData"/>) whose ownership rides
-    /// <see cref="TpmObjectLoaded"/> into the stored <see cref="SealedObjectState"/> at install; a refusing
-    /// arm releases them through the input's own <see cref="TpmObjectLoaded.Dispose"/>.
+    /// Verifies and unwraps a Protected Storage blob (TPM 2.0 Library Part 1, Clause 19): the outer HMAC —
+    /// keyed by <c>KDFa(pNameAlg, seedValue, "INTEGRITY", …)</c> over <c>symIv ‖ encSensitive ‖ name.buffer</c>
+    /// (equations 35 and 36) — is checked BEFORE anything is decrypted (Part 3, clause 12.2 requires the
+    /// order), then the ciphertext is AES-CFB-decrypted under <c>KDFa(pNameAlg, seedValue, "STORAGE",
+    /// name, …)</c> with the blob's own marshaled <c>TPM2B_IV</c> (equations 33 and 34) and the
+    /// <c>TPM2B_SENSITIVE</c> is unmarshaled.
     /// </summary>
-    /// <param name="privateBlob">The wrapped private blob, its shape already gated by <c>OnLoadObject</c>.</param>
-    /// <param name="pool">The memory pool the pinned carriers are rented from.</param>
-    /// <param name="userAuth">The recovered authorization value; ownership transfers to the caller.</param>
-    /// <param name="secretData">The recovered sealed data; ownership transfers to the caller.</param>
-    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-        Justification = "Ownership of both carriers transfers to the caller's TpmObjectLoaded, whose installing transition stores them and whose refusing arm disposes them.")]
-    private static void UnpackSealedPrivateBlob(ReadOnlyMemory<byte> privateBlob, BaseMemoryPool pool, out Tpm2bAuth userAuth, out Tpm2bSensitiveData secretData)
+    /// <remarks>
+    /// A verified HMAC proves this simulator wrapped these exact octets under this seed and this Name, so the
+    /// decrypted interior is structurally sound by construction; the size cross-check before the parse is the
+    /// fail-closed backstop that turns an impossible mismatch into a refusal instead of a crash. Decrypted
+    /// plaintext lives in a pinned rental cleared before it returns; the parse copies each field into its own
+    /// owned carrier first.
+    /// </remarks>
+    /// <param name="parentSeedValue">The Storage Parent's protection seed — a borrowed carrier, never disposed here.</param>
+    /// <param name="parentNameAlg">The parent's Name algorithm (<c>pNameAlg</c>), keying and sizing the derivations and the HMAC.</param>
+    /// <param name="privateBlob">The wrapped blob, its shape already gated by <c>OnLoadObject</c> — read only here; the caller stays its terminal owner.</param>
+    /// <param name="objectName">The object's Name octets (<c>nameAlg ‖ digest</c>, no size prefix), the HMAC's binding term.</param>
+    /// <param name="context">The effect context supplying the memory pool.</param>
+    /// <param name="cancellationToken">The token to observe.</param>
+    /// <returns>The recovered sensitive area with ownership transferring to the caller, or <see langword="null"/> when the integrity value does not verify.</returns>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility",
+        Justification = "The Protected Storage unwrap uses AES-CFB, the symmetric algorithm of the storage parent's template (TPM 2.0 Library Part 1, Clause 19); this in-process behavioural simulator is a test/server-side model, not a browser target. This mirrors the credential wrap's suppression for the same primitive.")]
+    private static async ValueTask<TpmtSensitive?> UnwrapSensitiveBlobAsync(
+        Tpm2bDigest parentSeedValue, TpmiAlgHash parentNameAlg, Tpm2bPrivate privateBlob,
+        ReadOnlyMemory<byte> objectName, TpmActionContext context, CancellationToken cancellationToken)
     {
-        ReadOnlySpan<byte> span = privateBlob.Span;
-        ushort userAuthLength = BinaryPrimitives.ReadUInt16BigEndian(span);
-        userAuth = Tpm2bAuth.Create(span.Slice(sizeof(ushort), userAuthLength), pool);
+        BaseMemoryPool pool = context.Pool;
+        int parentDigestSize = SessionDigestSize(parentNameAlg);
+        HashAlgorithmName hashName = SessionHashName(parentNameAlg);
+
+        //The IV-and-ciphertext region is copied out once: the HMAC seam reads memory the span-only carrier
+        //cannot lend across an await, and the same pinned rental then hosts the in-place decryption of the
+        //sensitive tail.
+        const int MarshaledIvLength = sizeof(ushort) + CredentialSymmetricBlockSize;
+        int regionLength = privateBlob.Length - sizeof(ushort) - parentDigestSize;
+        using IMemoryOwner<byte> work = pool.Rent(regionLength, AllocationKind.Pinned);
+        privateBlob.Span[(sizeof(ushort) + parentDigestSize)..].CopyTo(work.Memory.Span[..regionLength]);
+
+        using IMemoryOwner<byte> hmacKey = await Kdfa.DeriveAsync(
+            hashName, parentSeedValue.AsReadOnlyMemory(), CredentialIntegrityLabel, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, parentDigestSize * 8, pool, cancellationToken).ConfigureAwait(false);
+        using(IMemoryOwner<byte> expectedHmac = await ComputeCredentialHmacAsync(
+            hmacKey.Memory[..parentDigestSize], work.Memory[..regionLength], objectName, parentNameAlg, pool, cancellationToken).ConfigureAwait(false))
+        {
+            hmacKey.Memory.Span[..parentDigestSize].Clear();
+
+            if(!CryptographicOperations.FixedTimeEquals(expectedHmac.Memory.Span[..parentDigestSize], privateBlob.Span.Slice(sizeof(ushort), parentDigestSize)))
+            {
+                return null;
+            }
+        }
+
+        //Integrity verified; the region is TPM2B_IV ‖ encSensitive (equation 36's message). A declared IV width
+        //other than the model's block size cannot have been produced by the wrap, and the HMAC just proved the
+        //wrap produced these octets — the cross-check is the fail-closed backstop.
+        {
+            Span<byte> region = work.Memory.Span[..regionLength];
+            if(BinaryPrimitives.ReadUInt16BigEndian(region) != CredentialSymmetricBlockSize)
+            {
+                return null;
+            }
+        }
+
+        using IMemoryOwner<byte> symKey = await Kdfa.DeriveAsync(
+            hashName, parentSeedValue.AsReadOnlyMemory(), CredentialStorageLabel, objectName, ReadOnlyMemory<byte>.Empty, CredentialSymmetricKeyBits, pool, cancellationToken).ConfigureAwait(false);
         try
         {
-            secretData = Tpm2bSensitiveData.Create(span[(sizeof(ushort) + userAuthLength)..], pool);
+            {
+                Span<byte> region = work.Memory.Span[..regionLength];
+                TpmParameterEncryption.AesCfb(
+                    symKey.Memory.Span[..CredentialSymmetricKeyBytes], region.Slice(sizeof(ushort), CredentialSymmetricBlockSize), region[MarshaledIvLength..], encrypting: false);
+            }
+
+            symKey.Memory.Span[..CredentialSymmetricKeyBytes].Clear();
+
+            var reader = new TpmReader(work.Memory.Span[MarshaledIvLength..regionLength]);
+            ushort declaredSize = reader.ReadUInt16();
+            if(declaredSize != regionLength - MarshaledIvLength - sizeof(ushort))
+            {
+                return null;
+            }
+
+            return TpmtSensitive.Parse(ref reader, pool);
         }
-        catch
+        finally
         {
-            userAuth.Dispose();
-            throw;
+            //The rental held the decrypted sensitive plaintext from the CFB pass onward; every exit clears it.
+            work.Memory.Span[..regionLength].Clear();
         }
     }
 
@@ -2197,16 +4660,16 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// </summary>
     /// <param name="qualifyingData">The transferred <c>TPM2B_DATA</c> carrier.</param>
     /// <param name="responseSessions">The command's response-session entries, each owning its slot's caller nonce; the default value on the all-password arm.</param>
-    private static void ReleaseAttestQualifyingData(Tpm2bData qualifyingData, ImmutableArray<TpmAttestResponseSession> responseSessions)
+    private static void ReleaseAttestQualifyingData(Tpm2bData qualifyingData, ImmutableArray<TpmResponseSession> responseSessions)
     {
         qualifyingData.Dispose();
-        ReleaseAttestResponseSessionNonces(responseSessions);
+        ReleaseResponseSessionNonces(responseSessions);
     }
 
     /// <summary>
-    /// Releases the caller-nonce carrier every attest response-session entry owns — the <c>TPM2B_NONCE</c> its
-    /// slot's request record transferred into it — discharging the attest effects' terminal-owner obligation once
-    /// the response HMACs have read the nonces as their nonceOlder term (TPM 2.0 Library Part 1, clause 17.6.5).
+    /// Releases the caller-nonce carrier every response-session entry owns — the <c>TPM2B_NONCE</c> its slot's
+    /// request record transferred into it — discharging the framing effects' terminal-owner obligation once the
+    /// response HMACs have read the nonces as their nonceOlder term (TPM 2.0 Library Part 1, clause 16.6.5).
     /// A <c>TPM_RS_PW</c> slot's placeholder entry owns its slot's nonce exactly as a real entry does, so one
     /// uniform release covers every slot of a mixed authorization area.
     /// </summary>
@@ -2216,21 +4679,21 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// (uninitialized) array, whose response has no session area and whose parse rented no nonce.
     /// </remarks>
     /// <param name="responseSessions">The command's response-session entries, or the default value on the all-password arm.</param>
-    private static void ReleaseAttestResponseSessionNonces(ImmutableArray<TpmAttestResponseSession> responseSessions)
+    private static void ReleaseResponseSessionNonces(ImmutableArray<TpmResponseSession> responseSessions)
     {
         if(responseSessions.IsDefaultOrEmpty)
         {
             return;
         }
 
-        foreach(TpmAttestResponseSession session in responseSessions)
+        foreach(TpmResponseSession session in responseSessions)
         {
             session.NonceCaller.Dispose();
         }
     }
 
     /// <summary>
-    /// Computes the subject's and the signer's Qualified Names (TPM 2.0 Library Part 1, clause 14, Table 6) and marshals
+    /// Computes the subject's and the signer's Qualified Names (TPM 2.0 Library Part 1, clause 13, Table 9) and marshals
     /// the CERTIFY attestation from them — shared between the ECC and RSA <c>TPM2_Certify()</c> paths, which
     /// differ only in how they sign the resulting digest.
     /// </summary>
@@ -2260,7 +4723,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     }
 
     /// <summary>
-    /// Builds the marshaled <c>TPMS_ATTEST</c> for the CERTIFY case (TPM 2.0 Library Part 2, clause 10.12.12)
+    /// Builds the marshaled <c>TPMS_ATTEST</c> for the CERTIFY case (TPM 2.0 Library Part 2, clause 10.11.12)
     /// into a pooled buffer — the exact bytes the signature is over and the TPM2B_ATTEST wraps. Synchronous, so
     /// the spans never cross the digest/sign awaits.
     /// </summary>
@@ -2269,7 +4732,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// (<c>TPM_ST_ATTEST_CERTIFY</c>), extraData (the caller nonce), the attested
     /// <c>TPMS_CERTIFY_INFO.name</c> (the certified object's Name), qualifiedSigner (the signing key's real
     /// Qualified Name), and the attested qualifiedName (the certified object's real Qualified Name) — both
-    /// Qualified Names computed by the caller (TPM 2.0 Library Part 1, clause 26.6). clockInfo is the real
+    /// Qualified Names computed by the caller (TPM 2.0 Library Part 1, clause 25.6). clockInfo is the real
     /// Clock/resetCount/restartCount/Safe snapshot the transition folded from state after the per-command
     /// advance; firmwareVersion is the simulator's fixed synthetic identity.
     /// </remarks>
@@ -2316,7 +4779,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
     /// <summary>
     /// <c>QN(hierarchy)</c> for a permanent hierarchy handle is the handle itself (TPM 2.0 Library Part 1,
-    /// clause 14, Table 6) — every object this simulator creates is a primary directly under a permanent hierarchy, so no
+    /// clause 13, Table 9) — every object this simulator creates is a primary directly under a permanent hierarchy, so no
     /// parent-chain walk is needed; the hierarchy's 4-octet big-endian handle value stands in directly as its
     /// own Qualified Name.
     /// </summary>
@@ -2504,11 +4967,11 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// <param name="qualifyingData">The transferred <c>TPM2B_DATA</c> carrier.</param>
     /// <param name="pcrSelection">The transferred <c>TPML_PCR_SELECTION</c> carrier.</param>
     /// <param name="responseSessions">The command's response-session entries, each owning its slot's caller nonce; the default value on the all-password arm.</param>
-    private static void ReleaseQuoteCarriers(Tpm2bData qualifyingData, TpmlPcrSelection pcrSelection, ImmutableArray<TpmAttestResponseSession> responseSessions)
+    private static void ReleaseQuoteCarriers(Tpm2bData qualifyingData, TpmlPcrSelection pcrSelection, ImmutableArray<TpmResponseSession> responseSessions)
     {
         qualifyingData.Dispose();
         pcrSelection.Dispose();
-        ReleaseAttestResponseSessionNonces(responseSessions);
+        ReleaseResponseSessionNonces(responseSessions);
     }
 
     /// <summary>
@@ -2549,14 +5012,14 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     }
 
     /// <summary>
-    /// Builds the marshaled <c>TPMS_ATTEST</c> for the QUOTE case (TPM 2.0 Library Part 2, clause 10.12.12; the
-    /// quote body is <c>TPMS_QUOTE_INFO</c>, clause 10.12.1) into a pooled buffer — the exact bytes the signature
+    /// Builds the marshaled <c>TPMS_ATTEST</c> for the QUOTE case (TPM 2.0 Library Part 2, clause 10.11.12; the
+    /// quote body is <c>TPMS_QUOTE_INFO</c>, clause 10.11.1) into a pooled buffer — the exact bytes the signature
     /// is over and the TPM2B_ATTEST wraps. Synchronous, so the spans never cross the digest/sign awaits.
     /// </summary>
     /// <remarks>
     /// The fields the host verifies are cryptographically real: magic (<c>TPM_GENERATED_VALUE</c>), type
     /// (<c>TPM_ST_ATTEST_QUOTE</c>), extraData (the caller nonce), qualifiedSigner (the signing key's real
-    /// Qualified Name, TPM 2.0 Library Part 1, clause 26.6), and the attested <c>TPMS_QUOTE_INFO</c> {
+    /// Qualified Name, TPM 2.0 Library Part 1, clause 25.6), and the attested <c>TPMS_QUOTE_INFO</c> {
     /// pcrSelect echoed verbatim, pcrDigest computed over the real PCR values }. clockInfo is the real
     /// Clock/resetCount/restartCount/Safe snapshot the transition folded from state after the per-command
     /// advance; firmwareVersion is the simulator's fixed synthetic identity. The pcrSelect is the caller's
@@ -2733,12 +5196,12 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// <param name="ticketDigest">The transferred ticket-digest <c>TPM2B_DIGEST</c> carrier.</param>
     /// <param name="responseSessions">The command's response-session entries, each owning its slot's caller nonce; the default value on the all-password arm.</param>
     private static void ReleaseCertifyCreationCarriers(
-        Tpm2bData qualifyingData, Tpm2bDigest creationHash, Tpm2bDigest ticketDigest, ImmutableArray<TpmAttestResponseSession> responseSessions)
+        Tpm2bData qualifyingData, Tpm2bDigest creationHash, Tpm2bDigest ticketDigest, ImmutableArray<TpmResponseSession> responseSessions)
     {
         qualifyingData.Dispose();
         creationHash.Dispose();
         ticketDigest.Dispose();
-        ReleaseAttestResponseSessionNonces(responseSessions);
+        ReleaseResponseSessionNonces(responseSessions);
     }
 
     /// <summary>
@@ -2785,7 +5248,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     }
 
     /// <summary>
-    /// Builds the marshaled <c>TPMS_ATTEST</c> for the CREATION case (TPM 2.0 Library Part 2, clause 10.12.7)
+    /// Builds the marshaled <c>TPMS_ATTEST</c> for the CREATION case (TPM 2.0 Library Part 2, clause 10.11.7)
     /// into a pooled buffer — the exact bytes the signature is over and the TPM2B_ATTEST wraps.
     /// </summary>
     /// <remarks>
@@ -2957,13 +5420,13 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     }
 
     /// <summary>
-    /// Builds the marshaled <c>TPMS_ATTEST</c> for the TIME case (TPM 2.0 Library Part 2, clause 10.12.2) into a
+    /// Builds the marshaled <c>TPMS_ATTEST</c> for the TIME case (TPM 2.0 Library Part 2, clause 10.11.2) into a
     /// pooled buffer.
     /// </summary>
     /// <remarks>
     /// The attested <c>TPMS_TIME_ATTEST_INFO</c> reports the real Time and clockInfo the transition folded from
     /// state after the per-command advance; the SAME clockInfo snapshot is written both at the envelope level
-    /// and inside the nested <c>TPMS_TIME_ATTEST_INFO</c> (TPM 2.0 Library Part 1, clause 36.7 — the two copies
+    /// and inside the nested <c>TPMS_TIME_ATTEST_INFO</c> (TPM 2.0 Library Part 1, clause 33.7 — the two copies
     /// agree). firmwareVersion is likewise the same simulator-fixed constant in both places.
     /// </remarks>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
@@ -3130,8 +5593,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// structures the response carries — the attest as a <see cref="Tpm2bAttest"/> over the marshaled octets, the
     /// signature as a <see cref="TpmtSignature"/> — and routes them to the shape the authorization area asks for:
     /// the command's own plain result when every slot was a password, or the session-framed
-    /// <see cref="TpmAttestedOverSessions"/> when at least one slot carried a real session (TPM 2.0 Library Part 2,
-    /// clauses 10.12.13 and 11.3.4; Part 1, clause 16.6.1).
+    /// <see cref="TpmResponseFramedOverSessions"/> when at least one slot carried a real session (TPM 2.0 Library Part 2,
+    /// clauses 10.11.13 and 11.3.6; Part 1, clause 15.6.1).
     /// </summary>
     /// <remarks>
     /// This method is the terminal owner of <paramref name="attest"/> and <paramref name="signature"/> from the
@@ -3160,7 +5623,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         Signature signature,
         TpmiAlgSigScheme signatureScheme,
         TpmiAlgHash hashAlg,
-        ImmutableArray<TpmAttestResponseSession> responseSessions,
+        ImmutableArray<TpmResponseSession> responseSessions,
         Func<Tpm2bAttest, TpmtSignature, TpmSimulatorInput> plainResult,
         TpmActionContext context,
         CancellationToken cancellationToken)
@@ -3193,7 +5656,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// Frames a signed attestation for the session-authorized arm of an attest command — <c>TPM2_Certify()</c>,
     /// <c>TPM2_CertifyCreation()</c>, <c>TPM2_Quote()</c>, <c>TPM2_GetTime()</c>, <c>TPM2_NV_Certify()</c>: the
     /// <c>TPM2B_ATTEST ‖ TPMT_SIGNATURE</c> response parameter area, then one response session entry per command
-    /// session over that area's rpHash (TPM 2.0 Library Part 1, clause 16.8 equation 16; clause 16.6.1).
+    /// session over that area's rpHash (TPM 2.0 Library Part 1, clause 15.8 equation 16; clause 15.6.1).
     /// </summary>
     /// <remarks>
     /// This method is the terminal owner of <paramref name="attest"/> and <paramref name="signature"/> from the
@@ -3208,21 +5671,21 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// <param name="responseSessions">Every session in the command's authorization area, in command-session order; never empty here.</param>
     /// <param name="context">The effect context supplying the RNG and the memory pool.</param>
     /// <param name="cancellationToken">A token observed across the rpHash and HMAC computations.</param>
-    /// <returns>The <see cref="TpmAttestedOverSessions"/> feedback input for <c>OnAttestedOverSessions</c>.</returns>
+    /// <returns>The <see cref="TpmResponseFramedOverSessions"/> feedback input for <c>OnResponseFramedOverSessions</c>.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-        Justification = "Ownership of the parameter-area buffer transfers to the returned TpmAttestedOverSessions, then to the TpmAttestOverSessionsResponse intent, and is released by SerializeResponse after framing.")]
+        Justification = "Ownership of the parameter-area buffer transfers to the returned TpmResponseFramedOverSessions, then to the TpmOverSessionsResponse intent, and is released by SerializeResponse after framing.")]
     private static async ValueTask<TpmSimulatorInput> FrameAttestOverSessionsAsync(
         TpmCcConstants commandCode,
         Tpm2bAttest attest,
         TpmtSignature signature,
-        ImmutableArray<TpmAttestResponseSession> responseSessions,
+        ImmutableArray<TpmResponseSession> responseSessions,
         TpmActionContext context,
         CancellationToken cancellationToken)
     {
         (IMemoryOwner<byte> parameterArea, int parameterLength) = FrameAttestParameterArea(attest, signature, context.Pool);
         try
         {
-            return await FrameAttestSessionEntriesAsync(commandCode, parameterArea, parameterLength, responseSessions, context, cancellationToken).ConfigureAwait(false);
+            return await FrameSessionEntriesAsync(commandCode, parameterArea, parameterLength, responseSessions, context, cancellationToken).ConfigureAwait(false);
         }
         catch
         {
@@ -3238,7 +5701,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// <summary>
     /// Lays a signed attestation out as the response parameter area rpHash will cover: the attest structure
     /// (<c>TPM2B_ATTEST</c>) followed by <c>signature</c> (<c>TPMT_SIGNATURE</c>) — the response shape every
-    /// attest command shares (TPM 2.0 Library Part 3, Tables 90, 92, 94, 100, and 255; Part 1, clause 16.8
+    /// attest command shares (TPM 2.0 Library Part 3, Tables 90, 92, 94, 100, and 255; Part 1, clause 15.8
     /// equation 16).
     /// </summary>
     /// <remarks>
@@ -3279,10 +5742,10 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     }
 
     /// <summary>
-    /// Rolls a fresh nonceTPM for every real session in an attest command's authorization area, encrypts the
+    /// Rolls a fresh nonceTPM for every real session in a session-authorized command's area, encrypts the
     /// <c>TPM2B_ATTEST</c> over the session carrying the <c>encrypt</c> attribute where one does, and computes
-    /// each session's response HMAC over the framed parameter area's rpHash (TPM 2.0 Library Part 1, clause 16.8
-    /// equation 16; clauses 16.6.1 and 19.1), emitting the <c>TPM_RS_PW</c> slots' placeholders in place so the
+    /// each session's response HMAC over the framed parameter area's rpHash (TPM 2.0 Library Part 1, clause 15.8
+    /// equation 16; clauses 15.6.1 and 18.1), emitting the <c>TPM_RS_PW</c> slots' placeholders in place so the
     /// entries stay in command-session order.
     /// </summary>
     /// <remarks>
@@ -3292,25 +5755,28 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// rpHash is computed once per DISTINCT session hash algorithm and only for the real sessions: a password
     /// slot has no session hash algorithm and verifies nothing, so it contributes no digest and receives an empty
     /// nonce and an empty HMAC. A real slot's response HMAC is keyed on its own <c>sessionKey ‖ authValue</c>,
-    /// the same key its command HMAC used where one was verified (clause 17.6.5). rpHash's <c>commandCode</c>
-    /// term is the attest command's own, so an entry framed for one attest command never verifies as another's.
+    /// the same key its command HMAC used where one was verified (clause 16.6.5). rpHash's <c>commandCode</c>
+    /// term is the command's own, so an entry framed for one command never verifies as another's. Shared by the
+    /// attest family, whose first response parameter (the <c>TPM2B_ATTEST</c>) an encrypt session may protect,
+    /// and by the signing family, none of whose responses carries a sized first parameter — their area gates
+    /// refuse the claim, so the encryption step below is never reached for them.
     /// Each entry's caller nonce is BORROWED here — read at the HMAC primitive as the nonceOlder term and never
     /// released — because the effect that called this is the entry's terminal owner and releases it afterwards.
     /// </remarks>
-    /// <param name="commandCode">The attest command — rpHash's <c>commandCode</c> term, carried into the feedback.</param>
+    /// <param name="commandCode">The command the response answers — rpHash's <c>commandCode</c> term, carried into the feedback.</param>
     /// <param name="parameterArea">The already-framed <c>TPM2B_ATTEST ‖ TPMT_SIGNATURE</c> response parameter area; ownership passes to the returned feedback.</param>
     /// <param name="parameterLength">The number of valid octets in <paramref name="parameterArea"/>.</param>
     /// <param name="responseSessions">Every session in the command's authorization area, in command-session order.</param>
     /// <param name="context">The effect context supplying the RNG and the memory pool.</param>
     /// <param name="cancellationToken">A token observed across the rpHash and HMAC computations.</param>
-    /// <returns>The framed parameter area and every session's response entry, fed back to <c>OnAttestedOverSessions</c>.</returns>
+    /// <returns>The framed parameter area and every session's response entry, fed back to <c>OnResponseFramedOverSessions</c>.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-        Justification = "Ownership of each real entry's HMAC buffer transfers to the returned TpmAttestedOverSessions, then to the TpmAttestOverSessionsResponse intent, and is released by SerializeResponse after framing. The nonce pairs this method rolls are owned here until the framing overload returns, transfer into the entries on success, and are released by the catch on any fault.")]
-    private static async ValueTask<TpmSimulatorInput> FrameAttestSessionEntriesAsync(
+        Justification = "Ownership of each real entry's HMAC buffer transfers to the returned TpmResponseFramedOverSessions, then to the TpmOverSessionsResponse intent, and is released by SerializeResponse after framing. The nonce pairs this method rolls are owned here until the framing overload returns, transfer into the entries on success, and are released by the catch on any fault.")]
+    private static async ValueTask<TpmSimulatorInput> FrameSessionEntriesAsync(
         TpmCcConstants commandCode,
         IMemoryOwner<byte> parameterArea,
         int parameterLength,
-        ImmutableArray<TpmAttestResponseSession> responseSessions,
+        ImmutableArray<TpmResponseSession> responseSessions,
         TpmActionContext context,
         CancellationToken cancellationToken)
     {
@@ -3327,7 +5793,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         int nonceIndex = 0;
         for(int i = 0; i < responseSessions.Length; i++)
         {
-            TpmAttestResponseSession candidate = responseSessions[i];
+            TpmResponseSession candidate = responseSessions[i];
             if(candidate.IsPasswordPlaceholder)
             {
                 continue;
@@ -3340,7 +5806,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         (Tpm2bNonce[] framedNonces, Tpm2bNonce[] retainedNonces) = RollSessionNonces(realAlgs, context);
         try
         {
-            return await FrameAttestSessionEntriesAsync(
+            return await FrameSessionEntriesAsync(
                 commandCode, parameterArea, parameterLength, responseSessions, realAlgs, framedNonces, retainedNonces, context, cancellationToken).ConfigureAwait(false);
         }
         catch
@@ -3352,13 +5818,13 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     }
 
     /// <summary>
-    /// Frames each attest-command response session entry over the rolled nonceTPM pairs
-    /// <see cref="FrameAttestSessionEntriesAsync(TpmCcConstants, IMemoryOwner{byte}, int, ImmutableArray{TpmAttestResponseSession}, TpmActionContext, CancellationToken)"/>
+    /// Frames each session-authorized response session entry over the rolled nonceTPM pairs
+    /// <see cref="FrameSessionEntriesAsync(TpmCcConstants, IMemoryOwner{byte}, int, ImmutableArray{TpmResponseSession}, TpmActionContext, CancellationToken)"/>
     /// drew — the response-direction parameter encryption, then rpHash per distinct session hash algorithm, then
-    /// each real session's own response HMAC (TPM 2.0 Library Part 1, clauses 16.8 and 19.1).
+    /// each real session's own response HMAC (TPM 2.0 Library Part 1, clauses 15.8 and 18.1).
     /// </summary>
-    /// <param name="commandCode">The attest command the response answers, the <c>commandCode</c> term of every entry's rpHash.</param>
-    /// <param name="parameterArea">The framed <c>TPM2B_ATTEST ‖ TPMT_SIGNATURE</c> parameter area, transformed in place when a session encrypts.</param>
+    /// <param name="commandCode">The command the response answers, the <c>commandCode</c> term of every entry's rpHash.</param>
+    /// <param name="parameterArea">The framed response parameter area — an attest command's <c>TPM2B_ATTEST ‖ TPMT_SIGNATURE</c>, a signing command's <c>TPMT_SIGNATURE</c> or <c>TPMT_TK_VERIFIED</c>, or empty — transformed in place when a session encrypts.</param>
     /// <param name="parameterLength">The number of valid octets in <paramref name="parameterArea"/>.</param>
     /// <param name="responseSessions">Every session owed an entry, in command-session order.</param>
     /// <param name="realAlgs">The real (non-placeholder) sessions' hash algorithms, in entry order.</param>
@@ -3366,29 +5832,30 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// <param name="retainedNonces">The rolled nonces the rolling transition installs; ownership transfers to the entries this builds.</param>
     /// <param name="context">The effect context supplying the memory pool.</param>
     /// <param name="cancellationToken">A token observed across the encryption, rpHash and HMAC computations.</param>
-    /// <returns>The framed parameter area and every session's response entry, fed back to <c>OnAttestedOverSessions</c>.</returns>
+    /// <returns>The framed parameter area and every session's response entry, fed back to <c>OnResponseFramedOverSessions</c>.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-        Justification = "Ownership of each real entry's HMAC buffer transfers to the returned TpmAttestedOverSessions, then to the TpmAttestOverSessionsResponse intent, and is released by SerializeResponse after framing; the rolled nonce carriers are released by the caller's catch when this method faults.")]
-    private static async ValueTask<TpmSimulatorInput> FrameAttestSessionEntriesAsync(
+        Justification = "Ownership of each real entry's HMAC buffer transfers to the returned TpmResponseFramedOverSessions, then to the TpmOverSessionsResponse intent, and is released by SerializeResponse after framing; the rolled nonce carriers are released by the caller's catch when this method faults.")]
+    private static async ValueTask<TpmSimulatorInput> FrameSessionEntriesAsync(
         TpmCcConstants commandCode,
         IMemoryOwner<byte> parameterArea,
         int parameterLength,
-        ImmutableArray<TpmAttestResponseSession> responseSessions,
+        ImmutableArray<TpmResponseSession> responseSessions,
         TpmiAlgHash[] realAlgs,
         Tpm2bNonce[] framedNonces,
         Tpm2bNonce[] retainedNonces,
         TpmActionContext context,
         CancellationToken cancellationToken)
     {
-        //Encrypt the data portion of the FIRST response parameter — the TPM2B_ATTEST, after its 2-octet size,
-        //which is never protected (Part 1, clause 19.1) — over whichever session carries the encrypt attribute
-        //(at most one per command, clause 19.1), with its freshly rolled nonceTPM as nonceNewer and its command
-        //caller nonce as nonceOlder (clause 19.2). This sits between the nonce roll and the rpHash because
-        //"Parameters in responses are encrypted before any rpHash is computed" (clause 19.1): every entry's HMAC
+        //Encrypt the data portion of the FIRST response parameter — the attest family's TPM2B_ATTEST, after its
+        //2-octet size, which is never protected (Part 1, clause 18.1); the signing family's responses carry no
+        //sized first parameter and their area gates refuse the claim — over whichever session carries the encrypt attribute
+        //(at most one per command, clause 18.1), with its freshly rolled nonceTPM as nonceNewer and its command
+        //caller nonce as nonceOlder (clause 18.2). This sits between the nonce roll and the rpHash because
+        //"Parameters in responses are encrypted before any rpHash is computed" (clause 18.1): every entry's HMAC
         //therefore covers the CIPHERTEXT, which is the only thing that makes the transform detectably intact.
         for(int i = 0, realCandidate = 0; i < responseSessions.Length; i++)
         {
-            TpmAttestResponseSession candidate = responseSessions[i];
+            TpmResponseSession candidate = responseSessions[i];
             if(candidate.IsPasswordPlaceholder)
             {
                 continue;
@@ -3396,11 +5863,11 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
             if(candidate.Encrypts)
             {
-                ushort attestSize = BinaryPrimitives.ReadUInt16BigEndian(parameterArea.Memory.Span[..sizeof(ushort)]);
+                ushort firstParameterSize = BinaryPrimitives.ReadUInt16BigEndian(parameterArea.Memory.Span[..sizeof(ushort)]);
                 await ApplyResponseEncryptionAsync(
                     candidate.Symmetric, candidate.SessionAlg, candidate.SessionKey, candidate.EntityAuthValue,
                     framedNonces[realCandidate].AsReadOnlyMemory(), candidate.NonceCaller.AsReadOnlyMemory(),
-                    parameterArea.Memory.Slice(sizeof(ushort), attestSize), context.Pool, cancellationToken).ConfigureAwait(false);
+                    parameterArea.Memory.Slice(sizeof(ushort), firstParameterSize), context.Pool, cancellationToken).ConfigureAwait(false);
 
                 break;
             }
@@ -3411,17 +5878,29 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         (Memory<byte>[] rpHashPerSession, List<(TpmiAlgHash Alg, IMemoryOwner<byte> Owner)> rpHashOwners) = await ComputeRpHashPerSessionAsync(
             realAlgs, commandCode, parameterArea.Memory[..parameterLength], context.Pool, cancellationToken).ConfigureAwait(false);
 
-        var entries = ImmutableArray.CreateBuilder<TpmAttestFramedSessionEntry>(responseSessions.Length);
+        var entries = ImmutableArray.CreateBuilder<TpmFramedSessionEntry>(responseSessions.Length);
         try
         {
             int realIndex = 0;
             for(int i = 0; i < responseSessions.Length; i++)
             {
-                TpmAttestResponseSession session = responseSessions[i];
+                TpmResponseSession session = responseSessions[i];
                 if(session.IsPasswordPlaceholder)
                 {
-                    entries.Add(new TpmAttestFramedSessionEntry(
+                    entries.Add(new TpmFramedSessionEntry(
                         IsPasswordPlaceholder: true, session.SessionHandle, Tpm2bNonce.Empty, Tpm2bNonce.Empty, session.SessionAttributes, Hmac: null));
+
+                    continue;
+                }
+
+                //The No-HMAC-Authorization rule: an entirely empty HMAC key answered to an empty command hmac
+                //frames an empty response hmac — "the same formulation in the response as was in the command"
+                //(Part 1, clause 16.6.16; Part 4 ComputeResponseHMAC) — with the nonce still rolled.
+                if(session.IsResponseHmacEmpty)
+                {
+                    entries.Add(new TpmFramedSessionEntry(
+                        IsPasswordPlaceholder: false, session.SessionHandle, framedNonces[realIndex], retainedNonces[realIndex], session.SessionAttributes, Tpm2bAuth.Empty));
+                    realIndex++;
 
                     continue;
                 }
@@ -3439,16 +5918,16 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
                 sessionValueOwner.Memory.Span[..sessionValueLength].Clear();
 
-                entries.Add(new TpmAttestFramedSessionEntry(
+                entries.Add(new TpmFramedSessionEntry(
                     IsPasswordPlaceholder: false, session.SessionHandle, framedNonces[realIndex], retainedNonces[realIndex], session.SessionAttributes, hmac));
                 realIndex++;
             }
 
-            return new TpmAttestedOverSessions(commandCode, TpmParameterArea.Adopt(parameterArea, parameterLength), entries.ToImmutable());
+            return new TpmResponseFramedOverSessions(commandCode, TpmParameterArea.Adopt(parameterArea, parameterLength), entries.ToImmutable());
         }
         catch
         {
-            foreach(TpmAttestFramedSessionEntry framed in entries)
+            foreach(TpmFramedSessionEntry framed in entries)
             {
                 framed.Hmac?.Dispose();
             }
@@ -3504,7 +5983,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// <summary>
     /// Marshals an NV Index's <c>TPMS_NV_PUBLIC</c> from the Index's own retained fields and computes
     /// <c>nameAlg ‖ H_nameAlg(TPMS_NV_PUBLIC)</c> through the shared nameAlg-agile
-    /// <see cref="TpmObjectName"/> helper (TPM 2.0 Library Part 1, clause 14 and Table 6) — the single NV Name
+    /// <see cref="TpmObjectName"/> helper (TPM 2.0 Library Part 1, clause 13 and Table 9) — the single NV Name
     /// recipe every caller in this file routes through.
     /// </summary>
     /// <remarks>
@@ -3518,7 +5997,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// <param name="nvIndex">The NV Index handle, the first field of the marshaled public area.</param>
     /// <param name="nameAlg">The Index's own Name algorithm: both a hashed field and the digest the Name is computed with.</param>
     /// <param name="attributes">The Index's current attributes (<c>TPMA_NV</c>).</param>
-    /// <param name="authPolicy">The Index's own access policy digest (<c>TPM2B_DIGEST</c>, TPM 2.0 Library Part 2, clause 10.4.2, Table 92), a borrowed reference to the durable Index state's own carrier — copied into the marshaled public area and never disposed here; the empty sentinel when the Index was defined without a policy.</param>
+    /// <param name="authPolicy">The Index's own access policy digest (<c>TPM2B_DIGEST</c>, TPM 2.0 Library Part 2, clause 10.3.2, Table 90), a borrowed reference to the durable Index state's own carrier — copied into the marshaled public area and never disposed here; the empty sentinel when the Index was defined without a policy.</param>
     /// <param name="dataSize">The Index's declared data size.</param>
     /// <param name="pool">The memory pool backing the marshaling buffer and the returned Name.</param>
     /// <param name="cancellationToken">A token observed across the digest computation.</param>
@@ -3540,7 +6019,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     }
 
     /// <summary>
-    /// Builds the marshaled <c>TPMS_ATTEST</c> for the NV case (TPM 2.0 Library Part 2, clause 10.12.8) into a
+    /// Builds the marshaled <c>TPMS_ATTEST</c> for the NV case (TPM 2.0 Library Part 2, clause 10.11.8) into a
     /// pooled buffer.
     /// </summary>
     /// <remarks>
@@ -3594,15 +6073,18 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     }
 
     /// <summary>
-    /// <c>TPM2_VerifySignature()</c> over an ECC key (Part 3, clause 20.1): verify the caller-supplied digest and
+    /// <c>TPM2_VerifySignature()</c> over an ECC key (Part 3, clause 20.2): verify the caller-supplied digest and
     /// signature against the key's own retained public point through the injected ECC backend's verify delegate
     /// — a public-key operation that needs no authorization and consults no sign attribute (contrast
     /// <c>TPM2_Sign()</c>, which needs both).
     /// </summary>
     /// <remarks>
-    /// On a successful verification, re-derive the verifying key's hierarchy proof and compute the
-    /// <c>TPMT_TK_VERIFIED</c> digest <c>HMAC(proof, TPM_ST_VERIFIED || digest || keyName)</c> — the mirror
-    /// image of the creation ticket's name || creationHash order (Part 2, clause 10.7.4). A failed verification
+    /// On a successful verification against a NULL-hierarchy key, the ticket short-circuits to the NULL
+    /// <c>TPM_ST_VERIFIED</c> tuple (empty hmac, TPM_RH_NULL) rather than deriving a proof for a hierarchy that
+    /// has none (TPM 2.0 Library Part 3, clause 20.2.1: "If the key is in the NULL hierarchy, then hmac in the
+    /// ticket will be the Empty Buffer"). Otherwise, re-derive the verifying key's hierarchy proof and compute
+    /// the <c>TPMT_TK_VERIFIED</c> digest <c>HMAC(proof, TPM_ST_VERIFIED || digest || keyName)</c> — the mirror
+    /// image of the creation ticket's name || creationHash order (Part 2, clause 10.6.5). A failed verification
     /// needs no ticket at all, so the rejection is decided here rather than the pure transition (mirrors
     /// <see cref="CertifyObjectCreationAsync"/>).
     /// </remarks>
@@ -3610,28 +6092,48 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         Justification = "Ownership of the ticket-digest buffer transfers to the TPMT_TK_VERIFIED carried by the returned TpmSignatureVerified, then to the TpmVerifySignatureResponse intent, and is released by SerializeResponse after framing.")]
     private static async ValueTask<TpmSimulatorInput> VerifySignatureEccAsync(TpmVerifySignatureAction action, TpmActionContext context, CancellationToken cancellationToken)
     {
-        //The effect is the digest carrier's terminal owner: the verification primitive and the ticket HMAC are
-        //its only readers, so the using declaration releases it on every arm.
+        //The effect is the digest and signature carriers' terminal owner: the verification primitive and the
+        //ticket HMAC are their only readers, so the using declarations release both on every arm.
         using Tpm2bDigest digest = action.Digest;
+        using TpmtSignature signature = action.Signature;
 
         TpmEccSigningBackend backend = context.SigningBackend
             ?? throw new InvalidOperationException("TPM2_VerifySignature() over an ECC key requires a signing backend, but none was supplied.");
 
-        bool verified = await backend.VerifyDigest(
-            action.PublicPoint, digest.AsReadOnlyMemory(), action.Signature, action.Curve.Value, cancellationToken).ConfigureAwait(false);
+        //TpmuSignature keeps signatureR and signatureS as two separate carriers rather than one pre-joined
+        //buffer, so the fixed-width P1363 r ‖ s the verify delegate takes is rebuilt once here, into pool-rented
+        //scratch released in this same scope once the verify call has consumed it — each component read as the
+        //integer it is, so a short or zero-padded encoding verifies exactly as a real TPM verifies it.
+        TpmuSignature signatureMember = signature.Signature;
+        int componentWidth = TpmLifecycleTransitions.EccComponentWidth(action.PublicPoint);
+        using IMemoryOwner<byte> concatenatedSignature = context.Pool.Rent(Math.Max(2 * componentWidth, 1));
+
+        bool verified = TpmLifecycleTransitions.TryWriteNormalizedEcdsaSignature(signatureMember, componentWidth, concatenatedSignature.Memory.Span)
+            && await backend.VerifyDigest(
+                action.PublicPoint, digest.AsReadOnlyMemory(), concatenatedSignature.Memory[..(2 * componentWidth)], action.Curve.Value, cancellationToken).ConfigureAwait(false);
 
         if(!verified)
         {
             return new TpmSignatureVerified(TpmRcConstants.TPM_RC_SIGNATURE, Validation: null);
         }
 
+        if(action.KeyHierarchy.IsNull)
+        {
+            IMemoryOwner<byte> emptyHmac = context.Pool.Rent(1);
+
+            return new TpmSignatureVerified(
+                TpmRcConstants.TPM_RC_SUCCESS,
+                TpmtTkVerified.FromMarshaled(TpmStConstants.TPM_ST_VERIFIED, action.KeyHierarchy, metadata: null, emptyHmac, hmacLength: 0));
+        }
+
         using IMemoryOwner<byte> proof = await DeriveHierarchyProofAsync(context, action.KeyHierarchy.Value, cancellationToken).ConfigureAwait(false);
         IMemoryOwner<byte> ticketDigest = await ComputeVerifiedTicketDigestAsync(
-            proof.Memory[..CreationDigestSize], digest.AsReadOnlyMemory(), action.KeyName.AsReadOnlyMemory(), context.Pool, cancellationToken).ConfigureAwait(false);
+            proof.Memory[..CreationDigestSize], TpmStConstants.TPM_ST_VERIFIED, digest.AsReadOnlyMemory(), action.KeyName.AsReadOnlyMemory(), metadata: null, context.Pool, cancellationToken).ConfigureAwait(false);
 
         //The digest helper rents the ticket octets itself, so the whole-ticket carrier adopts that rental.
         return new TpmSignatureVerified(
-            TpmRcConstants.TPM_RC_SUCCESS, TpmtTkVerified.FromMarshaled(action.KeyHierarchy, ticketDigest, CreationDigestSize));
+            TpmRcConstants.TPM_RC_SUCCESS,
+            TpmtTkVerified.FromMarshaled(TpmStConstants.TPM_ST_VERIFIED, action.KeyHierarchy, metadata: null, ticketDigest, CreationDigestSize));
     }
 
     /// <summary>
@@ -3642,44 +6144,267 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         Justification = "Ownership of the ticket-digest buffer transfers to the TPMT_TK_VERIFIED carried by the returned TpmSignatureVerified, then to the TpmVerifySignatureResponse intent, and is released by SerializeResponse after framing.")]
     private static async ValueTask<TpmSimulatorInput> VerifySignatureRsaAsync(TpmRsaVerifySignatureAction action, TpmActionContext context, CancellationToken cancellationToken)
     {
-        //The effect is the digest carrier's terminal owner: the verification primitive and the ticket HMAC are
-        //its only readers, so the using declaration releases it on every arm.
+        //The effect is the digest and signature carriers' terminal owner: the verification primitive and the
+        //ticket HMAC are their only readers, so the using declarations release both on every arm.
         using Tpm2bDigest digest = action.Digest;
+        using TpmtSignature signature = action.Signature;
 
         TpmRsaSigningBackend backend = context.RsaSigningBackend
             ?? throw new InvalidOperationException("TPM2_VerifySignature() over an RSA key requires an RSA signing backend, but none was supplied.");
 
         bool verified = await backend.VerifyDigest(
-            action.PrivateKey.AsReadOnlyMemory(), digest.AsReadOnlyMemory(), action.Signature, action.Scheme.Value, action.HashAlg.Value, cancellationToken).ConfigureAwait(false);
+            action.PrivateKey.AsReadOnlyMemory(), digest.AsReadOnlyMemory(), signature.Signature.RsaSignature.AsReadOnlyMemory(), action.Scheme.Value, action.HashAlg.Value, cancellationToken).ConfigureAwait(false);
 
         if(!verified)
         {
             return new TpmSignatureVerified(TpmRcConstants.TPM_RC_SIGNATURE, Validation: null);
         }
 
+        if(action.KeyHierarchy.IsNull)
+        {
+            IMemoryOwner<byte> emptyHmac = context.Pool.Rent(1);
+
+            return new TpmSignatureVerified(
+                TpmRcConstants.TPM_RC_SUCCESS,
+                TpmtTkVerified.FromMarshaled(TpmStConstants.TPM_ST_VERIFIED, action.KeyHierarchy, metadata: null, emptyHmac, hmacLength: 0));
+        }
+
         using IMemoryOwner<byte> proof = await DeriveHierarchyProofAsync(context, action.KeyHierarchy.Value, cancellationToken).ConfigureAwait(false);
         IMemoryOwner<byte> ticketDigest = await ComputeVerifiedTicketDigestAsync(
-            proof.Memory[..CreationDigestSize], digest.AsReadOnlyMemory(), action.KeyName.AsReadOnlyMemory(), context.Pool, cancellationToken).ConfigureAwait(false);
+            proof.Memory[..CreationDigestSize], TpmStConstants.TPM_ST_VERIFIED, digest.AsReadOnlyMemory(), action.KeyName.AsReadOnlyMemory(), metadata: null, context.Pool, cancellationToken).ConfigureAwait(false);
 
         //The digest helper rents the ticket octets itself, so the whole-ticket carrier adopts that rental.
         return new TpmSignatureVerified(
-            TpmRcConstants.TPM_RC_SUCCESS, TpmtTkVerified.FromMarshaled(action.KeyHierarchy, ticketDigest, CreationDigestSize));
+            TpmRcConstants.TPM_RC_SUCCESS,
+            TpmtTkVerified.FromMarshaled(TpmStConstants.TPM_ST_VERIFIED, action.KeyHierarchy, metadata: null, ticketDigest, CreationDigestSize));
     }
 
     /// <summary>
-    /// Computes <c>verifiedTicket digest = HMAC_contextAlg(proof, TPM_ST_VERIFIED || digest || keyName)</c>
-    /// (TPM 2.0 Library Part 2, clause 10.7.4) — the mirror image of
+    /// <c>TPM2_VerifyDigestSignature()</c> over an ECC key (Part 3, clause 20.4): verify the caller-supplied
+    /// digest and signature against the key's own retained public point through the injected ECC backend's
+    /// verify delegate — the digest-only counterpart of <see cref="VerifySignatureEccAsync"/>.
+    /// </summary>
+    /// <remarks>
+    /// On a successful verification against a NULL-hierarchy key, the ticket short-circuits to the NULL
+    /// <c>TPM_ST_DIGEST_VERIFIED</c> tuple (empty hmac, TPM_RH_NULL, the scheme hash as metadata) rather than
+    /// deriving a proof for a hierarchy that has none (TPM 2.0 Library Part 3, clause 17: an external object
+    /// "will produce a NULL Ticket of the required type"). Otherwise, re-derive the verifying key's hierarchy
+    /// proof and compute the <c>TPMT_TK_VERIFIED</c> hmac
+    /// <c>HMAC(proof, TPM_ST_DIGEST_VERIFIED || digest || keyName || metadata)</c> — Equation (5), Part 2, clause
+    /// 10.6.5 — <c>metadata</c> being the serialized <see cref="TpmVerifyDigestSignatureAction.HashAlg"/>. A
+    /// failed verification needs no ticket at all, so the rejection is decided here rather than the pure
+    /// transition (mirrors <see cref="VerifySignatureEccAsync"/>).
+    /// </remarks>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the ticket-digest buffer transfers to the TPMT_TK_VERIFIED carried by the returned TpmDigestSignatureVerified, then to the TpmVerifyDigestSignatureResponse intent, and is released by SerializeResponse after framing.")]
+    private static async ValueTask<TpmSimulatorInput> VerifyDigestSignatureEccAsync(TpmVerifyDigestSignatureAction action, TpmActionContext context, CancellationToken cancellationToken)
+    {
+        //The effect is the digest and signature carriers' terminal owner: the verification primitive and the
+        //ticket HMAC are their only readers, so the using declarations release both on every arm.
+        using Tpm2bDigest digest = action.Digest;
+        using TpmtSignature signature = action.Signature;
+
+        TpmEccSigningBackend backend = context.SigningBackend
+            ?? throw new InvalidOperationException("TPM2_VerifyDigestSignature() over an ECC key requires a signing backend, but none was supplied.");
+
+        //TpmuSignature keeps signatureR and signatureS as two separate carriers rather than one pre-joined
+        //buffer, so the fixed-width P1363 r ‖ s the verify delegate takes is rebuilt once here, into pool-rented
+        //scratch released in this same scope once the verify call has consumed it — each component read as the
+        //integer it is, so a short or zero-padded encoding verifies exactly as a real TPM verifies it.
+        TpmuSignature signatureMember = signature.Signature;
+        int componentWidth = TpmLifecycleTransitions.EccComponentWidth(action.PublicPoint);
+        using IMemoryOwner<byte> concatenatedSignature = context.Pool.Rent(Math.Max(2 * componentWidth, 1));
+
+        bool verified = TpmLifecycleTransitions.TryWriteNormalizedEcdsaSignature(signatureMember, componentWidth, concatenatedSignature.Memory.Span)
+            && await backend.VerifyDigest(
+                action.PublicPoint, digest.AsReadOnlyMemory(), concatenatedSignature.Memory[..(2 * componentWidth)], action.Curve.Value, cancellationToken).ConfigureAwait(false);
+
+        if(!verified)
+        {
+            return new TpmDigestSignatureVerified(TpmRcConstants.TPM_RC_SIGNATURE, Validation: null);
+        }
+
+        if(action.KeyHierarchy.IsNull)
+        {
+            IMemoryOwner<byte> emptyHmac = context.Pool.Rent(1);
+
+            return new TpmDigestSignatureVerified(
+                TpmRcConstants.TPM_RC_SUCCESS,
+                TpmtTkVerified.FromMarshaled(TpmStConstants.TPM_ST_DIGEST_VERIFIED, action.KeyHierarchy, action.HashAlg, emptyHmac, hmacLength: 0));
+        }
+
+        using IMemoryOwner<byte> proof = await DeriveHierarchyProofAsync(context, action.KeyHierarchy.Value, cancellationToken).ConfigureAwait(false);
+        IMemoryOwner<byte> ticketDigest = await ComputeVerifiedTicketDigestAsync(
+            proof.Memory[..CreationDigestSize], TpmStConstants.TPM_ST_DIGEST_VERIFIED, digest.AsReadOnlyMemory(), action.KeyName.AsReadOnlyMemory(), action.HashAlg, context.Pool, cancellationToken).ConfigureAwait(false);
+
+        //The digest helper rents the ticket octets itself, so the whole-ticket carrier adopts that rental.
+        return new TpmDigestSignatureVerified(
+            TpmRcConstants.TPM_RC_SUCCESS,
+            TpmtTkVerified.FromMarshaled(TpmStConstants.TPM_ST_DIGEST_VERIFIED, action.KeyHierarchy, action.HashAlg, ticketDigest, CreationDigestSize));
+    }
+
+    /// <summary>
+    /// The RSA counterpart of <see cref="VerifyDigestSignatureEccAsync"/>: same verify-then-ticket flow, verified
+    /// through the injected RSA backend's verify delegate under the key's own retained scheme.
+    /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the ticket-digest buffer transfers to the TPMT_TK_VERIFIED carried by the returned TpmDigestSignatureVerified, then to the TpmVerifyDigestSignatureResponse intent, and is released by SerializeResponse after framing.")]
+    private static async ValueTask<TpmSimulatorInput> VerifyDigestSignatureRsaAsync(TpmRsaVerifyDigestSignatureAction action, TpmActionContext context, CancellationToken cancellationToken)
+    {
+        //The effect is the digest and signature carriers' terminal owner: the verification primitive and the
+        //ticket HMAC are their only readers, so the using declarations release both on every arm.
+        using Tpm2bDigest digest = action.Digest;
+        using TpmtSignature signature = action.Signature;
+
+        TpmRsaSigningBackend backend = context.RsaSigningBackend
+            ?? throw new InvalidOperationException("TPM2_VerifyDigestSignature() over an RSA key requires an RSA signing backend, but none was supplied.");
+
+        bool verified = await backend.VerifyDigest(
+            action.PrivateKey.AsReadOnlyMemory(), digest.AsReadOnlyMemory(), signature.Signature.RsaSignature.AsReadOnlyMemory(), action.Scheme.Value, action.HashAlg.Value, cancellationToken).ConfigureAwait(false);
+
+        if(!verified)
+        {
+            return new TpmDigestSignatureVerified(TpmRcConstants.TPM_RC_SIGNATURE, Validation: null);
+        }
+
+        if(action.KeyHierarchy.IsNull)
+        {
+            IMemoryOwner<byte> emptyHmac = context.Pool.Rent(1);
+
+            return new TpmDigestSignatureVerified(
+                TpmRcConstants.TPM_RC_SUCCESS,
+                TpmtTkVerified.FromMarshaled(TpmStConstants.TPM_ST_DIGEST_VERIFIED, action.KeyHierarchy, action.HashAlg, emptyHmac, hmacLength: 0));
+        }
+
+        using IMemoryOwner<byte> proof = await DeriveHierarchyProofAsync(context, action.KeyHierarchy.Value, cancellationToken).ConfigureAwait(false);
+        IMemoryOwner<byte> ticketDigest = await ComputeVerifiedTicketDigestAsync(
+            proof.Memory[..CreationDigestSize], TpmStConstants.TPM_ST_DIGEST_VERIFIED, digest.AsReadOnlyMemory(), action.KeyName.AsReadOnlyMemory(), action.HashAlg, context.Pool, cancellationToken).ConfigureAwait(false);
+
+        //The digest helper rents the ticket octets itself, so the whole-ticket carrier adopts that rental.
+        return new TpmDigestSignatureVerified(
+            TpmRcConstants.TPM_RC_SUCCESS,
+            TpmtTkVerified.FromMarshaled(TpmStConstants.TPM_ST_DIGEST_VERIFIED, action.KeyHierarchy, action.HashAlg, ticketDigest, CreationDigestSize));
+    }
+
+    /// <summary>
+    /// Computes <c>verifiedTicket hmac = HMAC_contextAlg(proof, tag || digestOrMessage || keyName || metadata)</c>
+    /// — Equation (5), TPM 2.0 Library Part 2, clause 10.6.5 — the mirror image of
     /// <see cref="ComputeCreationTicketDigestAsync"/>'s <c>TPM_ST_CREATION || Name || creationHash</c> field
-    /// order.
+    /// order, over a single contiguous <paramref name="digestOrMessage"/> buffer (every <c>TPM_ST_VERIFIED</c>
+    /// and <c>TPM_ST_DIGEST_VERIFIED</c> ticket's own digest). One-shot convenience wrapping the buffer in a
+    /// one-segment <c>ReadOnlySequence{byte}</c> and delegating to the sequence-native core below.
+    /// </summary>
+    private static ValueTask<IMemoryOwner<byte>> ComputeVerifiedTicketDigestAsync(
+        ReadOnlyMemory<byte> proof, TpmStConstants tag, ReadOnlyMemory<byte> digestOrMessage, ReadOnlyMemory<byte> keyName, TpmiAlgHash? metadata, BaseMemoryPool pool, CancellationToken cancellationToken) =>
+        ComputeVerifiedTicketDigestAsync(proof, tag, new ReadOnlySequence<byte>(digestOrMessage), keyName, metadata, pool, cancellationToken);
+
+    /// <summary>
+    /// The <c>ReadOnlySequence{byte}</c> core of the Equation (5) HMAC above. <paramref name="digestOrMessage"/>
+    /// may itself span several segments — <c>TPM2_VerifySequenceComplete()</c>'s <c>TPM_ST_MESSAGE_VERIFIED</c>
+    /// ticket folds the RAW accumulated sequence message (TPM 2.0 Library Part 2, clause 10.6.5: "the signed
+    /// digest or message"; Part 3, clause 20.3.1: "takes a message ... rather than a digest"), never a single
+    /// contiguous digest — so the HMAC input is built as one chained <c>ReadOnlySequence{byte}</c> over a pooled
+    /// 2-octet tag segment, every segment of <paramref name="digestOrMessage"/> in order, <paramref name="keyName"/>,
+    /// and an optional pooled 2-octet metadata segment, fed straight to
+    /// <see cref="CryptographicKeyEvents"/>'s own <c>ReadOnlySequence{byte}</c> overload of
+    /// <c>ComputeHmacAsync</c> — no intermediate concatenation buffer, however many segments
+    /// <paramref name="digestOrMessage"/> carries.
+    /// The one-shot overload above reproduces the pre-v185 single-digest formula byte-for-byte through this same
+    /// core.
+    /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the ticket-digest buffer transfers to the caller, which releases it via a using declaration; the pooled tag and (when rented) metadata segments are released by the using declaration and the finally once the HMAC call has consumed them.")]
+    private static async ValueTask<IMemoryOwner<byte>> ComputeVerifiedTicketDigestAsync(
+        ReadOnlyMemory<byte> proof, TpmStConstants tag, ReadOnlySequence<byte> digestOrMessage, ReadOnlyMemory<byte> keyName, TpmiAlgHash? metadata, BaseMemoryPool pool, CancellationToken cancellationToken)
+    {
+        using IMemoryOwner<byte> tagOctets = pool.Rent(sizeof(ushort));
+        var tagWriter = new TpmWriter(tagOctets.Memory.Span[..sizeof(ushort)]);
+        tagWriter.WriteUInt16((ushort)tag);
+
+        IMemoryOwner<byte>? metadataOctets = null;
+        try
+        {
+            if(metadata is { } metadataAlg)
+            {
+                metadataOctets = pool.Rent(sizeof(ushort));
+                var metadataWriter = new TpmWriter(metadataOctets.Memory.Span[..sizeof(ushort)]);
+                metadataAlg.WriteTo(ref metadataWriter);
+            }
+
+            BufferSegment first = new(tagOctets.Memory[..sizeof(ushort)]);
+            BufferSegment last = first;
+
+            foreach(ReadOnlyMemory<byte> segment in digestOrMessage)
+            {
+                if(!segment.IsEmpty)
+                {
+                    last = last.Append(segment);
+                }
+            }
+
+            last = last.Append(keyName);
+
+            if(metadataOctets is not null)
+            {
+                last = last.Append(metadataOctets.Memory[..sizeof(ushort)]);
+            }
+
+            ReadOnlySequence<byte> message = new(first, 0, last, last.Memory.Length);
+
+            using HmacValue hmac = await CryptographicKeyEvents.ComputeHmacAsync(
+                message, proof, CreationDigestSize, CryptoTags.HmacSha256Value, pool, cancellationToken: cancellationToken).ConfigureAwait(false);
+
+            IMemoryOwner<byte> owner = pool.Rent(CreationDigestSize);
+            try
+            {
+                hmac.AsReadOnlySpan().CopyTo(owner.Memory.Span[..CreationDigestSize]);
+
+                return owner;
+            }
+            catch
+            {
+                owner.Dispose();
+                throw;
+            }
+        }
+        finally
+        {
+            metadataOctets?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Re-verifies a caller-supplied <c>TPMT_TK_HASHCHECK</c> ticket statelessly (TPM 2.0 Library Part 2, clause
+    /// 10.6.7, Table 115): re-derives <paramref name="ticketHierarchy"/>'s proof — the ticket's OWN hierarchy
+    /// field, never independently re-derived from the signing key, so a tampered ticket cannot be rescued by a
+    /// matching hierarchy claim — recomputes <c>HMAC(proof, TPM_ST_HASHCHECK || digest)</c> (equation 7), and
+    /// compares the result constant-time against the ticket's own HMAC. <c>TPM2_SignDigest()</c>'s restricted-key
+    /// rule (Part 3, clause 20.7, mirroring 20.5's <c>TPM_RC_TICKET</c>) and its unrestricted-key forged-ticket
+    /// check both drive through this one validator.
+    /// </summary>
+    private static async ValueTask<bool> VerifyHashcheckTicketAsync(
+        uint ticketHierarchy, ReadOnlyMemory<byte> digest, ReadOnlyMemory<byte> ticketDigest, TpmActionContext context, CancellationToken cancellationToken)
+    {
+        using IMemoryOwner<byte> proof = await DeriveHierarchyProofAsync(context, ticketHierarchy, cancellationToken).ConfigureAwait(false);
+        using IMemoryOwner<byte> expectedDigest = await ComputeHashcheckTicketDigestAsync(
+            proof.Memory[..CreationDigestSize], digest, context.Pool, cancellationToken).ConfigureAwait(false);
+
+        return CryptographicOperations.FixedTimeEquals(expectedDigest.Memory.Span[..CreationDigestSize], ticketDigest.Span);
+    }
+
+    /// <summary>
+    /// Computes <c>hashcheckTicket digest = HMAC_contextAlg(proof, TPM_ST_HASHCHECK || digest)</c> — equation 7,
+    /// TPM 2.0 Library Part 2, clause 10.6.7 — the same rent-message-then-HMAC shape
+    /// <see cref="ComputeVerifiedTicketDigestAsync"/> and <see cref="ComputeCreationTicketDigestAsync"/> share.
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the ticket-digest buffer transfers to the caller, which releases it via a using declaration.")]
-    private static async ValueTask<IMemoryOwner<byte>> ComputeVerifiedTicketDigestAsync(
-        ReadOnlyMemory<byte> proof, ReadOnlyMemory<byte> digest, ReadOnlyMemory<byte> keyName, BaseMemoryPool pool, CancellationToken cancellationToken)
+    private static async ValueTask<IMemoryOwner<byte>> ComputeHashcheckTicketDigestAsync(
+        ReadOnlyMemory<byte> proof, ReadOnlyMemory<byte> digest, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
-        int messageSize = sizeof(ushort) + digest.Length + keyName.Length;
+        int messageSize = sizeof(ushort) + digest.Length;
         using IMemoryOwner<byte> message = pool.Rent(messageSize);
-        WriteVerifiedTicketMessage(message.Memory.Span[..messageSize], digest.Span, keyName.Span);
+        WriteHashcheckTicketMessage(message.Memory.Span[..messageSize], digest.Span);
 
         using HmacValue hmac = await CryptographicKeyEvents.ComputeHmacAsync(
             message.Memory[..messageSize], proof, CreationDigestSize, CryptoTags.HmacSha256Value, pool, cancellationToken: cancellationToken).ConfigureAwait(false);
@@ -3698,18 +6423,17 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         }
     }
 
-    /// <summary>The verified-ticket HMAC message: <c>TPM_ST_VERIFIED</c> (UINT16) || digest || Name.</summary>
-    private static void WriteVerifiedTicketMessage(Span<byte> destination, ReadOnlySpan<byte> digest, ReadOnlySpan<byte> keyName)
+    /// <summary>The hashcheck-ticket HMAC message: <c>TPM_ST_HASHCHECK</c> (UINT16) || digest.</summary>
+    private static void WriteHashcheckTicketMessage(Span<byte> destination, ReadOnlySpan<byte> digest)
     {
         var writer = new TpmWriter(destination);
-        writer.WriteUInt16((ushort)TpmStConstants.TPM_ST_VERIFIED);
+        writer.WriteUInt16((ushort)TpmStConstants.TPM_ST_HASHCHECK);
         writer.WriteBytes(digest);
-        writer.WriteBytes(keyName);
     }
 
     /// <summary>
     /// Computes <c>authTicket digest = HMAC_contextAlg(proof, tag || cpHash || policyRef || authName || timeout
-    /// || [timeEpoch] || [resetCount])</c> — equation 12 (TPM 2.0 Library Part 2, Section 10.7.5, Table 111),
+    /// || [timeEpoch] || [resetCount])</c> — equation 12 (TPM 2.0 Library Part 2, Section 10.6.6, Table 114),
     /// the formula shared by <c>TPM2_PolicySigned()</c>'s and <c>TPM2_PolicySecret()</c>'s TPMT_TK_AUTH mint and
     /// by <c>TPM2_PolicyTicket()</c>'s re-verification recompute (Part 3, clause 23.5.1, printed page 201: "the
     /// TPM uses the timeout, cpHashA, policyRef, and authName to construct a ticket to compare with the value in
@@ -3758,7 +6482,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// Equation 12's own field order, byte-for-byte: tag || cpHash || policyRef || authName || timeout ||
     /// [timeEpoch] || [resetCount]. The three variable-length fields are the raw TPM2B buffer contents with no
     /// size prefix of their own — matching the reference's <c>CryptDigestUpdate2B</c>, which hashes only the
-    /// buffer, never the size (Part 2, Table 111).
+    /// buffer, never the size (Part 2, Table 114).
     /// </summary>
     /// <remarks>
     /// This is spec parity, not a defect: two distinct (cpHash, policyRef, authName) triples whose concatenation
@@ -3794,9 +6518,9 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// <summary>
     /// Frames a <c>TPM2_PolicySecret()</c>/<c>TPM2_PolicySigned()</c> response's timeout + policyTicket (TPM 2.0
     /// Library Part 3, clauses 23.4/23.3): a NULL ticket (empty TPM2B_TIMEOUT, <c>TPM_RH_NULL</c> hierarchy,
-    /// empty digest — Part 2, Section 10.7.2's NULL-ticket convention, the tag set even on a NULL ticket) when
+    /// empty digest — Part 2, Section 10.6.2's NULL-ticket convention, the tag set even on a NULL ticket) when
     /// <paramref name="ticketDigest"/> is null; otherwise the real 8-byte big-endian TPM2B_TIMEOUT (bit 63 =
-    /// expires-on-reset, Section 10.4.10) and the real TPMT_TK_AUTH.
+    /// expires-on-reset, Section 10.3.10) and the real TPMT_TK_AUTH.
     /// </summary>
     private static void WriteAuthTicketResponse(
         ref TpmWriter writer, ushort tag, Tpm2bTimeout timeout, uint hierarchy, Tpm2bDigest? ticketDigest)
@@ -3820,7 +6544,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
     /// <summary>
     /// Rents a policyDigest destination at the session's own digest width and applies one <c>PolicyUpdate</c>
-    /// formula into it (TPM 2.0 Library Part 1, clause 17.7; Part 3, clause 23), adopting the rental as the
+    /// formula into it (TPM 2.0 Library Part 1, clause 16.7; Part 3, clause 23), adopting the rental as the
     /// returned <c>TPM2B_DIGEST</c>.
     /// </summary>
     /// <remarks>
@@ -3838,12 +6562,18 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// <param name="nameTerm">The Name term the fold hashes (the authorizing entity's, the signing key's, or the approving key's), as a borrowed Name carrier or a permanent entity's handle value.</param>
     /// <param name="policyRef">The policy qualifier the second <c>PolicyUpdate</c> hash always folds.</param>
     /// <param name="branches">The <c>TPM2_PolicyOR()</c> branch list.</param>
-    /// <param name="pcrSelection">The marshaled <c>TPML_PCR_SELECTION</c> exactly as sent.</param>
+    /// <param name="pcrSelection">The marshaled <c>TPML_PCR_SELECTION</c> — the clause-23.7 <c>pcrs</c> term: masked to the implemented PCR on a real session, the caller's input without modification on a trial one.</param>
     /// <param name="pcrDigest">The PCR digest the policy binds to — the caller's on a trial session, the live composite on a real one.</param>
     /// <param name="operandB">The comparison operand the argHash covers.</param>
     /// <param name="offset">The octet offset the argHash covers.</param>
     /// <param name="operation">The <c>TPM_EO</c> comparison the argHash covers.</param>
     /// <param name="pool">The memory pool the destination is rented from.</param>
+    /// <param name="boundDigest">The latched cpHash/nameHash/pHash/templateHash the fold hashes, as a borrow of the carrier the session already owns.</param>
+    /// <param name="locality">The <c>TPMA_LOCALITY</c> octet the fold hashes as sent.</param>
+    /// <param name="isNvWrittenRequired">The <c>writtenSet</c> value the fold hashes as one octet.</param>
+    /// <param name="objectName">The Name of the object to be duplicated, folded by <c>TPM2_PolicyDuplicationSelect()</c> only when <paramref name="isObjectIncluded"/> is SET (Part 3, clause 23.15).</param>
+    /// <param name="newParentName">The Name of the new parent <c>TPM2_PolicyDuplicationSelect()</c> always folds.</param>
+    /// <param name="isObjectIncluded">The <c>includeObject</c> value <c>TPM2_PolicyDuplicationSelect()</c> folds as one octet, selecting whether <paramref name="objectName"/> is folded too.</param>
     /// <returns>The advanced policyDigest in an owned carrier; ownership transfers to the caller.</returns>
     /// <exception cref="InvalidOperationException"><paramref name="fold"/> names no formula this seam applies, or <c>TPM2_PolicyOR()</c> was selected with no branch list.</exception>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
@@ -3861,9 +6591,15 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         ReadOnlySpan<byte> operandB,
         ushort offset,
         ushort operation,
-        BaseMemoryPool pool)
+        BaseMemoryPool pool,
+        ReadOnlySpan<byte> boundDigest = default,
+        byte locality = 0,
+        bool isNvWrittenRequired = false,
+        ReadOnlySpan<byte> objectName = default,
+        ReadOnlySpan<byte> newParentName = default,
+        bool isObjectIncluded = false)
     {
-        //A permanent entity's Name IS its 4-octet big-endian handle value (Part 1, clause 14, Table 6), so a handle-form
+        //A permanent entity's Name IS its 4-octet big-endian handle value (Part 1, clause 13, Table 9), so a handle-form
         //term is materialized here — this is the frame that holds a memory pool, while the pure transition that
         //resolved the entity holds none. A computed Name is read straight out of the carrier that owns it.
         Span<byte> handleFormName = stackalloc byte[sizeof(uint)];
@@ -3885,6 +6621,14 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                 TpmPolicyDigestFold.Signed => TpmPolicyDigest.ExtendForSigned(current, nameTermOctets, policyRef, policyHashAlgorithm.Value, destination),
                 TpmPolicyDigestFold.Authorize => TpmPolicyDigest.ExtendForAuthorize(nameTermOctets, policyRef, policyHashAlgorithm.Value, destination),
                 TpmPolicyDigestFold.Nv => TpmPolicyDigest.ExtendForNv(current, operandB, offset, operation, nameTermOctets, policyHashAlgorithm.Value, destination),
+                TpmPolicyDigestFold.CpHash => TpmPolicyDigest.ExtendForCpHash(current, boundDigest, policyHashAlgorithm.Value, destination),
+                TpmPolicyDigestFold.NameHash => TpmPolicyDigest.ExtendForNameHash(current, boundDigest, policyHashAlgorithm.Value, destination),
+                TpmPolicyDigestFold.Template => TpmPolicyDigest.ExtendForTemplate(current, boundDigest, policyHashAlgorithm.Value, destination),
+                TpmPolicyDigestFold.DuplicationSelect => TpmPolicyDigest.ExtendForDuplicationSelect(current, objectName, newParentName, isObjectIncluded, policyHashAlgorithm.Value, destination),
+                TpmPolicyDigestFold.Parameters => TpmPolicyDigest.ExtendForParameters(current, boundDigest, policyHashAlgorithm.Value, destination),
+                TpmPolicyDigestFold.Locality => TpmPolicyDigest.ExtendForLocality(current, (TpmaLocality)locality, policyHashAlgorithm.Value, destination),
+                TpmPolicyDigestFold.NvWritten => TpmPolicyDigest.ExtendForNvWritten(current, isNvWrittenRequired, policyHashAlgorithm.Value, destination),
+                TpmPolicyDigestFold.AuthorizeNv => TpmPolicyDigest.ExtendForAuthorizeNv(nameTermOctets, policyHashAlgorithm.Value, destination),
                 _ => throw new InvalidOperationException($"No policyDigest fold is defined for '{fold}'.")
             };
 
@@ -3897,6 +6641,34 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             storage.Dispose();
             throw;
         }
+    }
+
+    /// <summary>
+    /// Folds <c>TPM2_PolicyPCR()</c>'s policyDigest formula (<see cref="TpmPolicyDigestFold.Pcr"/>), re-marshaling
+    /// the parsed <c>TPML_PCR_SELECTION</c> into pooled scratch immediately before the hash
+    /// (<c>H(old || CC || pcrs || pcrDigest)</c>) and releasing the scratch once the fold has consumed it. Part
+    /// 3, clause 23.7 gives the <c>pcrs</c> term two shapes: a real session folds the selection with bits
+    /// corresponding to unimplemented PCR CLEARED — the declaring transition applies that mask in place
+    /// (<c>RetainImplementedPcrs</c>) before this fold is reached — while a trial session folds "the input
+    /// parameter without modification", so the octets marshaled here are the clause's term for the session type
+    /// the action declares.
+    /// </summary>
+    /// <param name="action">The declared fold, whose <see cref="TpmFoldPolicyDigestAction.PcrSelection"/> is re-marshaled.</param>
+    /// <param name="pcrDigest">The PCR digest the policy binds to — the caller's on a trial session, the live composite on a real one.</param>
+    /// <param name="pool">The memory pool the marshaling scratch and the destination are rented from.</param>
+    /// <returns>The advanced policyDigest in an owned carrier; ownership transfers to the caller.</returns>
+    private static Tpm2bDigest FoldPcrPolicyDigest(TpmFoldPolicyDigestAction action, ReadOnlySpan<byte> pcrDigest, BaseMemoryPool pool)
+    {
+        int marshaledSize = action.PcrSelection.GetSerializedSize();
+        using IMemoryOwner<byte> scratch = pool.Rent(marshaledSize);
+        Span<byte> marshaledPcrSelection = scratch.Memory.Span[..marshaledSize];
+        var writer = new TpmWriter(marshaledPcrSelection);
+        action.PcrSelection.WriteTo(ref writer);
+
+        return FoldPolicyDigest(
+            action.Fold, action.PolicyHashAlgorithm, action.CurrentPolicyDigest.AsReadOnlySpan(), action.RestrictedCommand,
+            nameTerm: TpmHandleName.None, policyRef: default, branches: null, marshaledPcrSelection, pcrDigest,
+            operandB: default, action.Offset, action.Operation, pool);
     }
 
     /// <summary>
@@ -3977,12 +6749,41 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                     return Completed(TpmRcConstants.TPM_RC_VALUE, Tpm2bDigest.Empty);
                 }
 
-                return Completed(
-                    TpmRcConstants.TPM_RC_SUCCESS,
-                    FoldPolicyDigest(
-                        action.Fold, action.PolicyHashAlgorithm, action.CurrentPolicyDigest.AsReadOnlySpan(), action.RestrictedCommand,
-                        nameTerm: TpmHandleName.None, policyRef: default, branches: null, action.PcrSelectionBytes.Span, liveDigest.AsReadOnlySpan(),
-                        operandB: default, action.Offset, action.Operation, context.Pool));
+                return Completed(TpmRcConstants.TPM_RC_SUCCESS, FoldPcrPolicyDigest(action, liveDigest.AsReadOnlySpan(), context.Pool));
+            }
+
+            if(action.Fold == TpmPolicyDigestFold.Pcr)
+            {
+                //A trial session folds the caller's own expectation verbatim, with no live composite to compare
+                //against (Part 3, clause 23.7).
+                return Completed(TpmRcConstants.TPM_RC_SUCCESS, FoldPcrPolicyDigest(action, action.PcrDigest.AsReadOnlySpan(), context.Pool));
+            }
+
+            if(action.Fold == TpmPolicyDigestFold.DuplicationSelect)
+            {
+                //The nameHash the assertion latches is H(objectName.name ‖ newParentName.name) under the session
+                //hash — the UINT16 sizes excluded (Part 3, clause 23.15; Part 4 CryptDigestUpdate2B over both
+                //Names) — computed here because the pure transition holds no digest seam, and handed back as an
+                //owned carrier the resuming transition transfers onto the session's shared cpHash slot.
+                Tpm2bDigest nameHash = ComputeDuplicationSelectNameHash(action.ObjectName, action.NewParentName, action.PolicyHashAlgorithm, context.Pool);
+                try
+                {
+                    return Completed(
+                        TpmRcConstants.TPM_RC_SUCCESS,
+                        FoldPolicyDigest(
+                            action.Fold, action.PolicyHashAlgorithm, action.CurrentPolicyDigest.AsReadOnlySpan(), action.RestrictedCommand,
+                            action.NameTerm, ReadOnlySpan<byte>.Empty, branches: null, ReadOnlySpan<byte>.Empty, ReadOnlySpan<byte>.Empty,
+                            ReadOnlySpan<byte>.Empty, action.Offset, action.Operation, context.Pool,
+                            objectName: action.ObjectName.Span, newParentName: action.NewParentName.Span, isObjectIncluded: action.IsObjectIncluded),
+                        nameHash);
+                }
+                catch
+                {
+                    //The nameHash's only owner is this frame until the feedback record adopts it, so a failing
+                    //fold must release it or the pinned rental is orphaned.
+                    nameHash.Dispose();
+                    throw;
+                }
             }
 
             //TPM2_PolicyAuthorize() hashes the approving key's Name out of the carrier the request transferred
@@ -3995,24 +6796,61 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                 TpmRcConstants.TPM_RC_SUCCESS,
                 FoldPolicyDigest(
                     action.Fold, action.PolicyHashAlgorithm, action.CurrentPolicyDigest.AsReadOnlySpan(), action.RestrictedCommand,
-                    foldNameTerm, action.PolicyRef.AsReadOnlySpan(), action.Branches, action.PcrSelectionBytes.Span,
-                    action.PcrDigest.AsReadOnlySpan(), action.OperandB.Span, action.Offset, action.Operation, context.Pool));
+                    foldNameTerm, action.PolicyRef.AsReadOnlySpan(), action.Branches, ReadOnlySpan<byte>.Empty,
+                    action.PcrDigest.AsReadOnlySpan(), action.OperandB.Span, action.Offset, action.Operation, context.Pool,
+                    action.BoundDigest.AsReadOnlySpan(), action.Locality, action.IsNvWrittenRequired));
         }
         finally
         {
             //The fold consumed these terms, so this effect is their terminal owner on every path; the sentinels
-            //the formulas that do not read them carry are dispose-immune.
+            //the formulas that do not read them carry are dispose-immune. BoundDigest is a BORROW of the session's
+            //own latched carrier and is never disposed here.
             action.PolicyRef.Dispose();
             action.KeySign.Dispose();
             action.Branches?.Dispose();
+            action.PcrSelection.Dispose();
             action.PcrDigest.Dispose();
             action.OperandB.Dispose();
+            action.ObjectName.Dispose();
+            action.NewParentName.Dispose();
         }
 
         //Local one-off helper: the uniform feedback shape both the folded and the refused arm return, relaying
-        //the assertion's own label and response payload unchanged.
-        TpmPolicyDigestFolded Completed(TpmRcConstants responseCode, Tpm2bDigest foldedDigest) =>
-            new(responseCode, action.Fold, action.PolicySession, foldedDigest, action.Label, action.TimeoutMagnitude, action.AuthorizingSession);
+        //the assertion's own label and response payload unchanged; the latched digest rides only the
+        //DuplicationSelect fold and is the dispose-immune empty sentinel for every other.
+        TpmPolicyDigestFolded Completed(TpmRcConstants responseCode, Tpm2bDigest foldedDigest, Tpm2bDigest? latchedDigest = null) =>
+            new(responseCode, action.Fold, action.PolicySession, foldedDigest, action.Label, action.TimeoutMagnitude, action.AuthorizingSession, latchedDigest ?? Tpm2bDigest.Empty);
+    }
+
+    /// <summary>
+    /// Computes the nameHash <c>TPM2_PolicyDuplicationSelect()</c> latches onto the session's shared cpHash slot:
+    /// <c>H_sessionAlg(objectName.name ‖ newParentName.name)</c> — the two Names' octets with their
+    /// <c>UINT16</c> sizes excluded (TPM 2.0 Library Part 3, clause 23.15: "The Name in these equations uses
+    /// Name.name, indicating that the UINT16 size is not included in the hash"), the same layout the use-time
+    /// <see cref="VerifyPolicyBindingAsync"/> nameHash arm digests over the authorized <c>TPM2_Duplicate()</c>'s
+    /// handle-Name area, so the two agree by construction for the selected pair. Names are public, so the
+    /// concatenation scratch is pooled for uniformity and released before returning.
+    /// </summary>
+    /// <param name="objectName">The Name of the object to be duplicated, as a borrow.</param>
+    /// <param name="newParentName">The Name of the new parent, as a borrow.</param>
+    /// <param name="sessionAlg">The session's policy hash algorithm, which sizes and selects the digest.</param>
+    /// <param name="pool">The memory pool the scratch and the returned carrier are rented from.</param>
+    /// <returns>The nameHash in an owned carrier; ownership transfers to the caller.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the returned digest carrier transfers to the caller, which hands it to the feedback record whose resuming transition installs it on the session.")]
+    private static Tpm2bDigest ComputeDuplicationSelectNameHash(Tpm2bName objectName, Tpm2bName newParentName, TpmiAlgHash sessionAlg, BaseMemoryPool pool)
+    {
+        int digestSize = SessionDigestSize(sessionAlg);
+        int namesLength = objectName.Size + newParentName.Size;
+        using IMemoryOwner<byte> scratch = pool.Rent(Math.Max(namesLength, 1));
+        Span<byte> names = scratch.Memory.Span[..namesLength];
+        objectName.Span.CopyTo(names);
+        newParentName.Span.CopyTo(names[objectName.Size..]);
+
+        using DigestValue nameHash = CryptographicKeyEvents.ComputeDigest(names, digestSize, SessionDigestTag(sessionAlg), pool);
+        names.Clear();
+
+        return Tpm2bDigest.Create(nameHash.AsReadOnlySpan()[..digestSize], pool);
     }
 
     /// <summary>
@@ -4024,12 +6862,17 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// </summary>
     /// <remarks>
     /// The ticket-vs-NULL split and the policyDigest fold (<see cref="BuildPolicySignedVerifiedAsync"/>) then
-    /// decide the response the continuation transition frames. This effect is the policy qualifier's terminal
-    /// owner — the aHash, the ticket HMAC, and the fold are its only uses — while the cpHashA carrier travels
-    /// onward to the continuation that either latches it onto the session or releases it.
+    /// decide the response the continuation transition frames. This effect is the parsed signature's and the
+    /// policy qualifier's terminal owner — the aHash, the ticket HMAC, and the fold are its only uses — while
+    /// the cpHashA carrier travels onward to the continuation that either latches it onto the session or
+    /// releases it.
     /// </remarks>
     private static async ValueTask<TpmSimulatorInput> VerifyPolicySignedEccAsync(TpmVerifyPolicySignedAction action, TpmActionContext context, CancellationToken cancellationToken)
     {
+        //The effect is the signature carrier's terminal owner: the verify primitive is its only reader, so the
+        //using declaration releases it on every arm, mirroring VerifySignatureEccAsync.
+        using TpmtSignature signature = action.Signature;
+
         try
         {
             TpmEccSigningBackend backend = context.SigningBackend
@@ -4039,8 +6882,18 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             using IMemoryOwner<byte> aHash = await ComputePolicySignedAHashAsync(
                 action.NonceTpm.AsReadOnlyMemory(), action.Expiration, action.CpHashA.AsReadOnlyMemory(), action.PolicyRef.AsReadOnlyMemory(), action.SchemeHashAlg, context.Pool, cancellationToken).ConfigureAwait(false);
 
-            bool verified = await backend.VerifyDigest(
-                action.PublicPoint, aHash.Memory[..aHashLength], action.Signature, action.Curve.Value, cancellationToken).ConfigureAwait(false);
+            //TpmuSignature keeps signatureR and signatureS as two separate carriers rather than one pre-joined
+            //buffer, so the fixed-width P1363 r ‖ s the verify delegate takes is rebuilt once here, into
+            //pool-rented scratch released in this same scope once the verify call has consumed it — each
+            //component read as the integer it is, so a short or zero-padded encoding verifies exactly as a real
+            //TPM verifies it (mirrors VerifySignatureEccAsync).
+            TpmuSignature signatureMember = signature.Signature;
+            int componentWidth = TpmLifecycleTransitions.EccComponentWidth(action.PublicPoint);
+            using IMemoryOwner<byte> concatenatedSignature = context.Pool.Rent(Math.Max(2 * componentWidth, 1));
+
+            bool verified = TpmLifecycleTransitions.TryWriteNormalizedEcdsaSignature(signatureMember, componentWidth, concatenatedSignature.Memory.Span)
+                && await backend.VerifyDigest(
+                    action.PublicPoint, aHash.Memory[..aHashLength], concatenatedSignature.Memory[..(2 * componentWidth)], action.Curve.Value, cancellationToken).ConfigureAwait(false);
 
             return await BuildPolicySignedVerifiedAsync(
                 verified, action.PolicySession.Value, action.AuthObjectName, action.PolicyRef, action.PolicyHashAlgorithm,
@@ -4068,6 +6921,10 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// </summary>
     private static async ValueTask<TpmSimulatorInput> VerifyPolicySignedRsaAsync(TpmRsaVerifyPolicySignedAction action, TpmActionContext context, CancellationToken cancellationToken)
     {
+        //The effect is the signature carrier's terminal owner: the verify primitive is its only reader, so the
+        //using declaration releases it on every arm, mirroring VerifySignatureRsaAsync.
+        using TpmtSignature signature = action.Signature;
+
         try
         {
             TpmRsaSigningBackend backend = context.RsaSigningBackend
@@ -4078,7 +6935,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                 action.NonceTpm.AsReadOnlyMemory(), action.Expiration, action.CpHashA.AsReadOnlyMemory(), action.PolicyRef.AsReadOnlyMemory(), action.SchemeHashAlg, context.Pool, cancellationToken).ConfigureAwait(false);
 
             bool verified = await backend.VerifyDigest(
-                action.PrivateKey.AsReadOnlyMemory(), aHash.Memory[..aHashLength], action.Signature, action.Scheme.Value, action.SchemeHashAlg.Value, cancellationToken).ConfigureAwait(false);
+                action.PrivateKey.AsReadOnlyMemory(), aHash.Memory[..aHashLength], signature.Signature.RsaSignature.AsReadOnlyMemory(), action.Scheme.Value, action.SchemeHashAlg.Value, cancellationToken).ConfigureAwait(false);
 
             return await BuildPolicySignedVerifiedAsync(
                 verified, action.PolicySession.Value, action.AuthObjectName, action.PolicyRef, action.PolicyHashAlgorithm,
@@ -4107,7 +6964,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// <remarks>
     /// On success, a non-negative expiration (no ticket requested, Part 3, Section 23.2.5) frames a NULL ticket
     /// the same way; only a negative expiration mints the real <c>TPM_ST_AUTH_SIGNED</c> ticket per equation 12
-    /// (TPM 2.0 Library Part 2, Section 10.7.5, Table 111), keyed on authObject's own Hierarchy proof, with
+    /// (TPM 2.0 Library Part 2, Section 10.6.6, Table 114), keyed on authObject's own Hierarchy proof, with
     /// expiresOnReset selected by whether the caller's nonceTPM
     /// was empty (an absolute, session-unbound deadline).
     /// </remarks>
@@ -4227,14 +7084,22 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
     /// <summary>
     /// <c>TPM2_PolicyAuthorize()</c>'s checkTicket re-verification (TPM 2.0 Library Part 3, Section 23.16):
-    /// recompute <c>aHash = H_hashAlg(approvedPolicy || policyRef)</c> under keySign's own nameAlg through the
-    /// registered async digest seam, derive the hierarchy proof for the CALLER-SUPPLIED
-    /// checkTicket.hierarchy (never independently re-derived from keySign — the caller's claim is exactly what
-    /// is being checked), recompute the expected ticket via the existing
-    /// <see cref="ComputeVerifiedTicketDigestAsync"/> formula (<c>HMAC(proof, TPM_ST_VERIFIED || aHash ||
-    /// keySign)</c>), and constant-time compare it to the caller-supplied digest — architecturally the same
-    /// stateless recompute-then-FixedTimeEquals shape as <see cref="VerifyCreationTicketAsync"/>, just against a
-    /// caller-supplied hierarchy rather than the subject's own.
+    /// derive the hierarchy proof for the CALLER-SUPPLIED checkTicket.hierarchy (never independently re-derived
+    /// from keySign — the caller's claim is exactly what is being checked), recompute the expected ticket via
+    /// the existing <see cref="ComputeVerifiedTicketDigestAsync"/> formula (<c>HMAC(proof, checkTicketTag ||
+    /// digestOrMessage || keySign || checkTicketMetadata)</c> — Equation (5)), and constant-time compare it to
+    /// the caller-supplied digest — architecturally the same stateless recompute-then-FixedTimeEquals shape as
+    /// <see cref="VerifyCreationTicketAsync"/>, just against a caller-supplied hierarchy rather than the
+    /// subject's own. What <c>digestOrMessage</c> IS depends on the CALLER-SUPPLIED
+    /// <see cref="TpmVerifyPolicyAuthorizeTicketAction.CheckTicketTag"/> — chosen by
+    /// <see cref="ComputePolicyAuthorizeExpectedTicketAsync"/> — because Table 111's three ticket shapes record
+    /// different things: a <c>TPM_ST_VERIFIED</c> ticket (from <c>TPM2_VerifySignature()</c>) hashes
+    /// <c>approvedPolicy || policyRef</c> under keySign's own nameAlg (clause 23.16.2's scheme modification,
+    /// since that ticket "does not record the hash algorithm"); a <c>TPM_ST_DIGEST_VERIFIED</c> ticket (from
+    /// <c>TPM2_VerifyDigestSignature()</c>) hashes it under the ticket's OWN <c>checkTicketMetadata</c> hash
+    /// algorithm instead; and a <c>TPM_ST_MESSAGE_VERIFIED</c> ticket (from
+    /// <c>TPM2_VerifySequenceComplete()</c>) folds the RAW <c>approvedPolicy || policyRef</c> octets with no
+    /// hash at all.
     /// </summary>
     /// <remarks>
     /// The policyDigest fold that a successful re-verification triggers runs HERE rather than in the resuming
@@ -4249,27 +7114,26 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     {
         try
         {
-            int aHashLength = SessionDigestSize(action.HashAlg);
             int messageSize = action.ApprovedPolicy.Size + action.PolicyRef.Size;
             using IMemoryOwner<byte> message = context.Pool.Rent(messageSize);
             var writer = new TpmWriter(message.Memory.Span[..messageSize]);
             writer.WriteBytes(action.ApprovedPolicy.AsReadOnlySpan());
             writer.WriteBytes(action.PolicyRef.AsReadOnlySpan());
 
-            using DigestValue aHash = await CryptographicKeyEvents.ComputeDigestAsync(
-                message.Memory[..messageSize], aHashLength, SessionDigestTag(action.HashAlg), context.Pool, cancellationToken: cancellationToken).ConfigureAwait(false);
-
             using IMemoryOwner<byte> proof = await DeriveHierarchyProofAsync(context, action.CheckTicketHierarchy.Value, cancellationToken).ConfigureAwait(false);
 
-            using IMemoryOwner<byte> expectedTicket = await ComputeVerifiedTicketDigestAsync(
-                proof.Memory[..CreationDigestSize], aHash.AsReadOnlyMemory(), action.KeySign.AsReadOnlyMemory(), context.Pool, cancellationToken).ConfigureAwait(false);
+            using IMemoryOwner<byte> expectedTicket = await ComputePolicyAuthorizeExpectedTicketAsync(
+                action, message.Memory[..messageSize], proof.Memory[..CreationDigestSize], context, cancellationToken).ConfigureAwait(false);
 
             bool matched = CryptographicOperations.FixedTimeEquals(
                 expectedTicket.Memory.Span[..CreationDigestSize], action.CheckTicketDigest.AsReadOnlySpan());
 
             if(!matched)
             {
-                return new TpmPolicyAuthorizeVerified(TpmRcConstants.TPM_RC_VALUE, action.PolicySession, Tpm2bDigest.Empty);
+                //Part 3, Section 23.16.1: "If the ticket is not valid, the TPM shall return TPM_RC_POLICY." —
+                //distinct from the approvedPolicy-mismatch refusal above (TPM_RC_VALUE), which this recompute is
+                //never reached for.
+                return new TpmPolicyAuthorizeVerified(TpmRcConstants.TPM_RC_POLICY, action.PolicySession, Tpm2bDigest.Empty);
             }
 
             return new TpmPolicyAuthorizeVerified(
@@ -4292,9 +7156,58 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     }
 
     /// <summary>
+    /// Chooses <c>TPM2_PolicyAuthorize()</c>'s Equation (5) <c>digestOrMessage</c> term by the caller's
+    /// checkTicket tag (TPM 2.0 Library Part 3, clause 23.16.2). <c>TPM_ST_MESSAGE_VERIFIED</c> (from
+    /// <c>TPM2_VerifySequenceComplete()</c>) folds <paramref name="approvedPolicyAndRef"/> RAW — that ticket
+    /// records no hash algorithm to hash under at all (clause 23.16.2: "do not require modifying the scheme").
+    /// <c>TPM_ST_DIGEST_VERIFIED</c> (from <c>TPM2_VerifyDigestSignature()</c>) hashes it under the ticket's OWN
+    /// <see cref="TpmVerifyPolicyAuthorizeTicketAction.CheckTicketMetadata"/> — guaranteed present for this tag
+    /// by <c>TryParsePolicyAuthorize</c>'s own coupling — since Table 111's metadata IS "the hash algorithm ...
+    /// used to produce the digest that was verified" (substituting keySign's nameAlg here would be wrong
+    /// whenever the scheme hash differs from nameAlg). Every other tag — <c>TPM_ST_VERIFIED</c> (from
+    /// <c>TPM2_VerifySignature()</c>), which records no hash algorithm of its own, and any value this method is
+    /// never reached with in practice, since <c>TryParsePolicyAuthorize</c> already refuses anything outside
+    /// Table 112's three tags — hashes under keySign's own nameAlg, clause 23.16.2's scheme modification.
+    /// </summary>
+    private static ValueTask<IMemoryOwner<byte>> ComputePolicyAuthorizeExpectedTicketAsync(
+        TpmVerifyPolicyAuthorizeTicketAction action, ReadOnlyMemory<byte> approvedPolicyAndRef, ReadOnlyMemory<byte> proof, TpmActionContext context, CancellationToken cancellationToken) =>
+        action.CheckTicketTag switch
+        {
+            TpmStConstants.TPM_ST_MESSAGE_VERIFIED => ComputeVerifiedTicketDigestAsync(
+                proof, action.CheckTicketTag, approvedPolicyAndRef, action.KeySign.AsReadOnlyMemory(), action.CheckTicketMetadata, context.Pool, cancellationToken),
+            TpmStConstants.TPM_ST_DIGEST_VERIFIED => ComputeHashedPolicyAuthorizeExpectedTicketAsync(
+                action, approvedPolicyAndRef, proof, action.CheckTicketMetadata!.Value, context, cancellationToken),
+            _ => ComputeHashedPolicyAuthorizeExpectedTicketAsync(action, approvedPolicyAndRef, proof, action.HashAlg, context, cancellationToken)
+        };
+
+    /// <summary>
+    /// The hashed arms of <see cref="ComputePolicyAuthorizeExpectedTicketAsync"/> — every checkTicket tag except
+    /// <c>TPM_ST_MESSAGE_VERIFIED</c>: hashes <paramref name="approvedPolicyAndRef"/> under
+    /// <paramref name="aHashAlg"/> through the registered async digest seam before folding the result into the
+    /// Equation (5) HMAC.
+    /// </summary>
+    /// <remarks>
+    /// <paramref name="aHashAlg"/> is always either keySign's own nameAlg or the caller-supplied checkTicket
+    /// metadata — either way, a value <c>OnPolicyAuthorize</c>'s gate has already confirmed is a supported
+    /// digest algorithm before this method is ever reached, since the transition never declares the action
+    /// this method's caller consumes for an unsupported algorithm. This method performs no re-check of its
+    /// own and trusts that gate as its sole guard against driving <see cref="SessionDigestSize"/> or
+    /// <see cref="SessionDigestTag"/> with a value neither supports.
+    /// </remarks>
+    private static async ValueTask<IMemoryOwner<byte>> ComputeHashedPolicyAuthorizeExpectedTicketAsync(
+        TpmVerifyPolicyAuthorizeTicketAction action, ReadOnlyMemory<byte> approvedPolicyAndRef, ReadOnlyMemory<byte> proof, TpmiAlgHash aHashAlg, TpmActionContext context, CancellationToken cancellationToken)
+    {
+        using DigestValue aHash = await CryptographicKeyEvents.ComputeDigestAsync(
+            approvedPolicyAndRef, SessionDigestSize(aHashAlg), SessionDigestTag(aHashAlg), context.Pool, cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        return await ComputeVerifiedTicketDigestAsync(
+            proof, action.CheckTicketTag, aHash.AsReadOnlyMemory(), action.KeySign.AsReadOnlyMemory(), action.CheckTicketMetadata, context.Pool, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// <c>TPM2_PolicySecret()</c>'s ticket mint (TPM 2.0 Library Part 3, Section 23.4): derive
     /// <c>action.Hierarchy</c>'s proof and compute the real <c>TPM_ST_AUTH_SECRET</c> ticket per equation 12
-    /// (TPM 2.0 Library Part 2, Section 10.7.5, Table 111).
+    /// (TPM 2.0 Library Part 2, Section 10.6.6, Table 114).
     /// </summary>
     /// <remarks>
     /// Unlike a verify action, this has no failure mode of its own — the transition only ever declares it once
@@ -4311,7 +7224,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         {
             using IMemoryOwner<byte> proof = await DeriveHierarchyProofAsync(context, action.Hierarchy.Value, cancellationToken).ConfigureAwait(false);
 
-            //The authorizing entity's Name is its 4-octet handle value (Part 1, clause 14, Table 6); the octets are
+            //The authorizing entity's Name is its 4-octet handle value (Part 1, clause 13, Table 9); the octets are
             //materialized here, in the frame that holds a memory pool, and feed both the ticket HMAC and the fold.
             using IMemoryOwner<byte> authNameOctets = context.Pool.Rent(action.AuthName.Length);
             Memory<byte> authName = authNameOctets.Memory[..action.AuthName.Length];
@@ -4362,12 +7275,12 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     }
 
     /// <summary>
-    /// Frames TPM2_PolicySecret()'s session-authorized response (TPM 2.0 Library Part 3, Section 23.4; Part 1, clause 16.6.1).
+    /// Frames TPM2_PolicySecret()'s session-authorized response (TPM 2.0 Library Part 3, Section 23.4; Part 1, clause 15.6.1).
     /// </summary>
     /// <remarks>
     /// Frames TPM2B_TIMEOUT ‖ TPMT_TK_AUTH via the same helper the password arm's response uses, rolls a fresh
     /// nonceTPM for the authorizing session, computes rpHash over the framed parameter bytes, then the response
-    /// HMAC keyed on the SAME sessionKey ‖ authValue the command-HMAC verification used (clause 17.6.5).
+    /// HMAC keyed on the SAME sessionKey ‖ authValue the command-HMAC verification used (clause 16.6.5).
     /// <paramref name="action"/>'s <c>Timeout</c> and <c>TicketDigest</c> (when present) are consumed and
     /// disposed here, once their bytes are copied into the framed parameter area — their content does not need
     /// to outlive that copy.
@@ -4383,7 +7296,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         //This frame is the terminal owner of the caller nonce the request record transferred into the
         //authorizing-session entry and that entry carried across the fold and ticket-mint hops into this
         //action: the response HMAC reads it as its nonceOlder term here and nothing past this framing reads it
-        //again (Part 1, clause 17.6.5).
+        //again (Part 1, clause 16.6.5).
         try
         {
             return await FramePolicySecretSessionResponseCoreAsync(action, context, cancellationToken).ConfigureAwait(false);
@@ -4554,7 +7467,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     }
 
     /// <summary>
-    /// Session-salt OAEP label (Part 1, Annex B.10.2): "SECRET" plus the trailing NUL octet the lhash digest
+    /// Session-salt OAEP label (Part 1, clause 16.6.13): "SECRET" plus the trailing NUL octet the lhash digest
     /// input requires as part of L (OAEP's own convention, distinct from KDFa/KDFe's auto-appended label
     /// terminator) — the session-salt counterpart of <c>CredentialIdentityLabelOctets</c>, whose use-case string
     /// differs.
@@ -4586,7 +7499,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             try
             {
                 //The bind authValue rides the action as a wire-exact borrowed carrier; its trailing-zero-stripped
-                //view is taken only here, at the KDFa and bound-entity fold primitives (Part 1, clause 17.6.4.3).
+                //view is taken only here, at the KDFa and bound-entity fold primitives (Part 1, clause 16.6.4.3).
                 ReadOnlyMemory<byte> bindAuthValue = TpmLifecycleTransitions.StripTrailingZeros(action.BindAuthValue.AsReadOnlyMemory());
                 sessionKey = await DeriveSessionKeyAsync(
                     action.SessionAlg, bindAuthValue, action.BoundEntityName, action.Salt, framedNonceTpm.AsReadOnlyMemory(), action.NonceCaller.AsReadOnlyMemory(), context.Pool, cancellationToken).ConfigureAwait(false);
@@ -4625,7 +7538,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
     /// <summary>
     /// <c>TPM2_StartAuthSession()</c> RSA salted arm: OAEP-decrypt encryptedSalt against tpmKey's retained
-    /// private key (TPM 2.0 Library Part 1, Annex B.10.1/B.10.2). ANY internal failure — a null decode (bad
+    /// private key (TPM 2.0 Library Part 1, clause 43.10.1/16.6.13). ANY internal failure — a null decode (bad
     /// padding, ciphertext &gt;= modulus) or a recovered value wider than the Name-algorithm digest-size cap —
     /// is reported immediately as <c>TPM_RC_VALUE</c>, never poisoned-and-deferred (Part 3, clause 11.1 has no
     /// later integrity check to defer to, unlike <c>TPM2_ActivateCredential()</c>'s RSA arm).
@@ -4705,7 +7618,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             try
             {
                 //The bind authValue rides the action as a wire-exact borrowed carrier; its trailing-zero-stripped
-                //view is taken only here, at the KDFa and bound-entity fold primitives (Part 1, clause 17.6.4.3).
+                //view is taken only here, at the KDFa and bound-entity fold primitives (Part 1, clause 16.6.4.3).
                 ReadOnlyMemory<byte> bindAuthValue = TpmLifecycleTransitions.StripTrailingZeros(action.BindAuthValue.AsReadOnlyMemory());
                 sessionKey = await DeriveSessionKeyAsync(
                     action.SessionAlg, bindAuthValue, action.BoundEntityName, decoded.Memory, framedNonceTpm.AsReadOnlyMemory(), action.NonceCaller.AsReadOnlyMemory(), pool, cancellationToken).ConfigureAwait(false);
@@ -4738,7 +7651,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// <summary>
     /// <c>TPM2_StartAuthSession()</c> ECC salted arm: recover the session salt via a one-pass ECDH exchange
     /// against tpmKey's private scalar and the wire ephemeral public point, then KDFe keyed on tpmKey's OWN Name
-    /// algorithm (TPM 2.0 Library Part 1, Annex C.6.1/C.6.2) — never the session's authHash, which may differ (a
+    /// algorithm (TPM 2.0 Library Part 1, clause 44.7.1/16.6.13.1) — never the session's authHash, which may differ (a
     /// mixed-hash session would otherwise leak the wrong hash into this derivation).
     /// </summary>
     /// <remarks>
@@ -4836,7 +7749,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         try
         {
             //The bind authValue rides the action as a wire-exact borrowed carrier; its trailing-zero-stripped
-            //view is taken only here, at the KDFa and bound-entity fold primitives (Part 1, clause 17.6.4.3).
+            //view is taken only here, at the KDFa and bound-entity fold primitives (Part 1, clause 16.6.4.3).
             ReadOnlyMemory<byte> bindAuthValue = TpmLifecycleTransitions.StripTrailingZeros(action.BindAuthValue.AsReadOnlyMemory());
             sessionKey = await DeriveSessionKeyAsync(
                 action.SessionAlg, bindAuthValue, action.BoundEntityName, salt.Memory[..saltSize], framedNonceTpm.AsReadOnlyMemory(), action.NonceCaller.AsReadOnlyMemory(), pool, cancellationToken).ConfigureAwait(false);
@@ -4888,7 +7801,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
     /// <summary>
     /// Computes the bound-entity value a started session records (TPM 2.0 Library Part 4,
-    /// <c>SessionComputeBoundEntity()</c>; Part 1, clause 17.6.10): the fold of the bind entity's Name
+    /// <c>SessionComputeBoundEntity()</c>; Part 1, clause 16.6.10): the fold of the bind entity's Name
     /// and its stripped bind-time authValue, for an HMAC session with a real bind entity —
     /// <see cref="SessionBoundEntity.Unbound"/> for an unbound start and for every POLICY/TRIAL
     /// session, which never applies the bind-omission optimization (Part 3, clause 11.1.1's own "the
@@ -4909,7 +7822,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         }
 
         //A permanent entity's (and, in this model, an NV Index's) Name IS its 4-octet big-endian handle value
-        //(Part 1, clause 14, Table 6), so the octets are materialized here rather than carried out of the pure transition
+        //(Part 1, clause 13, Table 9), so the octets are materialized here rather than carried out of the pure transition
         //that resolved the bind.
         Span<byte> handleFormName = stackalloc byte[sizeof(uint)];
 
@@ -4918,7 +7831,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
     /// <summary>
     /// Derives a session key: <c>KDFa(sessionAlg, bindAuthValue || salt, "ATH", nonceTPM, nonceCaller, bits)</c>
-    /// (TPM 2.0 Library Part 1, clause 17.6.10 equations 20/23/25).
+    /// (TPM 2.0 Library Part 1, clause 16.6.10 equations 20/23/25).
     /// </summary>
     /// <remarks>
     /// <para>
@@ -4929,7 +7842,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// disposed immediately after the KDFa call.
     /// </para>
     /// <para>
-    /// A session that is neither bound nor salted never runs KDFa at all: Part 1, clause 17.6.9 gives it
+    /// A session that is neither bound nor salted never runs KDFa at all: Part 1, clause 16.6.9 gives it
     /// sessionKey = an Empty Buffer, not a digest-width value derived from a zero-length key. Whether a bind
     /// entity is present is NOT the same question as whether its resolved authValue happens to be empty — a
     /// session bound to a real entity whose own authValue is empty (or salted with a zero-length recovered
@@ -5011,7 +7924,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
     /// <summary>
     /// An encrypt-attributed <c>TPM2_GetRandom()</c> response over a bound HMAC session (TPM 2.0 Library Part 3,
-    /// clause 16.1; Part 1, clauses 16.7 and 19).
+    /// clause 16.1; Part 1, clauses 15.7 and 18).
     /// </summary>
     /// <remarks>
     /// The order is the crux and mirrors the host's response-processing contract: draw the random octets and a
@@ -5051,11 +7964,11 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         int digestSize = SessionDigestSize(action.SessionAlg);
         int byteCount = action.ByteCount;
 
-        //nonceTPM rolled to a fresh value for this response (Part 1, clause 17.6.5): the response nonceNewer.
+        //nonceTPM rolled to a fresh value for this response (Part 1, clause 16.6.5): the response nonceNewer.
         (Tpm2bNonce framedNonceTpm, Tpm2bNonce retainedNonceTpm) = RollSessionNonce(action.SessionAlg, context);
 
         //The first (only) response parameter is randomBytes as a TPM2B_DIGEST: a UINT16 size prefix (the count,
-        //left unprotected) followed by the octets, whose data portion is encrypted in place (Part 1, clause 19.1).
+        //left unprotected) followed by the octets, whose data portion is encrypted in place (Part 1, clause 18.1).
         int parameterLength = sizeof(ushort) + byteCount;
         IMemoryOwner<byte> parameterArea;
         try
@@ -5078,9 +7991,9 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                 context.Rng(paramSpan.Slice(sizeof(ushort), byteCount));
             }
 
-            //Encrypt the data portion (after the 2-octet size). Response direction (Part 1, clause 19.2): nonceNewer
+            //Encrypt the data portion (after the 2-octet size). Response direction (Part 1, clause 18.2): nonceNewer
             //= newNonceTPM, nonceOlder = nonceCaller; the key is sessionValue = sessionKey, since TPM2_GetRandom()
-            //takes no handle and so its session authorizes no entity whose authValue could fold in (clause 19.1).
+            //takes no handle and so its session authorizes no entity whose authValue could fold in (clause 18.1).
             await ApplyResponseEncryptionAsync(
                 action.Symmetric, action.SessionAlg, action.SessionKey, Tpm2bAuth.Empty, framedNonceTpm.AsReadOnlyMemory(), action.NonceCaller.AsReadOnlyMemory(),
                 parameterArea.Memory.Slice(sizeof(ushort), byteCount), context.Pool, cancellationToken).ConfigureAwait(false);
@@ -5107,15 +8020,15 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
     /// <summary>
     /// The <c>TPM2_Unseal()</c> response over 0, 1, or 2 real (HMAC-table) sessions, plus an optional leading
-    /// policy-session placeholder entry (TPM 2.0 Library Part 3, clause 12.7; Part 1, clauses 16.7 and 19).
+    /// policy-session placeholder entry (TPM 2.0 Library Part 3, clause 12.7; Part 1, clauses 15.7 and 18).
     /// </summary>
     /// <remarks>
     /// The recovered secret is framed as a TPM2B_SENSITIVE_DATA (outData); its data portion is encrypted, in the
     /// same order the encrypt-attributed <c>TPM2_GetRandom()</c> path establishes, over whichever real session
     /// (if any) carries the encrypt attribute: roll a fresh nonceTPM per real session, ENCRYPT outData, compute
-    /// rpHash over the ENCRYPTED parameter area ONCE PER DISTINCT session hash algorithm (Part 1, clause 16.8,
+    /// rpHash over the ENCRYPTED parameter area ONCE PER DISTINCT session hash algorithm (Part 1, clause 15.8,
     /// equation 16; two real sessions may negotiate different algorithms), then each real session's own response HMAC, keyed on its
-    /// own sessionKey ‖ authValue — THE SAME key its command-HMAC verification used (Part 1, clause 17.6.8). A
+    /// own sessionKey ‖ authValue — THE SAME key its command-HMAC verification used (Part 1, clause 16.6.8). A
     /// policy-session placeholder entry carries no HMAC (it has no key); only its nonce width and echoed
     /// attributes travel back for framing.
     /// </remarks>
@@ -5125,7 +8038,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     {
         //This frame is the terminal owner of the caller-nonce carrier every response-session entry owns — the
         //TPM2B_NONCE its slot's request record transferred into it — discharging the obligation once the
-        //keystream and the response HMACs have read the nonces as their nonceOlder term (Part 1, clause 19.2),
+        //keystream and the response HMACs have read the nonces as their nonceOlder term (Part 1, clause 18.2),
         //on the success and framing-failure paths alike.
         try
         {
@@ -5166,7 +8079,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             }
 
             //rpHash is computed once per DISTINCT hash algorithm among action.HmacResponseSessions (Part 1,
-            //clause 16.8, equation 16): each real session verifies its response HMAC against its OWN algorithm's
+            //clause 15.8, equation 16): each real session verifies its response HMAC against its OWN algorithm's
             //rpHash, never one session's hash (nor the policy placeholder's, which carries no HMAC of its own)
             //shared by every real session — the host-side mirror lives in TpmCommandExecutor.ExecuteAsync. The
             //policy placeholder's own algorithm is unrelated to rpHash; it is used only to frame its nonce width,
@@ -5178,20 +8091,20 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             }
 
             //Roll a fresh nonceTPM for every real session up front (each is an independent RNG draw, Part 1,
-            //clause 17.6.5).
+            //clause 16.6.5).
             (Tpm2bNonce[] framedNonces, Tpm2bNonce[] retainedNonces) = RollSessionNonces(sessionAlgs, context);
             try
             {
                 //Encrypt the data portion (after the 2-octet size) over whichever session (if any) carries the
                 //encrypt attribute (Part 1 permits at most one), using its freshly rolled nonceTPM as nonceNewer
-                //and its command caller nonce as nonceOlder (clause 19.2).
+                //and its command caller nonce as nonceOlder (clause 18.2).
                 for(int i = 0; i < action.HmacResponseSessions.Length; i++)
                 {
                     TpmUnsealResponseSession encryptCandidate = action.HmacResponseSessions[i];
                     if(encryptCandidate.Encrypts)
                     {
                         //sessionValue = sessionKey ‖ StripTrailingZeros(authValue) when the encrypting session also
-                        //authorizes an entity, sessionKey alone when it is a companion (clause 19.1). The entry
+                        //authorizes an entity, sessionKey alone when it is a companion (clause 18.1). The entry
                         //carries that entity term already resolved — the item's LIVE userAuth for the authorizing
                         //slot, the empty carrier for a companion — so this call needs no knowledge of which slot it
                         //is transforming for.
@@ -5260,15 +8173,15 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// Applies the session's parameter-encryption scheme to the COMMAND first-parameter data in place, recovering
     /// its plaintext: XOR obfuscation (mandatory, self-inverse) or AES-CFB (platform specific), keyed by the
     /// session's <c>sessionValue</c> with the command-direction nonce ordering — nonceNewer is nonceCaller and
-    /// nonceOlder is nonceTPM (TPM 2.0 Library Part 1, clauses 19.2 and 19.3).
+    /// nonceOlder is nonceTPM (TPM 2.0 Library Part 1, clauses 18.2 and 18.3).
     /// </summary>
     /// <remarks>
     /// <para>
     /// The <c>sessionValue</c> is assembled here, once, for every request-decrypting effect: <c>sessionKey ‖
     /// authValue</c> when the decrypt session also authorizes an entity, <c>sessionKey</c> alone when it
-    /// authorizes none — and "the binding of the session is ignored" (Part 1, clause 19.1), so the entity term is
+    /// authorizes none — and "the binding of the session is ignored" (Part 1, clause 18.1), so the entity term is
     /// the authorized entity's LIVE authValue, never the bind-omission-resolved term the command HMAC key uses
-    /// (clause 17.6.10, equation 22). A caller whose decrypt session authorizes nothing passes the empty carrier
+    /// (clause 16.6.10, equation 22). A caller whose decrypt session authorizes nothing passes the empty carrier
     /// and gets the session key alone.
     /// </para>
     /// <para>
@@ -5284,7 +8197,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// <param name="entityAuthValue">The authValue of the entity the decrypt session authorizes, unresolved by bind, or the shared empty carrier when it authorizes none — a borrowed reference the durable state owns.</param>
     /// <param name="nonceCaller">The decrypt session's caller nonce for this command (the decryption's nonceNewer).</param>
     /// <param name="nonceTpm">The decrypt session's stored nonceTPM (the decryption's nonceOlder).</param>
-    /// <param name="data">The first parameter's data portion, transformed in place; its 2-octet size field is never encrypted and so is not part of this span (Part 1, clause 19.1).</param>
+    /// <param name="data">The first parameter's data portion, transformed in place; its 2-octet size field is never encrypted and so is not part of this span (Part 1, clause 18.1).</param>
     /// <param name="pool">The memory pool for the sessionValue scratch and the primitive's own buffers.</param>
     /// <param name="ownedInFlight">
     /// The in-flight request whose parse-rented carriers the calling effect still owns, released here when the
@@ -5334,12 +8247,12 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// Applies the session's parameter-encryption scheme to the response first-parameter data in place: XOR
     /// obfuscation (mandatory, self-inverse) or AES-CFB (platform specific), keyed by the session's
     /// <c>sessionValue</c> with the response-direction nonces the caller supplies (TPM 2.0 Library Part 1,
-    /// clauses 19.2 and 19.3).
+    /// clauses 18.2 and 18.3).
     /// </summary>
     /// <remarks>
     /// The <c>sessionValue</c> is assembled here by the same rule the request direction uses: <c>sessionKey ‖
     /// authValue</c> when the encrypting session also authorizes an entity, <c>sessionKey</c> alone when it
-    /// authorizes none, with the binding of the session ignored (Part 1, clause 19.1). The concatenation lands in
+    /// authorizes none, with the binding of the session ignored (Part 1, clause 18.1). The concatenation lands in
     /// pinned pooled scratch cleared before release. Reuses the production <c>TpmParameterEncryption</c>
     /// primitives, so the mask/keystream matches the host's decryption by construction.
     /// </remarks>
@@ -5380,8 +8293,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
     /// <summary>
     /// Dispatches an assembled <c>sessionValue</c> and an ordered nonce pair to the parameter-encryption
-    /// primitive the session negotiated — XOR obfuscation (TPM 2.0 Library Part 1, clause 19.2) or AES-CFB
-    /// (clause 19.3) — transforming the data in place.
+    /// primitive the session negotiated — XOR obfuscation (TPM 2.0 Library Part 1, clause 18.2) or AES-CFB
+    /// (clause 18.3) — transforming the data in place.
     /// </summary>
     /// <remarks>
     /// The single place either direction names a primitive, so the two directions can differ in nothing but the
@@ -5389,7 +8302,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// symmetric definition that is neither is refused loudly rather than silently left untransformed: a session
     /// can only ever hold <c>TPM_ALG_NULL</c>, XOR, or AES-CFB, since <c>TPM2_StartAuthSession()</c> answers
     /// <c>TPM_RC_SYMMETRIC</c>/<c>TPM_RC_MODE</c> for anything else, and a decrypt or encrypt claim over a
-    /// <c>TPM_ALG_NULL</c> session is already <c>TPM_RC_SYMMETRIC</c> at the session-area gate (clause 19.1).
+    /// <c>TPM_ALG_NULL</c> session is already <c>TPM_RC_SYMMETRIC</c> at the session-area gate (clause 18.1).
     /// </remarks>
     /// <param name="symmetric">The session's negotiated symmetric definition.</param>
     /// <param name="sessionAlg">The session's hash algorithm, driving the KDFa.</param>
@@ -5428,7 +8341,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// <summary>
     /// Computes <c>rpHash</c> for a session response = <c>H_sessionAlg(responseCode(TPM_RC_SUCCESS) ||
     /// commandCode || responseParameterArea)</c> — the response parameter bytes as sent, which for an encrypt
-    /// session are the ciphertext (TPM 2.0 Library Part 1, clause 16.8, equation 16). Computed through the registered digest
+    /// session are the ciphertext (TPM 2.0 Library Part 1, clause 15.8, equation 16). Computed through the registered digest
     /// seam over one contiguous buffer.
     /// </summary>
     /// <remarks>
@@ -5472,7 +8385,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
     /// <summary>
     /// Computes rpHash once per DISTINCT hash algorithm present in <paramref name="sessionAlgs"/>, over the SAME
-    /// parameter bytes, caching by algorithm (TPM 2.0 Library Part 1, clause 16.8, equation 16): a Create/Unseal
+    /// parameter bytes, caching by algorithm (TPM 2.0 Library Part 1, clause 15.8, equation 16): a Create/Unseal
     /// response framed over several real sessions negotiating different hash algorithms (e.g. a SHA-256 auth
     /// session alongside a SHA-384 decrypt/encrypt companion) needs each session's OWN rpHash, never one
     /// session's hash shared by every session — the host-side mirror of this same fix lives in
@@ -5517,7 +8430,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
     /// <summary>
     /// The response session HMAC = <c>HMAC_sessionAlg(sessionValue, rpHash || nonceTPM(new) || nonceCaller ||
-    /// sessionAttributes)</c> (TPM 2.0 Library Part 1, clause 16.7). sessionValue is the session key (the empty
+    /// sessionAttributes)</c> (TPM 2.0 Library Part 1, clause 15.7). sessionValue is the session key (the empty
     /// bind authValue adds nothing). Computed through the registered HMAC seam — the SAME the host verifies
     /// with.
     /// </summary>
@@ -5563,7 +8476,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// <summary>
     /// Executes a queued <see cref="TpmVerifyCommandHmacAction"/>: recompute cpHash over the still-encrypted (if
     /// any) parameter bytes exactly as received, then verify the current pending session's command HMAC against
-    /// it (TPM 2.0 Library Part 1, clauses 16.7 and 19.6; Part 3, clause 5.6, check 9).
+    /// it (TPM 2.0 Library Part 1, clauses 15.7 and 18.6; Part 3, clause 5.6, check 9).
     /// </summary>
     /// <remarks>
     /// The outcome, together with the queue and the original request, is fed back so
@@ -5573,6 +8486,38 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     private static async ValueTask<TpmSimulatorInput> VerifyCommandHmacAsync(TpmVerifyCommandHmacAction action, TpmActionContext context, CancellationToken cancellationToken)
     {
         TpmPendingSessionVerification current = action.Current;
+
+        if(current.IsPasswordCompare)
+        {
+            //A TPM_RS_PW slot queued in wire order behind a real session: its hmac field IS the password,
+            //compared against the entity's authValue — both sides trailing-zero-stripped (TPM 2.0 Library Part 1,
+            //clause 16.6.4.3), in fixed time — with no cpHash, so the slot is judged only once every slot before
+            //it has verified (Part 3, clause 5.6; Part 4 ParseSessionBuffer's per-slot walk).
+            bool isPasswordMatched = CryptographicOperations.FixedTimeEquals(
+                TpmLifecycleTransitions.StripTrailingZeros(current.SuppliedHmac.AsReadOnlySpan()),
+                TpmLifecycleTransitions.StripTrailingZeros(current.AuthValue.AsReadOnlySpan()));
+
+            return new TpmCommandHmacVerified(
+                isPasswordMatched, action.CommandCode, current.SessionIndex, current.IsDaProtected,
+                action.HandleNames, action.ParameterArea, action.Remaining, action.NextRequest, current.IsLockoutEntity);
+        }
+
+        if(current.PolicyBindingKind != TpmPolicyCpHashKind.None)
+        {
+            //A policy session's latched cpHash, nameHash or pHash is judged against THIS command (TPM 2.0 Library
+            //Part 3, clauses 23.13/23.14/23.15/23.24; Part 4 CheckPolicyAuthSession) under the session's own hash:
+            //the cpHash by the very recipe a command HMAC's cpHash uses, the nameHash over the handle-Name area
+            //alone, the pHash over the command code and the parameter area with the Names skipped. No authValue
+            //is involved, so a mismatch is the policy's failure, never a dictionary-attack event.
+            bool isBindingMatched = await VerifyPolicyBindingAsync(
+                current.PolicyBindingKind, current.PolicyBoundDigest!, current.SessionAlg, action.CommandCode, action.HandleNames, action.ParameterArea,
+                context.Pool, cancellationToken).ConfigureAwait(false);
+
+            return new TpmCommandHmacVerified(
+                isBindingMatched, action.CommandCode, current.SessionIndex, IsDaProtected: false,
+                action.HandleNames, action.ParameterArea, action.Remaining, action.NextRequest, IsLockoutEntity: false, IsPolicyBinding: true);
+        }
+
         int digestSize = SessionDigestSize(current.SessionAlg);
 
         using IMemoryOwner<byte> cpHash = await ComputeSessionCpHashAsync(
@@ -5589,6 +8534,68 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     }
 
     /// <summary>
+    /// <summary>
+    /// Judges a policy session's latched digest binding against the command it now authorizes (TPM 2.0 Library
+    /// Part 4 <c>CheckPolicyAuthSession</c>): a <see cref="TpmPolicyCpHashKind.CpHash"/> binding against the
+    /// command's cpHash — <c>H_sessionAlg(commandCode ‖ Name1..N ‖ parameters-as-received)</c>, the recipe
+    /// <see cref="ComputeSessionCpHashAsync"/> already implements — a <see cref="TpmPolicyCpHashKind.NameHash"/>
+    /// binding against <c>H_sessionAlg(Name1 ‖ … ‖ NameN)</c> over the handle-Name area alone (Part 4
+    /// <c>CompareNameHash</c>), and a <see cref="TpmPolicyCpHashKind.ParametersHash"/> binding against
+    /// <c>H_sessionAlg(commandCode ‖ parameters-as-received)</c> with the Names skipped (Part 3, clause 23.24;
+    /// Part 4 <c>CompareParametersHash</c>). Every compare is fixed-time; none reads a secret.
+    /// </summary>
+    /// <param name="kind">Which binding the slot holds.</param>
+    /// <param name="boundDigest">The latched digest — a borrow of the carrier the session owns.</param>
+    /// <param name="sessionAlg">The session's policy hash algorithm, which sizes and selects the digest.</param>
+    /// <param name="commandCode">The command being authorized.</param>
+    /// <param name="handleNames">The command's handle-Name area as its ordered terms.</param>
+    /// <param name="parameterArea">The command's parameter area exactly as received.</param>
+    /// <param name="pool">The memory pool the digest input and result are rented from.</param>
+    /// <param name="cancellationToken">A token observed across the digest computation.</param>
+    /// <returns><see langword="true"/> when the command satisfies the binding.</returns>
+    private static async ValueTask<bool> VerifyPolicyBindingAsync(
+        TpmPolicyCpHashKind kind, Tpm2bDigest boundDigest, TpmiAlgHash sessionAlg, TpmCcConstants commandCode, TpmCommandHandleNames handleNames, TpmParameterArea parameterArea,
+        BaseMemoryPool pool, CancellationToken cancellationToken)
+    {
+        int digestSize = SessionDigestSize(sessionAlg);
+
+        if(kind == TpmPolicyCpHashKind.CpHash)
+        {
+            using IMemoryOwner<byte> cpHash = await ComputeSessionCpHashAsync(sessionAlg, commandCode, handleNames, parameterArea, pool, cancellationToken).ConfigureAwait(false);
+
+            return CryptographicOperations.FixedTimeEquals(cpHash.Memory.Span[..digestSize], boundDigest.AsReadOnlySpan());
+        }
+
+        if(kind == TpmPolicyCpHashKind.ParametersHash)
+        {
+            //pHash = H(commandCode ‖ parameters) — the cpHash recipe with the handle-Name area skipped, over the
+            //parameter octets exactly as received (Part 3, clause 23.24: "commandTag, commandSize and the Names of
+            //the associated objects are not included in pHash"; Part 4 CompareParametersHash).
+            int inputLength = sizeof(uint) + parameterArea.Length;
+            using IMemoryOwner<byte> inputOwner = pool.Rent(inputLength);
+            {
+                Span<byte> span = inputOwner.Memory.Span[..inputLength];
+                BinaryPrimitives.WriteUInt32BigEndian(span, (uint)commandCode);
+                parameterArea.Span.CopyTo(span[sizeof(uint)..]);
+            }
+
+            using DigestValue parametersHash = await CryptographicKeyEvents.ComputeDigestAsync(
+                inputOwner.Memory[..inputLength], digestSize, SessionDigestTag(sessionAlg), pool, cancellationToken: cancellationToken).ConfigureAwait(false);
+            inputOwner.Memory.Span[..inputLength].Clear();
+
+            return CryptographicOperations.FixedTimeEquals(parametersHash.AsReadOnlySpan()[..digestSize], boundDigest.AsReadOnlySpan());
+        }
+
+        int namesLength = handleNames.Length;
+        using IMemoryOwner<byte> namesOwner = pool.Rent(Math.Max(namesLength, 1));
+        handleNames.CopyTo(namesOwner.Memory.Span[..namesLength]);
+
+        using DigestValue nameHash = await CryptographicKeyEvents.ComputeDigestAsync(
+            namesOwner.Memory[..namesLength], digestSize, SessionDigestTag(sessionAlg), pool, cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        return CryptographicOperations.FixedTimeEquals(nameHash.AsReadOnlySpan()[..digestSize], boundDigest.AsReadOnlySpan());
+    }
+
     /// Computes cpHash for command-side HMAC verification =
     /// <c>H_sessionAlg(commandCode || Name1..N || parameters-as-received)</c> (TPM 2.0 Library Part 1, clause
     /// 16.7 equation 15) — the command-direction mirror of <see cref="ComputeSessionRpHashAsync"/> (which has a
@@ -5596,7 +8603,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// </summary>
     /// <remarks>
     /// Computed over the parameter bytes exactly as received — still encrypted, if a decrypt session is present
-    /// (Part 1, clause 21.1) — never decrypted first.
+    /// (Part 1, clause 20.1) — never decrypted first.
     /// </remarks>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the cpHash buffer transfers to the caller, which releases it via a using declaration.")]
@@ -5611,7 +8618,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         //Lay out commandCode || Name1..N || parameterArea synchronously (the span never crosses the digest
         //await). The Name terms are materialized here rather than carried as octets because the pure transition
         //that decides them holds no memory pool: a computed Name is copied out of the carrier that owns it and a
-        //permanent entity's Name is written from its handle value (Part 1, clause 14, Table 6).
+        //permanent entity's Name is written from its handle value (Part 1, clause 13, Table 9).
         {
             Span<byte> span = inputOwner.Memory.Span[..inputLength];
             BinaryPrimitives.WriteUInt32BigEndian(span, (uint)commandCode);
@@ -5637,12 +8644,12 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     }
 
     /// <summary>
-    /// Verifies a session's command HMAC (TPM 2.0 Library Part 1, clause 17.6.5 equation 17; Part 3, clause 5.6, check 9).
+    /// Verifies a session's command HMAC (TPM 2.0 Library Part 1, clause 16.6.5 equation 17; Part 3, clause 5.6, check 9).
     /// </summary>
     /// <remarks>
     /// <para>
     /// <c>authHMAC := HMAC_sessionAlg(sessionKey || authValue, cpHash || nonceCaller || nonceTPM ||
-    /// nonceTPMdecrypt || nonceTPMencrypt || sessionAttributes)</c>. The two fold terms (Part 1, clause 17.6.3.4)
+    /// nonceTPMdecrypt || nonceTPMencrypt || sessionAttributes)</c>. The two fold terms (Part 1, clause 16.6.3.4)
     /// are supplied separately and concatenated here, in equation 17's own order, because the pure transition
     /// that decides them holds no memory pool while this effect already assembles the message in pooled scratch.
     /// Both are empty for every session except the first session in a command, and only when that first session
@@ -5650,18 +8657,19 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// </para>
     /// <para>
     /// When both <paramref name="sessionKey"/> and <paramref name="authValue"/> are empty, a zero-length hmac is
-    /// ALSO accepted (clause 17.6.15's No-HMAC-Authorization: "hmac is allowed to be either a valid authHMAC or an
-    /// Empty Buffer" — the clause's own prose is scoped to policy sessions, and this simulator deliberately extends
-    /// the allowance to any session type whose key material is entirely empty, a wider-than-reference leniency
-    /// since the reference's <c>CheckSessionHMAC</c> has no empty allowance at all) — but a caller that computed
-    /// and sent a genuine authHMAC over that empty key (RFC 2104's well-defined empty-key HMAC — the ordinary,
-    /// unremarkable choice for a caller with no reason to special-case it) must still verify normally; the
-    /// empty-hmac allowance is a permitted shortcut, never a mandate.
+    /// ALSO accepted (clause 16.6.16's No-HMAC-Authorization: "the caller has the option of either providing the
+    /// results of the authHMAC computation, or not" — for any session kind whose HMAC key is entirely empty,
+    /// exactly the arm Part 4's <c>ComputeCommandHMAC</c> takes, answering a zero-size expected hmac for a
+    /// zero-size key and a zero-size supplied hmac), and the response then carries an empty hmac in kind
+    /// (<c>ComputeResponseHMAC</c>) — but a caller that computed and sent a genuine authHMAC over that empty key
+    /// (RFC 2104's well-defined empty-key HMAC — the ordinary, unremarkable choice for a caller with no reason to
+    /// special-case it) must still verify normally, as it does in the reference; the empty-hmac allowance is a
+    /// permitted shortcut, never a mandate.
     /// </para>
     /// </remarks>
     /// <param name="sessionAlg">The session's negotiated hash algorithm.</param>
     /// <param name="sessionKey">The session's derived key — the borrowed carrier the durable session record owns; its bytes are viewed only here, at the HMAC primitive, and copied into a pinned scratch cleared before release.</param>
-    /// <param name="authValue">The authorized entity's authValue — the borrowed carrier the durable state owns, its trailing-zero-stripped view taken only here (Part 1, clause 17.6.4.3), or the shared empty carrier when the HMAC term omits it.</param>
+    /// <param name="authValue">The authorized entity's authValue — the borrowed carrier the durable state owns, its trailing-zero-stripped view taken only here (Part 1, clause 16.6.4.3), or the shared empty carrier when the HMAC term omits it.</param>
     /// <param name="cpHash">The command parameter hash.</param>
     /// <param name="nonceCaller">The caller-supplied nonceCaller.</param>
     /// <param name="nonceTpm">The session's current nonceTPM.</param>
@@ -5725,8 +8733,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     }
 
     /// <summary>
-    /// Draws a session's freshly rolled nonceTPM (TPM 2.0 Library Part 1, clause 17.6.5) from the injected RNG
-    /// into the PAIR of owned <c>TPM2B_NONCE</c> carriers (Part 2, clause 10.4.4, Table 94) a response needs.
+    /// Draws a session's freshly rolled nonceTPM (TPM 2.0 Library Part 1, clause 16.6.5) from the injected RNG
+    /// into the PAIR of owned <c>TPM2B_NONCE</c> carriers (Part 2, clause 10.3.4, Table 92) a response needs.
     /// </summary>
     /// <remarks>
     /// The two carriers hold the same octets and have deliberately disjoint owners: the framed one travels to
@@ -5855,7 +8863,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// <summary>
     /// The credential-protection outer wrap's symmetric key width in bits: the credential key's (endorsement
     /// key's) symmetric algorithm, which for the ECC storage/EK template this model creates is AES-128-CFB (TPM
-    /// 2.0 Library Part 1, clause 25.2; the storage parent template negotiates AES-128).
+    /// 2.0 Library Part 1, clause 24.2; the storage parent template negotiates AES-128).
     /// </summary>
     private const int CredentialSymmetricKeyBits = 128;
 
@@ -5868,17 +8876,17 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// </summary>
     private const int CredentialSymmetricBlockSize = 16;
 
-    /// <summary>The KDFe use label for the credential-protection seed derivation (TPM 2.0 Library Part 1, clause 24).</summary>
+    /// <summary>The KDFe use label for the credential-protection seed derivation (TPM 2.0 Library Part 1, clause 21).</summary>
     private const string CredentialIdentityLabel = "IDENTITY";
 
-    /// <summary>The KDFa outer-wrap label for the credential-protection symmetric key (TPM 2.0 Library Part 1, clause 24).</summary>
+    /// <summary>The KDFa outer-wrap label for the credential-protection symmetric key (TPM 2.0 Library Part 1, clause 21).</summary>
     private const string CredentialStorageLabel = "STORAGE";
 
-    /// <summary>The KDFa outer-wrap label for the credential-protection HMAC key (TPM 2.0 Library Part 1, clause 24).</summary>
+    /// <summary>The KDFa outer-wrap label for the credential-protection HMAC key (TPM 2.0 Library Part 1, clause 21).</summary>
     private const string CredentialIntegrityLabel = "INTEGRITY";
 
     /// <summary>
-    /// The RSA arm's OAEP label (L, TPM 2.0 Library Part 1, Annex B.4, B.10.4): the ASCII octets "IDENTITY" plus
+    /// The RSA arm's OAEP label (L, TPM 2.0 Library Part 1, clause 43.4, 21.3): the ASCII octets "IDENTITY" plus
     /// a trailing NUL that is part of the lhash digest input, not a KDFa-style separator the digest skips — a
     /// plain 9-octet buffer, unrelated to <see cref="CredentialIdentityLabel"/> above (which feeds the ECC arm's
     /// KDFe use-label, a different mechanism).
@@ -5886,9 +8894,15 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// <remarks>A static getter, not a byte[] field, per this codebase's static-cache convention.</remarks>
     private static ReadOnlyMemory<byte> CredentialIdentityLabelOctets { get; } = "IDENTITY\0"u8.ToArray();
 
+    /// <summary>The KDFe label deriving a duplication seed at an elliptic-curve new parent (TPM 2.0 Library Part 1, clause 20.3.2.3) — the duplication counterpart of <see cref="CredentialIdentityLabel"/> on the same transport path.</summary>
+    private const string DuplicationSeedLabel = "DUPLICATE";
+
+    /// <summary>The RSA-OAEP label for a duplication seed (TPM 2.0 Library Part 1, clause 20.3.2.3): the label octets INCLUDING the terminating zero — the duplication counterpart of <see cref="CredentialIdentityLabelOctets"/>.</summary>
+    private static ReadOnlyMemory<byte> DuplicationSeedLabelOctets { get; } = "DUPLICATE\0"u8.ToArray();
+
     /// <summary>
     /// <c>TPM2_MakeCredential()</c>: wrap a credential so only a TPM holding the credential key's private scalar
-    /// and the object named by objectName can recover it (TPM 2.0 Library Part 1, clause 24; Part 3, clause
+    /// and the object named by objectName can recover it (TPM 2.0 Library Part 1, clause 21; Part 3, clause
     /// 12.6).
     /// </summary>
     /// <remarks>
@@ -5914,46 +8928,87 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             ?? throw new InvalidOperationException("TPM2_MakeCredential() requires a signing backend, but none was supplied.");
         BaseMemoryPool pool = context.Pool;
 
-        int fieldWidth = (action.CredentialKeyPublicPoint.Length - 1) / 2;
-        int seedSize = SessionDigestSize(action.NameAlg);
+        (IMemoryOwner<byte> seed, int seedSize, Tpm2bEncryptedSecret secret) = await BuildEccSeedTransportAsync(
+            action.CredentialKeyPublicPoint, action.CredentialKeyCurve, action.NameAlg, CredentialIdentityLabel, context, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            (IMemoryOwner<byte> credentialBlobStorage, int credentialBlobLength) = await BuildCredentialBlobAsync(
+                seed.Memory[..seedSize], credential.AsReadOnlyMemory(), objectName.AsReadOnlyMemory(), action.NameAlg, pool, cancellationToken).ConfigureAwait(false);
 
-        //A fresh ephemeral key pair for the ECDH seed transport (a new pair per credential; Part 1, clause 24).
-        using TpmGeneratedEccKey ephemeral = await backend.GenerateKey(action.CredentialKeyCurve.Value, pool, cancellationToken).ConfigureAwait(false);
+            return new TpmCredentialMade(Tpm2bIdObject.FromMarshaled(credentialBlobStorage, credentialBlobLength), secret);
+        }
+        catch
+        {
+            secret.Dispose();
+            throw;
+        }
+        finally
+        {
+            seed.Memory.Span[..seedSize].Clear();
+            seed.Dispose();
+        }
+    }
 
-        //Extract the SEC1 ephemeral point, the ephemeral scalar, and the two KDFe x-coordinates (partyUInfo = the
-        //ephemeral point's x, partyVInfo = the credential key's x) into arrays, so the spans never cross the awaits.
+    /// <summary>
+    /// Builds an identity-based seed transport to an elliptic-curve recipient (TPM 2.0 Library Part 1, clause
+    /// 20.3.2.3): a fresh ephemeral key pair, an ECDH shared value against the recipient's public point, and
+    /// <c>seed := KDFe(nameAlg, Z, label, ephemeralX, recipientX, bits)</c>, with the ephemeral public point
+    /// framed as the <c>TPM2B_ENCRYPTED_SECRET</c> the recipient recovers the seed from. The label selects the
+    /// use — "IDENTITY" for credential protection, "DUPLICATE" for duplication — on this otherwise shared path.
+    /// </summary>
+    /// <param name="recipientPublicPoint">The recipient key's SEC1 uncompressed public point.</param>
+    /// <param name="recipientCurve">The recipient key's curve.</param>
+    /// <param name="nameAlg">The recipient's Name algorithm, driving the KDFe hash and the seed width.</param>
+    /// <param name="label">The KDFe use label.</param>
+    /// <param name="context">The effect context supplying the backend and the memory pool.</param>
+    /// <param name="cancellationToken">The token to observe.</param>
+    /// <returns>The derived seed in a pinned rental with its width, and the framed transport secret; ownership of the seed and the secret transfers to the caller.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the seed rental and the secret carrier transfers to the caller, which clears and releases the seed once the wrap has consumed it and rides the secret to the response intent released by SerializeResponse.")]
+    private static async ValueTask<(IMemoryOwner<byte> Seed, int SeedSize, Tpm2bEncryptedSecret Secret)> BuildEccSeedTransportAsync(
+        ReadOnlyMemory<byte> recipientPublicPoint, TpmiEccCurve recipientCurve, TpmiAlgHash nameAlg, string label,
+        TpmActionContext context, CancellationToken cancellationToken)
+    {
+        TpmEccSigningBackend backend = context.SigningBackend
+            ?? throw new InvalidOperationException("An elliptic-curve seed transport requires a signing backend, but none was supplied.");
+        BaseMemoryPool pool = context.Pool;
+
+        int fieldWidth = (recipientPublicPoint.Length - 1) / 2;
+        int seedSize = SessionDigestSize(nameAlg);
+
+        using TpmGeneratedEccKey ephemeral = await backend.GenerateKey(recipientCurve.Value, pool, cancellationToken).ConfigureAwait(false);
+
+        //Extract the SEC1 ephemeral point, the ephemeral scalar, and the two KDFe x-coordinates (partyUInfo =
+        //the ephemeral point's x, partyVInfo = the recipient key's x) into arrays, so the spans never cross the
+        //awaits.
         byte[] ephemeralPoint;
         byte[] ephemeralScalar;
         byte[] ephemeralX;
-        byte[] credentialKeyX;
+        byte[] recipientX;
         {
             ReadOnlySpan<byte> ephemeralPointSpan = ephemeral.PublicPoint.AsReadOnlySpan();
             ephemeralPoint = ephemeralPointSpan.ToArray();
             ephemeralScalar = ephemeral.PrivateScalar.AsReadOnlySpan().ToArray();
             ephemeralX = EllipticCurveUtilities.SliceXCoordinate(ephemeralPointSpan).ToArray();
-            credentialKeyX = EllipticCurveUtilities.SliceXCoordinate(action.CredentialKeyPublicPoint.Span).ToArray();
+            recipientX = EllipticCurveUtilities.SliceXCoordinate(recipientPublicPoint.Span).ToArray();
         }
 
         try
         {
             using IMemoryOwner<byte> sharedValue = await backend.ComputeSharedSecret(
-                ephemeralScalar, action.CredentialKeyPublicPoint, action.CredentialKeyCurve.Value, pool, cancellationToken).ConfigureAwait(false);
-            using IMemoryOwner<byte> seed = await Kdfe.DeriveAsync(
-                SessionHashName(action.NameAlg), sharedValue.Memory[..fieldWidth], CredentialIdentityLabel, ephemeralX, credentialKeyX, seedSize * 8, pool, cancellationToken).ConfigureAwait(false);
-
-            (IMemoryOwner<byte> credentialBlobStorage, int credentialBlobLength) = await BuildCredentialBlobAsync(
-                seed.Memory[..seedSize], credential.AsReadOnlyMemory(), objectName.AsReadOnlyMemory(), action.NameAlg, pool, cancellationToken).ConfigureAwait(false);
-            Tpm2bIdObject credentialBlob = Tpm2bIdObject.FromMarshaled(credentialBlobStorage, credentialBlobLength);
+                ephemeralScalar, recipientPublicPoint, recipientCurve.Value, pool, cancellationToken).ConfigureAwait(false);
+            IMemoryOwner<byte> seed = await Kdfe.DeriveAsync(
+                SessionHashName(nameAlg), sharedValue.Memory[..fieldWidth], label, ephemeralX, recipientX, seedSize * 8, pool, cancellationToken).ConfigureAwait(false);
             try
             {
-                seed.Memory.Span[..seedSize].Clear();
                 (IMemoryOwner<byte> secretStorage, int secretLength) = FrameEccPointSecret(ephemeralPoint, fieldWidth, pool);
 
-                return new TpmCredentialMade(credentialBlob, Tpm2bEncryptedSecret.FromMarshaled(secretStorage, secretLength));
+                return (seed, seedSize, Tpm2bEncryptedSecret.FromMarshaled(secretStorage, secretLength));
             }
             catch
             {
-                credentialBlob.Dispose();
+                seed.Memory.Span[..seedSize].Clear();
+                seed.Dispose();
                 throw;
             }
         }
@@ -5964,8 +9019,728 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     }
 
     /// <summary>
+    /// <c>TPM2_Encapsulate()</c>'s DHKEM encapsulation side (TPM 2.0 Library Part 3, clause 14.10; Part 1,
+    /// clause 44.4.2): generate a fresh ephemeral key pair (<c>skE</c>, <c>pkE</c>), compute
+    /// <c>dh = ECDH(skE, pkR)</c> against the KEM key's public point, derive the shared secret through the
+    /// DHKEM core (<see cref="Dhkem.ExtractAndExpandAsync"/>, DHKEM(P-256, HKDF-<see cref="TpmEncapsulateAction.KdfHashAlg"/>),
+    /// <c>kem_id</c> 0x0010), and frame <c>pkE_serialized</c> — the bare SEC 1 uncompressed point, not a
+    /// marshaled <c>TPMS_ECC_POINT</c> — as the ciphertext (clause 44.4.2 step 3).
+    /// </summary>
+    /// <remarks>
+    /// This effect declares no response code of its own: the declaring transition (<c>OnEncapsulate</c>)
+    /// already confirmed the resolved key is a KEM key before declaring this action, and every gate below is
+    /// unconditional — mirroring <see cref="BuildEccSeedTransportAsync"/>'s ephemeral-generation shape, but
+    /// framing the bare point as the ciphertext instead of <see cref="FrameEccPointSecret"/>'s marshaled
+    /// <c>TPM2B_ENCRYPTED_SECRET</c> form. The shared secret is adopted into its carrier before the
+    /// ciphertext is rented, so a refusing ciphertext rental releases the already-adopted secret rather than
+    /// orphaning it.
+    /// </remarks>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the shared-secret and ciphertext carriers transfers to the returned TpmEncapsulated, then to the TpmEncapsulateResponse intent, and is released by SerializeResponse after framing.")]
+    private static async ValueTask<TpmSimulatorInput> EncapsulateEccAsync(TpmEncapsulateAction action, TpmActionContext context, CancellationToken cancellationToken)
+    {
+        TpmEccSigningBackend backend = context.SigningBackend
+            ?? throw new InvalidOperationException("TPM2_Encapsulate() requires a signing backend, but none was supplied.");
+        BaseMemoryPool pool = context.Pool;
+        int fieldWidth = EllipticCurveConstants.P256.PointArrayLength;
+
+        using TpmGeneratedEccKey ephemeral = await backend.GenerateKey(action.Curve.Value, pool, cancellationToken).ConfigureAwait(false);
+
+        //pkE_serialized: a ReadOnlyMemory view over the ephemeral key's own carrier, safe to read across the
+        //awaits below since the using above keeps ephemeral (and its PublicPoint/PrivateScalar) alive for the
+        //whole method. The private scalar rides its own SensitiveMemory carrier straight into
+        //ComputeSharedSecret — no .ToArray() copy, unlike BuildEccSeedTransportAsync's pre-existing shape.
+        ReadOnlyMemory<byte> pkE = ephemeral.PublicPoint.AsReadOnlyMemory();
+
+        using IMemoryOwner<byte> dh = await backend.ComputeSharedSecret(
+            ephemeral.PrivateScalar.AsReadOnlyMemory(), action.PublicPoint, action.Curve.Value, pool, cancellationToken).ConfigureAwait(false);
+
+        //action.PublicPoint (pkR_serialized) needs no copy: it is a ReadOnlyMemory view over the durable
+        //key state's own immutable point array, safe to read across an await exactly as
+        //VerifyDigestSignatureEccAsync reads action.PublicPoint directly.
+        IMemoryOwner<byte> sharedSecretOwner = await DeriveKemSharedSecretAsync(dh.Memory[..fieldWidth], pkE, action.PublicPoint, action.KdfHashAlg, pool, cancellationToken).ConfigureAwait(false);
+        var sharedSecret = new Tpm2bSharedSecret(sharedSecretOwner);
+
+        //The shared-secret carrier is already adopted; a refusing ciphertext rental must not orphan it, so it
+        //is released in the catch before the exception continues outward — one risky call per statement.
+        try
+        {
+            return new TpmEncapsulated(sharedSecret, Tpm2bKemCiphertext.Create(pkE.Span, pool));
+        }
+        catch
+        {
+            sharedSecret.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// <c>TPM2_Decapsulate()</c>'s outer frame: releases <see cref="TpmDecapsulateAction.Ciphertext"/> on
+    /// every exit, including the immediate <c>TPM_RC_ECC_POINT</c> arms a malformed or off-curve point
+    /// answers with — the same split <see cref="RecoverEccSessionSaltAsync"/>/<see cref="RecoverEccSessionSaltCoreAsync"/>
+    /// use for their own attacker-influenceable wire buffer.
+    /// </summary>
+    /// <param name="action">The declared decapsulation action; its ciphertext is read here and released by the caller.</param>
+    /// <param name="context">The effect context supplying the ECC backend and the memory pool.</param>
+    /// <param name="cancellationToken">The token to observe.</param>
+    /// <returns>The decapsulation result to feed back to the transition.</returns>
+    private static async ValueTask<TpmSimulatorInput> DecapsulateEccAsync(TpmDecapsulateAction action, TpmActionContext context, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await DecapsulateEccCoreAsync(action, context, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            action.Ciphertext.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Runs <see cref="DecapsulateEccAsync"/>'s validation and DHKEM decapsulation (TPM 2.0 Library Part 3,
+    /// clause 14.11; Part 1, clause 44.4.3/44.5.1), with that frame owning the release of
+    /// <see cref="TpmDecapsulateAction.Ciphertext"/>.
+    /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the shared-secret carrier transfers to the returned TpmDecapsulated, then to the TpmDecapsulateResponse intent, and is released by SerializeResponse after framing.")]
+    private static async ValueTask<TpmSimulatorInput> DecapsulateEccCoreAsync(TpmDecapsulateAction action, TpmActionContext context, CancellationToken cancellationToken)
+    {
+        TpmEccSigningBackend backend = context.SigningBackend
+            ?? throw new InvalidOperationException("TPM2_Decapsulate() requires a signing backend, but none was supplied.");
+        BaseMemoryPool pool = context.Pool;
+        int fieldWidth = EllipticCurveConstants.P256.PointArrayLength;
+
+        //Not secret (a public ciphertext point) but still pooled rather than a naked array: Ciphertext only
+        //exposes a Span, so a pooled rental — not a .ToArray() copy — carries pkE across the awaits below.
+        IMemoryOwner<byte> pkEOwner;
+        {
+            ReadOnlySpan<byte> point = action.Ciphertext.Ciphertext;
+
+            //(TPM 2.0 Library Part 1, clause 44.5.1: "If the TPM receives an ECC point in the incorrect
+            //format ... it returns TPM_RC_ECC_POINT"): the SEC 1 uncompressed prefix and total length are
+            //checked BEFORE the on-curve primitive ever runs, mirroring RecoverEccSessionSaltCoreAsync's own
+            //field-width gate ahead of CheckPointOnCurve — a coordinate with a stripped or added leading zero
+            //octet must be rejected on its own terms rather than by catching CombineToUncompressedPoint's throw.
+            if(point.Length != EllipticCurveConstants.P256.UncompressedPointByteCount || point[0] != 0x04)
+            {
+                return new TpmDecapsulated(TpmRcConstants.TPM_RC_ECC_POINT, null);
+            }
+
+            ReadOnlySpan<byte> x = point.Slice(1, fieldWidth);
+            ReadOnlySpan<byte> y = point.Slice(1 + fieldWidth, fieldWidth);
+            if(!EllipticCurveUtilities.CheckPointOnCurve(x, y, EllipticCurveTypes.P256))
+            {
+                return new TpmDecapsulated(TpmRcConstants.TPM_RC_ECC_POINT, null);
+            }
+
+            pkEOwner = pool.Rent(point.Length);
+            point.CopyTo(pkEOwner.Memory.Span);
+        }
+
+        using(pkEOwner)
+        {
+            ReadOnlyMemory<byte> pkE = pkEOwner.Memory[..EllipticCurveConstants.P256.UncompressedPointByteCount];
+
+            using IMemoryOwner<byte> dh = await backend.ComputeSharedSecret(
+                action.PrivateKey.AsReadOnlyMemory(), pkE, action.Curve.Value, pool, cancellationToken).ConfigureAwait(false);
+
+            //action.PublicPoint (pkR_serialized) needs no copy — see EncapsulateEccAsync's identical reasoning.
+            IMemoryOwner<byte> sharedSecretOwner = await DeriveKemSharedSecretAsync(dh.Memory[..fieldWidth], pkE, action.PublicPoint, action.KdfHashAlg, pool, cancellationToken).ConfigureAwait(false);
+
+            return new TpmDecapsulated(TpmRcConstants.TPM_RC_SUCCESS, new Tpm2bSharedSecret(sharedSecretOwner));
+        }
+    }
+
+    /// <summary>
+    /// Builds <c>kem_context = pkE_serialized ‖ pkR_serialized</c> (<see href="https://www.rfc-editor.org/rfc/rfc9180">RFC 9180</see>
+    /// Section 4.1's Encap/Decap) and derives the DHKEM shared secret from it through
+    /// <see cref="Dhkem.ExtractAndExpandAsync"/> — the one derivation both <see cref="EncapsulateEccAsync"/>
+    /// and <see cref="DecapsulateEccCoreAsync"/> run, over the identical concatenation each side computes
+    /// from its own view of the exchange. This simulator's only wired DHKEM suite is DHKEM(P-256,
+    /// HKDF-SHA256) (<see cref="Dhkem.P256HkdfSha256"/>'s <c>kem_id</c> 0x0010/<c>Nsecret</c> 32); the hash
+    /// algorithm still comes from the key's own retained <paramref name="kdfHashAlg"/> rather than the
+    /// constant, since the creation-time gate (<c>TryBuildCreatePrimaryRequest</c>) is what enforces SHA-256
+    /// is the only value that ever reaches here.
+    /// </summary>
+    /// <param name="dh">The raw ECDH shared value at the curve field width — secret.</param>
+    /// <param name="pkE">The ephemeral/ciphertext SEC 1 point — public.</param>
+    /// <param name="pkR">The KEM key's own SEC 1 point — public.</param>
+    /// <param name="kdfHashAlg">The key's retained DHKEM KDF hash.</param>
+    /// <param name="pool">The memory pool for the kem_context rental and the returned shared secret.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>A pool-owned, pinned buffer holding the DHKEM shared secret. Ownership transfers to the caller.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the returned shared-secret buffer transfers to the caller, which adopts it into a Tpm2bSharedSecret; the kem_context rental is released in this method's own finally.")]
+    private static async ValueTask<IMemoryOwner<byte>> DeriveKemSharedSecretAsync(
+        ReadOnlyMemory<byte> dh, ReadOnlyMemory<byte> pkE, ReadOnlyMemory<byte> pkR, TpmiAlgHash kdfHashAlg, BaseMemoryPool pool, CancellationToken cancellationToken)
+    {
+        //kem_context is not secret (both parties independently reconstruct it), but is still zeroed before
+        //its rental returns to the pool, matching Dhkem's own treatment of its public label/context buffers.
+        IMemoryOwner<byte> kemContextOwner = pool.Rent(pkE.Length + pkR.Length);
+        Memory<byte> kemContext = kemContextOwner.Memory[..(pkE.Length + pkR.Length)];
+        try
+        {
+            pkE.CopyTo(kemContext);
+            pkR.CopyTo(kemContext[pkE.Length..]);
+
+            return await Dhkem.ExtractAndExpandAsync(
+                SessionHashName(kdfHashAlg), dh, kemContext, Dhkem.P256HkdfSha256.KemId, Dhkem.P256HkdfSha256.NSecret, pool, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            kemContext.Span.Clear();
+            kemContextOwner.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Builds an identity-based seed transport to an RSA recipient (TPM 2.0 Library Part 1, clause 20.3.2.3): a
+    /// fresh random seed from the entropy delegate, OAEP-encrypted to the recipient's modulus under the given
+    /// use label — "IDENTITY" for credential protection, "DUPLICATE" for duplication, each with its
+    /// terminating zero — on this otherwise shared path.
+    /// </summary>
+    /// <param name="recipientModulus">The recipient key's public modulus.</param>
+    /// <param name="nameAlg">The recipient's Name algorithm, driving the OAEP hash and the seed width.</param>
+    /// <param name="labelOctets">The OAEP label octets, terminating zero included.</param>
+    /// <param name="context">The effect context supplying the RSA backend, the entropy delegate, and the memory pool.</param>
+    /// <param name="cancellationToken">The token to observe.</param>
+    /// <returns>The generated seed in a pinned rental with its width, and the framed transport secret; ownership of the seed and the secret transfers to the caller.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the seed rental and the secret carrier transfers to the caller, which clears and releases the seed once the wrap has consumed it and rides the secret to the response intent released by SerializeResponse.")]
+    private static async ValueTask<(IMemoryOwner<byte> Seed, int SeedSize, Tpm2bEncryptedSecret Secret)> BuildRsaSeedTransportAsync(
+        Tpm2bPublicKeyRsa recipientModulus, TpmiAlgHash nameAlg, ReadOnlyMemory<byte> labelOctets,
+        TpmActionContext context, CancellationToken cancellationToken)
+    {
+        TpmRsaSigningBackend backend = context.RsaSigningBackend
+            ?? throw new InvalidOperationException("An RSA seed transport requires an RSA signing backend, but none was supplied.");
+        BaseMemoryPool pool = context.Pool;
+
+        int seedSize = SessionDigestSize(nameAlg);
+        IMemoryOwner<byte> seed = pool.Rent(seedSize, AllocationKind.Pinned);
+        try
+        {
+            context.Rng(seed.Memory.Span[..seedSize]);
+            IMemoryOwner<byte> secretStorage = await backend.EncryptOaep(
+                recipientModulus.AsReadOnlyMemory(), TpmsRsaParms.DefaultExponent, seed.Memory[..seedSize], labelOctets,
+                nameAlg.Value, nameAlg.Value, pool, cancellationToken).ConfigureAwait(false);
+
+            return (seed, seedSize, Tpm2bEncryptedSecret.FromMarshaled(secretStorage, secretStorage.Memory.Length));
+        }
+        catch
+        {
+            seed.Memory.Span[..seedSize].Clear();
+            seed.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Builds a duplication blob's outer wrap (TPM 2.0 Library Part 1, Clause 20, equations 40–43): the
+    /// marshaled <c>TPM2B_SENSITIVE</c> is AES-CFB-encrypted under
+    /// <c>KDFa(npNameAlg, seed, "STORAGE", name, …)</c> with the ZERO IV the duplication form prescribes
+    /// (Clause 19.4 — no <c>TPM2B_IV</c> precedes the ciphertext and the HMAC message carries no IV term), and
+    /// the blob is <c>TPM2B_DIGEST(outerHMAC)</c> before the ciphertext, keyed by
+    /// <c>KDFa(npNameAlg, seed, "INTEGRITY", …)</c> over <c>dupSensitive ‖ name.buffer</c>.
+    /// </summary>
+    /// <param name="seed">The freshly transported outer-wrapper seed.</param>
+    /// <param name="sensitivePlaintext">The marshaled <c>TPM2B_SENSITIVE</c> being protected.</param>
+    /// <param name="objectName">The duplicated object's Name octets (<c>nameAlg ‖ digest</c>, no size prefix), the HMAC's binding term.</param>
+    /// <param name="nameAlg">The NEW parent's Name algorithm (<c>npNameAlg</c>), keying and sizing every derivation.</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <param name="cancellationToken">The token to observe.</param>
+    /// <returns>The duplication blob octets; ownership transfers to the caller.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the blob buffer transfers to the caller, whose TPM2B_PRIVATE carrier adopts it and rides it to the response intent released by SerializeResponse.")]
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility",
+        Justification = "The duplication outer wrap uses AES-CFB, the symmetric algorithm of the new parent's storage template (TPM 2.0 Library Part 1, Clause 20); this in-process behavioural simulator is a test/server-side model, not a browser target. This mirrors the credential wrap's suppression for the same primitive.")]
+    private static async ValueTask<(IMemoryOwner<byte> Owner, int Length)> BuildDuplicationBlobAsync(
+        ReadOnlyMemory<byte> seed, ReadOnlyMemory<byte> sensitivePlaintext, ReadOnlyMemory<byte> objectName, TpmiAlgHash nameAlg, BaseMemoryPool pool, CancellationToken cancellationToken)
+    {
+        int digestSize = SessionDigestSize(nameAlg);
+        HashAlgorithmName hashName = SessionHashName(nameAlg);
+        int payloadLength = sensitivePlaintext.Length;
+
+        //The plaintext is copied once into a pinned rental and encrypted in place, so it has one resting place
+        //beside the caller's own.
+        using IMemoryOwner<byte> encSensitive = pool.Rent(payloadLength, AllocationKind.Pinned);
+        sensitivePlaintext.Span.CopyTo(encSensitive.Memory.Span[..payloadLength]);
+
+        using IMemoryOwner<byte> symKey = await Kdfa.DeriveAsync(
+            hashName, seed, CredentialStorageLabel, objectName, ReadOnlyMemory<byte>.Empty, CredentialSymmetricKeyBits, pool, cancellationToken).ConfigureAwait(false);
+        {
+            byte[] zeroIv = new byte[CredentialSymmetricBlockSize];
+            TpmParameterEncryption.AesCfb(symKey.Memory.Span[..CredentialSymmetricKeyBytes], zeroIv, encSensitive.Memory.Span[..payloadLength], encrypting: true);
+        }
+
+        symKey.Memory.Span[..CredentialSymmetricKeyBytes].Clear();
+
+        using IMemoryOwner<byte> hmacKey = await Kdfa.DeriveAsync(
+            hashName, seed, CredentialIntegrityLabel, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, digestSize * 8, pool, cancellationToken).ConfigureAwait(false);
+        using IMemoryOwner<byte> outerHmac = await ComputeCredentialHmacAsync(
+            hmacKey.Memory[..digestSize], encSensitive.Memory[..payloadLength], objectName, nameAlg, pool, cancellationToken).ConfigureAwait(false);
+        hmacKey.Memory.Span[..digestSize].Clear();
+
+        int blobLength = sizeof(ushort) + digestSize + payloadLength;
+        IMemoryOwner<byte> owner = pool.Rent(blobLength);
+        try
+        {
+            Span<byte> blob = owner.Memory.Span[..blobLength];
+            BinaryPrimitives.WriteUInt16BigEndian(blob, (ushort)digestSize);
+            outerHmac.Memory.Span[..digestSize].CopyTo(blob[sizeof(ushort)..]);
+            encSensitive.Memory.Span[..payloadLength].CopyTo(blob[(sizeof(ushort) + digestSize)..]);
+
+            return (owner, blobLength);
+        }
+        catch
+        {
+            owner.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// <c>TPM2_Duplicate()</c>: rebuild the object's marshaled <c>TPM2B_SENSITIVE</c> (its authValue re-padded
+    /// to the maximum size, TPM 2.0 Library Part 1, clause 24.7.3) and protect it for the new parent — a fresh
+    /// seed transported under the "DUPLICATE" label (clauses 20.3.2.3 and 20.3.2.3), then the duplication outer
+    /// wrap (Clause 20, equations 40–43) — or hand it out bare for a <c>TPM_RH_NULL</c> new parent, the
+    /// no-wrapper form whose duplicate is the sensitive area itself.
+    /// </summary>
+    /// <remarks>
+    /// Every input carrier is a borrow of durable state and is never disposed here; the produced blob and the
+    /// protected seed transfer to <see cref="TpmObjectDuplicated"/>, then to the response intent, and are
+    /// released by <see cref="SerializeResponse"/> after framing. Sensitive plaintext lives in pinned rentals
+    /// cleared before they return.
+    /// </remarks>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the blob and seed-transport carriers transfers to the returned TpmObjectDuplicated, then to the TpmDuplicateResponse intent, and is released by SerializeResponse after framing; a failure between rents releases what this frame still owns before rethrowing.")]
+    private static async ValueTask<TpmSimulatorInput> DuplicateObjectAsync(TpmDuplicateObjectAction action, TpmActionContext context, CancellationToken cancellationToken)
+    {
+        BaseMemoryPool pool = context.Pool;
+        int paddedAuthSize = Tpm2bAuth.MaxSize;
+        int obfuscationSize = action.SeedValue.Size;
+        int sensitiveInteriorLength = sizeof(ushort) + (sizeof(ushort) + paddedAuthSize) + (sizeof(ushort) + obfuscationSize) + (sizeof(ushort) + action.Data.Length);
+        int sensitiveLength = sizeof(ushort) + sensitiveInteriorLength;
+
+        using IMemoryOwner<byte> sensitive = pool.Rent(sensitiveLength, AllocationKind.Pinned);
+        try
+        {
+            using(IMemoryOwner<byte> paddedAuth = pool.Rent(paddedAuthSize, AllocationKind.Pinned))
+            {
+                Span<byte> paddedAuthSpan = paddedAuth.Memory.Span[..paddedAuthSize];
+                paddedAuthSpan.Clear();
+                action.UserAuth.AsReadOnlySpan().CopyTo(paddedAuthSpan);
+
+                var writer = new TpmWriter(sensitive.Memory.Span[..sensitiveLength]);
+                writer.WriteUInt16((ushort)sensitiveInteriorLength);
+                writer.WriteUInt16((ushort)TpmAlgIdConstants.TPM_ALG_KEYEDHASH);
+                writer.WriteTpm2b(paddedAuthSpan);
+                writer.WriteTpm2b(action.SeedValue.AsReadOnlySpan());
+                writer.WriteTpm2b(action.Data.AsReadOnlySpan());
+                paddedAuthSpan.Clear();
+            }
+
+            if(!action.HasNewParent)
+            {
+                //TPM_RH_NULL with no inner wrapper: a TPM2B_SENSITIVE is the only contents of the TPM2B_PRIVATE
+                //buffer (Part 1, Clause 20) — no integrity value, no encryption, no transported seed. The copy
+                //is PLAINTEXT sensitive material by design here, so it rides a pinned rental the pool zeroes
+                //when the framing step releases it.
+                IMemoryOwner<byte> bare = pool.Rent(sensitiveLength, AllocationKind.Pinned);
+                try
+                {
+                    sensitive.Memory.Span[..sensitiveLength].CopyTo(bare.Memory.Span[..sensitiveLength]);
+
+                    return new TpmObjectDuplicated(Tpm2bPrivate.FromMarshaled(bare, sensitiveLength), Tpm2bEncryptedSecret.Empty);
+                }
+                catch
+                {
+                    bare.Dispose();
+                    throw;
+                }
+            }
+
+            (IMemoryOwner<byte> seed, int seedSize, Tpm2bEncryptedSecret outSymSeed) = action.NewParentKeyType.Value == TpmAlgIdConstants.TPM_ALG_RSA
+                ? await BuildRsaSeedTransportAsync(action.NewParentModulus, action.NewParentNameAlg, DuplicationSeedLabelOctets, context, cancellationToken).ConfigureAwait(false)
+                : await BuildEccSeedTransportAsync(action.NewParentPublicPoint, action.NewParentCurve, action.NewParentNameAlg, DuplicationSeedLabel, context, cancellationToken).ConfigureAwait(false);
+            try
+            {
+                (IMemoryOwner<byte> blob, int blobLength) = await BuildDuplicationBlobAsync(
+                    seed.Memory[..seedSize], sensitive.Memory[..sensitiveLength], action.ObjectName.AsReadOnlyMemory(), action.NewParentNameAlg, pool, cancellationToken).ConfigureAwait(false);
+
+                return new TpmObjectDuplicated(Tpm2bPrivate.FromMarshaled(blob, blobLength), outSymSeed);
+            }
+            catch
+            {
+                outSymSeed.Dispose();
+                throw;
+            }
+            finally
+            {
+                seed.Memory.Span[..seedSize].Clear();
+                seed.Dispose();
+            }
+        }
+        finally
+        {
+            sensitive.Memory.Span[..sensitiveLength].Clear();
+        }
+    }
+
+    /// <summary>
+    /// Verifies and undoes a duplication blob's outer wrap (TPM 2.0 Library Part 1, Clause 20, equations
+    /// 40–43): the outer HMAC — keyed by <c>KDFa(npNameAlg, seed, "INTEGRITY", …)</c> over
+    /// <c>dupSensitive ‖ name.buffer</c> — is checked BEFORE anything is decrypted (Part 3, clause 13.3's
+    /// recovery order), then the ciphertext is AES-CFB-decrypted under
+    /// <c>KDFa(npNameAlg, seed, "STORAGE", name, …)</c> with the ZERO IV the duplication form prescribes and
+    /// the <c>TPM2B_SENSITIVE</c> is unmarshaled.
+    /// </summary>
+    /// <remarks>
+    /// Unlike the storage unwrap, a VERIFIED outer HMAC here proves only that whoever transported the seed also
+    /// wrapped these octets — the sender knows the seed, so the decrypted interior is genuinely
+    /// attacker-shapeable and its unmarshal failures are a reachable refusal, reported as the sensitive-area
+    /// code rather than a crash.
+    /// </remarks>
+    /// <param name="seed">The recovered outer-wrapper seed.</param>
+    /// <param name="duplicate">The duplication blob, its shape already gated by <c>OnImport</c> — read only here; the caller stays its terminal owner.</param>
+    /// <param name="objectName">The object's Name octets (<c>nameAlg ‖ digest</c>, no size prefix), the HMAC's binding term.</param>
+    /// <param name="parentNameAlg">The importing parent's Name algorithm (<c>npNameAlg</c>), keying and sizing the derivations.</param>
+    /// <param name="context">The effect context supplying the memory pool.</param>
+    /// <param name="cancellationToken">The token to observe.</param>
+    /// <returns>The recovered sensitive area with ownership transferring to the caller, or the failure code: <c>TPM_RC_INTEGRITY</c> when the outer HMAC does not verify, <c>TPM_RC_SENSITIVE</c> when the decrypted interior does not unmarshal.</returns>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility",
+        Justification = "The duplication outer unwrap uses AES-CFB, the symmetric algorithm of the new parent's storage template (TPM 2.0 Library Part 1, Clause 20); this in-process behavioural simulator is a test/server-side model, not a browser target. This mirrors the credential wrap's suppression for the same primitive.")]
+    private static async ValueTask<(TpmtSensitive? Sensitive, TpmRcConstants FailureCode)> UnwrapDuplicationBlobAsync(
+        ReadOnlyMemory<byte> seed, Tpm2bPrivate duplicate, ReadOnlyMemory<byte> objectName, TpmiAlgHash parentNameAlg,
+        TpmActionContext context, CancellationToken cancellationToken)
+    {
+        BaseMemoryPool pool = context.Pool;
+        int parentDigestSize = SessionDigestSize(parentNameAlg);
+        HashAlgorithmName hashName = SessionHashName(parentNameAlg);
+
+        //The ciphertext region is copied out once: the HMAC seam reads memory the span-only carrier cannot
+        //lend across an await, and the same pinned rental then hosts the in-place decryption.
+        int payloadLength = duplicate.Length - sizeof(ushort) - parentDigestSize;
+        using IMemoryOwner<byte> work = pool.Rent(payloadLength, AllocationKind.Pinned);
+        duplicate.Span[(sizeof(ushort) + parentDigestSize)..].CopyTo(work.Memory.Span[..payloadLength]);
+
+        using IMemoryOwner<byte> hmacKey = await Kdfa.DeriveAsync(
+            hashName, seed, CredentialIntegrityLabel, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, parentDigestSize * 8, pool, cancellationToken).ConfigureAwait(false);
+        using(IMemoryOwner<byte> expectedHmac = await ComputeCredentialHmacAsync(
+            hmacKey.Memory[..parentDigestSize], work.Memory[..payloadLength], objectName, parentNameAlg, pool, cancellationToken).ConfigureAwait(false))
+        {
+            hmacKey.Memory.Span[..parentDigestSize].Clear();
+
+            if(!CryptographicOperations.FixedTimeEquals(expectedHmac.Memory.Span[..parentDigestSize], duplicate.Span.Slice(sizeof(ushort), parentDigestSize)))
+            {
+                return (null, TpmRcConstants.TPM_RC_INTEGRITY);
+            }
+        }
+
+        using IMemoryOwner<byte> symKey = await Kdfa.DeriveAsync(
+            hashName, seed, CredentialStorageLabel, objectName, ReadOnlyMemory<byte>.Empty, CredentialSymmetricKeyBits, pool, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            {
+                byte[] zeroIv = new byte[CredentialSymmetricBlockSize];
+                TpmParameterEncryption.AesCfb(symKey.Memory.Span[..CredentialSymmetricKeyBytes], zeroIv, work.Memory.Span[..payloadLength], encrypting: false);
+            }
+
+            symKey.Memory.Span[..CredentialSymmetricKeyBytes].Clear();
+
+            return (ParseRecoveredSensitive(work.Memory.Span[..payloadLength], pool), TpmRcConstants.TPM_RC_SENSITIVE);
+        }
+        finally
+        {
+            //The rental held the decrypted sensitive plaintext from the CFB pass onward; every exit clears it.
+            work.Memory.Span[..payloadLength].Clear();
+        }
+    }
+
+    /// <summary>
+    /// Unmarshals a recovered <c>TPM2B_SENSITIVE</c> (TPM 2.0 Library Part 2, clause 12.3, Tables 224 and 225)
+    /// out of decrypted or bare duplication octets — genuinely attacker-shapeable input, so every structural
+    /// refusal returns <see langword="null"/> for the caller's <c>TPM_RC_SENSITIVE</c> answer instead of
+    /// escaping the effect executor as an exception.
+    /// </summary>
+    /// <param name="octets">The candidate marshaled <c>TPM2B_SENSITIVE</c>.</param>
+    /// <param name="pool">The memory pool the recovered carriers are rented from.</param>
+    /// <returns>The recovered sensitive area with ownership transferring to the caller, or <see langword="null"/> when it does not unmarshal.</returns>
+    private static TpmtSensitive? ParseRecoveredSensitive(ReadOnlySpan<byte> octets, BaseMemoryPool pool)
+    {
+        if(octets.Length < sizeof(ushort))
+        {
+            return null;
+        }
+
+        try
+        {
+            var reader = new TpmReader(octets);
+            ushort declaredSize = reader.ReadUInt16();
+            if(declaredSize != octets.Length - sizeof(ushort))
+            {
+                return null;
+            }
+
+            TpmtSensitive sensitive = TpmtSensitive.Parse(ref reader, pool);
+            if(reader.Remaining != 0)
+            {
+                //Trailing slack inside the declared envelope is not a marshaled TPMT_SENSITIVE.
+                sensitive.Dispose();
+
+                return null;
+            }
+
+            return sensitive;
+        }
+        catch(NotSupportedException)
+        {
+            //An unmodeled sensitive-area type or an over-wide seed slot.
+            return null;
+        }
+        catch(InvalidOperationException)
+        {
+            //A TPM2B interior wider than its type's bound.
+            return null;
+        }
+        catch(ArgumentOutOfRangeException)
+        {
+            //A declared interior length past the recovered octets' end.
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// <c>TPM2_Import()</c>: recover the outer-wrapper seed with the parent's own key under the "DUPLICATE"
+    /// label (TPM 2.0 Library Part 1, clauses 20.3.2.3 and 20.3.2.3), verify and undo the duplication wrap (Clause
+    /// 21), and re-wrap the recovered sensitive area under the importing parent's protection seed (Clause 19)
+    /// so a later <c>TPM2_Load()</c> can use the object here — or, for an empty <c>inSymSeed</c>, take the
+    /// duplicate as the bare marshaled <c>TPM2B_SENSITIVE</c> a <c>TPM_RH_NULL</c>-parent duplication produced.
+    /// </summary>
+    /// <remarks>
+    /// A failed RSA-OAEP decode substitutes an unpredictable seed so the failure surfaces uniformly at the
+    /// integrity check (the v184 Part 1, clause A.10.3 rule — the deferred-failure discipline the credential
+    /// activation path applies; v185 keeps its rationale at Part 3, clause 13.3.1). This effect is the terminal owner of the action's public-area,
+    /// duplicate, and seed carriers; the parent's own carriers are borrows of its durable state. Sensitive
+    /// plaintext lives in pinned rentals cleared before they return.
+    /// </remarks>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the re-wrapped blob transfers to the returned TpmObjectImported, then to the TpmImportResponse intent, and is released by SerializeResponse after framing; a failure between rents releases what this frame still owns before rethrowing.")]
+    private static async ValueTask<TpmSimulatorInput> ImportObjectAsync(TpmImportObjectAction action, TpmActionContext context, CancellationToken cancellationToken)
+    {
+        BaseMemoryPool pool = context.Pool;
+        TpmtSensitive? sensitive = null;
+        try
+        {
+            (IMemoryOwner<byte> nameStorage, int nameLength) = await ComputeObjectNameFromBytesAsync(
+                action.InPublic.GetRawMemory(), action.ObjectNameAlg, pool, cancellationToken).ConfigureAwait(false);
+            using IMemoryOwner<byte> name = nameStorage;
+            ReadOnlyMemory<byte> objectName = name.Memory[..nameLength];
+
+            if(action.InSymSeed.IsEmpty)
+            {
+                //The bare form: the duplicate IS the marshaled TPM2B_SENSITIVE (Part 1, Clause 20's
+                //no-wrapper shape).
+                sensitive = ParseRecoveredSensitive(action.Duplicate.Span, pool);
+                if(sensitive is null)
+                {
+                    return new TpmObjectImported(TpmRcConstants.TPM_RC_SENSITIVE, Tpm2bPrivate.Empty);
+                }
+            }
+            else
+            {
+                IMemoryOwner<byte> seed;
+                int seedSize = SessionDigestSize(action.ParentNameAlg);
+                if(action.ParentKeyType.Value == TpmAlgIdConstants.TPM_ALG_RSA)
+                {
+                    TpmRsaSigningBackend rsaBackend = context.RsaSigningBackend
+                        ?? throw new InvalidOperationException("TPM2_Import() under an RSA parent requires an RSA signing backend, but none was supplied.");
+
+                    //A null decode, or a decoded message of the wrong width, becomes a fresh UNPREDICTABLE
+                    //seed rather than a distinct refusal here: the outer-HMAC check below reports the failure,
+                    //uniformly as TPM_RC_INTEGRITY (Part 1, clause 20.3.2.3). The decode runs before the seed
+                    //rental exists, so a throwing backend leaves nothing to orphan; the ciphertext is read
+                    //straight from the action's carrier, which this effect's own finally releases.
+                    IMemoryOwner<byte>? decoded = await rsaBackend.DecryptOaep(
+                        action.ParentPrivateKey.AsReadOnlyMemory(), action.InSymSeed.AsReadOnlyMemory(), DuplicationSeedLabelOctets,
+                        action.ParentNameAlg.Value, action.ParentNameAlg.Value, pool, cancellationToken).ConfigureAwait(false);
+                    seed = pool.Rent(seedSize, AllocationKind.Pinned);
+                    if(decoded is not null && decoded.Memory.Length == seedSize)
+                    {
+                        using(decoded)
+                        {
+                            decoded.Memory.Span.CopyTo(seed.Memory.Span[..seedSize]);
+                        }
+                    }
+                    else
+                    {
+                        decoded?.Dispose();
+                        context.Rng(seed.Memory.Span[..seedSize]);
+                    }
+                }
+                else
+                {
+                    TpmEccSigningBackend backend = context.SigningBackend
+                        ?? throw new InvalidOperationException("TPM2_Import() under an elliptic-curve parent requires a signing backend, but none was supplied.");
+
+                    //The transported secret is a marshaled TPMS_ECC_POINT; a structurally under-length point
+                    //fails closed as TPM_RC_SIZE, the credential-activation guard for the same wire shape.
+                    int fieldWidth = (action.ParentPublicPoint.Length - 1) / 2;
+                    byte[] ephemeralPoint;
+                    byte[] ephemeralX;
+                    byte[] parentX;
+                    try
+                    {
+                        var pointReader = new TpmReader(action.InSymSeed.Span);
+                        ushort xLen = pointReader.ReadUInt16();
+                        ReadOnlySpan<byte> x = pointReader.ReadBytes(xLen);
+                        ushort yLen = pointReader.ReadUInt16();
+                        ReadOnlySpan<byte> y = pointReader.ReadBytes(yLen);
+                        if(pointReader.Remaining != 0)
+                        {
+                            //Trailing octets after the marshaled TPMS_ECC_POINT are a structure of the wrong
+                            //size, the salt-recovery precedent's refusal for the same wire shape.
+                            return new TpmObjectImported(TpmRcConstants.TPM_RC_SIZE, Tpm2bPrivate.Empty);
+                        }
+
+                        ephemeralPoint = EllipticCurveUtilities.CombineToUncompressedPoint(x, y);
+                        ephemeralX = x.ToArray();
+                        parentX = EllipticCurveUtilities.SliceXCoordinate(action.ParentPublicPoint.Span).ToArray();
+                    }
+                    catch(ArgumentOutOfRangeException)
+                    {
+                        return new TpmObjectImported(TpmRcConstants.TPM_RC_SIZE, Tpm2bPrivate.Empty);
+                    }
+                    catch(ArgumentException)
+                    {
+                        //Mismatched coordinate widths make the point assembly throw the base exception (the
+                        //session-salt recovery documents the same hazard): structurally not a point, answered
+                        //with the same public refusal an off-curve one gets.
+                        return new TpmObjectImported(TpmRcConstants.TPM_RC_ECC_POINT, Tpm2bPrivate.Empty);
+                    }
+
+                    try
+                    {
+                        using IMemoryOwner<byte> sharedValue = await backend.ComputeSharedSecret(
+                            action.ParentPrivateKey.AsReadOnlyMemory(), ephemeralPoint, action.ParentCurve.Value, pool, cancellationToken).ConfigureAwait(false);
+                        seed = await Kdfe.DeriveAsync(
+                            SessionHashName(action.ParentNameAlg), sharedValue.Memory[..fieldWidth], DuplicationSeedLabel, ephemeralX, parentX, seedSize * 8, pool, cancellationToken).ConfigureAwait(false);
+                    }
+                    catch(ArgumentException)
+                    {
+                        //An off-curve or otherwise invalid transported point: whether a point lies on the curve
+                        //is public information anyone can compute from the octets, so the dedicated refusal
+                        //leaks nothing — unlike the OAEP label, whose failure defers to the integrity check
+                        //(TPM_RC_ECC_POINT; TPM 2.0 Library Part 2, clause 6.6.3, Table 18).
+                        return new TpmObjectImported(TpmRcConstants.TPM_RC_ECC_POINT, Tpm2bPrivate.Empty);
+                    }
+                }
+
+                try
+                {
+                    (TpmtSensitive? recovered, TpmRcConstants failureCode) = await UnwrapDuplicationBlobAsync(
+                        seed.Memory[..seedSize], action.Duplicate, objectName, action.ParentNameAlg, context, cancellationToken).ConfigureAwait(false);
+                    if(recovered is null)
+                    {
+                        return new TpmObjectImported(failureCode, Tpm2bPrivate.Empty);
+                    }
+
+                    sensitive = recovered;
+                }
+                finally
+                {
+                    seed.Memory.Span[..seedSize].Clear();
+                    seed.Dispose();
+                }
+            }
+
+            //The recovered sensitive area must agree with the public area it is imported under (Part 3, clause
+            //13.3.1; Part 4 Import.c → ObjectLoad → CryptValidateKeys, which the reference applies at Import
+            //because the importing parent is fixedTPM): the seedValue is the nameAlg's digest size, and a signing
+            //or decryption key's value is no wider than the block size of its scheme hash (Part 1, clause
+            //24.7.5.1) — each violation TPM_RC_KEY_SIZE. The scheme itself was judged against the attributes by
+            //the declaring transition, so the block size is defined here.
+            if(sensitive.SeedValue.Size != SessionDigestSize(action.ObjectNameAlg))
+            {
+                return new TpmObjectImported(TpmRcConstants.TPM_RC_KEY_SIZE, Tpm2bPrivate.Empty);
+            }
+
+            TpmaObject importedAttributes = action.InPublic.PublicArea.ObjectAttributes;
+            bool isImportedKey = (importedAttributes & (TpmaObject.SIGN_ENCRYPT | TpmaObject.DECRYPT)) != 0;
+            if(isImportedKey)
+            {
+                TpmsKeyedHashParms importedScheme = action.InPublic.PublicArea.Parameters.KeyedHashDetail ?? TpmsKeyedHashParms.SealedData;
+                if(sensitive.Data.Length > TpmLifecycleTransitions.HashBlockSize(TpmiAlgHash.FromValue(importedScheme.HashAlg)))
+                {
+                    return new TpmObjectImported(TpmRcConstants.TPM_RC_KEY_SIZE, Tpm2bPrivate.Empty);
+                }
+            }
+
+            //"If there is a nameAlg, check the binding": objectPublic's unique must re-derive from the imported
+            //sensitive area under objectPublic's own attribute word (Part 2, clause 12.2.3.1, equation (8); Part
+            //4 CryptComputeSymmetricUnique) or the two areas are not one object (Part 4 Import.c → ObjectLoad →
+            //CryptValidateKeys → TPM_RC_BINDING). This is the check's one REACHABLE site: a bare duplicate
+            //carries no integrity wrap, so nothing earlier binds its sensitive octets to the public area a caller
+            //presents. The compare is fixed-time as house crypto style; the unique is public, so timing is not
+            //load-bearing here.
+            (IMemoryOwner<byte> expectedUnique, int expectedUniqueLength) = await ComputeKeyedHashUniqueAsync(
+                action.ObjectNameAlg, importedAttributes, sensitive.SeedValue.AsReadOnlyMemory(), sensitive.Data.AsReadOnlyMemory(), context, cancellationToken).ConfigureAwait(false);
+            using(expectedUnique)
+            {
+                if(!CryptographicOperations.FixedTimeEquals(expectedUnique.Memory.Span[..expectedUniqueLength], action.InPublic.PublicArea.Unique.GetKeyedHashUnique()))
+                {
+                    return new TpmObjectImported(TpmRcConstants.TPM_RC_BINDING, Tpm2bPrivate.Empty);
+                }
+            }
+
+            //Re-wrap under the importing parent: the recovered fields re-marshal — the authValue already
+            //travels padded to its maximum size, so the layout is byte-stable — and the shared wrap core
+            //produces the outPrivate a TPM2_Load() under this parent unwraps.
+            int paddedAuthSize = Tpm2bAuth.MaxSize;
+            int obfuscationSize = sensitive.SeedValue.Size;
+            int sensitiveInteriorLength = sizeof(ushort) + (sizeof(ushort) + paddedAuthSize) + (sizeof(ushort) + obfuscationSize) + (sizeof(ushort) + sensitive.Data.Length);
+            int sensitiveLength = sizeof(ushort) + sensitiveInteriorLength;
+            using IMemoryOwner<byte> marshaled = pool.Rent(sensitiveLength, AllocationKind.Pinned);
+            try
+            {
+                using(IMemoryOwner<byte> paddedAuth = pool.Rent(paddedAuthSize, AllocationKind.Pinned))
+                {
+                    Span<byte> paddedAuthSpan = paddedAuth.Memory.Span[..paddedAuthSize];
+                    paddedAuthSpan.Clear();
+                    sensitive.AuthValue.AsReadOnlySpan().CopyTo(paddedAuthSpan);
+
+                    var writer = new TpmWriter(marshaled.Memory.Span[..sensitiveLength]);
+                    writer.WriteUInt16((ushort)sensitiveInteriorLength);
+                    writer.WriteUInt16((ushort)TpmAlgIdConstants.TPM_ALG_KEYEDHASH);
+                    writer.WriteTpm2b(paddedAuthSpan);
+                    writer.WriteTpm2b(sensitive.SeedValue.AsReadOnlySpan());
+                    writer.WriteTpm2b(sensitive.Data.AsReadOnlySpan());
+                    paddedAuthSpan.Clear();
+                }
+
+                (IMemoryOwner<byte> blob, int blobLength) = await WrapSensitiveAreaAsync(
+                    action.ParentSeedValue, action.ParentNameAlg, marshaled.Memory[..sensitiveLength], objectName, context, cancellationToken).ConfigureAwait(false);
+
+                return new TpmObjectImported(TpmRcConstants.TPM_RC_SUCCESS, Tpm2bPrivate.FromMarshaled(blob, blobLength));
+            }
+            finally
+            {
+                marshaled.Memory.Span[..sensitiveLength].Clear();
+            }
+        }
+        finally
+        {
+            //The recovered sensitive area's carriers were re-marshaled by copy, so this effect is their
+            //terminal owner alongside the action's own three transferred carriers.
+            sensitive?.Dispose();
+            action.InPublic.Dispose();
+            action.Duplicate.Dispose();
+            action.InSymSeed.Dispose();
+        }
+    }
+
+    /// <summary>
     /// Builds the credential blob (<c>TPMS_ID_OBJECT</c>) of <c>TPM2_MakeCredential()</c>'s outer wrap (TPM 2.0
-    /// Library Part 1, clause 24): <c>symKey = KDFa(nameAlg, seed, "STORAGE", objectName, empty, symBits)</c>
+    /// Library Part 1, clause 21): <c>symKey = KDFa(nameAlg, seed, "STORAGE", objectName, empty, symBits)</c>
     /// keys the AES-CFB encryption of the marshaled credential (a zero IV), and <c>hmacKey = KDFa(nameAlg, seed,
     /// "INTEGRITY", empty, empty, digestBits)</c> keys <c>outerHMAC = HMAC(hmacKey, encIdentity ||
     /// objectName)</c>.
@@ -5977,7 +9752,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the credential-blob buffer transfers to the caller, which carries it to the response intent disposed by SerializeResponse; the intermediate buffers are released by their using declarations.")]
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility",
-        Justification = "The credential-protection outer wrap uses AES-CFB, the symmetric algorithm of the credential key's (endorsement key's) storage template (TPM 2.0 Library Part 1, clause 24); this in-process behavioural simulator is a test/server-side model, not a browser target. This mirrors the host's own suppression for the same primitive.")]
+        Justification = "The credential-protection outer wrap uses AES-CFB, the symmetric algorithm of the credential key's (endorsement key's) storage template (TPM 2.0 Library Part 1, clause 21); this in-process behavioural simulator is a test/server-side model, not a browser target. This mirrors the host's own suppression for the same primitive.")]
     private static async ValueTask<(IMemoryOwner<byte> Owner, int Length)> BuildCredentialBlobAsync(
         ReadOnlyMemory<byte> seed, ReadOnlyMemory<byte> credential, ReadOnlyMemory<byte> objectName, TpmiAlgHash nameAlg, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
@@ -6057,25 +9832,26 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
     /// <summary>
     /// <c>TPM2_MakeCredential()</c> RSA arm: wrap a credential so only a TPM holding the credential key's RSA
-    /// private key and the object named by objectName can recover it (TPM 2.0 Library Part 1, clause 24; Annex
-    /// B.4, B.10.3, B.10.4; Part 3, clause 12.6).
+    /// private key and the object named by objectName can recover it (TPM 2.0 Library Part 1, clause 21; clauses
+    /// 43.4, 20.3.2.3, 21.3; Part 3, clause 12.6).
     /// </summary>
     /// <remarks>
     /// <para>
     /// Unlike the ECC arm, the seed is a fresh random value (no ephemeral key pair — RSA has no ECDH-style split
-    /// step), transported by OAEP-encrypting it to the credential key's modulus with label "IDENTITY"+NUL (Annex
-    /// B.10.4). The lhash algorithm is the credential key's scheme hash, or nameAlg when the scheme is NULL
-    /// (Annex B.4) — every storage-parent template this simulator builds uses scheme NULL, so lhash is
+    /// step), transported by OAEP-encrypting it to the credential key's modulus with label "IDENTITY"+NUL (clause
+    /// 21.3). The lhash algorithm is the credential key's scheme hash, or nameAlg when the scheme is NULL
+    /// (clause 43.4) — every storage-parent template this simulator builds uses scheme NULL, so lhash is
     /// <c>action.NameAlg</c>; MGF1 always uses the key's Name algorithm (also <c>action.NameAlg</c> here) — the
     /// two are threaded as separate delegate parameters, kept distinct on principle, even though they coincide
-    /// for L-1. The seed width is the lhash digest size (Part 1, Annex B.10.3: "the size of a digest produced by
-    /// the OAEP hash algorithm"), reusing <see cref="SessionDigestSize"/> exactly as the ECC arm's KDFe seed
-    /// sizing does.
+    /// for L-1. The seed width is the lhash digest size (Part 1, clause 43.10.1: "The size of the random secret is
+    /// limited to the size of the digest produced by the scheme hash algorithm (or nameAlg if the scheme hash
+    /// algorithm is TPM_ALG_NULL) of the object that is associated with the public key used for OAEP
+    /// encryption"), reusing <see cref="SessionDigestSize"/> exactly as the ECC arm's KDFe seed sizing does.
     /// </para>
     /// <para>
-    /// The outer wrap (<see cref="BuildCredentialBlobAsync"/>) is unchanged from the ECC arm (clause 24 does not
+    /// The outer wrap (<see cref="BuildCredentialBlobAsync"/>) is unchanged from the ECC arm (clause 21 does not
     /// branch on the credential key's algorithm). <c>TPM2B_ENCRYPTED_SECRET</c>'s content for RSA is the raw
-    /// ciphertext directly, no sub-structure (Part 2, Table 209/210) — unlike the ECC arm's marshaled
+    /// ciphertext directly, no sub-structure (Part 2, Table 224) — unlike the ECC arm's marshaled
     /// TPMS_ECC_POINT, the OAEP ciphertext <c>backend.EncryptOaep</c> returns already IS that content, verbatim;
     /// <see cref="SerializeResponse"/> adds the one TPM2B_ENCRYPTED_SECRET wrapper when framing the wire
     /// response, so no extra framing step belongs here.
@@ -6095,41 +9871,30 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             ?? throw new InvalidOperationException("TPM2_MakeCredential() for an RSA credential key requires an RSA signing backend, but none was supplied.");
         BaseMemoryPool pool = context.Pool;
 
-        int seedSize = SessionDigestSize(action.NameAlg);
-
-        //A fresh random seed drawn from the simulator's RNG seam — not derived from an ephemeral key
-        //pair, unlike the ECC arm.
-        using IMemoryOwner<byte> seed = pool.Rent(seedSize, AllocationKind.Pinned);
-        context.Rng(seed.Memory.Span[..seedSize]);
-
+        (IMemoryOwner<byte> seed, int seedSize, Tpm2bEncryptedSecret secret) = await BuildRsaSeedTransportAsync(
+            action.CredentialKeyModulus, action.NameAlg, CredentialIdentityLabelOctets, context, cancellationToken).ConfigureAwait(false);
         try
         {
-            IMemoryOwner<byte> secretStorage = await backend.EncryptOaep(
-                action.CredentialKeyModulus.AsReadOnlyMemory(), TpmsRsaParms.DefaultExponent, seed.Memory[..seedSize], CredentialIdentityLabelOctets,
-                action.NameAlg.Value, action.NameAlg.Value, pool, cancellationToken).ConfigureAwait(false);
-            Tpm2bEncryptedSecret secret = Tpm2bEncryptedSecret.FromMarshaled(secretStorage, secretStorage.Memory.Length);
-            try
-            {
-                (IMemoryOwner<byte> credentialBlobStorage, int credentialBlobLength) = await BuildCredentialBlobAsync(
-                    seed.Memory[..seedSize], credential.AsReadOnlyMemory(), objectName.AsReadOnlyMemory(), action.NameAlg, pool, cancellationToken).ConfigureAwait(false);
+            (IMemoryOwner<byte> credentialBlobStorage, int credentialBlobLength) = await BuildCredentialBlobAsync(
+                seed.Memory[..seedSize], credential.AsReadOnlyMemory(), objectName.AsReadOnlyMemory(), action.NameAlg, pool, cancellationToken).ConfigureAwait(false);
 
-                return new TpmCredentialMade(Tpm2bIdObject.FromMarshaled(credentialBlobStorage, credentialBlobLength), secret);
-            }
-            catch
-            {
-                secret.Dispose();
-                throw;
-            }
+            return new TpmCredentialMade(Tpm2bIdObject.FromMarshaled(credentialBlobStorage, credentialBlobLength), secret);
+        }
+        catch
+        {
+            secret.Dispose();
+            throw;
         }
         finally
         {
             seed.Memory.Span[..seedSize].Clear();
+            seed.Dispose();
         }
     }
 
     /// <summary>
     /// Computes <c>outerHMAC = HMAC_nameAlg(hmacKey, encIdentity || objectName)</c> (TPM 2.0 Library Part 1,
-    /// clause 24), through the registered HMAC seam over one contiguous buffer — the same seam MakeCredential
+    /// clause 21), through the registered HMAC seam over one contiguous buffer — the same seam MakeCredential
     /// and ActivateCredential both drive, so the produced and recomputed HMACs agree by construction.
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
@@ -6166,8 +9931,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     }
 
     /// <summary>
-    /// <c>TPM2_ActivateCredential()</c>: recover the wrapped credential (TPM 2.0 Library Part 1, clause 24; Part
-    /// 3, clause 12.5). Recover the seed by <c>Z = ECDH(EK_priv, ephemeralPub)</c> fed to KDFe — the same seed
+    /// <c>TPM2_ActivateCredential()</c>: recover the wrapped credential (TPM 2.0 Library Part 1, clause 21; Part
+    /// 3, clause 11.5). Recover the seed by <c>Z = ECDH(EK_priv, ephemeralPub)</c> fed to KDFe — the same seed
     /// MakeCredential produced, by ECDH symmetry — then re-derive symKey/hmacKey from the seed AND the ACTIVATE
     /// object's Name, recompute the outer HMAC over the ciphertext and that Name, and compare it (constant time)
     /// to the blob's HMAC.
@@ -6180,16 +9945,18 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// or the declared body, and <c>TPM_RC_SIZE</c> where the declared width exceeds <c>sizeof(TPMU_HA)</c> or
     /// octets remain after the digest — the three-code return contract of Part 4, <c>CredentialToSecret()</c>,
     /// page 734. Ownership of the recovered secret flows to <see cref="TpmCredentialActivated"/>, then to
-    /// the response intent, and is released (zeroed) by <see cref="SerializeResponse"/> after framing.
+    /// the response intent, and is released (zeroed) by <see cref="SerializeResponse"/> after framing. This
+    /// effect is the terminal owner of <see cref="TpmActivateCredentialAction.CredentialBlob"/> and
+    /// <see cref="TpmActivateCredentialAction.Secret"/> from the moment it is entered, so signing-backend
+    /// resolution runs INSIDE the guarded frame too: a missing backend must reach the finally that releases
+    /// them, exactly as a failing read does.
     /// </remarks>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the recovered-secret buffer transfers to the returned TpmCredentialActivated, then to the TpmActivateCredentialResponse intent, and is released by SerializeResponse after framing.")]
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility",
-        Justification = "The credential-protection outer wrap uses AES-CFB, the symmetric algorithm of the credential key's (endorsement key's) storage template (TPM 2.0 Library Part 1, clause 24); this in-process behavioural simulator is a test/server-side model, not a browser target. This mirrors the host's own suppression for the same primitive.")]
+        Justification = "The credential-protection outer wrap uses AES-CFB, the symmetric algorithm of the credential key's (endorsement key's) storage template (TPM 2.0 Library Part 1, clause 21); this in-process behavioural simulator is a test/server-side model, not a browser target. This mirrors the host's own suppression for the same primitive.")]
     private static async ValueTask<TpmSimulatorInput> ActivateCredentialAsync(TpmActivateCredentialAction action, TpmActionContext context, CancellationToken cancellationToken)
     {
-        TpmEccSigningBackend backend = context.SigningBackend
-            ?? throw new InvalidOperationException("TPM2_ActivateCredential() requires a signing backend, but none was supplied.");
         BaseMemoryPool pool = context.Pool;
 
         int fieldWidth = (action.CredentialKeyPublicPoint.Length - 1) / 2;
@@ -6198,6 +9965,10 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
         //Recover the ephemeral point from the secret (a marshaled TPMS_ECC_POINT) and the outer-HMAC / encIdentity
         //split from the credential blob (TPM2B outer HMAC || encIdentity), into arrays so no span crosses an await.
+        //The signing-backend resolution sits inside this same guarded frame: action.Secret and
+        //action.CredentialBlob are owned from the moment the effect is entered, so a missing backend must
+        //release them through the finally below exactly as a too-small wire field does.
+        TpmEccSigningBackend backend;
         byte[] ephemeralPoint;
         byte[] ephemeralX;
         byte[] credentialKeyX;
@@ -6205,6 +9976,9 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         byte[] encIdentity;
         try
         {
+            backend = context.SigningBackend
+                ?? throw new InvalidOperationException("TPM2_ActivateCredential() requires a signing backend, but none was supplied.");
+
             var pointReader = new TpmReader(action.Secret.Span);
             ushort xLen = pointReader.ReadUInt16();
             ReadOnlySpan<byte> x = pointReader.ReadBytes(xLen);
@@ -6226,6 +10000,13 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             //out-of-range exception out of the effect executor, which the PDA runner does not catch (Part 3,
             //clause 12.5). The reads and the point assembly are the only under-length-sensitive steps here.
             return new TpmCredentialActivated(TpmRcConstants.TPM_RC_SIZE, CertInfo: null);
+        }
+        finally
+        {
+            //Both carriers are owned by this frame from entry, so it is their terminal owner on every path —
+            //the successful read, the ArgumentOutOfRangeException refusal, and a missing signing backend alike.
+            action.Secret.Dispose();
+            action.CredentialBlob.Dispose();
         }
 
         using IMemoryOwner<byte> sharedValue = await backend.ComputeSharedSecret(
@@ -6290,7 +10071,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
                 //A declared width past sizeof(TPMU_HA) is TPM2B_DIGEST_Unmarshal()'s own size refusal, taken
                 //before the body is read (Part 4, page 1138: "if((result == TPM_RC_SUCCESS) && (target->t.size
-                //> sizeof(TPMU_HA))) result = TPM_RC_SIZE"; Part 2, clause 10.4.2, Table 92) and BEFORE any
+                //> sizeof(TPMU_HA))) result = TPM_RC_SIZE"; Part 2, clause 10.3.2, Table 90) and BEFORE any
                 //carrier is rented, so no over-bound TPM2B_DIGEST is ever framed for the host parser to refuse.
                 if(credLen > Tpm2bDigest.MaxSize)
                 {
@@ -6351,16 +10132,17 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
     /// <summary>
     /// <c>TPM2_ActivateCredential()</c> RSA arm: recover the wrapped credential (TPM 2.0 Library Part 1, clause
-    /// 24; Annex B.3, B.4, B.10.3, B.10.4; Part 3, clause 12.5). RSADP-decrypt and OAEP-decode the transported
+    /// 24; clause 43.3, 43.4, 20.3.2.3, 21.3; Part 3, clause 12.5). RSADP-decrypt and OAEP-decode the transported
     /// secret with the credential key's retained private key.
     /// </summary>
     /// <remarks>
     /// <para>
     /// On any decode failure — the delegate signals this by returning null rather than a distinct error, per
     /// <c>TpmRsaOaepDecryptDelegate</c>'s contract — substitute a fresh UNPREDICTABLE seed of the correct length
-    /// and proceed exactly as on success (TPM 2.0 Library Part 1, Annex B.10.3: "the error should cause the seed
+    /// and proceed exactly as on success (the v184 TPM 2.0 Library Part 1, clause A.10.3: "the error should cause the seed
     /// value to be set to an invalid value so that the error will not be reported until the integrity HMAC is
-    /// validated", imported by B.10.4 for the credential case); a recovered seed of the wrong width is treated
+    /// validated", imported by A.10.4 for the credential case — v185's Labeled-KEM reframe drops the sentence
+    /// and keeps the rationale at Part 3, clause 13.3.1); a recovered seed of the wrong width is treated
     /// identically, since a correct-width message is itself part of what OAEP decoding must validate.
     /// </para>
     /// <para>
@@ -6371,41 +10153,54 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// deliberately decode-failing secret, making ActivateCredential return <c>TPM_RC_SUCCESS</c> for a
     /// credential that never validly decrypted to the endorsement key: a forgery/distinguishing oracle that
     /// defeats attestation soundness. An unpredictable seed makes the outer HMAC fail with overwhelming
-    /// probability, so the failure is reported uniformly as <c>TPM_RC_INTEGRITY</c> (Annex B.10.3's intent)
+    /// probability, so the failure is reported uniformly as <c>TPM_RC_INTEGRITY</c> (clause 20.3.2.3's intent)
     /// without exposing that oracle.
     /// </para>
     /// <para>
     /// The outer-wrap recovery that follows (re-derive symKey/hmacKey from the seed AND the ACTIVATE object's
     /// Name, verify the HMAC constant-time, decrypt, unmarshal the recovered <c>TPM2B_DIGEST</c>) is identical
-    /// to the ECC arm's — clause 24 does not branch on the credential key's algorithm — and so is its
+    /// to the ECC arm's — clause 21 does not branch on the credential key's algorithm — and so is its
     /// three-code return contract: <c>TPM_RC_INTEGRITY</c> for the outer HMAC alone, <c>TPM_RC_INSUFFICIENT</c>
     /// where the plaintext cannot supply the size field or the declared body, <c>TPM_RC_SIZE</c> where the
     /// declared width exceeds <c>sizeof(TPMU_HA)</c> or octets remain after the digest (Part 4,
     /// <c>CredentialToSecret()</c>, page 734).
     /// </para>
+    /// <para>
+    /// This effect is the terminal owner of <see cref="TpmRsaActivateCredentialAction.CredentialBlob"/> and
+    /// <see cref="TpmRsaActivateCredentialAction.Secret"/> from the moment it is entered, so signing-backend
+    /// resolution, the ciphertext copy, and the outer-HMAC/encIdentity split all run inside one guarded frame;
+    /// both carriers are released together once that frame completes or fails.
+    /// </para>
     /// </remarks>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the recovered-secret buffer transfers to the returned TpmCredentialActivated, then to the TpmActivateCredentialResponse intent, and is released by SerializeResponse after framing.")]
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility",
-        Justification = "The credential-protection outer wrap uses AES-CFB, the symmetric algorithm of the credential key's (endorsement key's) storage template (TPM 2.0 Library Part 1, clause 24); this in-process behavioural simulator is a test/server-side model, not a browser target. This mirrors the host's own suppression for the same primitive.")]
+        Justification = "The credential-protection outer wrap uses AES-CFB, the symmetric algorithm of the credential key's (endorsement key's) storage template (TPM 2.0 Library Part 1, clause 21); this in-process behavioural simulator is a test/server-side model, not a browser target. This mirrors the host's own suppression for the same primitive.")]
     private static async ValueTask<TpmSimulatorInput> ActivateCredentialRsaAsync(TpmRsaActivateCredentialAction action, TpmActionContext context, CancellationToken cancellationToken)
     {
-        TpmRsaSigningBackend backend = context.RsaSigningBackend
-            ?? throw new InvalidOperationException("TPM2_ActivateCredential() for an RSA credential key requires an RSA signing backend, but none was supplied.");
         BaseMemoryPool pool = context.Pool;
 
         int seedSize = SessionDigestSize(action.NameAlg);
         HashAlgorithmName hashName = SessionHashName(action.NameAlg);
 
-        //action.Secret is already the unwrapped content of the wire TPM2B_ENCRYPTED_SECRET (the command
-        //parser stripped that one framing layer) — for RSA that content is the raw OAEP ciphertext directly, no
-        //further sub-structure, unlike the ECC arm's marshaled TPMS_ECC_POINT. Copy it and the credential blob's
-        //split (TPM2B outer HMAC || encIdentity) into arrays so no span crosses the OAEP-decrypt await.
-        byte[] ciphertext = action.Secret.ToArray();
+        //action.Secret and action.CredentialBlob are owned by this frame from entry, so signing-backend
+        //resolution sits inside the same guarded block as the reads below: a missing backend must release both
+        //through the finally exactly as a too-small wire field does.
+        TpmRsaSigningBackend backend;
+        byte[] ciphertext;
         byte[] blobHmac;
         byte[] encIdentity;
         try
         {
+            backend = context.RsaSigningBackend
+                ?? throw new InvalidOperationException("TPM2_ActivateCredential() for an RSA credential key requires an RSA signing backend, but none was supplied.");
+
+            //action.Secret is already the unwrapped content of the wire TPM2B_ENCRYPTED_SECRET (the command
+            //parser stripped that one framing layer) — for RSA that content is the raw OAEP ciphertext directly,
+            //no further sub-structure, unlike the ECC arm's marshaled TPMS_ECC_POINT. Copy it into an array so
+            //no span crosses the OAEP-decrypt await; the carrier's only use is this copy.
+            ciphertext = action.Secret.AsReadOnlyMemory().ToArray();
+
             var blobReader = new TpmReader(action.CredentialBlob.Span);
             ushort hmacLen = blobReader.ReadUInt16();
             blobHmac = blobReader.ReadBytes(hmacLen).ToArray();
@@ -6418,6 +10213,14 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             //an out-of-range exception out of the effect executor, which the PDA runner does not catch (Part 3,
             //clause 12.5) — mirrors the ECC arm's identical guard.
             return new TpmCredentialActivated(TpmRcConstants.TPM_RC_SIZE, CertInfo: null);
+        }
+        finally
+        {
+            //Both carriers are owned by this frame from entry, so it is their terminal owner on every path —
+            //the successful copy and split, the ArgumentOutOfRangeException refusal, and a missing signing
+            //backend alike.
+            action.Secret.Dispose();
+            action.CredentialBlob.Dispose();
         }
 
         using IMemoryOwner<byte> seed = pool.Rent(seedSize, AllocationKind.Pinned);
@@ -6432,7 +10235,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         }
         else
         {
-            //Deferred-failure substitution (Part 1, Annex B.10.3, quoted above): a null decode result, or a
+            //Deferred-failure substitution (the v184 Part 1, clause A.10.3 note quoted above): a null decode result, or a
             //correctly-decoded-but-wrong-width message, both become a fresh UNPREDICTABLE seed rather than a
             //distinct rejection here — the outer HMAC check below is what reports the failure, uniformly as
             //TPM_RC_INTEGRITY. The substitute is drawn from the RNG seam, never a fixed value, so its derived
@@ -6500,7 +10303,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
                 //A declared width past sizeof(TPMU_HA) is TPM2B_DIGEST_Unmarshal()'s own size refusal, taken
                 //before the body is read (Part 4, page 1138: "if((result == TPM_RC_SUCCESS) && (target->t.size
-                //> sizeof(TPMU_HA))) result = TPM_RC_SIZE"; Part 2, clause 10.4.2, Table 92) and BEFORE any
+                //> sizeof(TPMU_HA))) result = TPM_RC_SIZE"; Part 2, clause 10.3.2, Table 90) and BEFORE any
                 //carrier is rented, so no over-bound TPM2B_DIGEST is ever framed for the host parser to refuse.
                 if(credLen > Tpm2bDigest.MaxSize)
                 {
@@ -6561,7 +10364,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
     /// <summary>
     /// <c>TPM2_PolicyNV()</c>: marshal the NV Index's <c>TPMS_NV_PUBLIC</c> and compute its Name (nameAlg ||
-    /// H_nameAlg(TPMS_NV_PUBLIC), TPM 2.0 Library Part 1, clause 14, Table 6) through the shared nameAlg-agile
+    /// H_nameAlg(TPMS_NV_PUBLIC), TPM 2.0 Library Part 1, clause 13, Table 9) through the shared nameAlg-agile
     /// <see cref="TpmObjectName"/> helper and the registered asynchronous digest seam — TPM digests belong
     /// there, not the sync <c>HashFunctionDelegate</c> seam a pure transition could reach on its own.
     /// </summary>
@@ -6594,7 +10397,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return new TpmNvNameComputedForPolicy(
                 action.PolicySession,
                 FoldPolicyDigest(
-                    TpmPolicyDigestFold.Nv, action.PolicyHashAlgorithm, action.CurrentPolicyDigest.AsReadOnlySpan(), restrictedCommand: default,
+                    action.Fold, action.PolicyHashAlgorithm, action.CurrentPolicyDigest.AsReadOnlySpan(), restrictedCommand: default,
                     TpmHandleName.FromName(nvName), policyRef: default, branches: null, pcrSelection: default, pcrDigest: default,
                     action.OperandB.Span, action.Offset, action.Operation, context.Pool));
         }
@@ -6608,7 +10411,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
     /// <summary>
     /// <c>TPM2_NV_ReadPublic()</c>: marshal the NV Index's <c>TPMS_NV_PUBLIC</c> from its retained fields and
-    /// compute its Name (nameAlg ‖ H_nameAlg(TPMS_NV_PUBLIC), TPM 2.0 Library Part 1, clause 14, Table 6) through the
+    /// compute its Name (nameAlg ‖ H_nameAlg(TPMS_NV_PUBLIC), TPM 2.0 Library Part 1, clause 13, Table 9) through the
     /// shared nameAlg-agile <see cref="TpmObjectName"/> helper and the registered asynchronous digest seam —
     /// the same recipe <see cref="ComputeNvNameForPolicyAsync"/> uses, now serving the command that returns the
     /// public area and Name directly rather than folding the Name into a policyDigest.
@@ -6672,12 +10475,12 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
     /// <summary>
     /// Frames a session-authorized command's response for the NV and hierarchy families (TPM 2.0 Library Part 1,
-    /// clause 16.6.1) — the generalization of <see cref="FramePolicySecretSessionResponseAsync"/>: lay out the
-    /// response parameter area (empty for Write/DefineSpace/UndefineSpace/Increment and the hierarchy commands,
+    /// clause 15.6.1) — the generalization of <see cref="FramePolicySecretSessionResponseAsync"/>: lay out the
+    /// response parameter area (empty for Write/DefineSpace/UndefineSpace/Increment/Extend and the hierarchy commands,
     /// the <c>TPM2B_MAX_NV_BUFFER</c> framing of <see cref="TpmFrameNvSessionResponseAction.ReadWindow"/> for
     /// Read), roll a fresh nonceTPM, compute rpHash over that area, then the response HMAC keyed on the SAME
     /// <c>sessionKey ‖ authValue</c> the command-HMAC
-    /// verification used (clause 17.6.5).
+    /// verification used (clause 16.6.5).
     /// </summary>
     /// <param name="action">The declared action carrying the session's key material, nonces, attributes, and the read window the parameter area is framed from.</param>
     /// <param name="context">The effect context supplying the RNG backend and the memory pool.</param>
@@ -6721,7 +10524,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         try
         {
             //The response parameter area is laid out first, into this effect's own rental, because rpHash is
-            //computed over the very octets the response frames (Part 1, clause 16.8 equation 16): a read's
+            //computed over the very octets the response frames (Part 1, clause 15.8 equation 16): a read's
             //TPM2B_MAX_NV_BUFFER window is copied out of the Index's borrowed carrier here, where a pool is in
             //scope, and every parameter-free command frames a zero-length area.
             int parameterLength = action.ReadWindow?.SerializedSize ?? 0;
@@ -6762,22 +10565,22 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
     /// <summary>
     /// Frames an authValue rotation's response — <c>TPM2_NV_ChangeAuth()</c> (TPM 2.0 Library Part 3, clause
-    /// 31.15) or <c>TPM2_HierarchyChangeAuth()</c> (clause 24.8), which share this shape (Part 1, clause 16.6.1):
+    /// 31.15) or <c>TPM2_HierarchyChangeAuth()</c> (clause 24.8), which share this shape (Part 1, clause 15.6.1):
     /// roll a fresh nonceTPM for every session in the command's authorization area and compute each session's own
     /// response HMAC over the empty response parameter area.
     /// </summary>
     /// <remarks>
     /// Neither command returns parameters, so rpHash covers an empty parameter area — but never an assumed
-    /// command code: rpHash's own equation folds <c>commandCode</c> (Part 1, clause 16.8, equation 16), so the
+    /// command code: rpHash's own equation folds <c>commandCode</c> (Part 1, clause 15.8, equation 16), so the
     /// code travels on the action and a rotation framed for one command can never key its response on the other's
-    /// digest. rpHash is computed once per DISTINCT session hash algorithm (clause 16.8), since the authorizing
+    /// digest. rpHash is computed once per DISTINCT session hash algorithm (clause 15.8), since the authorizing
     /// session and a decrypt companion may have been started with different <c>authHash</c> values and each
     /// verifies against its own algorithm's rpHash. The authorizing session's <c>AuthValue</c> already carries the
     /// POST-rotation value where one is required (clause 31.15.1 and clause 24.8.1), resolved by the declaring
     /// transition — this step only keys with what it is handed. A <c>TPM_RS_PW</c> slot contributes a placeholder
-    /// entry instead: it has no session key to key an HMAC with and no nonceTPM to roll (clause 17.6.4.1), yet it
+    /// entry instead: it has no session key to key an HMAC with and no nonceTPM to roll (clause 16.6.4.1), yet it
     /// still occupies its wire position, because a successful response carries one entry per request session in
-    /// request order (clause 16.6.1).
+    /// request order (clause 15.6.1).
     /// </remarks>
     /// <param name="action">The declared action carrying each session's key material, nonces, and attributes.</param>
     /// <param name="context">The effect context supplying the RNG backend and the memory pool.</param>
@@ -6819,7 +10622,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     {
         //A password slot has no session key, no hash algorithm, and no nonceTPM to roll, so the nonce roll and
         //the rpHash algorithm set are taken over the REAL slots alone; its entry is emitted straight into the
-        //list at its own wire position (Part 1, clause 16.6.1's same-number-same-order rule).
+        //list at its own wire position (Part 1, clause 15.6.1's same-number-same-order rule).
         int realCount = 0;
         for(int i = 0; i < action.ResponseSessions.Length; i++)
         {
@@ -7098,7 +10901,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                 //TPM2_GetRandom() carries a single UINT16 bytesRequested parameter (Part 3, 16.1); a
                 //command whose parameter area is too short to unmarshal it is a shortfall, which the
                 //TPM reports as TPM_RC_INSUFFICIENT ("not enough octets in the input buffer"), not the
-                //size-value-out-of-range TPM_RC_SIZE (Part 2, Table 4).
+                //size-value-out-of-range TPM_RC_SIZE (Part 2, Table 2).
                 if(reader.Remaining < sizeof(ushort))
                 {
                     malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
@@ -7109,6 +10912,14 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                 input = new TpmGetRandomRequested(reader.ReadUInt16());
 
                 break;
+            }
+            case TpmCcConstants.TPM_CC_Duplicate:
+            {
+                return TryParseDuplicate(ref reader, header.Tag, pool, out input, out malformedResponseCode);
+            }
+            case TpmCcConstants.TPM_CC_Import:
+            {
+                return TryParseImport(ref reader, header.Tag, pool, out input, out malformedResponseCode);
             }
             case TpmCcConstants.TPM_CC_GetCapability:
             {
@@ -7152,9 +10963,26 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             {
                 return TryParseNvIncrement(ref reader, header.Tag, pool, out input, out malformedResponseCode);
             }
+            case TpmCcConstants.TPM_CC_NV_Extend:
+            {
+                return TryParseNvExtend(ref reader, header.Tag, pool, out input, out malformedResponseCode);
+            }
+            case TpmCcConstants.TPM_CC_NV_SetBits:
+            {
+                return TryParseNvSetBits(ref reader, header.Tag, pool, out input, out malformedResponseCode);
+            }
+            case TpmCcConstants.TPM_CC_NV_WriteLock:
+            case TpmCcConstants.TPM_CC_NV_ReadLock:
+            {
+                return TryParseNvLock(ref reader, header.Tag, commandCode, pool, out input, out malformedResponseCode);
+            }
             case TpmCcConstants.TPM_CC_NV_ReadPublic:
             {
                 return TryParseNvReadPublic(ref reader, out input, out malformedResponseCode);
+            }
+            case TpmCcConstants.TPM_CC_ReadPublic:
+            {
+                return TryParseReadPublic(ref reader, out input, out malformedResponseCode);
             }
             case TpmCcConstants.TPM_CC_EvictControl:
             {
@@ -7184,6 +11012,101 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                 }
 
                 return TryParseSign(ref reader, header.Tag, pool, out input, out malformedResponseCode);
+            }
+            case TpmCcConstants.TPM_CC_SignDigest:
+            {
+                //TPM2_SignDigest() signs through the same ECC/RSA signing-backend seam-bundles TPM2_Sign() does,
+                //so it is gated identically: without any asymmetric backend the simulated TPM cannot honour it.
+                if(SigningBackend is null && RsaSigningBackend is null)
+                {
+                    malformedResponseCode = TpmRcConstants.TPM_RC_COMMAND_CODE;
+
+                    return false;
+                }
+
+                return TryParseSignDigest(ref reader, header.Tag, pool, out input, out malformedResponseCode);
+            }
+            case TpmCcConstants.TPM_CC_SignSequenceStart:
+            {
+                //TPM2_SignSequenceStart() signs nothing itself but resolves the signing scheme it will hash and
+                //sign under from the same ECC/RSA signing-backend seam-bundles TPM2_Sign()/TPM2_SignDigest() use;
+                //without either backend the simulated TPM cannot ever complete a sequence it opens, so it is
+                //gated identically here rather than admitting a sequence no backend can ever finish.
+                if(SigningBackend is null && RsaSigningBackend is null)
+                {
+                    malformedResponseCode = TpmRcConstants.TPM_RC_COMMAND_CODE;
+
+                    return false;
+                }
+
+                return TryParseSignSequenceStart(ref reader, header.Tag, pool, out input, out malformedResponseCode);
+            }
+            case TpmCcConstants.TPM_CC_SequenceUpdate:
+            {
+                //TPM2_SequenceUpdate() only accumulates octets into the sequence's own segment list — no
+                //cryptographic backend is invoked, so it is admitted without a backend gate (unlike the sign and
+                //verify commands above).
+                return TryParseSequenceUpdate(ref reader, header.Tag, pool, out input, out malformedResponseCode);
+            }
+            case TpmCcConstants.TPM_CC_SignSequenceComplete:
+            {
+                //TPM2_SignSequenceComplete() signs through the same ECC/RSA signing-backend seam-bundles
+                //TPM2_Sign()/TPM2_SignDigest() do, so it is gated identically.
+                if(SigningBackend is null && RsaSigningBackend is null)
+                {
+                    malformedResponseCode = TpmRcConstants.TPM_RC_COMMAND_CODE;
+
+                    return false;
+                }
+
+                return TryParseSignSequenceComplete(ref reader, header.Tag, pool, out input, out malformedResponseCode);
+            }
+            case TpmCcConstants.TPM_CC_VerifySequenceStart:
+            {
+                //TPM2_VerifySequenceStart() resolves the verification scheme it will hash and verify under from
+                //the same ECC/RSA signing-backend seam-bundles TPM2_SignSequenceStart() uses; without either
+                //backend the simulated TPM cannot ever complete a sequence it opens, so it is gated identically.
+                if(SigningBackend is null && RsaSigningBackend is null)
+                {
+                    malformedResponseCode = TpmRcConstants.TPM_RC_COMMAND_CODE;
+
+                    return false;
+                }
+
+                return TryParseVerifySequenceStart(ref reader, header.Tag, pool, out input, out malformedResponseCode);
+            }
+            case TpmCcConstants.TPM_CC_VerifySequenceComplete:
+            {
+                //TPM2_VerifySequenceComplete() verifies through the same ECC/RSA signing-backend seam-bundles
+                //TPM2_VerifyDigestSignature() does, so it is gated identically.
+                if(SigningBackend is null && RsaSigningBackend is null)
+                {
+                    malformedResponseCode = TpmRcConstants.TPM_RC_COMMAND_CODE;
+
+                    return false;
+                }
+
+                return TryParseVerifySequenceComplete(ref reader, header.Tag, pool, out input, out malformedResponseCode);
+            }
+            case TpmCcConstants.TPM_CC_HashSequenceStart:
+            {
+                return TryParseHashSequenceStart(ref reader, header.Tag, pool, out input, out malformedResponseCode);
+            }
+            case TpmCcConstants.TPM_CC_SequenceComplete:
+            {
+                return TryParseSequenceComplete(ref reader, header.Tag, pool, out input, out malformedResponseCode);
+            }
+            case TpmCcConstants.TPM_CC_Hash:
+            {
+                return TryParseHash(ref reader, header.Tag, pool, out input, out malformedResponseCode);
+            }
+            case TpmCcConstants.TPM_CC_HMAC:
+            {
+                return TryParseHmac(ref reader, header.Tag, pool, out input, out malformedResponseCode);
+            }
+            case TpmCcConstants.TPM_CC_HMAC_Start:
+            {
+                return TryParseHmacStart(ref reader, header.Tag, pool, out input, out malformedResponseCode);
             }
             case TpmCcConstants.TPM_CC_Create:
             {
@@ -7311,11 +11234,69 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
                 return TryParseVerifySignature(ref reader, header.Tag, pool, out input, out malformedResponseCode);
             }
+            case TpmCcConstants.TPM_CC_VerifyDigestSignature:
+            {
+                //TPM2_VerifyDigestSignature() verifies through the same ECC/RSA signing-backend seam-bundles
+                //TPM2_VerifySignature() does, so it is gated identically.
+                if(SigningBackend is null && RsaSigningBackend is null)
+                {
+                    malformedResponseCode = TpmRcConstants.TPM_RC_COMMAND_CODE;
+
+                    return false;
+                }
+
+                return TryParseVerifyDigestSignature(ref reader, header.Tag, pool, out input, out malformedResponseCode);
+            }
+            case TpmCcConstants.TPM_CC_Encapsulate:
+            {
+                //TPM2_Encapsulate() runs the ECC DHKEM over the same ECC signing-backend seam-bundle
+                //TPM2_CreatePrimary()'s ECC key generation uses (TpmEccSigningBackend.GenerateKey/
+                //ComputeSharedSecret) — RSA has no KEM arm at all (Part 2, Table 101's ecdh/mlkem selectors
+                //only), so this gate checks the ECC backend alone, unlike the RSA-inclusive signing-command
+                //gates above.
+                if(SigningBackend is null)
+                {
+                    malformedResponseCode = TpmRcConstants.TPM_RC_COMMAND_CODE;
+
+                    return false;
+                }
+
+                return TryParseEncapsulate(ref reader, header.Tag, out input, out malformedResponseCode);
+            }
+            case TpmCcConstants.TPM_CC_Decapsulate:
+            {
+                //TPM2_Decapsulate() runs the same ECC DHKEM in reverse; gated identically to Encapsulate.
+                if(SigningBackend is null)
+                {
+                    malformedResponseCode = TpmRcConstants.TPM_RC_COMMAND_CODE;
+
+                    return false;
+                }
+
+                return TryParseDecapsulate(ref reader, header.Tag, pool, out input, out malformedResponseCode);
+            }
+            case TpmCcConstants.TPM_CC_PCR_Extend:
+            {
+                //The PCR-modifying commands digest through the registered seam alone and need no signing backend.
+                return TryParsePcrExtend(ref reader, header.Tag, pool, out input, out malformedResponseCode);
+            }
+            case TpmCcConstants.TPM_CC_PCR_Event:
+            {
+                return TryParsePcrEvent(ref reader, header.Tag, pool, out input, out malformedResponseCode);
+            }
+            case TpmCcConstants.TPM_CC_PCR_Reset:
+            {
+                return TryParsePcrReset(ref reader, header.Tag, pool, out input, out malformedResponseCode);
+            }
+            case TpmCcConstants.TPM_CC_EventSequenceComplete:
+            {
+                return TryParseEventSequenceComplete(ref reader, header.Tag, pool, out input, out malformedResponseCode);
+            }
             case TpmCcConstants.TPM_CC_PCR_Read:
             {
                 //TPM2_PCR_Read() reads durable PCR state and needs no backend, so it is admitted without a
                 //signing backend (unlike the signing commands above).
-                return TryParsePcrRead(ref reader, out input, out malformedResponseCode);
+                return TryParsePcrRead(ref reader, pool, out input, out malformedResponseCode);
             }
             case TpmCcConstants.TPM_CC_Quote:
             {
@@ -7389,10 +11370,50 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             {
                 return TryParsePolicyCounterTimer(ref reader, pool, out input, out malformedResponseCode);
             }
+            case TpmCcConstants.TPM_CC_PolicyPassword:
+            {
+                return TryParsePolicyPassword(ref reader, out input, out malformedResponseCode);
+            }
+            case TpmCcConstants.TPM_CC_PolicyRestart:
+            {
+                return TryParsePolicyRestart(ref reader, out input, out malformedResponseCode);
+            }
+            case TpmCcConstants.TPM_CC_PolicyCpHash:
+            {
+                return TryParsePolicyCpHash(ref reader, pool, out input, out malformedResponseCode);
+            }
+            case TpmCcConstants.TPM_CC_PolicyNameHash:
+            {
+                return TryParsePolicyNameHash(ref reader, pool, out input, out malformedResponseCode);
+            }
+            case TpmCcConstants.TPM_CC_PolicyDuplicationSelect:
+            {
+                return TryParsePolicyDuplicationSelect(ref reader, pool, out input, out malformedResponseCode);
+            }
+            case TpmCcConstants.TPM_CC_PolicyParameters:
+            {
+                return TryParsePolicyParameters(ref reader, pool, out input, out malformedResponseCode);
+            }
+            case TpmCcConstants.TPM_CC_PolicyTemplate:
+            {
+                return TryParsePolicyTemplate(ref reader, pool, out input, out malformedResponseCode);
+            }
+            case TpmCcConstants.TPM_CC_PolicyLocality:
+            {
+                return TryParsePolicyLocality(ref reader, out input, out malformedResponseCode);
+            }
+            case TpmCcConstants.TPM_CC_PolicyNvWritten:
+            {
+                return TryParsePolicyNvWritten(ref reader, out input, out malformedResponseCode);
+            }
+            case TpmCcConstants.TPM_CC_PolicyAuthorizeNV:
+            {
+                return TryParsePolicyAuthorizeNv(ref reader, header.Tag, pool, out input, out malformedResponseCode);
+            }
             case TpmCcConstants.TPM_CC_MakeCredential:
             {
                 //Credential protection transports the seed by ECDH (ECC) or RSA-OAEP (RSA) with the credential
-                //key's public area (Part 1, clause 24; Annex B.4/B.10.3/B.10.4), so it needs an asymmetric
+                //key's public area (Part 1, clause 21; clause 43.4/20.3.2.3/21.3), so it needs an asymmetric
                 //backend of the matching type — the actual RSA-vs-ECC dispatch lives one layer down in
                 //OnMakeCredential (mirroring the six attest-command gates, TpmLifecycleTransitions.cs:1007);
                 //without either backend the simulated TPM answers the faithful TPM_RC_COMMAND_CODE.
@@ -7501,7 +11522,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
         //NV_DefineSpace's entire parameter set (auth ‖ publicInfo) is every octet left after the authorization
         //area — captured verbatim, before any field is decoded, as the HMAC arm's cpHash parameter term (Part 1,
-        //clause 16.7 equation 15); unused by the password arm.
+        //clause 15.7 equation 15); unused by the password arm.
         ReadOnlySpan<byte> rawParameterAreaOctets = reader.PeekBytes(reader.Remaining);
 
         //Parameter: auth (TPM2B_AUTH) — the authorization value assigned to the new Index.
@@ -7510,11 +11531,11 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return false;
         }
 
-        //A TPM2B_AUTH buffer can be no wider than sizeof(TPMU_HA) (TPM 2.0 Library Part 2, clause 10.4.5, Table
-        //95, which types it as a TPM2B_DIGEST, and clause 10.4.2, Table 92, which bounds that structure's
+        //A TPM2B_AUTH buffer can be no wider than sizeof(TPMU_HA) (TPM 2.0 Library Part 2, clause 10.3.5, Table
+        //95, which types it as a TPM2B_DIGEST, and clause 10.3.2, Table 90, which bounds that structure's
         //buffer). The wire bound is answered here, ahead of the rental whose Create refuses the same bound by
         //throwing; the command's own narrower per-entity rule — no wider than the digest of the entity's nameAlg
-        //(clause 10.4.5's prose) — stays where it is, on the installing transition.
+        //(clause 10.3.5's prose) — stays where it is, on the installing transition.
         if(indexAuth.Length > Tpm2bAuth.MaxSize)
         {
             malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
@@ -7555,8 +11576,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return false;
         }
 
-        //A TPM2B_DIGEST buffer can be no wider than sizeof(TPMU_HA) (TPM 2.0 Library Part 2, clause 10.4.2,
-        //Table 92), so the wire bound is answered here — ahead of the rental, whose Create refuses the same
+        //A TPM2B_DIGEST buffer can be no wider than sizeof(TPMU_HA) (TPM 2.0 Library Part 2, clause 10.3.2,
+        //Table 90), so the wire bound is answered here — ahead of the rental, whose Create refuses the same
         //bound by throwing. The defining transition's exact nameAlg-width gate stays as the fail-closed
         //backstop, so the size rule is proved at both layers.
         if(authPolicy.Length > Tpm2bDigest.MaxSize)
@@ -7816,7 +11837,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         }
 
         //A TPM2B_MAX_NV_BUFFER buffer can be no wider than MAX_NV_BUFFER_SIZE (TPM 2.0 Library Part 2, clause
-        //10.4.9, Table 99: buffer[size]{:MAX_NV_BUFFER_SIZE}), which this library fixes at
+        //10.3.9, Table 97: buffer[size]{:MAX_NV_BUFFER_SIZE}), which this library fixes at
         //Tpm2bMaxNvBuffer.MaxSize and reports through TPM_PT_NV_BUFFER_MAX. The wire bound is answered here —
         //ahead of the rental, whose Create refuses the same bound by throwing — with the marshalling refusal the
         //reference's own TPM2B_MAX_NV_BUFFER unmarshal answers, TPM_RC_SIZE, rather than any command-level code:
@@ -7975,11 +11996,11 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// <summary>
     /// <c>TPM2_NV_ChangeAuth()</c> is authorized: handle area (<c>@nvIndex</c> — a SINGLE handle, unlike every
     /// other authorized NV command in this parser), authorization area (one or two sessions), then the sole
-    /// parameter <c>newAuth</c> as a <c>TPM2B_AUTH</c> (Part 3, clause 31.15, Table 252).
+    /// parameter <c>newAuth</c> as a <c>TPM2B_AUTH</c> (Part 3, clause 31.15, Table 269).
     /// </summary>
     /// <remarks>
     /// <para>
-    /// One handle because the entity being administered is also the entity authorizing: Table 252 lists
+    /// One handle because the entity being administered is also the entity authorizing: Table 269 lists
     /// <c>@nvIndex</c> alone, with Auth Index 1 and Auth Role ADMIN. There is no <c>authHandle</c> hierarchy
     /// arm — an owner-authorized rotation is not a shape this command has.
     /// </para>
@@ -7992,10 +12013,10 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// </para>
     /// <para>
     /// The handle's own out-of-range case is <c>TPM_RC_VALUE</c> — the unmarshal-time interface check
-    /// <c>TPMI_RH_NV_INDEX</c> carries (Part 2, Table 72) — distinct from the in-range-but-undefined case, which
+    /// <c>TPMI_RH_NV_INDEX</c> carries (Part 2, Table 71) — distinct from the in-range-but-undefined case, which
     /// the transition answers with <c>TPM_RC_HANDLE</c> (Part 3, clause 5.4). <c>newAuth</c> is captured as
     /// received, ciphertext included when a decrypt session is present: its 2-octet size prefix is never itself
-    /// encrypted (Part 1, clause 19.1), so the field can be delimited before anything is decrypted.
+    /// encrypted (Part 1, clause 18.1), so the field can be delimited before anything is decrypted.
     /// </para>
     /// </remarks>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
@@ -8062,7 +12083,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         }
 
         //newAuth is the entire parameter area, captured verbatim before it is decoded as cpHash's parameter term
-        //(Part 1, clause 16.7 equation 15). The capture is an exclusive copy, which is what lets the decrypt
+        //(Part 1, clause 15.7 equation 15). The capture is an exclusive copy, which is what lets the decrypt
         //effect transform it in place.
         ReadOnlySpan<byte> rawParameterAreaOctets = reader.PeekBytes(reader.Remaining);
 
@@ -8071,11 +12092,11 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return false;
         }
 
-        //A TPM2B_AUTH buffer can be no wider than sizeof(TPMU_HA) (TPM 2.0 Library Part 2, clause 10.4.5, Table
-        //95, which types it as a TPM2B_DIGEST, and clause 10.4.2, Table 92, which bounds that structure's
+        //A TPM2B_AUTH buffer can be no wider than sizeof(TPMU_HA) (TPM 2.0 Library Part 2, clause 10.3.5, Table
+        //95, which types it as a TPM2B_DIGEST, and clause 10.3.2, Table 90, which bounds that structure's
         //buffer). The wire bound is answered here, ahead of the rental whose Create refuses the same bound by
         //throwing; the command's own narrower per-entity rule — no wider than the digest of the entity's nameAlg
-        //(clause 10.4.5's prose) — stays where it is, on the installing transition.
+        //(clause 10.3.5's prose) — stays where it is, on the installing transition.
         if(newAuth.Length > Tpm2bAuth.MaxSize)
         {
             malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
@@ -8136,10 +12157,10 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// Modelled on <c>TryReadPolicySessionOnly</c>'s shape (a single handle, confirm nothing follows) rather
     /// than any of the password-authorized NV parse arms above, since this command never reads an
     /// authorization area at all. The handle's own out-of-range case is <c>TPM_RC_VALUE</c> — unmarshal-time,
-    /// <c>TPMI_RH_NV_INDEX</c>'s own interface-type check (Part 2, Table 72: "TPM_RC_VALUE error returned if
+    /// <c>TPMI_RH_NV_INDEX</c>'s own interface-type check (Part 2, Table 71: "TPM_RC_VALUE error returned if
     /// the handle is out of range") — distinct from the in-range-but-undefined case, which is
     /// <c>TPM_RC_HANDLE</c> at the transition (clause 5.4). The wire tag is <c>TPM_ST_SESSIONS</c> only "if an
-    /// audit or encrypt session is present" (Table 234) — this simulator does not yet implement an encrypt
+    /// audit or encrypt session is present" (Table 250) — this simulator does not yet implement an encrypt
     /// session on <c>nvPublic</c> (the reference command-attribute table marks it ENCRYPT_2-eligible, tracked,
     /// not implemented), so any session-tagged request leaves unparsed trailing octets and fails closed with
     /// <c>TPM_RC_SIZE</c> below rather than silently accepting-but-not-encrypting.
@@ -8172,6 +12193,57 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         }
 
         input = new TpmNvReadPublicRequested(TpmiRhNvIndex.FromValue(nvIndex));
+
+        return true;
+    }
+
+    /// <summary>
+    /// Parses <c>TPM2_ReadPublic()</c> (TPM 2.0 Library Part 3, clause 12.4, Table 24): the single
+    /// <c>objectHandle</c> and nothing else.
+    /// </summary>
+    /// <remarks>
+    /// <c>Auth Index: None</c>, so no authorization area is parsed. The handle must lie in the transient or
+    /// persistent range — <c>TPMI_DH_OBJECT</c>'s own interface-type check (Part 2, clause 9.3, Table 49:
+    /// <c>#TPM_RC_VALUE</c>); its <c>+TPM_RH_NULL</c> conditional value is not admitted by Table 24, which
+    /// declares the handle without the <c>+</c>, so the NULL handle is out of range here too — distinct from
+    /// the in-range-but-not-loaded case, which is <c>TPM_RC_HANDLE</c> at the transition (clause 5.4). The wire
+    /// tag is <c>TPM_ST_SESSIONS</c> only "if an audit or encrypt session is present" (Table 24) — this
+    /// simulator does not implement an encrypt session on <c>outPublic</c> (tracked, not implemented, exactly
+    /// as for <c>TPM2_NV_ReadPublic()</c>), so any session-tagged request leaves unparsed trailing octets and
+    /// fails closed with <c>TPM_RC_SIZE</c> below rather than silently accepting-but-not-encrypting.
+    /// </remarks>
+    /// <param name="reader">The reader positioned after the command header.</param>
+    /// <param name="input">The parsed request on success.</param>
+    /// <param name="malformedResponseCode">The response code a malformed frame answers with.</param>
+    /// <returns><see langword="true"/> when the frame parsed; otherwise <see langword="false"/>.</returns>
+    private static bool TryParseReadPublic(ref TpmReader reader, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
+    {
+        input = null;
+        malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
+
+        if(reader.Remaining < sizeof(uint))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        uint objectHandle = reader.ReadUInt32();
+        if((byte)(objectHandle >> 24) is not ((byte)TpmHt.TPM_HT_TRANSIENT or (byte)TpmHt.TPM_HT_PERSISTENT))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_VALUE;
+
+            return false;
+        }
+
+        if(reader.Remaining != 0)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+
+        input = new TpmReadPublicRequested(TpmiDhObject.FromValue(objectHandle));
 
         return true;
     }
@@ -8233,7 +12305,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         }
 
         //NV_Increment carries no parameters at all, so the raw parameter area is always empty — still captured
-        //for uniformity with the other NV HMAC arms' cpHash construction (Part 1, clause 16.7 equation 15).
+        //for uniformity with the other NV HMAC arms' cpHash construction (Part 1, clause 15.7 equation 15).
         ReadOnlySpan<byte> rawParameterAreaOctets = reader.PeekBytes(reader.Remaining);
 
         //No parameters follow the authorization area; any surplus is malformed (Part 3, 5.2).
@@ -8259,6 +12331,335 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             input = sessionHandle.IsPasswordSession
                 ? new TpmNvIncrementRequested(TpmiRhNvAuth.FromValue(authHandle), TpmiRhNvIndex.FromValue(nvIndex), slotCredential)
                 : new TpmNvIncrementOverSessionRequested(TpmiRhNvAuth.FromValue(authHandle), TpmiRhNvIndex.FromValue(nvIndex), sessionHandle, slotNonce, sessionAttributes, slotCredential, parameterArea, Tpm2bName.Empty);
+        }
+        catch
+        {
+            //These carriers' only owner is this frame until the request adopts them, so a failing later rent
+            //must release them or the pinned rentals are orphaned.
+            parameterArea.Dispose();
+            slotNonce.Dispose();
+            slotCredential.Dispose();
+            throw;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// <c>TPM2_NV_Extend()</c> is authorized, so its wire layout after the header is: handle area (@authHandle,
+    /// nvIndex — 2 handles), authorization area (a single session), then the one parameter (data as
+    /// TPM2B_MAX_NV_BUFFER) (Part 3, clause 31.9, Table 257).
+    /// </summary>
+    /// <remarks>
+    /// <c>TryReadCommandSessionSpans</c> reads the authorization area generically, exactly as
+    /// <c>TryParseNvWrite</c> does: the parsed sessionHandle alone decides whether this becomes
+    /// <see cref="TpmNvExtendRequested"/> (password) or <see cref="TpmNvExtendOverSessionRequested"/> (HMAC —
+    /// both the owner and the Index arm). The parameter area is <c>TPM2_NV_Write()</c>'s without the trailing
+    /// <c>offset</c>: an Extend Index has no offset to write at, the fold replacing its whole value.
+    /// </remarks>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the parse-rented parameter-area, data and authorization-slot credential carriers transfers to the constructed request input; the consuming transition or continuation releases them per carrier, transfers the data onto the extend action and the slot's caller nonce into the response framing, and every refusing arm releases them through the input's own Dispose; a rent that fails after an earlier carrier already succeeded releases it in the catch before rethrowing.")]
+    private static bool TryParseNvExtend(ref TpmReader reader, ushort tag, BaseMemoryPool pool, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
+    {
+        input = null;
+        malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
+
+        //As in TryParseNvWrite, an authorized command must carry an authorization area. A missing one is
+        //TPM_RC_AUTH_MISSING; when the command has multiple errors the reporting order is non-normative
+        //(Part 3, clause 5.1), and the production executor always frames a session area.
+        if(tag != (ushort)TpmStConstants.TPM_ST_SESSIONS)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_AUTH_MISSING;
+
+            return false;
+        }
+
+        //Handle area: @authHandle then nvIndex.
+        if(reader.Remaining < 2 * sizeof(uint))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        uint authHandle = reader.ReadUInt32();
+        uint nvIndex = reader.ReadUInt32();
+
+        if(!TryBeginAuthArea(ref reader, out int sessionsStart, out uint authorizationSize, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        if(!TryReadCommandSessionSpans(ref reader, sessionIndex: 0, out TpmiShAuthSession sessionHandle, out ReadOnlySpan<byte> nonceCaller, out TpmaSession sessionAttributes, out ReadOnlySpan<byte> hmac, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        if(!TryEndAuthArea(ref reader, sessionsStart, authorizationSize, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //NV_Extend's entire parameter set (data alone) is every octet left after the authorization area —
+        //captured verbatim, before the field is decoded, as the HMAC arm's cpHash parameter term.
+        ReadOnlySpan<byte> rawParameterAreaOctets = reader.PeekBytes(reader.Remaining);
+
+        //Parameter: data (TPM2B_MAX_NV_BUFFER). Its octets are recorded rather than copied out: the carrier is
+        //rented from them as the parse's last act, after every remaining shape check has passed.
+        if(!TryReadTpm2bSpan(ref reader, out ReadOnlySpan<byte> dataOctets, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //A TPM2B_MAX_NV_BUFFER buffer can be no wider than MAX_NV_BUFFER_SIZE (TPM 2.0 Library Part 2, clause
+        //10.3.9, Table 97), answered here — ahead of the rental, whose Create refuses the same bound by throwing
+        //— with the marshalling refusal the reference's own unmarshal answers, TPM_RC_SIZE: clause 31.9.1's
+        //Note says data may be "any size allowed by TPM2B_MAX_NV_BUFFER", and a declared size past the
+        //structure's bound never reaches the command body at all.
+        if(dataOctets.Length > Tpm2bMaxNvBuffer.MaxSize)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+
+        //data is the only parameter; no octets may follow it (Part 3, 5.2).
+        if(reader.Remaining != 0)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+
+        //The data carrier and, on the session arm, the captured parameter area are rented only now, after every
+        //shape check has passed, so no refused parse ever creates one.
+        TpmParameterArea parameterArea = TpmParameterArea.Empty;
+        Tpm2bAuth slotCredential = Tpm2bAuth.Empty;
+        Tpm2bNonce slotNonce = Tpm2bNonce.Empty;
+        try
+        {
+            if(!sessionHandle.IsPasswordSession)
+            {
+                parameterArea = TpmParameterArea.Create(rawParameterAreaOctets, pool);
+            }
+
+            slotCredential = Tpm2bAuth.Create(hmac, pool);
+            slotNonce = sessionHandle.IsPasswordSession ? Tpm2bNonce.Empty : Tpm2bNonce.Create(nonceCaller, pool);
+
+            input = sessionHandle.IsPasswordSession
+                ? new TpmNvExtendRequested(TpmiRhNvAuth.FromValue(authHandle), TpmiRhNvIndex.FromValue(nvIndex), slotCredential, Tpm2bMaxNvBuffer.Create(dataOctets, pool))
+                : new TpmNvExtendOverSessionRequested(
+                    TpmiRhNvAuth.FromValue(authHandle), TpmiRhNvIndex.FromValue(nvIndex), sessionHandle, slotNonce, sessionAttributes, slotCredential, parameterArea,
+                    Tpm2bMaxNvBuffer.Create(dataOctets, pool), Tpm2bName.Empty);
+        }
+        catch
+        {
+            //These carriers' only owner is this frame until the request adopts them, so a failing later rent
+            //must release them or the pinned rentals are orphaned.
+            slotNonce.Dispose();
+            slotCredential.Dispose();
+            parameterArea.Dispose();
+            throw;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Reads the wire prologue every two-handle, USER-role NV command shares (TPM 2.0 Library Part 3, Tables 255,
+    /// 257, 259, 261 and 267): the <c>TPM_ST_SESSIONS</c> tag — an authorized command must carry an authorization
+    /// area, else <c>TPM_RC_AUTH_MISSING</c> — the <c>@authHandle</c>/<c>nvIndex</c> handle area, and a single
+    /// authorization slot read generically so the parsed session handle alone decides between the password and
+    /// the HMAC-session request shape, leaving <paramref name="reader"/> positioned at the parameter area.
+    /// </summary>
+    /// <param name="reader">The reader positioned after the command header.</param>
+    /// <param name="tag">The command header's tag.</param>
+    /// <param name="authHandle">The <c>@authHandle</c> value.</param>
+    /// <param name="nvIndex">The <c>nvIndex</c> value.</param>
+    /// <param name="sessionHandle">The slot's session handle.</param>
+    /// <param name="nonceCaller">The slot's caller nonce octets, borrowed from the command frame.</param>
+    /// <param name="sessionAttributes">The slot's session-attributes octet.</param>
+    /// <param name="hmac">The slot's hmac octets, borrowed from the command frame.</param>
+    /// <param name="malformedResponseCode">The response code a malformed prologue answers.</param>
+    /// <returns><see langword="true"/> when the prologue is well formed.</returns>
+    private static bool TryReadNvUserCommandPrologue(
+        ref TpmReader reader, ushort tag, out uint authHandle, out uint nvIndex, out TpmiShAuthSession sessionHandle, out ReadOnlySpan<byte> nonceCaller,
+        out TpmaSession sessionAttributes, out ReadOnlySpan<byte> hmac, out TpmRcConstants malformedResponseCode)
+    {
+        authHandle = 0;
+        nvIndex = 0;
+        sessionHandle = default;
+        nonceCaller = default;
+        sessionAttributes = default;
+        hmac = default;
+        malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
+
+        //An authorized command must carry an authorization area. A missing one is TPM_RC_AUTH_MISSING; when the
+        //command has multiple errors the reporting order is non-normative (Part 3, clause 5.1), and the
+        //production executor always frames a session area.
+        if(tag != (ushort)TpmStConstants.TPM_ST_SESSIONS)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_AUTH_MISSING;
+
+            return false;
+        }
+
+        //Handle area: @authHandle then nvIndex.
+        if(reader.Remaining < 2 * sizeof(uint))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        authHandle = reader.ReadUInt32();
+        nvIndex = reader.ReadUInt32();
+
+        if(!TryBeginAuthArea(ref reader, out int sessionsStart, out uint authorizationSize, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        if(!TryReadCommandSessionSpans(ref reader, sessionIndex: 0, out sessionHandle, out nonceCaller, out sessionAttributes, out hmac, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        return TryEndAuthArea(ref reader, sessionsStart, authorizationSize, out malformedResponseCode);
+    }
+
+    /// <summary>
+    /// <c>TPM2_NV_SetBits()</c> is authorized, so its wire layout after the header is: handle area (@authHandle,
+    /// nvIndex — 2 handles), authorization area (a single session), then the one parameter (<c>bits</c>, a
+    /// <c>UINT64</c>) (Part 3, clause 31.10, Table 259).
+    /// </summary>
+    /// <remarks>
+    /// The parsed sessionHandle alone decides whether this becomes <see cref="TpmNvSetBitsRequested"/> (password)
+    /// or <see cref="TpmNvSetBitsOverSessionRequested"/> (HMAC — both the owner and the Index arm). The parameter
+    /// is a bare eight-octet integer rather than a sized <c>TPM2B</c>: fewer than eight octets left is
+    /// <c>TPM_RC_INSUFFICIENT</c>, the reference's unmarshalling answer for a truncated <c>UINT64</c>, and any
+    /// octet after it is <c>TPM_RC_SIZE</c>.
+    /// </remarks>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the parse-rented parameter-area and authorization-slot credential carriers transfers to the constructed request input; the consuming transition or continuation releases them per carrier and transfers the slot's caller nonce into the response framing, and every refusing arm releases them through the input's own Dispose; a rent that fails after an earlier carrier already succeeded releases it in the catch before rethrowing.")]
+    private static bool TryParseNvSetBits(ref TpmReader reader, ushort tag, BaseMemoryPool pool, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
+    {
+        input = null;
+
+        if(!TryReadNvUserCommandPrologue(ref reader, tag, out uint authHandle, out uint nvIndex, out TpmiShAuthSession sessionHandle, out ReadOnlySpan<byte> nonceCaller, out TpmaSession sessionAttributes, out ReadOnlySpan<byte> hmac, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //NV_SetBits's entire parameter set (bits alone) is every octet left after the authorization area —
+        //captured verbatim, before the field is decoded, as the HMAC arm's cpHash parameter term (Part 1, clause
+        //15.7 equation 15): the eight raw octets of the UINT64, no size prefix.
+        ReadOnlySpan<byte> rawParameterAreaOctets = reader.PeekBytes(reader.Remaining);
+
+        //Parameter: bits (UINT64).
+        if(reader.Remaining < sizeof(ulong))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        ulong bits = reader.ReadUInt64();
+
+        //bits is the only parameter; no octets may follow it (Part 3, 5.2).
+        if(reader.Remaining != 0)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+
+        //The session slot's own two credentials and, on the session arm, the captured parameter area are rented
+        //here, the parse's last act after every wire check has passed, so no refused parse ever creates one. A
+        //TPM_RS_PW slot carries no caller nonce at all (its width rule already refused a non-empty one), so only
+        //its credential is rented.
+        Tpm2bAuth slotCredential = Tpm2bAuth.Empty;
+        Tpm2bNonce slotNonce = Tpm2bNonce.Empty;
+        TpmParameterArea parameterArea = TpmParameterArea.Empty;
+        try
+        {
+            slotCredential = Tpm2bAuth.Create(hmac, pool);
+            slotNonce = sessionHandle.IsPasswordSession ? Tpm2bNonce.Empty : Tpm2bNonce.Create(nonceCaller, pool);
+            parameterArea = sessionHandle.IsPasswordSession ? TpmParameterArea.Empty : TpmParameterArea.Create(rawParameterAreaOctets, pool);
+
+            input = sessionHandle.IsPasswordSession
+                ? new TpmNvSetBitsRequested(TpmiRhNvAuth.FromValue(authHandle), TpmiRhNvIndex.FromValue(nvIndex), slotCredential, bits)
+                : new TpmNvSetBitsOverSessionRequested(
+                    TpmiRhNvAuth.FromValue(authHandle), TpmiRhNvIndex.FromValue(nvIndex), sessionHandle, slotNonce, sessionAttributes, slotCredential, parameterArea,
+                    bits, Tpm2bName.Empty);
+        }
+        catch
+        {
+            //These carriers' only owner is this frame until the request adopts them, so a failing later rent
+            //must release them or the pinned rentals are orphaned.
+            parameterArea.Dispose();
+            slotNonce.Dispose();
+            slotCredential.Dispose();
+            throw;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// <c>TPM2_NV_WriteLock()</c> and <c>TPM2_NV_ReadLock()</c> share one wire layout after the header: handle
+    /// area (@authHandle, nvIndex — 2 handles), authorization area (a single session), and no parameters (Part 3,
+    /// clause 31.11, Table 261; clause 31.14, Table 267) — <c>TPM2_NV_Increment()</c>'s exact shape, so the two
+    /// parse through one body and differ only in the request the command code selects.
+    /// </summary>
+    /// <remarks>
+    /// The parsed sessionHandle alone decides whether this becomes the password request
+    /// (<see cref="TpmNvWriteLockRequested"/>/<see cref="TpmNvReadLockRequested"/>) or the HMAC-session request
+    /// (<see cref="TpmNvWriteLockOverSessionRequested"/>/<see cref="TpmNvReadLockOverSessionRequested"/> — both the
+    /// owner and the Index arm). The always-empty raw parameter area is still captured for uniformity with the
+    /// other NV HMAC arms' cpHash construction (Part 1, clause 15.7 equation 15).
+    /// </remarks>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the parse-rented parameter-area and authorization-slot credential carriers transfers to the constructed request input; the consuming transition or continuation releases them per carrier and transfers the slot's caller nonce into the response framing, and every refusing arm releases them through the input's own Dispose; a rent that fails after an earlier carrier already succeeded releases it in the catch before rethrowing.")]
+    private static bool TryParseNvLock(ref TpmReader reader, ushort tag, TpmCcConstants commandCode, BaseMemoryPool pool, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
+    {
+        input = null;
+
+        if(!TryReadNvUserCommandPrologue(ref reader, tag, out uint authHandle, out uint nvIndex, out TpmiShAuthSession sessionHandle, out ReadOnlySpan<byte> nonceCaller, out TpmaSession sessionAttributes, out ReadOnlySpan<byte> hmac, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //Neither lock command carries parameters, so the raw parameter area is always empty.
+        ReadOnlySpan<byte> rawParameterAreaOctets = reader.PeekBytes(reader.Remaining);
+
+        //No parameters follow the authorization area; any surplus is malformed (Part 3, 5.2).
+        if(reader.Remaining != 0)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+
+        Tpm2bAuth slotCredential = Tpm2bAuth.Empty;
+        Tpm2bNonce slotNonce = Tpm2bNonce.Empty;
+        TpmParameterArea parameterArea = TpmParameterArea.Empty;
+        try
+        {
+            slotCredential = Tpm2bAuth.Create(hmac, pool);
+            slotNonce = sessionHandle.IsPasswordSession ? Tpm2bNonce.Empty : Tpm2bNonce.Create(nonceCaller, pool);
+            parameterArea = sessionHandle.IsPasswordSession ? TpmParameterArea.Empty : TpmParameterArea.Create(rawParameterAreaOctets, pool);
+
+            var authHandleValue = TpmiRhNvAuth.FromValue(authHandle);
+            var nvIndexValue = TpmiRhNvIndex.FromValue(nvIndex);
+            input = (commandCode, sessionHandle.IsPasswordSession) switch
+            {
+                (TpmCcConstants.TPM_CC_NV_WriteLock, true) => new TpmNvWriteLockRequested(authHandleValue, nvIndexValue, slotCredential),
+                (TpmCcConstants.TPM_CC_NV_WriteLock, false) => new TpmNvWriteLockOverSessionRequested(authHandleValue, nvIndexValue, sessionHandle, slotNonce, sessionAttributes, slotCredential, parameterArea, Tpm2bName.Empty),
+                (TpmCcConstants.TPM_CC_NV_ReadLock, true) => new TpmNvReadLockRequested(authHandleValue, nvIndexValue, slotCredential),
+                (TpmCcConstants.TPM_CC_NV_ReadLock, false) => new TpmNvReadLockOverSessionRequested(authHandleValue, nvIndexValue, sessionHandle, slotNonce, sessionAttributes, slotCredential, parameterArea, Tpm2bName.Empty),
+                _ => throw new InvalidOperationException($"'{commandCode}' is not an NV lock command.")
+            };
         }
         catch
         {
@@ -8342,10 +12743,11 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// <remarks>
     /// The Name algorithm, object attributes, and per-algorithm key parameters are read from the ECC or RSA
     /// signing template; the sensitive area's userAuth is read into an owned pooled carrier, while its
-    /// sealed-data half, outsideInfo, and the PCR selection are consumed for framing but not modelled.
-    /// <paramref name="eccSupported"/>/<paramref name="rsaSupported"/> say which backends are wired,
-    /// so a template whose algorithm has no backend is answered <c>TPM_RC_COMMAND_CODE</c> rather than entering
-    /// an effect the TPM cannot run.
+    /// sealed-data half is consumed for framing but not modelled. <c>outsideInfo</c> and the PCR selection are
+    /// each captured into an owned pooled carrier (<see cref="Tpm2bData"/>, <see cref="TpmlPcrSelection"/>) that
+    /// rides into the built request, whose effect is their terminal owner. <paramref name="eccSupported"/>/
+    /// <paramref name="rsaSupported"/> say which backends are wired, so a template whose algorithm has no
+    /// backend is answered <c>TPM_RC_COMMAND_CODE</c> rather than entering an effect the TPM cannot run.
     /// </remarks>
     private static bool TryParseCreatePrimary(ref TpmReader reader, ushort tag, BaseMemoryPool pool, bool eccSupported, bool rsaSupported, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
     {
@@ -8395,10 +12797,18 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         catch(InvalidOperationException)
         {
             //TPMS_SENSITIVE_CREATE.userAuth is a TPM2B_AUTH, bounded by sizeof(TPMU_HA) (TPM 2.0 Library Part 2,
-            //clause 10.4.5, Table 95 over clause 10.4.2, Table 92), so a wider declared size is TPM_RC_SIZE. The
+            //clause 10.3.5, Table 93 over clause 10.3.2, Table 90), so a wider declared size is TPM_RC_SIZE. The
             //structure parser's only refusal channel is the throw, and an unmarshaling error means no command
             //processing occurs (Part 3, clause 5.8.2), so nothing may escape this frame.
             malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+        catch(ArgumentOutOfRangeException)
+        {
+            //An interior width past the octets that remain is a truncated frame, TPM_RC_INSUFFICIENT (Part 3,
+            //clause 5.8.2, Table 2).
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
 
             return false;
         }
@@ -8420,35 +12830,98 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             }
             catch(InvalidOperationException)
             {
-                //A TPM2B_DIGEST is bounded by sizeof(TPMU_HA) (TPM 2.0 Library Part 2, clause 10.4.2, Table 92)
+                //A TPM2B_DIGEST is bounded by sizeof(TPMU_HA) (TPM 2.0 Library Part 2, clause 10.3.2, Table 90)
                 //and the template's authPolicy is one, so a wider declared size is TPM_RC_SIZE. The parse is what
                 //answers it: the structure parser's only refusal channel is the throw, and an unmarshaling error
-                //means no command processing occurs (Part 3, clause 5.8.2), so nothing may escape this frame.
+                //means no command processing occurs (Part 3, clause 5.8.2), so nothing may escape this frame. The
+                //same channel answers the public area's own interface-level refusals — a keyed-hash scheme selector
+                //outside Table 175 (#TPM_RC_VALUE) or a hash value outside Table 77 (#TPM_RC_HASH), Part 2, clauses
+                //11.1.19 and 9.31 — which this simulator collapses to TPM_RC_SIZE rather than carrying a per-field
+                //code out of the parse.
                 malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+                return false;
+            }
+            catch(ArgumentOutOfRangeException)
+            {
+                //A declared inPublic width past the octets that remain is a truncated frame, TPM_RC_INSUFFICIENT
+                //(Part 3, clause 5.8.2, Table 2).
+                malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
 
                 return false;
             }
 
             using(inPublic)
             {
-                //Parameter: outsideInfo (TPM2B_DATA) — included in creation data; not modelled. The trailing
-                //parameters are skipped before the template is judged: the reference emits this command's
-                //template refusals (TPM_RC_SCHEME) from the command action, strictly after every parameter has
-                //unmarshaled, and an unmarshaling error means no command processing occurs (Part 3, clause
-                //5.8.2) — so a truncated tail answers before an unmodelled template does. The order also lets
-                //the request, with its owned userAuth carrier, be constructed as the parse's last act.
-                if(!TrySkipTpm2b(ref reader, out malformedResponseCode))
+                //Parameter: outsideInfo (TPM2B_DATA) — included in creation data (TPM 2.0 Library Part 2,
+                //clause 10.3.3, Table 101; Part 3, clause 24.1, Table 191). The wire shape is probed first on a
+                //by-value copy of the reader, which leaves the reader itself untouched: an over-bound declared
+                //size answers TPM_RC_SIZE ahead of the truncation check, and a truncated but in-bound field
+                //still answers TPM_RC_INSUFFICIENT — either way before any carrier is rented, exactly
+                //TryParseQuote's probe-then-parse pattern for its own TPML_PCR_SELECTION parameter. The template
+                //refusals (TPM_RC_SCHEME) TryBuildCreatePrimaryRequest may still answer come strictly after both
+                //trailing parameters unmarshal, since an unmarshaling error means no command processing occurs
+                //at all (Part 3, clause 5.8.2).
+                TpmReader outsideInfoProbe = reader;
+                if(!TryProbeOutsideInfo(ref outsideInfoProbe, out malformedResponseCode))
                 {
                     return false;
                 }
 
-                //Parameter: creationPCR (TPML_PCR_SELECTION) — a UINT32 count then that many selections, skipped.
-                if(!TrySkipPcrSelection(ref reader, out malformedResponseCode))
+                Tpm2bData outsideInfo;
+                try
                 {
+                    outsideInfo = Tpm2bData.Parse(ref reader, pool);
+                }
+                catch(InvalidOperationException)
+                {
+                    //TPM2B_DATA's buffer is bounded by sizeof(TPMT_HA) (TPM 2.0 Library Part 2, clause 10.3.3,
+                    //Table 91), so a wider declared size is TPM_RC_SIZE. The structure parser's only
+                    //refusal channel is the throw, and an unmarshaling error means no command processing
+                    //occurs (Part 3, clause 5.8.2).
+                    malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
                     return false;
                 }
 
-                return TryBuildCreatePrimaryRequest(inPublic.PublicArea, hierarchy, suppliedAuth, inSensitive.Sensitive.UserAuth.AsReadOnlySpan(), pool, eccSupported, rsaSupported, out input, out malformedResponseCode);
+                //Parameter: creationPCR (TPML_PCR_SELECTION) — the PCR that will be used in creation data (TPM
+                //2.0 Library Part 2, clause 10.8.7, Table 128; Part 3, clause 24.1, Table 191). Probed the same
+                //way: an over-bound declared count answers TPM_RC_SIZE ahead of the truncation check. Either
+                //refusal here must dispose the already-captured outsideInfo before answering, the
+                //plainAuthPolicy discipline TryParseCreate's plain-password arm uses.
+                TpmReader creationPcrProbe = reader;
+                if(!TrySkipPcrSelection(ref creationPcrProbe, out malformedResponseCode))
+                {
+                    outsideInfo.Dispose();
+
+                    return false;
+                }
+
+                TpmlPcrSelection creationPcr;
+                try
+                {
+                    creationPcr = TpmlPcrSelection.Parse(ref reader, pool);
+                }
+                catch(InvalidOperationException)
+                {
+                    //A list naming more banks than the list admits is out of its declared bound (TPM
+                    //2.0 Library Part 2, clause 10.8.7, Table 128: #TPM_RC_SIZE).
+                    outsideInfo.Dispose();
+                    malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+                    return false;
+                }
+                catch(ArgumentOutOfRangeException)
+                {
+                    //A selection whose sizeofSelect lies outside PCR_SELECT_MIN..PCR_SELECT_MAX is out of the
+                    //member's own declared bounds (TPM 2.0 Library Part 2, clause 10.5.2, Table 107: #TPM_RC_VALUE).
+                    outsideInfo.Dispose();
+                    malformedResponseCode = TpmRcConstants.TPM_RC_VALUE;
+
+                    return false;
+                }
+
+                return TryBuildCreatePrimaryRequest(inPublic.PublicArea, hierarchy, suppliedAuth, inSensitive.Sensitive.UserAuth.AsReadOnlySpan(), outsideInfo, creationPcr, pool, eccSupported, rsaSupported, out input, out malformedResponseCode);
             }
         }
     }
@@ -8458,23 +12931,36 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// template is unmodelled or its algorithm has no wired backend.
     /// </summary>
     /// <remarks>
-    /// An ECC signing template (ECDSA over an ECC key) and an RSA signing template are modelled; the RSA scheme
-    /// is carried as-is, so an unrestricted (NULL) scheme is preserved and the signing scheme is chosen per
-    /// <c>TPM2_Sign()</c>. The supplied hierarchy password, the template's policy digest, and userAuth are
-    /// rented into the request's own carriers at each construction, after the branch's own backend gate — a
-    /// refusing branch creates no carrier, and a rent that fails after an earlier one already succeeded releases
-    /// it before rethrowing so the pinned rentals are never orphaned.
+    /// An ECC signing template (ECDSA over an ECC key), an ECC KEM template (an unrestricted decryption
+    /// TPM_ALG_ECDH key with a non-NULL HKDF kdf, TPM 2.0 Library Part 2, Table 229), and an RSA signing
+    /// template are modelled; the RSA scheme is carried as-is, so an unrestricted (NULL) scheme is preserved
+    /// and the signing scheme is chosen per <c>TPM2_Sign()</c>. The ECDSA and NULL-scheme (storage) branches
+    /// additionally refuse a non-NULL <c>kdf</c> with <c>TPM_RC_KDF</c> — Table 229 admits a KDF only on the
+    /// KEM branch — and any other ECC template reaching neither branch but still carrying a non-NULL
+    /// <c>kdf</c> is refused the same way just ahead of the final catch-all. The KEM branch additionally
+    /// enforces Table 229's <c>symmetric</c> (<c>TPM_RC_SYMMETRIC</c> unless <c>TPM_ALG_NULL</c>) and
+    /// <c>scheme</c> (<c>TPM_RC_SCHEME</c> when <c>SIGN_ENCRYPT</c> is SET, since <c>TPM_ALG_ECDH</c> is not a
+    /// signing scheme) rows, and retains the template's own <c>scheme.details.ecdh.hashAlg</c> separately from
+    /// <c>kdf.hashAlg</c> so the exported public area echoes it unchanged (Part 3, clause 24.1.1: "All of the
+    /// bits of the template are used"; Table 229's "ignored" note is scoped to the Encapsulate/Decapsulate
+    /// commands, not to object creation). The supplied hierarchy password, the template's policy digest, and
+    /// userAuth are rented into the request's own carriers at each construction, after the branch's own
+    /// backend gate — a refusing branch creates no carrier, and a rent that fails after an earlier one already
+    /// succeeded releases it before rethrowing so the pinned rentals are never orphaned.
+    /// <paramref name="outsideInfo"/> and <paramref name="creationPcr"/> arrive already rented by the caller
+    /// and ride into whichever request is built; a branch that refuses instead (an unsupported backend or an
+    /// unmodelled template) disposes both before answering, since no request adopts them on that path.
     /// </remarks>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the parse-rented hierarchy-password, policy-digest, and userAuth carriers transfers to the constructed request input: the consuming transition releases the hierarchy password itself once the hierarchy compare has consumed it and threads the policy digest and userAuth into the create action for the effect to install on the durable key state, and the refusing arms dispose all three through the input's own Dispose.")]
-    private static bool TryBuildCreatePrimaryRequest(TpmtPublic publicArea, uint hierarchy, ReadOnlySpan<byte> hierarchyPassword, ReadOnlySpan<byte> userAuth, BaseMemoryPool pool, bool eccSupported, bool rsaSupported, [NotNullWhen(true)] out TpmSimulatorInput? request, out TpmRcConstants malformedResponseCode)
+    private static bool TryBuildCreatePrimaryRequest(TpmtPublic publicArea, uint hierarchy, ReadOnlySpan<byte> hierarchyPassword, ReadOnlySpan<byte> userAuth, Tpm2bData outsideInfo, TpmlPcrSelection creationPcr, BaseMemoryPool pool, bool eccSupported, bool rsaSupported, [NotNullWhen(true)] out TpmSimulatorInput? request, out TpmRcConstants malformedResponseCode)
     {
         request = null;
         malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
 
         //Retained so the created object's exported public area — and therefore its Name — carries the template's
         //authPolicy (empty for every template except a standard endorsement key's "PolicyA"), mirroring how
-        //TryParseCreate retains TpmCreateSealedObjectRequested.AuthPolicy for the sealed-data path. The scoped
+        //TryParseCreate retains TpmCreateKeyedHashRequested.AuthPolicy for the sealed-data path. The scoped
         //public area the caller still holds owns these octets, so the branch that builds a request copies them
         //into a carrier of its own and a refusing branch rents nothing.
         ReadOnlySpan<byte> authPolicy = publicArea.AuthPolicy.AsReadOnlySpan();
@@ -8486,7 +12972,22 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             //The template is well-formed; without an ECC backend the TPM cannot honour it.
             if(!eccSupported)
             {
+                outsideInfo.Dispose();
+                creationPcr.Dispose();
                 malformedResponseCode = TpmRcConstants.TPM_RC_COMMAND_CODE;
+
+                return false;
+            }
+
+            //Table 229 (v185): a non-NULL kdf is admitted ONLY on an unrestricted decryption TPM_ALG_ECDH key
+            //(the KEM branch below) — "Shall be NULL in all other cases (TPM_RC_KDF)". An ECDSA signing
+            //template carrying a KDF is exactly such another case, so it is refused here rather than silently
+            //admitted with the KDF field ignored.
+            if(!eccParms.Kdf.IsNull)
+            {
+                outsideInfo.Dispose();
+                creationPcr.Dispose();
+                malformedResponseCode = TpmRcConstants.TPM_RC_KDF;
 
                 return false;
             }
@@ -8497,14 +12998,114 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             {
                 suppliedPassword = Tpm2bAuth.Create(hierarchyPassword, pool);
                 templatePolicy = Tpm2bDigest.Create(authPolicy, pool);
-                request = new TpmCreatePrimaryRequested(TpmiRhHierarchy.FromValue(hierarchy), suppliedPassword, TpmiAlgHash.FromValue(publicArea.NameAlg), publicArea.ObjectAttributes, TpmiEccCurve.FromValue(eccParms.CurveId), TpmiAlgHash.FromValue(eccParms.Scheme.HashAlg), templatePolicy, Tpm2bAuth.Create(userAuth, pool));
+                request = new TpmCreatePrimaryRequested(TpmiRhHierarchy.FromValue(hierarchy), suppliedPassword, TpmiAlgHash.FromValue(publicArea.NameAlg), publicArea.ObjectAttributes, TpmiEccCurve.FromValue(eccParms.CurveId), TpmiAlgHash.FromValue(eccParms.Scheme.HashAlg), templatePolicy, Tpm2bAuth.Create(userAuth, pool), outsideInfo, creationPcr);
             }
             catch
             {
                 //These carriers' only owner is this frame until the request adopts them, so a failing later
-                //rent must release them or the pinned rentals are orphaned.
+                //rent must release them or the pinned rentals are orphaned — including the caller-rented
+                //outsideInfo and creationPCR, which no request was built to adopt.
                 templatePolicy.Dispose();
                 suppliedPassword.Dispose();
+                outsideInfo.Dispose();
+                creationPcr.Dispose();
+                throw;
+            }
+
+            return true;
+        }
+
+        //An ECC KEM key (Table 229's DHKEM admission gate): an unrestricted decryption TPM_ALG_ECDH key whose
+        //kdf is TPM_ALG_HKDF. Checked before the NULL-scheme storage-parent branch below so a malformed
+        //combination (ECDH scheme with a non-HKDF kdf, or the wrong attribute shape) is refused TPM_RC_KDF
+        //here rather than falling through to the bottom catch-all's TPM_RC_SCHEME. An ECDH-scheme template
+        //with a NULL kdf (the raw TPM2_ECDH_ZGen key-agreement shape) deliberately falls through unchanged —
+        //this simulator does not create such keys via TPM2_CreatePrimary() at all, KEM or not.
+        if(publicArea.Type == TpmAlgIdConstants.TPM_ALG_ECC
+            && publicArea.Parameters.EccDetail is TpmsEccParms kemParms
+            && kemParms.Scheme.Scheme == TpmAlgIdConstants.TPM_ALG_ECDH
+            && !kemParms.Kdf.IsNull)
+        {
+            if(!eccSupported)
+            {
+                outsideInfo.Dispose();
+                creationPcr.Dispose();
+                malformedResponseCode = TpmRcConstants.TPM_RC_COMMAND_CODE;
+
+                return false;
+            }
+
+            //Table 229 kdf: legal only on an "unrestricted decryption" key — RESTRICTED clear and DECRYPT set;
+            //"Shall be NULL in all other cases (TPM_RC_KDF)". This runs first so a restricted template carrying
+            //a kdf answers for the kdf, not for whatever symmetric algorithm a restricted key legitimately names.
+            bool isUnrestrictedDecrypt = (publicArea.ObjectAttributes & (TpmaObject.RESTRICTED | TpmaObject.DECRYPT)) == TpmaObject.DECRYPT;
+            if(!isUnrestrictedDecrypt)
+            {
+                outsideInfo.Dispose();
+                creationPcr.Dispose();
+                malformedResponseCode = TpmRcConstants.TPM_RC_KDF;
+
+                return false;
+            }
+
+            //Table 229 symmetric: "if the key is not a restricted decryption key, this field shall be set to
+            //TPM_ALG_NULL" — the key is unrestricted here, so any non-NULL symmetric is a template violation
+            //(TPM_RC_SYMMETRIC), refused ahead of the KDF-suite gate below.
+            if(kemParms.Symmetric.Algorithm != TpmAlgIdConstants.TPM_ALG_NULL)
+            {
+                outsideInfo.Dispose();
+                creationPcr.Dispose();
+                malformedResponseCode = TpmRcConstants.TPM_RC_SYMMETRIC;
+
+                return false;
+            }
+
+            //Table 229 scheme: "If the sign attribute of the key is SET, then this shall be a valid signing
+            //scheme" — TPM_ALG_ECDH is not a signing scheme, so a template pairing it with SIGN_ENCRYPT SET
+            //is malformed.
+            if((publicArea.ObjectAttributes & TpmaObject.SIGN_ENCRYPT) != 0)
+            {
+                outsideInfo.Dispose();
+                creationPcr.Dispose();
+                malformedResponseCode = TpmRcConstants.TPM_RC_SCHEME;
+
+                return false;
+            }
+
+            //"Currently, TPM_ALG_HKDF is the only supported KDF for DHKEM" (Table 229) — any other kdf.scheme
+            //is TPM_RC_KDF. This simulator's ONLY wired DHKEM suite is DHKEM(P-256, HKDF-SHA256)
+            //(Verifiable.Cryptography.Dhkem.P256HkdfSha256); RFC 9180 registers kem_id values for other
+            //curve/hash suites too (0x0011 DHKEM(P-384, HKDF-SHA384), 0x0012 DHKEM(P-521, HKDF-SHA512)), so the
+            //refusal below is not about an unregistered kem_id — it is that this simulator wires exactly one
+            //DHKEM suite and refuses to mint a key it could never service.
+            if(kemParms.Kdf.Scheme != TpmAlgIdConstants.TPM_ALG_HKDF
+                || kemParms.CurveId != TpmEccCurveConstants.TPM_ECC_NIST_P256
+                || kemParms.Kdf.HashAlg != TpmAlgIdConstants.TPM_ALG_SHA256)
+            {
+                outsideInfo.Dispose();
+                creationPcr.Dispose();
+                malformedResponseCode = TpmRcConstants.TPM_RC_KDF;
+
+                return false;
+            }
+
+            Tpm2bAuth suppliedPassword = Tpm2bAuth.Empty;
+            Tpm2bDigest templatePolicy = Tpm2bDigest.Empty;
+            try
+            {
+                suppliedPassword = Tpm2bAuth.Create(hierarchyPassword, pool);
+                templatePolicy = Tpm2bDigest.Create(authPolicy, pool);
+                request = new TpmCreateEccKemKeyRequested(TpmiRhHierarchy.FromValue(hierarchy), suppliedPassword, TpmiAlgHash.FromValue(publicArea.NameAlg), publicArea.ObjectAttributes, TpmiEccCurve.FromValue(kemParms.CurveId), TpmiAlgHash.FromValue(kemParms.Scheme.HashAlg), TpmiAlgHash.FromValue(kemParms.Kdf.HashAlg), templatePolicy, Tpm2bAuth.Create(userAuth, pool), outsideInfo, creationPcr);
+            }
+            catch
+            {
+                //These carriers' only owner is this frame until the request adopts them, so a failing later
+                //rent must release them or the pinned rentals are orphaned — including the caller-rented
+                //outsideInfo and creationPCR, which no request was built to adopt.
+                templatePolicy.Dispose();
+                suppliedPassword.Dispose();
+                outsideInfo.Dispose();
+                creationPcr.Dispose();
                 throw;
             }
 
@@ -8521,7 +13122,21 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         {
             if(!eccSupported)
             {
+                outsideInfo.Dispose();
+                creationPcr.Dispose();
                 malformedResponseCode = TpmRcConstants.TPM_RC_COMMAND_CODE;
+
+                return false;
+            }
+
+            //Table 229: kdf "Shall be NULL in all other cases (TPM_RC_KDF)" than an unrestricted decryption
+            //TPM_ALG_ECDH key — a restricted storage key is exactly such another case, so a template carrying
+            //a KDF here is refused rather than admitted with the field silently ignored.
+            if(!storageParms.Kdf.IsNull)
+            {
+                outsideInfo.Dispose();
+                creationPcr.Dispose();
+                malformedResponseCode = TpmRcConstants.TPM_RC_KDF;
 
                 return false;
             }
@@ -8533,14 +13148,17 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             {
                 suppliedPassword = Tpm2bAuth.Create(hierarchyPassword, pool);
                 templatePolicy = Tpm2bDigest.Create(authPolicy, pool);
-                request = new TpmCreateStorageParentRequested(TpmiRhHierarchy.FromValue(hierarchy), suppliedPassword, TpmiAlgHash.FromValue(publicArea.NameAlg), publicArea.ObjectAttributes, TpmiEccCurve.FromValue(storageParms.CurveId), noDa, templatePolicy, Tpm2bAuth.Create(userAuth, pool));
+                request = new TpmCreateStorageParentRequested(TpmiRhHierarchy.FromValue(hierarchy), suppliedPassword, TpmiAlgHash.FromValue(publicArea.NameAlg), publicArea.ObjectAttributes, TpmiEccCurve.FromValue(storageParms.CurveId), noDa, templatePolicy, Tpm2bAuth.Create(userAuth, pool), outsideInfo, creationPcr);
             }
             catch
             {
                 //These carriers' only owner is this frame until the request adopts them, so a failing later
-                //rent must release them or the pinned rentals are orphaned.
+                //rent must release them or the pinned rentals are orphaned — including the caller-rented
+                //outsideInfo and creationPCR, which no request was built to adopt.
                 templatePolicy.Dispose();
                 suppliedPassword.Dispose();
+                outsideInfo.Dispose();
+                creationPcr.Dispose();
                 throw;
             }
 
@@ -8556,6 +13174,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         {
             if(!rsaSupported)
             {
+                outsideInfo.Dispose();
+                creationPcr.Dispose();
                 malformedResponseCode = TpmRcConstants.TPM_RC_COMMAND_CODE;
 
                 return false;
@@ -8568,14 +13188,17 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             {
                 suppliedPassword = Tpm2bAuth.Create(hierarchyPassword, pool);
                 templatePolicy = Tpm2bDigest.Create(authPolicy, pool);
-                request = new TpmCreateRsaStorageParentRequested(TpmiRhHierarchy.FromValue(hierarchy), suppliedPassword, TpmiAlgHash.FromValue(publicArea.NameAlg), publicArea.ObjectAttributes, TpmiRsaKeyBits.FromValue(rsaStorageParms.KeyBits), noDa, templatePolicy, Tpm2bAuth.Create(userAuth, pool));
+                request = new TpmCreateRsaStorageParentRequested(TpmiRhHierarchy.FromValue(hierarchy), suppliedPassword, TpmiAlgHash.FromValue(publicArea.NameAlg), publicArea.ObjectAttributes, TpmiRsaKeyBits.FromValue(rsaStorageParms.KeyBits), noDa, templatePolicy, Tpm2bAuth.Create(userAuth, pool), outsideInfo, creationPcr);
             }
             catch
             {
                 //These carriers' only owner is this frame until the request adopts them, so a failing later
-                //rent must release them or the pinned rentals are orphaned.
+                //rent must release them or the pinned rentals are orphaned — including the caller-rented
+                //outsideInfo and creationPCR, which no request was built to adopt.
                 templatePolicy.Dispose();
                 suppliedPassword.Dispose();
+                outsideInfo.Dispose();
+                creationPcr.Dispose();
                 throw;
             }
 
@@ -8587,6 +13210,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         {
             if(!rsaSupported)
             {
+                outsideInfo.Dispose();
+                creationPcr.Dispose();
                 malformedResponseCode = TpmRcConstants.TPM_RC_COMMAND_CODE;
 
                 return false;
@@ -8598,37 +13223,289 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             {
                 suppliedPassword = Tpm2bAuth.Create(hierarchyPassword, pool);
                 templatePolicy = Tpm2bDigest.Create(authPolicy, pool);
-                request = new TpmCreateRsaPrimaryRequested(TpmiRhHierarchy.FromValue(hierarchy), suppliedPassword, TpmiAlgHash.FromValue(publicArea.NameAlg), publicArea.ObjectAttributes, TpmiRsaKeyBits.FromValue(rsaParms.KeyBits), rsaParms.Scheme, templatePolicy, Tpm2bAuth.Create(userAuth, pool));
+                request = new TpmCreateRsaPrimaryRequested(TpmiRhHierarchy.FromValue(hierarchy), suppliedPassword, TpmiAlgHash.FromValue(publicArea.NameAlg), publicArea.ObjectAttributes, TpmiRsaKeyBits.FromValue(rsaParms.KeyBits), rsaParms.Scheme, templatePolicy, Tpm2bAuth.Create(userAuth, pool), outsideInfo, creationPcr);
             }
             catch
             {
                 //These carriers' only owner is this frame until the request adopts them, so a failing later
-                //rent must release them or the pinned rentals are orphaned.
+                //rent must release them or the pinned rentals are orphaned — including the caller-rented
+                //outsideInfo and creationPCR, which no request was built to adopt.
                 templatePolicy.Dispose();
                 suppliedPassword.Dispose();
+                outsideInfo.Dispose();
+                creationPcr.Dispose();
                 throw;
             }
 
             return true;
         }
 
+        //Table 229: kdf "Shall be NULL in all other cases (TPM_RC_KDF)" than an unrestricted decryption
+        //TPM_ALG_ECDH key. An ECC template that matches none of the branches above (a scheme other than
+        //ECDSA/ECDH/NULL, or an ECDH-scheme template with the wrong attribute shape for the KEM branch) but
+        //still carries a non-NULL kdf is exactly such another case, so it answers TPM_RC_KDF here rather than
+        //falling into the generic TPM_RC_SCHEME catch-all below.
+        if(publicArea.Type == TpmAlgIdConstants.TPM_ALG_ECC
+            && publicArea.Parameters.EccDetail is TpmsEccParms fallThroughEccParms
+            && !fallThroughEccParms.Kdf.IsNull)
+        {
+            outsideInfo.Dispose();
+            creationPcr.Dispose();
+            malformedResponseCode = TpmRcConstants.TPM_RC_KDF;
+
+            return false;
+        }
+
         //A non-signing or otherwise unmodelled template.
+        outsideInfo.Dispose();
+        creationPcr.Dispose();
         malformedResponseCode = TpmRcConstants.TPM_RC_SCHEME;
 
         return false;
     }
 
     /// <summary>
-    /// <c>TPM2_Sign()</c> is authorized, so its wire layout after the header is: handle area (@keyHandle, 1
-    /// handle), authorization area (a single password session), then parameters (digest as TPM2B_DIGEST,
-    /// inScheme as TPMT_SIG_SCHEME, validation as TPMT_TK_HASHCHECK).
+    /// A command's whole authorization area as span-quads over the command buffer, read before anything is
+    /// rented: up to three blocks (TPM 2.0 Library Part 1, clause 15.6.1), each a session handle, a caller nonce,
+    /// the session attributes, and the <c>hmac</c> field, in wire order. A ref struct because every span aliases
+    /// the buffer the by-reference reader points into; <see cref="RentAuthorizationArea"/> turns it into the
+    /// owned <see cref="TpmAuthorizationArea"/> as the parse's last act.
     /// </summary>
-    /// <remarks>
-    /// The validation ticket is consumed but not checked: this slice signs an externally-computed digest, which
-    /// a genuine TPM authorizes with a NULL ticket.
-    /// </remarks>
+    private ref struct AuthorizationAreaSpans
+    {
+        /// <summary>Gets or sets the number of blocks read.</summary>
+        public int Count { get; set; }
+
+        /// <summary>Gets or sets the first slot's session handle.</summary>
+        public TpmiShAuthSession Handle0 { get; private set; }
+
+        /// <summary>Gets or sets the second slot's session handle.</summary>
+        public TpmiShAuthSession Handle1 { get; private set; }
+
+        /// <summary>Gets or sets the third slot's session handle.</summary>
+        public TpmiShAuthSession Handle2 { get; private set; }
+
+        /// <summary>Gets or sets the first slot's caller nonce octets.</summary>
+        public ReadOnlySpan<byte> Nonce0 { get; private set; }
+
+        /// <summary>Gets or sets the second slot's caller nonce octets.</summary>
+        public ReadOnlySpan<byte> Nonce1 { get; private set; }
+
+        /// <summary>Gets or sets the third slot's caller nonce octets.</summary>
+        public ReadOnlySpan<byte> Nonce2 { get; private set; }
+
+        /// <summary>Gets or sets the first slot's session attributes.</summary>
+        public TpmaSession Attributes0 { get; private set; }
+
+        /// <summary>Gets or sets the second slot's session attributes.</summary>
+        public TpmaSession Attributes1 { get; private set; }
+
+        /// <summary>Gets or sets the third slot's session attributes.</summary>
+        public TpmaSession Attributes2 { get; private set; }
+
+        /// <summary>Gets or sets the first slot's <c>hmac</c> octets.</summary>
+        public ReadOnlySpan<byte> Hmac0 { get; private set; }
+
+        /// <summary>Gets or sets the second slot's <c>hmac</c> octets.</summary>
+        public ReadOnlySpan<byte> Hmac1 { get; private set; }
+
+        /// <summary>Gets or sets the third slot's <c>hmac</c> octets.</summary>
+        public ReadOnlySpan<byte> Hmac2 { get; private set; }
+
+        /// <summary>Gets a slot's session handle by wire position.</summary>
+        /// <param name="index">The zero-based wire position.</param>
+        /// <returns>The handle.</returns>
+        public readonly TpmiShAuthSession HandleAt(int index) => index switch { 0 => Handle0, 1 => Handle1, _ => Handle2 };
+
+        /// <summary>Gets a slot's caller nonce octets by wire position.</summary>
+        /// <param name="index">The zero-based wire position.</param>
+        /// <returns>The nonce octets.</returns>
+        public readonly ReadOnlySpan<byte> NonceAt(int index) => index switch { 0 => Nonce0, 1 => Nonce1, _ => Nonce2 };
+
+        /// <summary>Gets a slot's session attributes by wire position.</summary>
+        /// <param name="index">The zero-based wire position.</param>
+        /// <returns>The attributes.</returns>
+        public readonly TpmaSession AttributesAt(int index) => index switch { 0 => Attributes0, 1 => Attributes1, _ => Attributes2 };
+
+        /// <summary>Gets a slot's <c>hmac</c> octets by wire position.</summary>
+        /// <param name="index">The zero-based wire position.</param>
+        /// <returns>The hmac octets.</returns>
+        public readonly ReadOnlySpan<byte> HmacAt(int index) => index switch { 0 => Hmac0, 1 => Hmac1, _ => Hmac2 };
+
+        /// <summary>
+        /// Records one block at a wire position.
+        /// </summary>
+        /// <param name="index">The zero-based wire position.</param>
+        /// <param name="handle">The slot's session handle.</param>
+        /// <param name="nonce">The slot's caller nonce octets.</param>
+        /// <param name="attributes">The slot's session attributes.</param>
+        /// <param name="hmac">The slot's <c>hmac</c> octets.</param>
+        public void Set(int index, TpmiShAuthSession handle, ReadOnlySpan<byte> nonce, TpmaSession attributes, ReadOnlySpan<byte> hmac)
+        {
+            //A statement rather than an expression: the four written members include two spans, which no
+            //tuple can carry, so the arms assign in place.
+            switch(index)
+            {
+                case 0:
+                    Handle0 = handle;
+                    Nonce0 = nonce;
+                    Attributes0 = attributes;
+                    Hmac0 = hmac;
+                    break;
+                case 1:
+                    Handle1 = handle;
+                    Nonce1 = nonce;
+                    Attributes1 = attributes;
+                    Hmac1 = hmac;
+                    break;
+                default:
+                    Handle2 = handle;
+                    Nonce2 = nonce;
+                    Attributes2 = attributes;
+                    Hmac2 = hmac;
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// Whether the area is exactly the command's authorizing slots, every one a <c>TPM_RS_PW</c> password,
+        /// with no companion — the shape a command's password form serves, where no cpHash is ever computed.
+        /// </summary>
+        /// <param name="authorizingCount">The command's count of <c>@</c>-marked handles.</param>
+        /// <returns><see langword="true"/> for a lone all-password area.</returns>
+        public readonly bool IsAllPassword(int authorizingCount)
+        {
+            if(Count != authorizingCount)
+            {
+                return false;
+            }
+
+            for(int index = 0; index < Count; index++)
+            {
+                if(!HandleAt(index).IsPasswordSession)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Reads a command's whole authorization area as span-quads over the command buffer (TPM 2.0 Library Part 1,
+    /// clause 15.6.1): the <paramref name="authorizingCount"/> slots the command's <c>@</c>-marked handles owe,
+    /// then every companion the declared <c>authorizationSize</c> still holds octets for — at most three blocks
+    /// in all, read only while the declared size holds octets — each slot read generically as a
+    /// <c>TPM_RS_PW</c> password or a real session (<see cref="TryReadCommandSessionSpans"/>, which applies the
+    /// password slot's own width and attribute rules); fewer whole blocks than the command's <c>@</c>-marked
+    /// handles is <c>TPM_RC_AUTH_MISSING</c> (clause 5.5, step 5), and the declared size is checked against what
+    /// was read (<see cref="TryEndAuthArea"/>: <c>TPM_RC_AUTHSIZE</c> for a size the blocks do not account for).
+    /// Nothing is rented here.
+    /// </summary>
+    /// <param name="reader">The command reader, positioned at <c>authorizationSize</c>.</param>
+    /// <param name="authorizingCount">The command's count of <c>@</c>-marked handles.</param>
+    /// <param name="spans">The blocks read.</param>
+    /// <param name="malformedResponseCode">The refusal code when the area is malformed.</param>
+    /// <returns><see langword="true"/> when the area parsed.</returns>
+    private static bool TryReadAuthorizationAreaSpans(ref TpmReader reader, int authorizingCount, out AuthorizationAreaSpans spans, out TpmRcConstants malformedResponseCode)
+    {
+        spans = default;
+
+        if(!TryBeginAuthArea(ref reader, out int sessionsStart, out uint authorizationSize, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //Blocks are read only while the declared size still holds octets, at most three (Part 1, clause 15.6.1),
+        //exactly as Part 4 RetrieveSessionData walks the area — never out of the parameter octets behind it.
+        int count = 0;
+        while(count < TpmAuthorizationArea.MaxSlots && reader.Consumed - sessionsStart < (int)authorizationSize)
+        {
+            if(!TryReadCommandSessionSpans(ref reader, count, out TpmiShAuthSession handle, out ReadOnlySpan<byte> nonceCaller, out TpmaSession attributes, out ReadOnlySpan<byte> hmac, out malformedResponseCode))
+            {
+                return false;
+            }
+
+            spans.Set(count, handle, nonceCaller, attributes, hmac);
+            count++;
+        }
+
+        spans.Count = count;
+
+        //"An authorization session is present for each of the handles with the '@' decoration" (Part 3, clause
+        //5.5, step 5; Part 4 ParseSessionBuffer's handle walk) — a whole-block count below the command's
+        //@-count is the missing authorization, answered bare, ahead of the size reconciliation.
+        if(count < authorizingCount)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_AUTH_MISSING;
+
+            return false;
+        }
+
+        return TryEndAuthArea(ref reader, sessionsStart, authorizationSize, out malformedResponseCode);
+    }
+
+    /// <summary>
+    /// Rents the owned <see cref="TpmAuthorizationArea"/> a parse's span-quads describe — every slot's
+    /// <c>hmac</c> and, for a real session, its caller nonce (a <c>TPM_RS_PW</c> slot carries none, Part 1,
+    /// clause 16.6.4, so its nonce is the dispose-immune empty sentinel) — as the parse's last act, after every
+    /// wire check has passed; a rent that fails after earlier ones succeeded releases them before rethrowing.
+    /// </summary>
+    /// <param name="spans">The blocks read.</param>
+    /// <param name="authorizingCount">The command's count of <c>@</c>-marked handles.</param>
+    /// <param name="pool">The pool the carriers are rented from.</param>
+    /// <returns>The owned area.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-        Justification = "Ownership of the parse-rented key-password carrier transfers to the constructed request input, whose consuming transition releases it once the key-slot compare has consumed it, and whose refusing arms dispose it through the input's own Dispose.")]
+        Justification = "Ownership of every rented slot carrier transfers to the returned TpmAuthorizationArea, whose consuming transition releases the hmacs and transfers the nonces, and whose refusing arms dispose everything through the area's own Dispose; a rent that fails after earlier ones succeeded releases them in the catch before rethrowing.")]
+    private static TpmAuthorizationArea RentAuthorizationArea(in AuthorizationAreaSpans spans, int authorizingCount, BaseMemoryPool pool)
+    {
+        var slots = ImmutableArray.CreateBuilder<TpmAuthorizationSlot>(spans.Count);
+        try
+        {
+            for(int index = 0; index < spans.Count; index++)
+            {
+                TpmiShAuthSession handle = spans.HandleAt(index);
+                Tpm2bAuth hmac = Tpm2bAuth.Create(spans.HmacAt(index), pool);
+                Tpm2bNonce nonce;
+                try
+                {
+                    nonce = handle.IsPasswordSession ? Tpm2bNonce.Empty : Tpm2bNonce.Create(spans.NonceAt(index), pool);
+                }
+                catch
+                {
+                    hmac.Dispose();
+                    throw;
+                }
+
+                slots.Add(new TpmAuthorizationSlot(handle, nonce, spans.AttributesAt(index), hmac));
+            }
+        }
+        catch
+        {
+            foreach(TpmAuthorizationSlot slot in slots)
+            {
+                slot.Dispose();
+            }
+
+            throw;
+        }
+
+        return new TpmAuthorizationArea(slots.ToImmutable(), authorizingCount);
+    }
+
+    /// <summary>
+    /// <c>TPM2_Sign()</c> is authorized, so its wire layout after the header is: handle area (@keyHandle, 1
+    /// handle), authorization area (the key's slot — a <c>TPM_RS_PW</c> password or a real session — and up to
+    /// two companion slots, Part 1, clause 15.6.1), then parameters (digest as TPM2B_DIGEST, inScheme as
+    /// TPMT_SIG_SCHEME+, validation as TPMT_TK_HASHCHECK). A lone all-password area parses to
+    /// <see cref="TpmSignRequested"/>; every other area to <see cref="TpmSignOverSessionRequested"/>, whose
+    /// first parameter is left undecoded — a decrypt session may have left it ciphertext (Part 1, clause 18.1),
+    /// and cpHash covers the captured octets as received — while the parameters behind it are decoded on both
+    /// forms.
+    /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the parse-rented carriers transfers to the constructed request input — the password form's password and digest, or the session form's authorization area and raw parameter area — whose consuming transitions release or transfer each, and whose refusing arms dispose them all through the input's own Dispose; a rent that fails after an earlier carrier already succeeded releases it in the catch before rethrowing.")]
     private static bool TryParseSign(ref TpmReader reader, ushort tag, BaseMemoryPool pool, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
     {
         input = null;
@@ -8651,37 +13528,73 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
         uint keyHandle = reader.ReadUInt32();
 
-        if(!TryReadPasswordAuthArea(ref reader, out ReadOnlySpan<byte> suppliedAuth, out malformedResponseCode))
+        if(!TryReadAuthorizationAreaSpans(ref reader, authorizingCount: 1, out AuthorizationAreaSpans area, out malformedResponseCode))
         {
             return false;
         }
 
-        //Parameter: digest (TPM2B_DIGEST) — the externally-computed digest, copied into durable model memory.
-        if(!TryReadTpm2bSpan(ref reader, out ReadOnlySpan<byte> digest, out malformedResponseCode))
+        //The parameter set (digest ‖ inScheme ‖ validation) is every octet left after the authorization area —
+        //captured verbatim, before any field is decoded, as the session arm's cpHash parameter term (Part 1,
+        //clause 15.7 equation 15).
+        ReadOnlySpan<byte> rawParameterAreaOctets = reader.PeekBytes(reader.Remaining);
+        bool isAllPassword = area.IsAllPassword(authorizingCount: 1);
+
+        //Parameter: digest (TPM2B_DIGEST) — the externally-computed digest, and the first command parameter,
+        //which is the one a decrypt session protects (Part 1, clause 18.1). On the session form these octets
+        //may be CIPHERTEXT, so the parse only steps over the field's framing and the decrypt step supplies the
+        //plaintext, bounding it there (Part 3, clause 5.7 precedes clause 5.8); on the password form it is
+        //read here and bounded by sizeof(TPMU_HA) (Part 2, clause 10.3.2, Table 90) ahead of the rental.
+        scoped ReadOnlySpan<byte> digest = ReadOnlySpan<byte>.Empty;
+        if(isAllPassword)
+        {
+            if(!TryReadTpm2bSpan(ref reader, out digest, out malformedResponseCode))
+            {
+                return false;
+            }
+
+            if(digest.Length > Tpm2bDigest.MaxSize)
+            {
+                malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+                return false;
+            }
+        }
+        else if(!TrySkipTpm2b(ref reader, out malformedResponseCode))
         {
             return false;
         }
 
-        //A TPM2B_DIGEST buffer can be no wider than sizeof(TPMU_HA) (TPM 2.0 Library Part 2, clause 10.4.2,
-        //Table 92), so the wire bound is answered here, ahead of the rental whose Create refuses the same bound
-        //by throwing.
-        if(digest.Length > Tpm2bDigest.MaxSize)
+        //Parameter: inScheme (TPMT_SIG_SCHEME) — scheme selector (+TPMI_ALG_SIG_SCHEME) plus the scheme-selected
+        //TPMU_SIG_SCHEME (TPM 2.0 Library Part 2, clause 11.2.1.5, Table 183). Unlike VerifySignature's/
+        //PolicySigned's signature, the leading '+' admits TPM_ALG_NULL here (isNullAdmitted: true) — it means
+        //"use the key's default scheme": the transition gates the parsed scheme against the key's own type and
+        //resolves a NULL selector to that type's model default (TpmLifecycleTransitions.ResolveNullSignHashAlg for
+        //the scheme hash on either arm, ResolveRsaSignScheme for the RSA scheme itself). It sits behind the first
+        //parameter and so is never encrypted, which is why it is decoded on both forms alike.
+        TpmtSigScheme parsedScheme;
+        try
         {
-            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+            parsedScheme = TpmtSigScheme.Parse(ref reader, isNullAdmitted: true);
+        }
+        catch(InvalidOperationException)
+        {
+            //An unadmitted scheme selector (TPM 2.0 Library Part 2, Table 83) or, for a hash-only member, an
+            //unrecognized hashAlg (TPMI_ALG_HASH, clause 9.31, Table 77) both throw this from the underlying
+            //selector gates; either is a malformed scheme, #TPM_RC_SCHEME.
+            malformedResponseCode = TpmRcConstants.TPM_RC_SCHEME;
 
             return false;
         }
-
-        //Parameter: inScheme (TPMT_SIG_SCHEME) — scheme selector (UINT16) + hash algorithm (UINT16).
-        if(reader.Remaining < 2 * sizeof(ushort))
+        catch(ArgumentOutOfRangeException)
         {
+            //Too few octets remain to read the selector or its scheme-selected details (Part 3, clause 5.8.2, Table 2).
             malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
 
             return false;
         }
 
-        TpmiAlgSigScheme signatureScheme = TpmiAlgSigScheme.FromValue((TpmAlgIdConstants)reader.ReadUInt16());
-        TpmiAlgHash schemeHashAlg = TpmiAlgHash.FromValue((TpmAlgIdConstants)reader.ReadUInt16());
+        TpmiAlgSigScheme signatureScheme = parsedScheme.Scheme;
+        TpmiAlgHash schemeHashAlg = parsedScheme.Details?.HashAlg ?? TpmiAlgHash.FromValue(TpmAlgIdConstants.TPM_ALG_NULL);
 
         //Parameter: validation (TPMT_TK_HASHCHECK) — tag (UINT16) + hierarchy (UINT32) + digest (TPM2B).
         if(reader.Remaining < sizeof(ushort) + sizeof(uint))
@@ -8698,19 +13611,1298 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return false;
         }
 
-        //The request, with its owned password and digest carriers, is constructed as the parse's last act, so no
-        //refused parse ever creates one.
-        Tpm2bAuth suppliedKeyPassword = Tpm2bAuth.Empty;
+        //Either form's owned pooled carriers are rented here, the parse's last act after every wire check has
+        //passed, so no refused parse ever creates one.
+        if(isAllPassword)
+        {
+            Tpm2bAuth suppliedKeyPassword = Tpm2bAuth.Empty;
+            try
+            {
+                suppliedKeyPassword = Tpm2bAuth.Create(area.Hmac0, pool);
+                input = new TpmSignRequested(TpmiDhObject.FromValue(keyHandle), suppliedKeyPassword, Tpm2bDigest.Create(digest, pool), signatureScheme, schemeHashAlg);
+            }
+            catch
+            {
+                //This carrier's only owner is this frame until the request adopts it, so a failing later rent
+                //must release it or the pinned rental is orphaned.
+                suppliedKeyPassword.Dispose();
+                throw;
+            }
+
+            return true;
+        }
+
+        TpmAuthorizationArea? authorizationArea = null;
+        TpmParameterArea parameterArea = TpmParameterArea.Empty;
         try
         {
-            suppliedKeyPassword = Tpm2bAuth.Create(suppliedAuth, pool);
-            input = new TpmSignRequested(TpmiDhObject.FromValue(keyHandle), suppliedKeyPassword, Tpm2bDigest.Create(digest, pool), signatureScheme, schemeHashAlg);
+            authorizationArea = RentAuthorizationArea(in area, authorizingCount: 1, pool);
+            parameterArea = TpmParameterArea.Create(rawParameterAreaOctets, pool);
+            input = new TpmSignOverSessionRequested(
+                TpmiDhObject.FromValue(keyHandle), authorizationArea, Tpm2bDigest.Empty, signatureScheme, schemeHashAlg, parameterArea);
         }
         catch
         {
-            //This carrier's only owner is this frame until the request adopts it, so a failing later rent
-            //must release it or the pinned rental is orphaned.
-            suppliedKeyPassword.Dispose();
+            parameterArea.Dispose();
+            authorizationArea?.Dispose();
+            throw;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// <c>TPM2_SignDigest()</c> is authorized, so its wire layout after the header is: handle area (@keyHandle, 1
+    /// handle), authorization area (the key's slot and up to two companion slots), then parameters (context as
+    /// TPM2B_SIGNATURE_CTX, digest as TPM2B_DIGEST, validation as TPMT_TK_HASHCHECK). Unlike
+    /// <see cref="TryParseSign"/> there is no <c>inScheme</c> — the key's own scheme always applies (TPM 2.0
+    /// Library Part 3, clause 20.7) — and the validation ticket is genuinely parsed rather than skipped, since
+    /// the transition validates it against a restricted key's requirement instead of discarding it. A lone
+    /// all-password area parses to <see cref="TpmSignDigestRequested"/>; every other area to
+    /// <see cref="TpmSignDigestOverSessionRequested"/>, whose first parameter — <c>context</c> — is left
+    /// undecoded for the decryption step while the digest and the ticket behind it are decoded on both forms.
+    /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the parse-rented carriers transfers to the constructed request input — the password form's key password, context, digest and validation ticket, or the session form's authorization area, digest, validation ticket and raw parameter area — whose consuming transitions release or transfer each, and whose refusing arms dispose them all through the input's own Dispose; a rent that fails after an earlier carrier already succeeded releases it in the catch before rethrowing.")]
+    private static bool TryParseSignDigest(ref TpmReader reader, ushort tag, BaseMemoryPool pool, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
+    {
+        input = null;
+        malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
+
+        if(tag != (ushort)TpmStConstants.TPM_ST_SESSIONS)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_AUTH_MISSING;
+
+            return false;
+        }
+
+        //Handle area: @keyHandle (the signing key).
+        if(reader.Remaining < sizeof(uint))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        uint keyHandle = reader.ReadUInt32();
+
+        if(!TryReadAuthorizationAreaSpans(ref reader, authorizingCount: 1, out AuthorizationAreaSpans area, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //The parameter set (context ‖ digest ‖ validation) is every octet left after the authorization area —
+        //captured verbatim, before any field is decoded, as the session arm's cpHash parameter term (Part 1,
+        //clause 15.7 equation 15).
+        ReadOnlySpan<byte> rawParameterAreaOctets = reader.PeekBytes(reader.Remaining);
+        bool isAllPassword = area.IsAllPassword(authorizingCount: 1);
+
+        //Parameter: context (TPM2B_SIGNATURE_CTX) — the first command parameter, which is the one a decrypt
+        //session protects (Part 1, clause 18.1). On the password form it is bound-first against MaxSize (255,
+        //TPM_RC_SIZE), matching the structure's own Parse throw (Part 2, clause 11.3.8); on the session form the
+        //parse only steps over the field's framing and the decrypt step supplies and bounds the plaintext.
+        Tpm2bSignatureCtx context = Tpm2bSignatureCtx.Empty;
+        if(isAllPassword)
+        {
+            try
+            {
+                context = Tpm2bSignatureCtx.Parse(ref reader, pool);
+            }
+            catch(InvalidOperationException)
+            {
+                malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+                return false;
+            }
+            catch(ArgumentOutOfRangeException)
+            {
+                malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+                return false;
+            }
+        }
+        else if(!TrySkipTpm2b(ref reader, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //Parameter: digest (TPM2B_DIGEST) — the externally-computed digest, bound-first against sizeof(TPMU_HA).
+        //It sits behind the first parameter and so is never encrypted, which is why it is decoded on both forms.
+        if(!TryReadTpm2bSpanBounded(ref reader, Tpm2bDigest.MaxSize, out ReadOnlySpan<byte> digest, out malformedResponseCode))
+        {
+            context.Dispose();
+
+            return false;
+        }
+
+        //Parameter: validation (TPMT_TK_HASHCHECK) — genuinely parsed (not skipped, unlike TryParseSign), read
+        //inline the way TPM2_PolicyAuthorize's checkTicket is (~TryParsePolicyAuthorize), rather than through
+        //TpmtTkHashcheck.Parse: a bad tag and a bad hierarchy are distinct wire faults with distinct RCs, and
+        //collapsing both into one InvalidOperationException would answer the wrong one for half of them. A
+        //restricted key needs a valid ticket, and an unrestricted key's non-NULL ticket is still HMAC-checked.
+        if(reader.Remaining < sizeof(ushort) + sizeof(uint))
+        {
+            context.Dispose();
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        //tag != TPM_ST_HASHCHECK is #TPM_RC_TAG (TPM 2.0 Library Part 2, clause 10.6.7, Table 115).
+        ushort validationTag = reader.ReadUInt16();
+        if(validationTag != (ushort)TpmStConstants.TPM_ST_HASHCHECK)
+        {
+            context.Dispose();
+            malformedResponseCode = TpmRcConstants.TPM_RC_TAG;
+
+            return false;
+        }
+
+        //hierarchy outside Table 59's four selectors is TPM_RC_VALUE.
+        TpmiRhHierarchy validationHierarchy;
+        try
+        {
+            validationHierarchy = TpmiRhHierarchy.Parse(ref reader);
+        }
+        catch(InvalidOperationException)
+        {
+            context.Dispose();
+            malformedResponseCode = TpmRcConstants.TPM_RC_VALUE;
+
+            return false;
+        }
+
+        //validation's digest is a TPM2B_DIGEST too (Part 2, clause 10.6.7, Table 115), so it takes the same
+        //sizeof(TPMU_HA) bound BEFORE any rent — TPM_RC_SIZE on the bound, TPM_RC_INSUFFICIENT on truncation
+        //(bound before truncation, the order every TPM2B reader here keeps).
+        if(!TryReadTpm2bSpanBounded(ref reader, Tpm2bDigest.MaxSize, out ReadOnlySpan<byte> validationDigest, out malformedResponseCode))
+        {
+            context.Dispose();
+
+            return false;
+        }
+
+        //validation is the final parameter; no octets may follow it (Part 3, clause 5.2).
+        if(reader.Remaining != 0)
+        {
+            context.Dispose();
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+
+        //Every carrier the request adopts is rented as its own statement, ahead of the request's own
+        //construction: two inline Tpm2bDigest.Create calls in one constructor argument list would let a second
+        //rent's failure orphan a first rent that already succeeded, so each gets its own guarded statement
+        //instead.
+        Tpm2bDigest digestCarrier = Tpm2bDigest.Empty;
+        Tpm2bDigest validationDigestCarrier = Tpm2bDigest.Empty;
+        try
+        {
+            digestCarrier = Tpm2bDigest.Create(digest, pool);
+            validationDigestCarrier = Tpm2bDigest.Create(validationDigest, pool);
+        }
+        catch
+        {
+            digestCarrier.Dispose();
+            validationDigestCarrier.Dispose();
+            context.Dispose();
+            throw;
+        }
+
+        //Either form's request, with its owned carriers, is constructed as the parse's last act, so no refused
+        //parse ever creates one.
+        if(isAllPassword)
+        {
+            Tpm2bAuth suppliedKeyPassword = Tpm2bAuth.Empty;
+            try
+            {
+                suppliedKeyPassword = Tpm2bAuth.Create(area.Hmac0, pool);
+                input = new TpmSignDigestRequested(
+                    TpmiDhObject.FromValue(keyHandle), suppliedKeyPassword, context, digestCarrier, validationHierarchy, validationDigestCarrier);
+            }
+            catch
+            {
+                //These carriers' only owner is this frame until the request adopts them, so a failing later rent
+                //must release them or the pinned rentals are orphaned.
+                suppliedKeyPassword.Dispose();
+                context.Dispose();
+                digestCarrier.Dispose();
+                validationDigestCarrier.Dispose();
+                throw;
+            }
+
+            return true;
+        }
+
+        TpmAuthorizationArea? authorizationArea = null;
+        TpmParameterArea parameterArea = TpmParameterArea.Empty;
+        try
+        {
+            authorizationArea = RentAuthorizationArea(in area, authorizingCount: 1, pool);
+            parameterArea = TpmParameterArea.Create(rawParameterAreaOctets, pool);
+            input = new TpmSignDigestOverSessionRequested(
+                TpmiDhObject.FromValue(keyHandle), authorizationArea, Tpm2bSignatureCtx.Empty, digestCarrier, validationHierarchy, validationDigestCarrier, parameterArea);
+        }
+        catch
+        {
+            parameterArea.Dispose();
+            authorizationArea?.Dispose();
+            digestCarrier.Dispose();
+            validationDigestCarrier.Dispose();
+            throw;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// <c>TPM2_SignSequenceStart()</c>'s <c>keyHandle</c> carries no <c>@</c> (Auth Index None, no key
+    /// authorization at this time), so its wire layout after the header is: handle area (1 handle, no
+    /// authorization area at all), then parameters (auth as TPM2B_AUTH, context as TPM2B_SIGNATURE_CTX). Table
+    /// 87 fixes the tag to <c>TPM_ST_NO_SESSIONS</c> ordinarily, conditional on an audit or decrypt session as
+    /// <see cref="TryParseVerifyDigestSignature"/>'s own doc comment explains for the identical conditional-tag
+    /// shape; this simulator parses no such session area on a handle-less command, so it refuses the
+    /// <c>TPM_ST_SESSIONS</c> form deterministically — a recorded simulator limitation, not a wire violation.
+    /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the parse-rented sequence-auth and context carriers transfers to the constructed request input, whose consuming transition adopts the auth into the new sequence and disposes the context once its emptiness is confirmed, and whose refusing arms dispose them both through the input's own Dispose; a rent that fails after an earlier carrier already succeeded releases it in the catch before rethrowing.")]
+    private static bool TryParseSignSequenceStart(ref TpmReader reader, ushort tag, BaseMemoryPool pool, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
+    {
+        input = null;
+        malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
+
+        if(tag != (ushort)TpmStConstants.TPM_ST_NO_SESSIONS)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_BAD_TAG;
+
+            return false;
+        }
+
+        //Handle area: keyHandle (the key the opened sequence will complete under; no authorization area).
+        if(reader.Remaining < sizeof(uint))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        uint keyHandle = reader.ReadUInt32();
+
+        //Parameter: auth (TPM2B_AUTH) — bound-first against MaxSize (64, TPM_RC_SIZE), matching the structure's
+        //own Parse throw (TPM 2.0 Library Part 2, clause 10.3.5).
+        if(!TryReadTpm2bSpanBounded(ref reader, Tpm2bAuth.MaxSize, out ReadOnlySpan<byte> auth, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //Parameter: context (TPM2B_SIGNATURE_CTX) — bound-first against MaxSize (255, TPM_RC_SIZE).
+        Tpm2bSignatureCtx context;
+        try
+        {
+            context = Tpm2bSignatureCtx.Parse(ref reader, pool);
+        }
+        catch(InvalidOperationException)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+        catch(ArgumentOutOfRangeException)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        //context is the final parameter; no octets may follow it (Part 3, 5.2).
+        if(reader.Remaining != 0)
+        {
+            context.Dispose();
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+
+        //The owned pooled auth carrier is rented as the parse's last act, after every wire check has passed, so
+        //no refused parse ever creates one.
+        Tpm2bAuth sequenceAuth = Tpm2bAuth.Empty;
+        try
+        {
+            sequenceAuth = Tpm2bAuth.Create(auth, pool);
+            input = new TpmSignSequenceStartRequested(TpmiDhObject.FromValue(keyHandle), sequenceAuth, context);
+        }
+        catch
+        {
+            sequenceAuth.Dispose();
+            context.Dispose();
+            throw;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// <c>TPM2_SequenceUpdate()</c> is authorized, so its wire layout after the header is: handle area
+    /// (@sequenceHandle, 1 handle), authorization area (the sequence's slot — a <c>TPM_RS_PW</c> password or a
+    /// real session — and up to two companion slots), then the one parameter (buffer as TPM2B_MAX_BUFFER,
+    /// bounded 1024 — "may be any size up to the limits of the TPM", TPM 2.0 Library Part 3, clause 17.7 — with
+    /// an empty buffer admitted). A lone all-password area parses to <see cref="TpmSequenceUpdateRequested"/>;
+    /// every other area to <see cref="TpmSequenceUpdateOverSessionRequested"/>, whose buffer — the first
+    /// parameter, the one a decrypt session protects — is left undecoded for the decryption step.
+    /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the parse-rented carriers transfers to the constructed request input — the password form's password and buffer, or the session form's authorization area and raw parameter area — whose consuming transitions release or transfer each, and whose refusing arms dispose them all through the input's own Dispose; a rent that fails after an earlier carrier already succeeded releases it in the catch before rethrowing.")]
+    private static bool TryParseSequenceUpdate(ref TpmReader reader, ushort tag, BaseMemoryPool pool, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
+    {
+        input = null;
+        malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
+
+        if(tag != (ushort)TpmStConstants.TPM_ST_SESSIONS)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_AUTH_MISSING;
+
+            return false;
+        }
+
+        //Handle area: @sequenceHandle (the open sequence to append to).
+        if(reader.Remaining < sizeof(uint))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        uint sequenceHandle = reader.ReadUInt32();
+
+        if(!TryReadAuthorizationAreaSpans(ref reader, authorizingCount: 1, out AuthorizationAreaSpans area, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //The parameter set (buffer alone) is every octet left after the authorization area — captured verbatim,
+        //before the field is decoded, as the session arm's cpHash parameter term (Part 1, clause 15.7 equation 15).
+        ReadOnlySpan<byte> rawParameterAreaOctets = reader.PeekBytes(reader.Remaining);
+        bool isAllPassword = area.IsAllPassword(authorizingCount: 1);
+
+        //Parameter: buffer (TPM2B_MAX_BUFFER) — the first (and only) command parameter, which is the one a
+        //decrypt session protects (Part 1, clause 18.1). On the password form it is bound-first against MaxSize
+        //(1024, TPM_RC_SIZE); on the session form the parse only steps over the field's framing and the decrypt
+        //step supplies and bounds the plaintext.
+        scoped ReadOnlySpan<byte> buffer = ReadOnlySpan<byte>.Empty;
+        if(isAllPassword)
+        {
+            if(!TryReadTpm2bSpanBounded(ref reader, Tpm2bMaxBuffer.MaxSize, out buffer, out malformedResponseCode))
+            {
+                return false;
+            }
+        }
+        else if(!TrySkipTpm2b(ref reader, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //buffer is the final parameter; no octets may follow it (Part 3, 5.2).
+        if(reader.Remaining != 0)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+
+        //Either form's owned pooled carriers are rented here, the parse's last act after every wire check has
+        //passed, so no refused parse ever creates one.
+        if(isAllPassword)
+        {
+            Tpm2bAuth suppliedSequencePassword = Tpm2bAuth.Empty;
+            Tpm2bMaxBuffer sequenceBuffer = Tpm2bMaxBuffer.Empty;
+            try
+            {
+                suppliedSequencePassword = Tpm2bAuth.Create(area.Hmac0, pool);
+                sequenceBuffer = Tpm2bMaxBuffer.Create(buffer, pool);
+                input = new TpmSequenceUpdateRequested(TpmiDhObject.FromValue(sequenceHandle), suppliedSequencePassword, sequenceBuffer);
+            }
+            catch
+            {
+                sequenceBuffer.Dispose();
+                suppliedSequencePassword.Dispose();
+                throw;
+            }
+
+            return true;
+        }
+
+        TpmAuthorizationArea? authorizationArea = null;
+        TpmParameterArea parameterArea = TpmParameterArea.Empty;
+        try
+        {
+            authorizationArea = RentAuthorizationArea(in area, authorizingCount: 1, pool);
+            parameterArea = TpmParameterArea.Create(rawParameterAreaOctets, pool);
+            input = new TpmSequenceUpdateOverSessionRequested(TpmiDhObject.FromValue(sequenceHandle), authorizationArea, Tpm2bMaxBuffer.Empty, parameterArea);
+        }
+        catch
+        {
+            parameterArea.Dispose();
+            authorizationArea?.Dispose();
+            throw;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// <c>TPM2_HashSequenceStart()</c> names no handle and carries no authorization (TPM 2.0 Library Part 3,
+    /// clause 17.4, Table 85), so its wire layout after the header is: parameter area (<c>auth</c> as
+    /// <c>TPM2B_AUTH</c>, then <c>hashAlg</c> as <c>TPMI_ALG_HASH+</c>). Table 85's tag rule — sessions only for
+    /// audit or decrypt — is answered exactly as <see cref="TryParseSignSequenceStart"/> answers it: neither is
+    /// modelled, so <c>TPM_ST_NO_SESSIONS</c> is pinned and <c>TPM_ST_SESSIONS</c> is <c>TPM_RC_BAD_TAG</c>.
+    /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the parse-rented sequence-auth carrier transfers to the constructed request input, whose consuming transition adopts it into the new sequence and whose refusing arms dispose it through the input's own Dispose.")]
+    private static bool TryParseHashSequenceStart(ref TpmReader reader, ushort tag, BaseMemoryPool pool, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
+    {
+        input = null;
+        malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
+
+        if(tag != (ushort)TpmStConstants.TPM_ST_NO_SESSIONS)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_BAD_TAG;
+
+            return false;
+        }
+
+        //Parameter: auth (TPM2B_AUTH) — bound-first against MaxSize (64, TPM_RC_SIZE).
+        if(!TryReadTpm2bSpanBounded(ref reader, Tpm2bAuth.MaxSize, out ReadOnlySpan<byte> auth, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //Parameter: hashAlg (TPMI_ALG_HASH+) — TPM_ALG_NULL admitted (an Event Sequence, clause 17.4.1); any
+        //value that is not a hash identifier fails the unmarshal with #TPM_RC_HASH (Part 2, Table 66).
+        if(!TryParseSequenceHashAlg(ref reader, isNullAdmitted: true, out TpmiAlgHash hashAlg, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //hashAlg is the final parameter; no octets may follow it (Part 3, 5.2).
+        if(reader.Remaining != 0)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+
+        //The owned pooled auth carrier is rented as the parse's last act, after every wire check has passed.
+        input = new TpmHashSequenceStartRequested(Tpm2bAuth.Create(auth, pool), hashAlg);
+
+        return true;
+    }
+
+    /// <summary>
+    /// Reads a <c>TPMI_ALG_HASH</c> parameter for the hash-sequence family: <c>TPM_RC_INSUFFICIENT</c> when the
+    /// frame ends first, <c>TPM_RC_HASH</c> when the value is not a hash identifier (or is <c>TPM_ALG_NULL</c>
+    /// where the interface type carries no <c>+</c>) — Part 2, Table 66's <c>#TPM_RC_HASH</c>.
+    /// </summary>
+    /// <param name="reader">The reader positioned at the parameter.</param>
+    /// <param name="isNullAdmitted">Whether <c>TPM_ALG_NULL</c> is a member of the parameter's type (the <c>+</c> decoration).</param>
+    /// <param name="hashAlg">The parsed algorithm on success.</param>
+    /// <param name="malformedResponseCode">The response code on failure.</param>
+    /// <returns><see langword="true"/> when the parameter parsed.</returns>
+    private static bool TryParseSequenceHashAlg(ref TpmReader reader, bool isNullAdmitted, out TpmiAlgHash hashAlg, out TpmRcConstants malformedResponseCode)
+    {
+        hashAlg = default;
+        malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
+
+        if(reader.Remaining < sizeof(ushort))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        try
+        {
+            hashAlg = TpmiAlgHash.Parse(ref reader, isNullAdmitted);
+        }
+        catch(InvalidOperationException)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_HASH;
+
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Reads a <c>TPMI_RH_HIERARCHY</c> parameter: <c>TPM_RC_INSUFFICIENT</c> when the frame ends first,
+    /// <c>TPM_RC_VALUE</c> when the value is outside Part 2, Table 59's selectors (its <c>#TPM_RC_VALUE</c>);
+    /// <c>TPM_RH_NULL</c> is a listed member of the type and is always admitted.
+    /// </summary>
+    /// <param name="reader">The reader positioned at the parameter.</param>
+    /// <param name="hierarchy">The parsed hierarchy on success.</param>
+    /// <param name="malformedResponseCode">The response code on failure.</param>
+    /// <returns><see langword="true"/> when the parameter parsed.</returns>
+    private static bool TryParseTicketHierarchy(ref TpmReader reader, out TpmiRhHierarchy hierarchy, out TpmRcConstants malformedResponseCode)
+    {
+        hierarchy = default;
+        malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
+
+        if(reader.Remaining < sizeof(uint))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        try
+        {
+            hierarchy = TpmiRhHierarchy.Parse(ref reader);
+        }
+        catch(InvalidOperationException)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_VALUE;
+
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// <c>TPM2_SequenceComplete()</c> authorizes <c>@sequenceHandle</c> (TPM 2.0 Library Part 3, clause 17.8,
+    /// Table 93), so its wire layout after the header is: handle area (<c>@sequenceHandle</c>), authorization
+    /// area (one <c>TPM_RS_PW</c> slot), parameter area (<c>buffer</c> as <c>TPM2B_MAX_BUFFER</c>, then
+    /// <c>hierarchy</c> as <c>TPMI_RH_HIERARCHY</c>) — the <see cref="TryParseSequenceUpdate"/> shape with the
+    /// ticket hierarchy appended.
+    /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the parse-rented sequence-password and buffer carriers transfers to the constructed request input, whose consuming transition releases the password once the compare has consumed it and hands the buffer to the digest effect, and whose refusing arms dispose them both through the input's own Dispose; a rent that fails after an earlier carrier already succeeded releases it in the catch before rethrowing.")]
+    private static bool TryParseSequenceComplete(ref TpmReader reader, ushort tag, BaseMemoryPool pool, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
+    {
+        input = null;
+        malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
+
+        if(tag != (ushort)TpmStConstants.TPM_ST_SESSIONS)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_AUTH_MISSING;
+
+            return false;
+        }
+
+        //Handle area: @sequenceHandle (the open sequence to complete).
+        if(reader.Remaining < sizeof(uint))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        uint sequenceHandle = reader.ReadUInt32();
+
+        if(!TryReadPasswordAuthArea(ref reader, out ReadOnlySpan<byte> suppliedAuth, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //Parameter: buffer (TPM2B_MAX_BUFFER) — bound-first against MaxSize (1024, TPM_RC_SIZE); an empty
+        //buffer is admitted ("the last part of data, if any", clause 17.8.1).
+        if(!TryReadTpm2bSpanBounded(ref reader, Tpm2bMaxBuffer.MaxSize, out ReadOnlySpan<byte> buffer, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //Parameter: hierarchy (TPMI_RH_HIERARCHY) — the ticket's hierarchy; TPM_RH_NULL asks for no ticket.
+        if(!TryParseTicketHierarchy(ref reader, out TpmiRhHierarchy hierarchy, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //hierarchy is the final parameter; no octets may follow it (Part 3, 5.2).
+        if(reader.Remaining != 0)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+
+        //The owned pooled password and buffer carriers are rented as the parse's last act, after every wire
+        //check has passed, so no refused parse ever creates one.
+        Tpm2bAuth suppliedSequencePassword = Tpm2bAuth.Empty;
+        Tpm2bMaxBuffer trailingBuffer = Tpm2bMaxBuffer.Empty;
+        try
+        {
+            suppliedSequencePassword = Tpm2bAuth.Create(suppliedAuth, pool);
+            trailingBuffer = Tpm2bMaxBuffer.Create(buffer, pool);
+            input = new TpmSequenceCompleteRequested(TpmiDhObject.FromValue(sequenceHandle), suppliedSequencePassword, trailingBuffer, hierarchy);
+        }
+        catch
+        {
+            trailingBuffer.Dispose();
+            suppliedSequencePassword.Dispose();
+            throw;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// <c>TPM2_Hash()</c> names no handle and carries no authorization (TPM 2.0 Library Part 3, clause 15.4,
+    /// Table 69), so its wire layout after the header is: parameter area (<c>data</c> as
+    /// <c>TPM2B_MAX_BUFFER</c>, <c>hashAlg</c> as <c>TPMI_ALG_HASH</c> — no <c>+</c>, so <c>TPM_ALG_NULL</c>
+    /// fails the unmarshal — then <c>hierarchy</c> as <c>TPMI_RH_HIERARCHY+</c>). Table 69's tag rule —
+    /// sessions only for audit, encrypt, or decrypt — is answered as <see cref="TryParseHashSequenceStart"/>
+    /// answers it: <c>TPM_ST_NO_SESSIONS</c> pinned, <c>TPM_ST_SESSIONS</c> is <c>TPM_RC_BAD_TAG</c>.
+    /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the parse-rented data carrier transfers to the constructed request input, whose consuming transition hands it to the digest effect and whose refusing arms dispose it through the input's own Dispose.")]
+    private static bool TryParseHash(ref TpmReader reader, ushort tag, BaseMemoryPool pool, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
+    {
+        input = null;
+        malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
+
+        if(tag != (ushort)TpmStConstants.TPM_ST_NO_SESSIONS)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_BAD_TAG;
+
+            return false;
+        }
+
+        //Parameter: data (TPM2B_MAX_BUFFER) — bound-first against MaxSize (1024, TPM_RC_SIZE); larger inputs
+        //go through a hash sequence (clause 15.4.1's note).
+        if(!TryReadTpm2bSpanBounded(ref reader, Tpm2bMaxBuffer.MaxSize, out ReadOnlySpan<byte> data, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //Parameter: hashAlg (TPMI_ALG_HASH) — "shall not be TPM_ALG_NULL" (Table 69).
+        if(!TryParseSequenceHashAlg(ref reader, isNullAdmitted: false, out TpmiAlgHash hashAlg, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //Parameter: hierarchy (TPMI_RH_HIERARCHY+) — the ticket's hierarchy; TPM_RH_NULL asks for no ticket.
+        if(!TryParseTicketHierarchy(ref reader, out TpmiRhHierarchy hierarchy, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //hierarchy is the final parameter; no octets may follow it (Part 3, 5.2).
+        if(reader.Remaining != 0)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+
+        //The owned pooled data carrier is rented as the parse's last act, after every wire check has passed.
+        input = new TpmHashRequested(Tpm2bMaxBuffer.Create(data, pool), hashAlg, hierarchy);
+
+        return true;
+    }
+
+    /// <summary>
+    /// Parses <c>TPM2_HMAC()</c> (TPM 2.0 Library Part 3, clause 15.5, Table 71): the shared front
+    /// (<see cref="TryReadKeyedHashCommandFront"/> — <c>@handle</c> and its single authorization slot, read
+    /// generically), then <c>buffer</c> (a <c>TPM2B_MAX_BUFFER</c>, bounded at 1024) and <c>hashAlg</c>
+    /// (<c>TPMI_ALG_HASH+</c>, <c>TPM_ALG_NULL</c> admitted), with trailing octets <c>TPM_RC_SIZE</c>. A
+    /// <c>TPM_RS_PW</c> slot parses to <see cref="TpmHmacRequested"/>, any other session handle to
+    /// <see cref="TpmHmacOverSessionRequested"/> carrying the slot's nonce, attributes and hmac and the raw
+    /// parameter octets cpHash covers. Every owned carrier is rented as the parse's last act, after every wire
+    /// check has passed.
+    /// </summary>
+    /// <param name="reader">The command reader, positioned after the header.</param>
+    /// <param name="tag">The command tag.</param>
+    /// <param name="pool">The pool the owned carriers are rented from.</param>
+    /// <param name="input">The parsed <see cref="TpmHmacRequested"/> or <see cref="TpmHmacOverSessionRequested"/> on success.</param>
+    /// <param name="malformedResponseCode">The refusal code when the frame is malformed.</param>
+    /// <returns><see langword="true"/> when the frame parsed.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the parse-rented slot credential, caller nonce, buffer and parameter-area carriers transfers to the constructed request input, whose consuming transition releases the credential and the parameter area once their compares and verifications have consumed them, transfers the nonce into the response-session entry and the buffer into the HMAC effect, and whose refusing arms dispose every carrier through the input's own Dispose; a rent that fails after an earlier carrier already succeeded releases it in the catch before rethrowing.")]
+    private static bool TryParseHmac(ref TpmReader reader, ushort tag, BaseMemoryPool pool, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
+    {
+        input = null;
+        malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
+
+        if(!TryReadKeyedHashCommandFront(
+            ref reader, tag, out uint keyHandle, out TpmiShAuthSession sessionHandle, out ReadOnlySpan<byte> nonceCaller, out TpmaSession sessionAttributes,
+            out ReadOnlySpan<byte> hmac, out ReadOnlySpan<byte> rawParameterArea, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //Parameter: buffer (TPM2B_MAX_BUFFER) — bound-first against MaxSize (1024, TPM_RC_SIZE).
+        if(!TryReadTpm2bSpanBounded(ref reader, Tpm2bMaxBuffer.MaxSize, out ReadOnlySpan<byte> buffer, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //Parameter: hashAlg (TPMI_ALG_HASH+) — TPM_ALG_NULL admitted, selecting the key's own default scheme
+        //hash (Table 79's "hashAlg TPM_ALG_NULL" rows); any value that is not a hash identifier fails the
+        //unmarshal with #TPM_RC_HASH (Part 2, Table 66).
+        if(!TryParseSequenceHashAlg(ref reader, isNullAdmitted: true, out TpmiAlgHash hashAlg, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //hashAlg is the final parameter; no octets may follow it (Part 3, 5.2).
+        if(reader.Remaining != 0)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+
+        //A TPM_RS_PW slot's hmac field IS the plaintext password; a real session's is its command HMAC (or a
+        //TPM2_PolicyPassword() session's cleartext authValue). Only the session form keeps the slot's caller
+        //nonce and the raw parameter octets, since only it verifies a cpHash.
+        Tpm2bAuth slotCredential = Tpm2bAuth.Empty;
+        Tpm2bMaxBuffer ownedBuffer = Tpm2bMaxBuffer.Empty;
+        Tpm2bNonce slotNonce = Tpm2bNonce.Empty;
+        TpmParameterArea parameterArea = TpmParameterArea.Empty;
+        try
+        {
+            slotCredential = Tpm2bAuth.Create(hmac, pool);
+            ownedBuffer = Tpm2bMaxBuffer.Create(buffer, pool);
+            if(sessionHandle.IsPasswordSession)
+            {
+                input = new TpmHmacRequested(TpmiDhObject.FromValue(keyHandle), slotCredential, ownedBuffer, hashAlg);
+            }
+            else
+            {
+                slotNonce = Tpm2bNonce.Create(nonceCaller, pool);
+                parameterArea = TpmParameterArea.Create(rawParameterArea, pool);
+                input = new TpmHmacOverSessionRequested(
+                    TpmiDhObject.FromValue(keyHandle), sessionHandle, slotNonce, sessionAttributes, slotCredential, ownedBuffer, hashAlg, parameterArea);
+            }
+        }
+        catch
+        {
+            //These carriers' only owner is this frame until the request adopts them, so a failing later rent
+            //must release them or the pinned rentals are orphaned.
+            parameterArea.Dispose();
+            slotNonce.Dispose();
+            ownedBuffer.Dispose();
+            slotCredential.Dispose();
+            throw;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Parses <c>TPM2_HMAC_Start()</c> (TPM 2.0 Library Part 3, clause 17.2, Table 80): the shared front
+    /// (<see cref="TryReadKeyedHashCommandFront"/> — <c>@handle</c> and its single authorization slot, read
+    /// generically), then <c>auth</c> (a <c>TPM2B_AUTH</c>, bounded at 64) and <c>hashAlg</c>
+    /// (<c>TPMI_ALG_HASH+</c>, <c>TPM_ALG_NULL</c> admitted), with trailing octets <c>TPM_RC_SIZE</c>. A
+    /// <c>TPM_RS_PW</c> slot parses to <see cref="TpmHmacStartRequested"/>, any other session handle to
+    /// <see cref="TpmHmacStartOverSessionRequested"/> carrying the slot's nonce, attributes and hmac and the raw
+    /// parameter octets cpHash covers. Every owned carrier is rented as the parse's last act, after every wire
+    /// check has passed.
+    /// </summary>
+    /// <param name="reader">The command reader, positioned after the header.</param>
+    /// <param name="tag">The command tag.</param>
+    /// <param name="pool">The pool the owned carriers are rented from.</param>
+    /// <param name="input">The parsed <see cref="TpmHmacStartRequested"/> or <see cref="TpmHmacStartOverSessionRequested"/> on success.</param>
+    /// <param name="malformedResponseCode">The refusal code when the frame is malformed.</param>
+    /// <returns><see langword="true"/> when the frame parsed.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the parse-rented slot credential, caller nonce, sequence-authorization and parameter-area carriers transfers to the constructed request input, whose consuming transition releases the credential and the parameter area once their compares and verifications have consumed them, transfers the nonce into the response-session entry and the sequence authorization into the sequence-start action, and whose refusing arms dispose every carrier through the input's own Dispose; a rent that fails after an earlier carrier already succeeded releases it in the catch before rethrowing.")]
+    private static bool TryParseHmacStart(ref TpmReader reader, ushort tag, BaseMemoryPool pool, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
+    {
+        input = null;
+        malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
+
+        if(!TryReadKeyedHashCommandFront(
+            ref reader, tag, out uint keyHandle, out TpmiShAuthSession sessionHandle, out ReadOnlySpan<byte> nonceCaller, out TpmaSession sessionAttributes,
+            out ReadOnlySpan<byte> hmac, out ReadOnlySpan<byte> rawParameterArea, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //Parameter: auth (TPM2B_AUTH) — the sequence's own authorization value; bound-first against MaxSize
+        //(64, TPM_RC_SIZE).
+        if(!TryReadTpm2bSpanBounded(ref reader, Tpm2bAuth.MaxSize, out ReadOnlySpan<byte> sequenceAuth, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //Parameter: hashAlg (TPMI_ALG_HASH+) — TPM_ALG_NULL admitted, selecting the key's own default scheme
+        //hash (Table 79); any value that is not a hash identifier fails the unmarshal with #TPM_RC_HASH.
+        if(!TryParseSequenceHashAlg(ref reader, isNullAdmitted: true, out TpmiAlgHash hashAlg, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //hashAlg is the final parameter; no octets may follow it (Part 3, 5.2).
+        if(reader.Remaining != 0)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+
+        //The slot's credential and the sequence authorization are rented for either form; only the session
+        //form keeps the caller nonce and the raw parameter octets, since only it verifies a cpHash.
+        Tpm2bAuth slotCredential = Tpm2bAuth.Empty;
+        Tpm2bAuth ownedSequenceAuth = Tpm2bAuth.Empty;
+        Tpm2bNonce slotNonce = Tpm2bNonce.Empty;
+        TpmParameterArea parameterArea = TpmParameterArea.Empty;
+        try
+        {
+            slotCredential = Tpm2bAuth.Create(hmac, pool);
+            ownedSequenceAuth = Tpm2bAuth.Create(sequenceAuth, pool);
+            if(sessionHandle.IsPasswordSession)
+            {
+                input = new TpmHmacStartRequested(TpmiDhObject.FromValue(keyHandle), slotCredential, ownedSequenceAuth, hashAlg);
+            }
+            else
+            {
+                slotNonce = Tpm2bNonce.Create(nonceCaller, pool);
+                parameterArea = TpmParameterArea.Create(rawParameterArea, pool);
+                input = new TpmHmacStartOverSessionRequested(
+                    TpmiDhObject.FromValue(keyHandle), sessionHandle, slotNonce, sessionAttributes, slotCredential, ownedSequenceAuth, hashAlg, parameterArea);
+            }
+        }
+        catch
+        {
+            //These carriers' only owner is this frame until the request adopts them, so a failing later rent
+            //must release them or the pinned rentals are orphaned.
+            parameterArea.Dispose();
+            slotNonce.Dispose();
+            ownedSequenceAuth.Dispose();
+            slotCredential.Dispose();
+            throw;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Reads the shared front of a USER-role KEYEDHASH-key command (<c>TPM2_HMAC()</c>/<c>TPM2_HMAC_Start()</c>):
+    /// the tag, the <c>@handle</c>, and exactly one authorization slot read generically — a <c>TPM_RS_PW</c>
+    /// password, a bound or unbound HMAC session, or a policy session (TPM 2.0 Library Part 3, clauses 15.5 and
+    /// 17.2, Tables 71 and 80) — then the raw parameter octets that follow, peeked before any parameter is
+    /// decoded as the session form's cpHash parameter term (Part 1, clause 15.7, equation 15). The slot's spans
+    /// alias the command buffer; the caller copies whichever it keeps into pooled carriers.
+    /// </summary>
+    /// <remarks>
+    /// Both tables carry a single <c>@handle</c>, and neither <c>buffer</c>/<c>auth</c> nor <c>outHMAC</c> is
+    /// modelled as encryptable, so no companion slot could claim an admitted attribute: the area is read as one
+    /// slot and a second block overruns the declared <c>authorizationSize</c>, <c>TPM_RC_AUTHSIZE</c>
+    /// (<see cref="TryEndAuthArea"/>) — the single-session shape the NV read/write arms use. A
+    /// <c>TPM_ST_NO_SESSIONS</c> frame is <c>TPM_RC_AUTH_MISSING</c> (clause 5.5: an authorization session is
+    /// present for each <c>@</c> handle).
+    /// </remarks>
+    /// <param name="reader">The command reader, positioned at the handle area.</param>
+    /// <param name="tag">The command tag; must be <c>TPM_ST_SESSIONS</c>.</param>
+    /// <param name="keyHandle">The parsed <c>@handle</c> value.</param>
+    /// <param name="sessionHandle">The slot's session handle.</param>
+    /// <param name="nonceCaller">The slot's caller nonce (empty for a password slot).</param>
+    /// <param name="sessionAttributes">The slot's session attributes.</param>
+    /// <param name="hmac">The slot's hmac field — the plaintext password for a <c>TPM_RS_PW</c> slot.</param>
+    /// <param name="rawParameterArea">Every octet after the authorization area, exactly as received.</param>
+    /// <param name="malformedResponseCode">The refusal code when the read fails.</param>
+    /// <returns><see langword="true"/> when the front parsed; otherwise <see langword="false"/>.</returns>
+    private static bool TryReadKeyedHashCommandFront(
+        ref TpmReader reader, ushort tag, out uint keyHandle, out TpmiShAuthSession sessionHandle, out ReadOnlySpan<byte> nonceCaller,
+        out TpmaSession sessionAttributes, out ReadOnlySpan<byte> hmac, out ReadOnlySpan<byte> rawParameterArea, out TpmRcConstants malformedResponseCode)
+    {
+        keyHandle = 0;
+        sessionHandle = TpmiShAuthSession.FromValue(0);
+        nonceCaller = ReadOnlySpan<byte>.Empty;
+        sessionAttributes = default;
+        hmac = ReadOnlySpan<byte>.Empty;
+        rawParameterArea = ReadOnlySpan<byte>.Empty;
+        malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
+
+        if(tag != (ushort)TpmStConstants.TPM_ST_SESSIONS)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_AUTH_MISSING;
+
+            return false;
+        }
+
+        //Handle area: @handle (the loaded HMAC key).
+        if(reader.Remaining < sizeof(uint))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        keyHandle = reader.ReadUInt32();
+
+        if(!TryBeginAuthArea(ref reader, out int sessionsStart, out uint authorizationSize, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //The one slot, read as any session kind (TryReadCommandSessionSpans applies the password slot's own
+        //width and attribute rules when the handle is TPM_RS_PW).
+        if(!TryReadCommandSessionSpans(ref reader, sessionIndex: 0, out sessionHandle, out nonceCaller, out sessionAttributes, out hmac, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        if(!TryEndAuthArea(ref reader, sessionsStart, authorizationSize, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        rawParameterArea = reader.PeekBytes(reader.Remaining);
+
+        return true;
+    }
+
+    /// <summary>
+    /// <c>TPM2_SignSequenceComplete()</c> authorizes both of its handles (TPM 2.0 Library Part 3, clause 20.6, Table
+    /// 124: <c>@sequenceHandle</c> then <c>@keyHandle</c>), so its wire layout after the header is: handle area (2
+    /// handles), authorization area (the two authorizing slots in handle order — each a <c>TPM_RS_PW</c> password
+    /// or a real session — and at most one companion slot, Part 1, clause 15.6.1), then the one parameter (buffer
+    /// as TPM2B_MAX_BUFFER, "data to be added to the signature", bounded 1024, empty admitted — a completion with
+    /// no final block, every message already delivered by prior TPM2_SequenceUpdate() calls). A lone all-password
+    /// area parses to <see cref="TpmSignSequenceCompleteRequested"/>; every other area to
+    /// <see cref="TpmSignSequenceCompleteOverSessionRequested"/>, whose buffer is left undecoded for the
+    /// decryption step.
+    /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the parse-rented carriers transfers to the constructed request input — the password form's two passwords and buffer, or the session form's authorization area and raw parameter area — whose consuming transitions release or transfer each, and whose refusing arms dispose them all through the input's own Dispose; a rent that fails after an earlier carrier already succeeded releases it in the catch before rethrowing.")]
+    private static bool TryParseSignSequenceComplete(ref TpmReader reader, ushort tag, BaseMemoryPool pool, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
+    {
+        input = null;
+        malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
+
+        if(tag != (ushort)TpmStConstants.TPM_ST_SESSIONS)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_AUTH_MISSING;
+
+            return false;
+        }
+
+        //Handle area: @sequenceHandle then @keyHandle.
+        if(reader.Remaining < 2 * sizeof(uint))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        TpmiDhObject sequenceHandle = TpmiDhObject.FromValue(reader.ReadUInt32());
+        TpmiDhObject keyHandle = TpmiDhObject.FromValue(reader.ReadUInt32());
+
+        if(!TryReadAuthorizationAreaSpans(ref reader, authorizingCount: 2, out AuthorizationAreaSpans area, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //The parameter set (buffer alone) is every octet left after the authorization area — captured verbatim,
+        //before the field is decoded, as the session arm's cpHash parameter term (Part 1, clause 15.7 equation 15).
+        ReadOnlySpan<byte> rawParameterAreaOctets = reader.PeekBytes(reader.Remaining);
+        bool isAllPassword = area.IsAllPassword(authorizingCount: 2);
+
+        //Parameter: buffer (TPM2B_MAX_BUFFER) — the first (and only) command parameter, which is the one a
+        //decrypt session protects (Part 1, clause 18.1). On the password form it is bound-first against MaxSize
+        //(1024, TPM_RC_SIZE); on the session form the parse only steps over the field's framing and the decrypt
+        //step supplies and bounds the plaintext.
+        scoped ReadOnlySpan<byte> buffer = ReadOnlySpan<byte>.Empty;
+        if(isAllPassword)
+        {
+            if(!TryReadTpm2bSpanBounded(ref reader, Tpm2bMaxBuffer.MaxSize, out buffer, out malformedResponseCode))
+            {
+                return false;
+            }
+        }
+        else if(!TrySkipTpm2b(ref reader, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //buffer is the final parameter; no octets may follow it (Part 3, 5.2).
+        if(reader.Remaining != 0)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+
+        //Either form's owned pooled carriers are rented here, the parse's last act after every wire check has
+        //passed, so no refused parse ever creates one.
+        if(isAllPassword)
+        {
+            Tpm2bAuth suppliedSequencePassword = Tpm2bAuth.Empty;
+            Tpm2bAuth suppliedKeyPassword = Tpm2bAuth.Empty;
+            Tpm2bMaxBuffer completingBuffer = Tpm2bMaxBuffer.Empty;
+            try
+            {
+                suppliedSequencePassword = Tpm2bAuth.Create(area.Hmac0, pool);
+                suppliedKeyPassword = Tpm2bAuth.Create(area.Hmac1, pool);
+                completingBuffer = Tpm2bMaxBuffer.Create(buffer, pool);
+                input = new TpmSignSequenceCompleteRequested(sequenceHandle, keyHandle, suppliedSequencePassword, suppliedKeyPassword, completingBuffer);
+            }
+            catch
+            {
+                completingBuffer.Dispose();
+                suppliedKeyPassword.Dispose();
+                suppliedSequencePassword.Dispose();
+                throw;
+            }
+
+            return true;
+        }
+
+        TpmAuthorizationArea? authorizationArea = null;
+        TpmParameterArea parameterArea = TpmParameterArea.Empty;
+        try
+        {
+            authorizationArea = RentAuthorizationArea(in area, authorizingCount: 2, pool);
+            parameterArea = TpmParameterArea.Create(rawParameterAreaOctets, pool);
+            input = new TpmSignSequenceCompleteOverSessionRequested(sequenceHandle, keyHandle, authorizationArea, Tpm2bMaxBuffer.Empty, parameterArea);
+        }
+        catch
+        {
+            parameterArea.Dispose();
+            authorizationArea?.Dispose();
+            throw;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// <c>TPM2_VerifySequenceStart()</c>'s <c>keyHandle</c> carries no <c>@</c> (Auth Index None, no key
+    /// authorization at this time — mirroring <see cref="TryParseSignSequenceStart"/>'s own posture), so its
+    /// wire layout after the header is: handle area (1 handle, no authorization area at all), then parameters
+    /// (auth as TPM2B_AUTH, hint as TPM2B_SIGNATURE_HINT, context as TPM2B_SIGNATURE_CTX — Table 89's own field
+    /// order). Table 89 fixes the tag to <c>TPM_ST_NO_SESSIONS</c> ordinarily, conditional on an audit or
+    /// decrypt session, exactly as <see cref="TryParseSignSequenceStart"/>'s own doc comment explains; this
+    /// simulator parses no such session area on a handle-less command, so it refuses the <c>TPM_ST_SESSIONS</c>
+    /// form deterministically.
+    /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the parse-rented sequence-auth, hint and context carriers transfers to the constructed request input, whose consuming transition adopts the auth into the new sequence and disposes the hint and context once their emptiness is confirmed, and whose refusing arms dispose all three through the input's own Dispose; the already-rented hint is released in every catch arm around the context parse (the two mapped exceptions and the general one), and a rent that fails after the sequence-auth carrier already succeeded releases hint and context in the final catch before rethrowing.")]
+    private static bool TryParseVerifySequenceStart(ref TpmReader reader, ushort tag, BaseMemoryPool pool, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
+    {
+        input = null;
+        malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
+
+        if(tag != (ushort)TpmStConstants.TPM_ST_NO_SESSIONS)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_BAD_TAG;
+
+            return false;
+        }
+
+        //Handle area: keyHandle (the key the opened sequence will complete under; no authorization area).
+        if(reader.Remaining < sizeof(uint))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        uint keyHandle = reader.ReadUInt32();
+
+        //Parameter: auth (TPM2B_AUTH) — bound-first against MaxSize (64, TPM_RC_SIZE), matching the structure's
+        //own Parse throw (TPM 2.0 Library Part 2, clause 10.3.5).
+        if(!TryReadTpm2bSpanBounded(ref reader, Tpm2bAuth.MaxSize, out ReadOnlySpan<byte> auth, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //Parameter: hint (TPM2B_SIGNATURE_HINT) — bound-first against MaxSize (57, TPM_RC_SIZE).
+        Tpm2bSignatureHint hint;
+        try
+        {
+            hint = Tpm2bSignatureHint.Parse(ref reader, pool);
+        }
+        catch(InvalidOperationException)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+        catch(ArgumentOutOfRangeException)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        //Parameter: context (TPM2B_SIGNATURE_CTX) — bound-first against MaxSize (255, TPM_RC_SIZE).
+        Tpm2bSignatureCtx context;
+        try
+        {
+            context = Tpm2bSignatureCtx.Parse(ref reader, pool);
+        }
+        catch(InvalidOperationException)
+        {
+            hint.Dispose();
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+        catch(ArgumentOutOfRangeException)
+        {
+            hint.Dispose();
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+        catch
+        {
+            //Any other failure inside Parse (a pool exhaustion on the rent, for instance) still leaves the
+            //already-rented hint with no other owner; release it before rethrowing rather than trusting the two
+            //mapped catches above to be exhaustive.
+            hint.Dispose();
+
+            throw;
+        }
+
+        //context is the final parameter; no octets may follow it (Part 3, 5.2).
+        if(reader.Remaining != 0)
+        {
+            hint.Dispose();
+            context.Dispose();
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+
+        //The owned pooled auth carrier is rented as the parse's last act, after every wire check has passed, so
+        //no refused parse ever creates one.
+        Tpm2bAuth sequenceAuth = Tpm2bAuth.Empty;
+        try
+        {
+            sequenceAuth = Tpm2bAuth.Create(auth, pool);
+            input = new TpmVerifySequenceStartRequested(TpmiDhObject.FromValue(keyHandle), sequenceAuth, hint, context);
+        }
+        catch
+        {
+            sequenceAuth.Dispose();
+            hint.Dispose();
+            context.Dispose();
+            throw;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// <c>TPM2_VerifySequenceComplete()</c> authorizes its sequence handle only (TPM 2.0 Library Part 3, clause
+    /// 20.3, Table 118: <c>@sequenceHandle</c> USER, <c>keyHandle</c> Auth Index None), so its wire layout after
+    /// the header is: handle area (2 handles), authorization area (the sequence's slot — a <c>TPM_RS_PW</c>
+    /// password or a real session — and up to two companion slots), then the one parameter (signature as
+    /// TPMT_SIGNATURE — sigAlg selecting the union member; the verification schemes this simulator executes here
+    /// are the asymmetric ones TPM2_VerifyDigestSignature() admits plus TPM_ALG_HMAC, Table 115's
+    /// message-verifying row). A <c>TPMT_SIGNATURE</c> has no size field, so no decrypt session can protect it
+    /// (Part 1, clause 18.1) and it is decoded on both forms alike. A lone all-password area parses to
+    /// <see cref="TpmVerifySequenceCompleteRequested"/>; every other area to
+    /// <see cref="TpmVerifySequenceCompleteOverSessionRequested"/>.
+    /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the parse-rented carriers transfers to the constructed request input — the password form's password and signature, or the session form's authorization area, signature and raw parameter area — whose consuming transitions release or transfer each, and whose refusing arms dispose them all through the input's own Dispose; a rent that fails after an earlier carrier already succeeded releases it in the catch before rethrowing.")]
+    private static bool TryParseVerifySequenceComplete(ref TpmReader reader, ushort tag, BaseMemoryPool pool, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
+    {
+        input = null;
+        malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
+
+        if(tag != (ushort)TpmStConstants.TPM_ST_SESSIONS)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_AUTH_MISSING;
+
+            return false;
+        }
+
+        //Handle area: @sequenceHandle then keyHandle (no authorization area of its own).
+        if(reader.Remaining < 2 * sizeof(uint))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        TpmiDhObject sequenceHandle = TpmiDhObject.FromValue(reader.ReadUInt32());
+        TpmiDhObject keyHandle = TpmiDhObject.FromValue(reader.ReadUInt32());
+
+        if(!TryReadAuthorizationAreaSpans(ref reader, authorizingCount: 1, out AuthorizationAreaSpans area, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //The parameter set (signature alone) is every octet left after the authorization area — captured
+        //verbatim as the session arm's cpHash parameter term (Part 1, clause 15.7 equation 15).
+        ReadOnlySpan<byte> rawParameterAreaOctets = reader.PeekBytes(reader.Remaining);
+        bool isAllPassword = area.IsAllPassword(authorizingCount: 1);
+
+        //Parameter: signature (TPMT_SIGNATURE) — sigAlg (TPMI_ALG_SIG_SCHEME) selects the union member.
+        if(reader.Remaining < sizeof(ushort))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        TpmiAlgSigScheme sigAlg = TpmiAlgSigScheme.FromValue((TpmAlgIdConstants)reader.ReadUInt16());
+        if(sigAlg.Value is not (TpmAlgIdConstants.TPM_ALG_ECDSA or TpmAlgIdConstants.TPM_ALG_RSASSA or TpmAlgIdConstants.TPM_ALG_RSAPSS or TpmAlgIdConstants.TPM_ALG_HMAC))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_SCHEME;
+
+            return false;
+        }
+
+        //The post-gate TPMT_SIGNATURE body (hashAlg plus the sigAlg-selected member) is the shared helper's job,
+        //exactly as TryParseVerifyDigestSignature delegates to it; it rents the pooled signature carrier as its
+        //own last act.
+        if(!TryParseTpmtSignatureBody(ref reader, sigAlg, pool, out TpmtSignature? signature, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //signature is the final parameter; no octets may follow it (Part 3, 5.2).
+        if(reader.Remaining != 0)
+        {
+            signature.Dispose();
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+
+        TpmiAlgHash schemeHashAlg = TpmiAlgHash.FromValue(signature.Signature.HashAlgorithm);
+
+        //Either form's remaining owned carriers are rented here, the parse's last act after every wire check
+        //has passed, so no refused parse ever creates one.
+        if(isAllPassword)
+        {
+            Tpm2bAuth suppliedSequencePassword = Tpm2bAuth.Empty;
+            try
+            {
+                suppliedSequencePassword = Tpm2bAuth.Create(area.Hmac0, pool);
+                input = new TpmVerifySequenceCompleteRequested(sequenceHandle, keyHandle, suppliedSequencePassword, sigAlg, schemeHashAlg, signature);
+            }
+            catch
+            {
+                suppliedSequencePassword.Dispose();
+                signature.Dispose();
+                throw;
+            }
+
+            return true;
+        }
+
+        TpmAuthorizationArea? authorizationArea = null;
+        TpmParameterArea parameterArea = TpmParameterArea.Empty;
+        try
+        {
+            authorizationArea = RentAuthorizationArea(in area, authorizingCount: 1, pool);
+            parameterArea = TpmParameterArea.Create(rawParameterAreaOctets, pool);
+            input = new TpmVerifySequenceCompleteOverSessionRequested(sequenceHandle, keyHandle, authorizationArea, sigAlg, schemeHashAlg, signature, parameterArea);
+        }
+        catch
+        {
+            parameterArea.Dispose();
+            authorizationArea?.Dispose();
+            signature.Dispose();
             throw;
         }
 
@@ -8725,12 +14917,12 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// </summary>
     /// <remarks>
     /// inPublic's Name algorithm, authorization policy, and DA attribute are decoded here (never subject to
-    /// parameter encryption, Part 1 clause 21.1); inSensitive's nested userAuth/data are NOT — a decrypt session
+    /// parameter encryption, Part 1 clause 20.1); inSensitive's nested userAuth/data are NOT — a decrypt session
     /// may still leave them ciphertext at this point — so only the raw parameter-area bytes are captured for the
     /// session-authorized form, decoded later once the command HMAC(s) verify and (if present) the decrypt
-    /// session has run (<c>TpmCreateSealedObjectOverSessionsRequested</c>; Part 3, clause 5.6 precedes clause
+    /// session has run (<c>TpmCreateKeyedHashOverSessionsRequested</c>; Part 3, clause 5.6 precedes clause
     /// 5.7). The first session generically parses as either TPM_RS_PW or a real HMAC session; a single
-    /// TPM_RS_PW session (no decrypt companion) is the plain form (<c>TpmCreateSealedObjectRequested</c>),
+    /// TPM_RS_PW session (no decrypt companion) is the plain form (<c>TpmCreateKeyedHashRequested</c>),
     /// decoded immediately without decryption. The parent's storage attributes are checked in the transition
     /// (which holds the loaded-object state).
     /// </remarks>
@@ -8795,10 +14987,18 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             catch(InvalidOperationException)
             {
                 //TPMS_SENSITIVE_CREATE.userAuth is a TPM2B_AUTH, bounded by sizeof(TPMU_HA) (TPM 2.0 Library
-                //Part 2, clause 10.4.5, Table 95 over clause 10.4.2, Table 92), so a wider declared size is
+                //Part 2, clause 10.3.5, Table 93 over clause 10.3.2, Table 90), so a wider declared size is
                 //TPM_RC_SIZE. The structure parser's only refusal channel is the throw, and an unmarshaling
                 //error means no command processing occurs (Part 3, clause 5.8.2).
                 malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+                return false;
+            }
+            catch(ArgumentOutOfRangeException)
+            {
+                //An interior width past the octets that remain is a truncated frame, TPM_RC_INSUFFICIENT
+                //(Part 3, clause 5.8.2, Table 2).
+                malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
 
                 return false;
             }
@@ -8816,6 +15016,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                 TpmiAlgHash plainNameAlg;
                 bool plainNoDa;
                 bool plainUserWithAuth;
+                TpmaObject plainTemplateAttributes;
+                TpmsKeyedHashParms plainScheme;
 
                 //The scoped public area releases its own policy carrier at the using below, so the digest the
                 //request retains is copied into a carrier of its own inside that scope — the only place the
@@ -8830,12 +15032,24 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                 }
                 catch(InvalidOperationException)
                 {
-                    //A TPM2B_DIGEST is bounded by sizeof(TPMU_HA) (TPM 2.0 Library Part 2, clause 10.4.2, Table
+                    //A TPM2B_DIGEST is bounded by sizeof(TPMU_HA) (TPM 2.0 Library Part 2, clause 10.3.2, Table
                     //92) and the public area's authPolicy is one, so a wider declared size is TPM_RC_SIZE. The
                     //parse is what answers it: the structure parser's only refusal channel is the throw, and an
                     //unmarshaling error means no command processing occurs (Part 3, clause 5.8.2). Nothing has
-                    //been rented for the refused frame yet — the policy carrier is still the empty sentinel.
+                    //been rented for the refused frame yet — the policy carrier is still the empty sentinel. The
+                    //same channel answers the public area's own interface-level refusals — a keyed-hash scheme
+                    //selector outside Table 175 (#TPM_RC_VALUE) or a hash value outside Table 77 (#TPM_RC_HASH),
+                    //Part 2, clauses 11.1.19 and 9.31 — which this simulator collapses to TPM_RC_SIZE rather than
+                    //carrying a per-field code out of the parse.
                     malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+                    return false;
+                }
+                catch(ArgumentOutOfRangeException)
+                {
+                    //A declared inPublic width past the octets that remain is a truncated frame,
+                    //TPM_RC_INSUFFICIENT (Part 3, clause 5.8.2, Table 2).
+                    malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
 
                     return false;
                 }
@@ -8847,6 +15061,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                     plainAuthPolicy = Tpm2bDigest.Create(inPublic.PublicArea.AuthPolicy.AsReadOnlySpan(), pool);
                     plainNoDa = (inPublic.PublicArea.ObjectAttributes & TpmaObject.NO_DA) != 0;
                     plainUserWithAuth = (inPublic.PublicArea.ObjectAttributes & TpmaObject.USER_WITH_AUTH) != 0;
+                    plainTemplateAttributes = inPublic.PublicArea.ObjectAttributes;
+                    plainScheme = inPublic.PublicArea.Parameters.KeyedHashDetail ?? TpmsKeyedHashParms.SealedData;
                 }
 
                 if(plainObjectType.Value != TpmAlgIdConstants.TPM_ALG_KEYEDHASH)
@@ -8857,16 +15073,69 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                     return false;
                 }
 
-                if(!TrySkipTpm2b(ref reader, out malformedResponseCode))
+                //Parameter: outsideInfo (TPM2B_DATA) — included in creation data (TPM 2.0 Library Part 2,
+                //clause 10.3.3, Table 101; Part 3, clause 12.1, Table 18). Probed on a by-value reader copy
+                //first, exactly as TryParseCreatePrimary's own capture: an over-bound declared size answers
+                //TPM_RC_SIZE ahead of the truncation check; either refusal here must still dispose the
+                //already-rented plainAuthPolicy.
+                TpmReader outsideInfoProbe = reader;
+                if(!TryProbeOutsideInfo(ref outsideInfoProbe, out malformedResponseCode))
                 {
                     plainAuthPolicy.Dispose();
 
                     return false;
                 }
 
-                if(!TrySkipPcrSelection(ref reader, out malformedResponseCode))
+                Tpm2bData outsideInfo;
+                try
+                {
+                    outsideInfo = Tpm2bData.Parse(ref reader, pool);
+                }
+                catch(InvalidOperationException)
+                {
+                    //TPM2B_DATA's buffer is bounded by sizeof(TPMT_HA) (TPM 2.0 Library Part 2, clause 10.3.3,
+                    //Table 91), so a wider declared size is TPM_RC_SIZE.
+                    plainAuthPolicy.Dispose();
+                    malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+                    return false;
+                }
+
+                //Parameter: creationPCR (TPML_PCR_SELECTION) — the PCR that will be used in creation data (TPM
+                //2.0 Library Part 2, clause 10.8.7, Table 128; Part 3, clause 12.1, Table 18). An over-bound
+                //declared count answers TPM_RC_SIZE ahead of the truncation check. Either refusal here must
+                //dispose both plainAuthPolicy and the already-captured outsideInfo.
+                TpmReader creationPcrProbe = reader;
+                if(!TrySkipPcrSelection(ref creationPcrProbe, out malformedResponseCode))
                 {
                     plainAuthPolicy.Dispose();
+                    outsideInfo.Dispose();
+
+                    return false;
+                }
+
+                TpmlPcrSelection creationPcr;
+                try
+                {
+                    creationPcr = TpmlPcrSelection.Parse(ref reader, pool);
+                }
+                catch(InvalidOperationException)
+                {
+                    //A list naming more banks than the list admits is out of its declared bound (TPM
+                    //2.0 Library Part 2, clause 10.8.7, Table 128: #TPM_RC_SIZE).
+                    plainAuthPolicy.Dispose();
+                    outsideInfo.Dispose();
+                    malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+                    return false;
+                }
+                catch(ArgumentOutOfRangeException)
+                {
+                    //A selection whose sizeofSelect lies outside PCR_SELECT_MIN..PCR_SELECT_MAX is out of the
+                    //member's own declared bounds (TPM 2.0 Library Part 2, clause 10.5.2, Table 107: #TPM_RC_VALUE).
+                    plainAuthPolicy.Dispose();
+                    outsideInfo.Dispose();
+                    malformedResponseCode = TpmRcConstants.TPM_RC_VALUE;
 
                     return false;
                 }
@@ -8883,9 +15152,9 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                     //pooled carrier to the consuming transition's compare against the parent's retained
                     //authValue; an empty password is the dispose-immune sentinel.
                     suppliedParentPassword = Tpm2bAuth.Create(firstHmac, pool);
-                    input = new TpmCreateSealedObjectRequested(
-                        TpmiDhObject.FromValue(parentHandle), suppliedParentPassword, plainNameAlg, plainAuthPolicy, plainNoDa, plainUserWithAuth,
-                        secretData, Tpm2bAuth.Create(inSensitive.Sensitive.UserAuth.AsReadOnlySpan(), pool));
+                    input = new TpmCreateKeyedHashRequested(
+                        TpmiDhObject.FromValue(parentHandle), suppliedParentPassword, plainNameAlg, plainAuthPolicy, plainNoDa, plainUserWithAuth, plainTemplateAttributes,
+                        plainScheme, secretData, Tpm2bAuth.Create(inSensitive.Sensitive.UserAuth.AsReadOnlySpan(), pool), outsideInfo, creationPcr);
                 }
                 catch
                 {
@@ -8894,6 +15163,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                     plainAuthPolicy.Dispose();
                     secretData.Dispose();
                     suppliedParentPassword.Dispose();
+                    outsideInfo.Dispose();
+                    creationPcr.Dispose();
                     throw;
                 }
 
@@ -8955,7 +15226,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             decryptSlotCredential = Tpm2bAuth.Create(decryptHmac, pool);
             parameterArea = TpmParameterArea.Create(rawParameterAreaOctets, pool);
 
-            input = new TpmCreateSealedObjectOverSessionsRequested(
+            input = new TpmCreateKeyedHashOverSessionsRequested(
                 TpmiDhObject.FromValue(parentHandle), firstHandle, firstSlotNonce, firstAttributes, firstSlotCredential,
                 !isSingleSession, decryptHandle, decryptSlotNonce, decryptAttributes, decryptSlotCredential,
                 parameterArea);
@@ -8976,6 +15247,179 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     }
 
     /// <summary>
+    /// Parses <c>TPM2_Import()</c> (TPM 2.0 Library Part 3, clause 13.3): the parent handle, its password
+    /// authorization, then <c>encryptionKey</c> (a <c>TPM2B_DATA</c>), <c>objectPublic</c> (a
+    /// <c>TPM2B_PUBLIC</c>), <c>duplicate</c> (a <c>TPM2B_PRIVATE</c>), <c>inSymSeed</c> (a
+    /// <c>TPM2B_ENCRYPTED_SECRET</c>, empty for a <c>TPM_RH_NULL</c>-parent duplicate), and
+    /// <c>symmetricAlg</c> (a <c>TPMT_SYM_DEF_OBJECT+</c>). The modeled form is the no-inner-wrapper one: a
+    /// non-NULL <c>symmetricAlg</c> is refused <c>TPM_RC_SYMMETRIC</c> before its key-size and mode fields are
+    /// ever read, and a non-empty <c>encryptionKey</c> beside it is a structure of the wrong size
+    /// (<c>TPM_RC_SIZE</c> via clause 5.8.2, Table 2) — the same rulings <c>TPM2_Duplicate()</c>'s parse
+    /// applies to the same pair.
+    /// </summary>
+    /// <param name="reader">The reader positioned after the header.</param>
+    /// <param name="tag">The command tag; a sessions tag is required for the authorized parent slot.</param>
+    /// <param name="pool">The memory pool the request's carriers are rented from.</param>
+    /// <param name="input">The parsed request on success.</param>
+    /// <param name="malformedResponseCode">The refusal code on failure.</param>
+    /// <returns><see langword="true"/> when the command parsed.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of every rented carrier transfers to the returned TpmImportRequested, whose refusing arms release them through its own Dispose; a rent that fails after earlier ones succeeded releases them in the catch before rethrowing.")]
+    private static bool TryParseImport(ref TpmReader reader, ushort tag, BaseMemoryPool pool, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
+    {
+        input = null;
+        malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
+
+        if(tag != (ushort)TpmStConstants.TPM_ST_SESSIONS)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_AUTH_MISSING;
+
+            return false;
+        }
+
+        //Handle area: @parentHandle (the loaded storage parent).
+        if(reader.Remaining < sizeof(uint))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        uint parentHandle = reader.ReadUInt32();
+
+        if(!TryReadPasswordAuthArea(ref reader, out ReadOnlySpan<byte> suppliedAuth, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //encryptionKey: prefix, bound, remaining — the modeled NULL form requires the Empty Buffer.
+        if(reader.Remaining < sizeof(ushort))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        ushort encryptionKeyLength = reader.ReadUInt16();
+        if(encryptionKeyLength > reader.Remaining)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        if(encryptionKeyLength != 0)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+
+        //objectPublic: the duplicated object's public area, whose marshaled TPMT_PUBLIC the Name is hashed over.
+        if(reader.Remaining < sizeof(ushort))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        Tpm2bPublic objectPublic;
+        try
+        {
+            objectPublic = Tpm2bPublic.Parse(ref reader, pool);
+        }
+        catch(InvalidOperationException)
+        {
+            //The public area's own bounded interior (its authPolicy digest) declared a size past its type's
+            //bound; the structure parser's only refusal channel is the throw (the TPM2_Load() parse's ruling
+            //for the same field). The same channel answers the public area's interface-level refusals — a
+            //keyed-hash scheme selector outside Table 175 (#TPM_RC_VALUE) or a hash value outside Table 77
+            //(#TPM_RC_HASH), Part 2, clauses 11.1.19 and 9.31 — which this simulator collapses to TPM_RC_SIZE
+            //rather than carrying a per-field code out of the parse.
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+        catch(ArgumentOutOfRangeException)
+        {
+            //The declared public-area size ran past the frame's end.
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        //Everything after the public area is read against its carrier already being rented, so every refusal
+        //below releases it.
+        TpmiAlgPublic objectType = TpmiAlgPublic.FromValue(objectPublic.PublicArea.Type);
+        TpmiAlgHash nameAlg = TpmiAlgHash.FromValue(objectPublic.PublicArea.NameAlg);
+        TpmaObject templateAttributes = objectPublic.PublicArea.ObjectAttributes;
+
+        //duplicate: unbounded like TPM2_Load()'s inPrivate (Table 243 bounds it by implementation storage
+        //alone), so truncation is its only wire refusal.
+        if(!TryReadTpm2bSpan(ref reader, out ReadOnlySpan<byte> duplicateSpan, out malformedResponseCode))
+        {
+            objectPublic.Dispose();
+
+            return false;
+        }
+
+        //inSymSeed: bounded by its union's largest arm (TPM 2.0 Library Part 2, clause 11.4.3, Table 224).
+        if(!TryReadTpm2bSpanBounded(ref reader, Tpm2bEncryptedSecret.MaxSize, out ReadOnlySpan<byte> inSymSeedSpan, out malformedResponseCode))
+        {
+            objectPublic.Dispose();
+
+            return false;
+        }
+
+        if(reader.Remaining < sizeof(ushort))
+        {
+            objectPublic.Dispose();
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        ushort symmetricAlg = reader.ReadUInt16();
+        if(symmetricAlg != (ushort)TpmAlgIdConstants.TPM_ALG_NULL)
+        {
+            objectPublic.Dispose();
+            malformedResponseCode = TpmRcConstants.TPM_RC_SYMMETRIC;
+
+            return false;
+        }
+
+        if(reader.Remaining != 0)
+        {
+            objectPublic.Dispose();
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+
+        //The remaining carriers are rented as the parse's last act, so a failing later rent releases every
+        //earlier one before rethrowing and no refused parse leaves a rental behind.
+        Tpm2bAuth suppliedParentPassword = Tpm2bAuth.Empty;
+        Tpm2bPrivate duplicate = Tpm2bPrivate.Empty;
+        try
+        {
+            suppliedParentPassword = Tpm2bAuth.Create(suppliedAuth, pool);
+            duplicate = Tpm2bPrivate.Create(duplicateSpan, pool);
+            input = new TpmImportRequested(
+                TpmiDhObject.FromValue(parentHandle), suppliedParentPassword, objectType, nameAlg, templateAttributes,
+                objectPublic, duplicate, Tpm2bEncryptedSecret.Create(inSymSeedSpan, pool));
+        }
+        catch
+        {
+            duplicate.Dispose();
+            suppliedParentPassword.Dispose();
+            objectPublic.Dispose();
+            throw;
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// <c>TPM2_Load()</c> is authorized: handle area (@parentHandle, 1 handle), authorization area (a single
     /// password session), then parameters (inPrivate as TPM2B_PRIVATE, inPublic as TPM2B_PUBLIC).
     /// </summary>
@@ -8984,7 +15428,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// retained so the effect can compute the object Name (TPM 2.0 Library Part 3, clause 12.2).
     /// </remarks>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-        Justification = "Ownership of the parse-rented parent-password carrier transfers to the constructed request input, whose consuming transition releases it once the parent-slot compare has consumed it, and whose refusing arms dispose it through the input's own Dispose.")]
+        Justification = "Ownership of the parse-rented parent-password, authPolicy, public-area and private-blob carriers transfers to the constructed request input: the consuming transition releases the password once the parent-slot compare has consumed it and threads the policy digest, the public area, and the private blob into the load action, whose effect is their terminal owner, while every refusing arm disposes all four through the input's own Dispose.")]
     private static bool TryParseLoad(ref TpmReader reader, ushort tag, BaseMemoryPool pool, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
     {
         input = null;
@@ -9012,8 +15456,12 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return false;
         }
 
-        //Parameter: inPrivate (TPM2B_PRIVATE) — the wrapped blob, copied into durable model memory.
-        if(!TryReadTpm2b(ref reader, out ReadOnlyMemory<byte> privateBlob, out malformedResponseCode))
+        //Parameter: inPrivate (TPM2B_PRIVATE) — the wrapped blob, aliasing the command buffer until the parse's
+        //last act rents it into durable model memory. TPM2B_PRIVATE carries no small fixed maximum (Table 243
+        //bounds it only by implementation storage), so unlike inPublic's authPolicy below this field is read
+        //with no width bound: a short prefix or a declared size the remaining octets cannot cover is
+        //TPM_RC_INSUFFICIENT (Part 3, clause 5.8.2, Table 2), and nothing here maps it to TPM_RC_SIZE.
+        if(!TryReadTpm2bSpan(ref reader, out ReadOnlySpan<byte> privateBlobSpan, out malformedResponseCode))
         {
             return false;
         }
@@ -9034,11 +15482,22 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         }
         catch(InvalidOperationException)
         {
-            //A TPM2B_DIGEST is bounded by sizeof(TPMU_HA) (TPM 2.0 Library Part 2, clause 10.4.2, Table 92) and
+            //A TPM2B_DIGEST is bounded by sizeof(TPMU_HA) (TPM 2.0 Library Part 2, clause 10.3.2, Table 90) and
             //the loaded public area's authPolicy is one, so a wider declared size is TPM_RC_SIZE. The parse is
             //what answers it: the structure parser's only refusal channel is the throw, and an unmarshaling
-            //error means no command processing occurs (Part 3, clause 5.8.2).
+            //error means no command processing occurs (Part 3, clause 5.8.2). The same channel answers the public
+            //area's interface-level refusals — a keyed-hash scheme selector outside Table 175 (#TPM_RC_VALUE) or a
+            //hash value outside Table 77 (#TPM_RC_HASH), Part 2, clauses 11.1.19 and 9.31 — which this simulator
+            //collapses to TPM_RC_SIZE rather than carrying a per-field code out of the parse.
             malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+        catch(ArgumentOutOfRangeException)
+        {
+            //A declared inPublic width past the octets that remain is a truncated frame, TPM_RC_INSUFFICIENT
+            //(Part 3, clause 5.8.2, Table 2).
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
 
             return false;
         }
@@ -9054,6 +15513,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         //public-area attributes, not sensitive-area state (which travels through the private blob instead).
         bool noDa = (inPublic.PublicArea.ObjectAttributes & TpmaObject.NO_DA) != 0;
         bool userWithAuth = (inPublic.PublicArea.ObjectAttributes & TpmaObject.USER_WITH_AUTH) != 0;
+        TpmaObject templateAttributes = inPublic.PublicArea.ObjectAttributes;
 
         //The remaining carriers are rented as the parse's last act, inside the multi-carrier guard: the
         //authPolicy the loaded public area carries needs a carrier of its own because the load effect transfers
@@ -9061,24 +15521,143 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         //public area the request owns, and the parent password is compared once by the consuming transition.
         Tpm2bDigest authPolicy = Tpm2bDigest.Empty;
         Tpm2bAuth suppliedParentPassword = Tpm2bAuth.Empty;
+        Tpm2bPrivate privateBlob = Tpm2bPrivate.Empty;
         try
         {
             authPolicy = Tpm2bDigest.Create(inPublic.PublicArea.AuthPolicy.AsReadOnlySpan(), pool);
             suppliedParentPassword = Tpm2bAuth.Create(suppliedAuth, pool);
+            privateBlob = Tpm2bPrivate.Create(privateBlobSpan, pool);
 
             input = new TpmLoadObjectRequested(
                 TpmiDhObject.FromValue(parentHandle), suppliedParentPassword, objectType, nameAlg, authPolicy,
-                noDa, userWithAuth, inPublic, privateBlob);
+                noDa, userWithAuth, templateAttributes, inPublic, privateBlob);
         }
         catch
         {
             //These carriers' only owner is this frame until the request adopts them, so a failing later rent
             //must release every earlier one or the rentals are orphaned.
+            privateBlob.Dispose();
             suppliedParentPassword.Dispose();
             authPolicy.Dispose();
             inPublic.Dispose();
             throw;
         }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Parses <c>TPM2_Duplicate()</c> (TPM 2.0 Library Part 3, clause 13.1): two handles, the object slot's
+    /// DUP-role session, then <c>encryptionKeyIn</c> (a <c>TPM2B_DATA</c>) and <c>symmetricAlg</c> (a
+    /// <c>TPMT_SYM_DEF_OBJECT+</c>). The modeled form is the no-inner-wrapper one: a <c>symmetricAlg</c> other
+    /// than <c>TPM_ALG_NULL</c> is refused <c>TPM_RC_SYMMETRIC</c> before its key-size and mode fields are ever
+    /// read (the NULL selector carries neither), and a non-empty <c>encryptionKeyIn</c> beside the NULL
+    /// selector is a structure of the wrong size (clause 13.1 has it "shall be the Empty Buffer" and names no
+    /// code, so clause 5.8.2, Table 2's size-parameter code answers). The raw parameter area — the term a DUP-role
+    /// policy session's cpHash or pHash binding is judged against — is the request's one carrier, rented as the
+    /// parse's last act, so no refused parse ever rents.
+    /// </summary>
+    /// <param name="reader">The reader positioned after the header.</param>
+    /// <param name="tag">The command tag; a sessions tag is required for the authorized object slot.</param>
+    /// <param name="pool">The memory pool the raw parameter area is rented from.</param>
+    /// <param name="input">The parsed request on success.</param>
+    /// <param name="malformedResponseCode">The refusal code on failure.</param>
+    /// <returns><see langword="true"/> when the command parsed.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the parse-rented parameter area transfers to the constructed request input, which the refusing transitions, the binding-mismatch path and the accepting continuation each release through the input's own Dispose.")]
+    private static bool TryParseDuplicate(ref TpmReader reader, ushort tag, BaseMemoryPool pool, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
+    {
+        input = null;
+        malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
+
+        if(tag != (ushort)TpmStConstants.TPM_ST_SESSIONS)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_AUTH_MISSING;
+
+            return false;
+        }
+
+        //Handle area: @objectHandle (DUP-role auth) then newParentHandle (no auth).
+        if(reader.Remaining < 2 * sizeof(uint))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        uint objectHandle = reader.ReadUInt32();
+        uint newParentHandle = reader.ReadUInt32();
+
+        if(!TryBeginAuthArea(ref reader, out int sessionsStart, out uint authorizationSize, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        if(!TryReadCommandSessionSpans(ref reader, sessionIndex: 0, out TpmiShAuthSession sessionHandle, out ReadOnlySpan<byte> _, out TpmaSession _, out ReadOnlySpan<byte> _, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        if(!TryEndAuthArea(ref reader, sessionsStart, authorizationSize, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //Duplicate's entire parameter set (encryptionKeyIn ‖ symmetricAlg) is every octet left after the
+        //authorization area — captured verbatim, before either field is decoded, as the term a DUP-role policy
+        //session's cpHash or pHash binding is judged against (Part 1, clause 15.7 equation 15; Part 4
+        //CompareParametersHash reads command->parameterBuffer).
+        ReadOnlySpan<byte> rawParameterAreaOctets = reader.PeekBytes(reader.Remaining);
+
+        //encryptionKeyIn: prefix, bound, remaining — a declared size past the frame's end is a shortfall, and a
+        //non-empty value beside the NULL symmetricAlg below is the wrong-size refusal.
+        if(reader.Remaining < sizeof(ushort))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        ushort encryptionKeyLength = reader.ReadUInt16();
+        if(encryptionKeyLength > reader.Remaining)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        if(encryptionKeyLength != 0)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+
+        if(reader.Remaining < sizeof(ushort))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        ushort symmetricAlg = reader.ReadUInt16();
+        if(symmetricAlg != (ushort)TpmAlgIdConstants.TPM_ALG_NULL)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_SYMMETRIC;
+
+            return false;
+        }
+
+        if(reader.Remaining != 0)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+
+        //The raw parameter area is rented as the parse's last act, after every wire check has passed.
+        input = new TpmDuplicateRequested(
+            TpmiDhObject.FromValue(objectHandle), TpmiDhObject.FromValue(newParentHandle), sessionHandle, TpmParameterArea.Create(rawParameterAreaOctets, pool));
 
         return true;
     }
@@ -9292,7 +15871,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         }
 
         //Octets left inside the declared authorization size after the last REQUIRED slot are a companion slot
-        //(Part 1, clause 16.6.1, Table 9, position after the authorization sessions).
+        //(Part 1, clause 15.6.1, Table 12, position after the authorization sessions).
         bool hasCompanion = reader.Consumed - sessionsStart != (int)authorizationSize;
         TpmiShAuthSession companionSessionHandle = TpmiShAuthSession.FromValue(0);
         TpmaSession companionSessionAttributes = default;
@@ -9315,7 +15894,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
         //The parameter set (qualifyingData ‖ inScheme) is every octet left after the authorization area —
         //captured verbatim, before any field is decoded, as the session arm's cpHash parameter term (Part 1,
-        //clause 16.7 equation 15).
+        //clause 15.7 equation 15).
         ReadOnlySpan<byte> rawParameterAreaOctets = reader.PeekBytes(reader.Remaining);
 
         //Which arm the area belongs to is settled before the parameters are read, because it decides how
@@ -9325,7 +15904,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         bool isAllPassword = objectSessionHandle.IsPasswordSession && signSessionHandle.IsPasswordSession && !hasCompanion;
 
         //Parameter: qualifyingData (TPM2B_DATA) — the caller nonce echoed into the attestation, and the first
-        //command parameter, which is the one a decrypt session protects (Part 1, clause 16.4). On the session
+        //command parameter, which is the one a decrypt session protects (Part 1, clause 15.4). On the session
         //form these octets may be CIPHERTEXT, so the parse only steps over the field's framing to reach the
         //parameters behind it and the decrypt step supplies the plaintext (Part 3, clause 5.7 precedes clause
         //5.8); decoding here would also be futile, since a separately copied field is not updated by the in-place
@@ -9339,7 +15918,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                 return false;
             }
 
-            //TPM2B_DATA is bounded by sizeof(TPMT_HA) (Part 2, clause 10.4.3, Table 93), so a wider value is
+            //TPM2B_DATA is bounded by sizeof(TPMT_HA) (Part 2, clause 10.3.3, Table 91), so a wider value is
             //TPM_RC_SIZE here, before any carrier is rented; the consuming transition's own bound check stands as
             //the fail-closed backstop. The session form's bound is applied to the RECOVERED value instead, which
             //is the only form of it TPM2B_DATA is about.
@@ -9390,7 +15969,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             suppliedSignHmac = Tpm2bAuth.Create(signHmac, pool);
 
             //Only the session arm retains the slots' caller nonces, so only it rents them — and it rents BOTH,
-            //because a mixed area's TPM_RS_PW slot still owes its own response entry (Part 1, clause 16.6.1).
+            //because a mixed area's TPM_RS_PW slot still owes its own response entry (Part 1, clause 15.6.1).
             objectNonce = isAllPassword ? Tpm2bNonce.Empty : Tpm2bNonce.Create(objectNonceCaller, pool);
             signNonce = isAllPassword ? Tpm2bNonce.Empty : Tpm2bNonce.Create(signNonceCaller, pool);
             companionCredential = hasCompanion ? Tpm2bAuth.Create(companionHmac, pool) : Tpm2bAuth.Empty;
@@ -9425,7 +16004,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// <summary>
     /// <c>TPM2_CertifyCreation()</c> is authorized and takes two handles, but only ONE requires authorization:
     /// the wire layout after the header is handle area (@signHandle first — USER role — then objectHandle,
-    /// Table 88, no auth), authorization area (the signHandle slot, either a <c>TPM_RS_PW</c> password or a real
+    /// Table 99, no auth), authorization area (the signHandle slot, either a <c>TPM_RS_PW</c> password or a real
     /// HMAC session, optionally followed by one or two companion slots authorizing nothing), then parameters
     /// (qualifyingData as TPM2B_DATA, creationHash as TPM2B_DIGEST, inScheme as TPMT_SIG_SCHEME, creationTicket
     /// as TPMT_TK_CREATION). A lone password slot parses to <see cref="TpmCertifyCreationRequested"/>; anything
@@ -9434,9 +16013,9 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// </summary>
     /// <remarks>
     /// The number of slots is read from the declared authorization size rather than assumed, the
-    /// <c>TPM2_Create()</c> idiom. One authorizing slot leaves BOTH of Table 9's later positions open, so the area
+    /// <c>TPM2_Create()</c> idiom. One authorizing slot leaves BOTH of Table 12's later positions open, so the area
     /// may carry two companions; <c>TryEndAuthArea</c> answers <c>TPM_RC_AUTHSIZE</c> for a fourth slot or any
-    /// surplus octet, which is the "no more than three" bound of Part 1, clause 16.6.1. The ticket's own
+    /// surplus octet, which is the "no more than three" bound of Part 1, clause 15.6.1. The ticket's own
     /// tag/hierarchy fields are consumed for correct framing but not retained: the transition/effect re-derive the
     /// hierarchy from the resolved object's own retained state rather than trust the caller-supplied fields (TPM
     /// 2.0 Library Part 3, clause 18.3).
@@ -9479,7 +16058,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         }
 
         //Octets left inside the declared authorization size after the last REQUIRED slot are a companion slot
-        //(Part 1, clause 16.6.1, Table 9, position after the authorization sessions).
+        //(Part 1, clause 15.6.1, Table 12, position after the authorization sessions).
         bool hasCompanion = reader.Consumed - sessionsStart != (int)authorizationSize;
         TpmiShAuthSession companionSessionHandle = TpmiShAuthSession.FromValue(0);
         TpmaSession companionSessionAttributes = default;
@@ -9495,9 +16074,9 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return false;
         }
 
-        //Octets STILL left after the first companion are a second one: with a single authorizing slot, Table 9's
+        //Octets STILL left after the first companion are a second one: with a single authorizing slot, Table 12's
         //positions 2 and 3 are both open, and each may be an encryption, decryption, or audit session (Part 1,
-        //clause 16.6.1). A fourth block would overrun the declared size, which TryEndAuthArea answers below.
+        //clause 15.6.1). A fourth block would overrun the declared size, which TryEndAuthArea answers below.
         bool hasSecondCompanion = reader.Consumed - sessionsStart != (int)authorizationSize;
         TpmiShAuthSession secondCompanionSessionHandle = TpmiShAuthSession.FromValue(0);
         TpmaSession secondCompanionSessionAttributes = default;
@@ -9517,7 +16096,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
         //The parameter set (qualifyingData ‖ creationHash ‖ inScheme ‖ creationTicket) is every octet left after
         //the authorization area — captured verbatim, before any field is decoded, as the session arm's cpHash
-        //parameter term (Part 1, clause 16.7 equation 15).
+        //parameter term (Part 1, clause 15.7 equation 15).
         ReadOnlySpan<byte> rawParameterAreaOctets = reader.PeekBytes(reader.Remaining);
 
         //Which arm the area belongs to is settled before the parameters are read, because it decides how
@@ -9526,7 +16105,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         bool isPasswordSlot = signSessionHandle.IsPasswordSession && !hasCompanion;
 
         //Parameter: qualifyingData (TPM2B_DATA) — the caller nonce echoed into the attestation, and the first
-        //command parameter, which is the one a decrypt session protects (Part 1, clause 16.4). On the session
+        //command parameter, which is the one a decrypt session protects (Part 1, clause 15.4). On the session
         //form these octets may be CIPHERTEXT, so the parse only steps over the field's framing to reach the
         //parameters behind it and the decrypt step supplies the plaintext (Part 3, clause 5.7 precedes clause
         //5.8); decoding here would also be futile, since a separately copied field is not updated by the in-place
@@ -9540,7 +16119,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                 return false;
             }
 
-            //TPM2B_DATA is bounded by sizeof(TPMT_HA) (Part 2, clause 10.4.3, Table 93), so a wider value is
+            //TPM2B_DATA is bounded by sizeof(TPMT_HA) (Part 2, clause 10.3.3, Table 91), so a wider value is
             //TPM_RC_SIZE here, before any carrier is rented; the consuming transition's own bound check stands as
             //the fail-closed backstop. The session form's bound is applied to the RECOVERED value instead, which
             //is the only form of it TPM2B_DATA is about.
@@ -9658,7 +16237,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// <summary>
     /// <c>TPM2_GetTime()</c> is authorized and takes two handles, both requiring authorization: the wire layout
     /// after the header is handle area (@privacyAdminHandle — fixed to TPM_RH_ENDORSEMENT — then @signHandle,
-    /// Table 99), authorization area (two sessions in handle order, each independently a <c>TPM_RS_PW</c> password
+    /// Table 107), authorization area (two sessions in handle order, each independently a <c>TPM_RS_PW</c> password
     /// or a real HMAC session, optionally followed by a companion slot authorizing nothing), then parameters
     /// (qualifyingData as TPM2B_DATA, inScheme as TPMT_SIG_SCHEME). An area of two LONE password slots parses to
     /// <see cref="TpmGetTimeRequested"/>; any other combination, including two password slots ALONGSIDE a
@@ -9692,7 +16271,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         }
 
         //The privacy-administrator slot's interface type admits only TPM_RH_ENDORSEMENT (Part 2, clause 9.20,
-        //Table 67); the value is carried as read and the transition answers TPM_RC_HANDLE for anything else, so
+        //Table 66); the value is carried as read and the transition answers TPM_RC_HANDLE for anything else, so
         //an out-of-set handle stays a response code rather than becoming an exception at the parse.
         TpmiRhEndorsement privacyAdminHandle = TpmiRhEndorsement.FromValue(reader.ReadUInt32());
         TpmiDhObject signHandle = TpmiDhObject.FromValue(reader.ReadUInt32());
@@ -9715,7 +16294,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         }
 
         //Octets left inside the declared authorization size after the last REQUIRED slot are a companion slot
-        //(Part 1, clause 16.6.1, Table 9, position after the authorization sessions).
+        //(Part 1, clause 15.6.1, Table 12, position after the authorization sessions).
         bool hasCompanion = reader.Consumed - sessionsStart != (int)authorizationSize;
         TpmiShAuthSession companionSessionHandle = TpmiShAuthSession.FromValue(0);
         TpmaSession companionSessionAttributes = default;
@@ -9738,7 +16317,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
         //The parameter set (qualifyingData ‖ inScheme) is every octet left after the authorization area —
         //captured verbatim, before any field is decoded, as the session arm's cpHash parameter term (Part 1,
-        //clause 16.7 equation 15).
+        //clause 15.7 equation 15).
         ReadOnlySpan<byte> rawParameterAreaOctets = reader.PeekBytes(reader.Remaining);
 
         //Which arm the area belongs to is settled before the parameters are read, because it decides how
@@ -9748,7 +16327,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         bool isAllPassword = privacyAdminSessionHandle.IsPasswordSession && signSessionHandle.IsPasswordSession && !hasCompanion;
 
         //Parameter: qualifyingData (TPM2B_DATA) — the caller nonce echoed into the attestation, and the first
-        //command parameter, which is the one a decrypt session protects (Part 1, clause 16.4). On the session
+        //command parameter, which is the one a decrypt session protects (Part 1, clause 15.4). On the session
         //form these octets may be CIPHERTEXT, so the parse only steps over the field's framing to reach the
         //parameters behind it and the decrypt step supplies the plaintext (Part 3, clause 5.7 precedes clause
         //5.8); decoding here would also be futile, since a separately copied field is not updated by the in-place
@@ -9762,7 +16341,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                 return false;
             }
 
-            //TPM2B_DATA is bounded by sizeof(TPMT_HA) (Part 2, clause 10.4.3, Table 93), so a wider value is
+            //TPM2B_DATA is bounded by sizeof(TPMT_HA) (Part 2, clause 10.3.3, Table 91), so a wider value is
             //TPM_RC_SIZE here, before any carrier is rented; the consuming transition's own bound check stands as
             //the fail-closed backstop. The session form's bound is applied to the RECOVERED value instead, which
             //is the only form of it TPM2B_DATA is about.
@@ -9813,7 +16392,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             suppliedSignHmac = Tpm2bAuth.Create(signHmac, pool);
 
             //Only the session arm retains the slots' caller nonces, so only it rents them — and it rents BOTH,
-            //because a mixed area's TPM_RS_PW slot still owes its own response entry (Part 1, clause 16.6.1).
+            //because a mixed area's TPM_RS_PW slot still owes its own response entry (Part 1, clause 15.6.1).
             privacyAdminNonce = isAllPassword ? Tpm2bNonce.Empty : Tpm2bNonce.Create(privacyAdminNonceCaller, pool);
             signNonce = isAllPassword ? Tpm2bNonce.Empty : Tpm2bNonce.Create(signNonceCaller, pool);
             companionCredential = hasCompanion ? Tpm2bAuth.Create(companionHmac, pool) : Tpm2bAuth.Empty;
@@ -10034,7 +16613,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
     /// <summary>
     /// <c>TPM2_Clear()</c> is authorized: handle area (<c>@authHandle</c>, 1 handle), authorization area (a
-    /// single session), then no parameters at all (TPM 2.0 Library Part 3, clause 24.6.2, Table 184).
+    /// single session), then no parameters at all (TPM 2.0 Library Part 3, clause 24.6.2, Table 201).
     /// </summary>
     /// <remarks>
     /// The authorization area is read generically with <c>TryReadCommandSessionSpans</c>, exactly as
@@ -10127,7 +16706,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// <summary>
     /// <c>TPM2_ClearControl()</c> is authorized: handle area (<c>@auth</c>, 1 handle), authorization area (a
     /// single session), then the sole parameter <c>disable</c> as a <c>TPMI_YES_NO</c> (TPM 2.0 Library Part 3,
-    /// clause 24.7.2, Table 186).
+    /// clause 24.7.2, Table 203).
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the parse-rented parameter-area carrier and of the authorization slot's own two credential carriers — its caller nonce and its supplied hmac — transfers to the constructed request input; the consuming continuation releases the credential and the parameter area per carrier and transfers the nonce into the response framing, and every refusing arm releases all three through the input's own Dispose; a rent that fails after an earlier carrier already succeeded releases it in the catch before rethrowing.")]
@@ -10169,7 +16748,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         }
 
         //The parameter area is captured verbatim before it is decoded, since it is cpHash's parameters term
-        //(Part 1, clause 16.7 equation 15).
+        //(Part 1, clause 15.7 equation 15).
         ReadOnlySpan<byte> rawParameterAreaOctets = reader.PeekBytes(reader.Remaining);
 
         //Parameter: disable (TPMI_YES_NO, a single octet).
@@ -10222,7 +16801,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// <summary>
     /// <c>TPM2_HierarchyControl()</c> is authorized: handle area (<c>@authHandle</c>, 1 handle), authorization
     /// area (a single session), then the parameters <c>enable</c> (<c>TPMI_RH_ENABLES</c>, a handle-valued
-    /// UINT32) and <c>state</c> (<c>TPMI_YES_NO</c>) (TPM 2.0 Library Part 3, clause 24.2.2, Table 176).
+    /// UINT32) and <c>state</c> (<c>TPMI_YES_NO</c>) (TPM 2.0 Library Part 3, clause 24.2.2, Table 193).
     /// </summary>
     /// <remarks>
     /// <c>enable</c> is a parameter that happens to carry a handle value, not a handle-area entry: it names the
@@ -10321,7 +16900,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// <summary>
     /// <c>TPM2_SetPrimaryPolicy()</c> is authorized: handle area (<c>@authHandle</c>, 1 handle), authorization
     /// area (a single session), then the parameters <c>authPolicy</c> (<c>TPM2B_DIGEST</c>) and <c>hashAlg</c>
-    /// (<c>TPMI_ALG_HASH+</c>, a UINT16) (TPM 2.0 Library Part 3, clause 24.3.2, Table 178).
+    /// (<c>TPMI_ALG_HASH+</c>, a UINT16) (TPM 2.0 Library Part 3, clause 24.3.2, Table 195).
     /// </summary>
     /// <remarks>
     /// <c>authPolicy</c> is a sized parameter, but it is a public digest rather than a secret, so this command
@@ -10374,8 +16953,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return false;
         }
 
-        //A TPM2B_DIGEST buffer can be no wider than sizeof(TPMU_HA) (TPM 2.0 Library Part 2, clause 10.4.2,
-        //Table 92), so the wire bound is answered here — ahead of the rental, whose Create refuses the same
+        //A TPM2B_DIGEST buffer can be no wider than sizeof(TPMU_HA) (TPM 2.0 Library Part 2, clause 10.3.2,
+        //Table 90), so the wire bound is answered here — ahead of the rental, whose Create refuses the same
         //bound by throwing. The installing transition's exact hashAlg-width gate stays as the fail-closed
         //backstop, so the size rule is proved at both layers.
         if(authPolicy.Length > Tpm2bDigest.MaxSize)
@@ -10435,7 +17014,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// <summary>
     /// <c>TPM2_HierarchyChangeAuth()</c> is authorized: handle area (<c>@authHandle</c>, 1 handle), authorization
     /// area (one or two sessions), then the sole parameter <c>newAuth</c> as a <c>TPM2B_AUTH</c> (TPM 2.0 Library
-    /// Part 3, clause 24.8.2, Table 188).
+    /// Part 3, clause 24.8.2, Table 205).
     /// </summary>
     /// <remarks>
     /// <para>
@@ -10443,7 +17022,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// companion that protects <c>newAuth</c> in flight — the same two-session shape
     /// <see cref="TryParseNvChangeAuth"/> reads for the NV family's own authValue rotation. <c>newAuth</c> is
     /// captured as received, ciphertext included: its 2-octet size prefix is never itself encrypted (Part 1,
-    /// clause 19.1), so the field can be delimited before anything is decrypted.
+    /// clause 18.1), so the field can be delimited before anything is decrypted.
     /// </para>
     /// <para>
     /// The plain form is the LONE password area, and the fork says so structurally: a <c>TPM_RS_PW</c> slot 0 is
@@ -10451,7 +17030,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// for that one block and nothing more. An area that carried a second block is always the session-shaped
     /// record, whatever slot 0 named, because that block must be resolved, validated, HMAC-verified, and answered
     /// with a response entry of its own — Part 3, clause 5.5, step 4 walks every unmarshaled session in turn,
-    /// clause 5.6 applies to every session in the area, and Part 1, clause 16.6.1's "If the responseCode is
+    /// clause 5.6 applies to every session in the area, and Part 1, clause 15.6.1's "If the responseCode is
     /// TPM_RC_SUCCESS, the response has the same number of sessions in the same order as the request" owes it an
     /// entry. Forking on the handle alone would take a <c>[password, decrypt]</c> area down the plain path, where
     /// the companion is never seen and the ciphertext it protects is installed verbatim as the hierarchy's
@@ -10524,11 +17103,11 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return false;
         }
 
-        //A TPM2B_AUTH buffer can be no wider than sizeof(TPMU_HA) (TPM 2.0 Library Part 2, clause 10.4.5, Table
-        //95, which types it as a TPM2B_DIGEST, and clause 10.4.2, Table 92, which bounds that structure's
+        //A TPM2B_AUTH buffer can be no wider than sizeof(TPMU_HA) (TPM 2.0 Library Part 2, clause 10.3.5, Table
+        //95, which types it as a TPM2B_DIGEST, and clause 10.3.2, Table 90, which bounds that structure's
         //buffer). The wire bound is answered here, ahead of the rental whose Create refuses the same bound by
         //throwing; the command's own narrower per-entity rule — no wider than the digest of the entity's nameAlg
-        //(clause 10.4.5's prose) — stays where it is, on the installing transition.
+        //(clause 10.3.5's prose) — stays where it is, on the installing transition.
         if(newAuth.Length > Tpm2bAuth.MaxSize)
         {
             malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
@@ -10587,14 +17166,14 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// <summary>
     /// <c>TPM2_NV_Certify()</c> is authorized and takes three handles, two of which require authorization: the
     /// wire layout after the header is handle area (@signHandle, @authHandle, nvIndex — Part 3, clause 31.16.2,
-    /// Table 254), then parameters (qualifyingData as TPM2B_DATA, inScheme as TPMT_SIG_SCHEME, size as UINT16,
+    /// Table 271), then parameters (qualifyingData as TPM2B_DATA, inScheme as TPMT_SIG_SCHEME, size as UINT16,
     /// offset as UINT16).
     /// </summary>
     /// <remarks>
     /// <para>
     /// The authorization area carries two required sessions in handle order — session 1 authorizes signHandle,
-    /// session 2 authorizes authHandle (Table 254 gives both Auth Role USER) — optionally followed by a third,
-    /// companion slot that authorizes nothing (Part 1, clause 16.6.1, Table 9). Each is read generically with
+    /// session 2 authorizes authHandle (Table 271 gives both Auth Role USER) — optionally followed by a third,
+    /// companion slot that authorizes nothing (Part 1, clause 15.6.1, Table 12). Each is read generically with
     /// <c>TryReadCommandSessionSpans</c>, the span-returning shape a parse that rents its own carriers needs, and
     /// the slot count comes from the declared authorization size rather than being assumed. A
     /// <c>TPMS_AUTH_COMMAND</c>'s wire layout is the same for a password session and a real one, so the parsed
@@ -10604,7 +17183,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// </para>
     /// <para>
     /// The slots are decided independently rather than as a pair, because mixed forms are legal wire: nothing in
-    /// Table 254 couples one handle's authorization mechanism to the other's. Every field of every session is
+    /// Table 271 couples one handle's authorization mechanism to the other's. Every field of every session is
     /// captured rather than consumed-and-discarded — the parser records what arrived and the transition decides
     /// what each slot may authorize.
     /// </para>
@@ -10658,7 +17237,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         }
 
         //Octets left inside the declared authorization size after the last REQUIRED slot are a companion slot
-        //(Part 1, clause 16.6.1, Table 9, position after the authorization sessions).
+        //(Part 1, clause 15.6.1, Table 12, position after the authorization sessions).
         bool hasCompanion = reader.Consumed - sessionsStart != (int)authorizationSize;
         TpmiShAuthSession companionSessionHandle = TpmiShAuthSession.FromValue(0);
         TpmaSession companionSessionAttributes = default;
@@ -10681,7 +17260,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
         //NV_Certify's entire parameter set (qualifyingData ‖ inScheme ‖ size ‖ offset) is every octet left after
         //the authorization area — captured verbatim, before any field is decoded, as the session arm's cpHash
-        //parameter term (Part 1, clause 16.7 equation 15).
+        //parameter term (Part 1, clause 15.7 equation 15).
         ReadOnlySpan<byte> rawParameterAreaOctets = reader.PeekBytes(reader.Remaining);
 
         //Which arm the area belongs to is settled before the parameters are read, because it decides how
@@ -10691,7 +17270,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         bool isAllPassword = signSessionHandle.IsPasswordSession && authSessionHandle.IsPasswordSession && !hasCompanion;
 
         //Parameter: qualifyingData (TPM2B_DATA) — the caller nonce echoed into the attestation, and the first
-        //command parameter, which is the one a decrypt session protects (Part 1, clause 16.4). On the session
+        //command parameter, which is the one a decrypt session protects (Part 1, clause 15.4). On the session
         //form these octets may be CIPHERTEXT, so the parse only steps over the field's framing to reach the
         //parameters behind it and the decrypt step supplies the plaintext (Part 3, clause 5.7 precedes clause
         //5.8); decoding here would also be futile, since a separately copied field is not updated by the in-place
@@ -10705,7 +17284,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                 return false;
             }
 
-            //TPM2B_DATA is bounded by sizeof(TPMT_HA) (Part 2, clause 10.4.3, Table 93), so a wider value is
+            //TPM2B_DATA is bounded by sizeof(TPMT_HA) (Part 2, clause 10.3.3, Table 91), so a wider value is
             //TPM_RC_SIZE here, before any carrier is rented; the consuming transition's own bound check stands as
             //the fail-closed backstop. The session form's bound is applied to the RECOVERED value instead, which
             //is the only form of it TPM2B_DATA is about.
@@ -10767,7 +17346,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             suppliedAuthorizingCredential = Tpm2bAuth.Create(authHmac, pool);
 
             //Only the session arm retains the slots' caller nonces, so only it rents them — and it rents BOTH,
-            //because a mixed area's TPM_RS_PW slot still owes its own response entry (Part 1, clause 16.6.1).
+            //because a mixed area's TPM_RS_PW slot still owes its own response entry (Part 1, clause 15.6.1).
             signNonce = isAllPassword ? Tpm2bNonce.Empty : Tpm2bNonce.Create(signNonceCaller, pool);
             authorizingNonce = isAllPassword ? Tpm2bNonce.Empty : Tpm2bNonce.Create(authNonceCaller, pool);
             companionCredential = hasCompanion ? Tpm2bAuth.Create(companionHmac, pool) : Tpm2bAuth.Empty;
@@ -10803,18 +17382,21 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
     /// <summary>
     /// <c>TPM2_VerifySignature()</c> authorizes no entity — keyHandle needs no authorization at all (Part 3,
-    /// clause 20.1) — so only the no-sessions form is modelled; a sessions tag would carry an authorization area
+    /// clause 20.2) — so only the no-sessions form is modelled; a sessions tag would carry an authorization area
     /// this command has no handle for. Its wire layout after the header is: handle area (@keyHandle, 1 handle),
     /// then parameters (digest as TPM2B_DIGEST, signature as TPMT_SIGNATURE: sigAlg selecting the ECDSA r/s
-    /// TPM2B pair or the single RSA TPM2B signature).
+    /// TPM2B pair, the single RSA TPM2B signature, or the unsized TPMT_HA the HMAC member carries).
     /// </summary>
     /// <remarks>
-    /// Each TPM2B is read through the already bounds-checked <c>TryReadTpm2b</c>, mirroring the command-input
-    /// parsing convention used throughout this file, rather than the host-side <c>TpmuSignature.Parse</c> (built
-    /// for trusted response parsing, where an out-of-bounds size throws instead of failing closed).
+    /// digest is read fail-closed inline (<see cref="TryReadTpm2bSpan"/> plus an explicit <see cref="Tpm2bDigest.MaxSize"/>
+    /// bound), and the <c>sigAlg</c> selector gate that answers <c>TPM_RC_SCHEME</c> stays inline here too — only
+    /// the post-gate <c>TPMT_SIGNATURE</c> body (hashAlg plus the selected union member) is shared with every
+    /// other signature-consuming parse, through <see cref="TryParseTpmtSignatureBody"/>: the same fail-closed
+    /// wire checks, ending in a pooled <see cref="TpmtSignature"/> whose octets ride the Spec carrier alone,
+    /// never through an intermediate heap copy.
     /// </remarks>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-        Justification = "Ownership of the parse-rented digest carrier transfers to the constructed request input, whose consuming transition hands it to the verification action for the effect to release, and whose refusing arms dispose it through the input's own Dispose.")]
+        Justification = "Ownership of the parse-rented digest and signature carriers transfers to the constructed request input, whose consuming transition hands them to the verification action for the effect to release, and whose refusing arms dispose them through the input's own Dispose.")]
     private static bool TryParseVerifySignature(ref TpmReader reader, ushort tag, BaseMemoryPool pool, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
     {
         input = null;
@@ -10837,23 +17419,18 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
         uint keyHandle = reader.ReadUInt32();
 
-        //Parameter: digest (TPM2B_DIGEST) — the digest the signature is claimed to be over.
-        if(!TryReadTpm2bSpan(ref reader, out ReadOnlySpan<byte> digest, out malformedResponseCode))
+        //Parameter: digest (TPM2B_DIGEST) — the digest the signature is claimed to be over. Bound-first against
+        //sizeof(TPMU_HA) (TPM 2.0 Library Part 2, clause 10.3.2, Table 90), matching the shared TPMT_SIGNATURE
+        //body this parse delegates to below — a digest that is both over-bound and truncated answers
+        //TPM_RC_SIZE, never TPM_RC_INSUFFICIENT.
+        if(!TryReadTpm2bSpanBounded(ref reader, Tpm2bDigest.MaxSize, out ReadOnlySpan<byte> digest, out malformedResponseCode))
         {
             return false;
         }
 
-        //A TPM2B_DIGEST buffer can be no wider than sizeof(TPMU_HA) (TPM 2.0 Library Part 2, clause 10.4.2,
-        //Table 92), so the wire bound is answered here, ahead of the rental whose Create refuses the same bound
-        //by throwing.
-        if(digest.Length > Tpm2bDigest.MaxSize)
-        {
-            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
-
-            return false;
-        }
-
-        //Parameter: signature (TPMT_SIGNATURE) — sigAlg (TPMI_ALG_SIG_SCHEME) selects the union member.
+        //Parameter: signature (TPMT_SIGNATURE) — sigAlg (TPMI_ALG_SIG_SCHEME) selects the union member; the
+        //admitted set is the asymmetric schemes plus TPM_ALG_HMAC, Table 115's digest-verifying row for this
+        //command (clause 20.2.1's symmetric-key sentence).
         if(reader.Remaining < sizeof(ushort))
         {
             malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
@@ -10862,52 +17439,209 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         }
 
         TpmiAlgSigScheme sigAlg = TpmiAlgSigScheme.FromValue((TpmAlgIdConstants)reader.ReadUInt16());
-        if(sigAlg.Value is not (TpmAlgIdConstants.TPM_ALG_ECDSA or TpmAlgIdConstants.TPM_ALG_RSASSA or TpmAlgIdConstants.TPM_ALG_RSAPSS))
+        if(sigAlg.Value is not (TpmAlgIdConstants.TPM_ALG_ECDSA or TpmAlgIdConstants.TPM_ALG_RSASSA or TpmAlgIdConstants.TPM_ALG_RSAPSS or TpmAlgIdConstants.TPM_ALG_HMAC))
         {
             malformedResponseCode = TpmRcConstants.TPM_RC_SCHEME;
 
             return false;
         }
 
-        if(reader.Remaining < sizeof(ushort))
+        //The post-gate TPMT_SIGNATURE body (hashAlg plus the sigAlg-selected member) is the shared helper's job;
+        //it rents the pooled signature carrier as its own last act.
+        if(!TryParseTpmtSignatureBody(ref reader, sigAlg, pool, out TpmtSignature? signature, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //signature is the final parameter; no octets may follow it (Part 3, 5.2).
+        if(reader.Remaining != 0)
+        {
+            signature.Dispose();
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+
+        //The owned pooled digest carrier is rented here, the parse's last act after every wire check has
+        //passed; the signature carrier was already rented earlier, inside TryParseTpmtSignatureBody, so a
+        //failing digest rent here must release it too or that earlier rental is orphaned.
+        try
+        {
+            input = new TpmVerifySignatureRequested(
+                TpmiDhObject.FromValue(keyHandle), Tpm2bDigest.Create(digest, pool), sigAlg, TpmiAlgHash.FromValue(signature.Signature.HashAlgorithm), signature);
+        }
+        catch
+        {
+            signature.Dispose();
+            throw;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// <c>TPM2_VerifyDigestSignature()</c>'s <c>keyHandle</c> carries no <c>@</c> (Auth Index None, a public-key
+    /// operation), so its wire layout after the header is: handle area (1 handle, no authorization area at all),
+    /// then parameters (context as TPM2B_SIGNATURE_CTX, digest as TPM2B_DIGEST, signature as TPMT_SIGNATURE).
+    /// Table 120 marks this command's tag conditional — <c>TPM_ST_NO_SESSIONS</c> ordinarily,
+    /// <c>TPM_ST_SESSIONS</c> only when an audit or decrypt session decorates the command — but this simulator
+    /// parses no such session area on a handle-less command, so it refuses the <c>TPM_ST_SESSIONS</c> form
+    /// deterministically, exactly like <see cref="TryParseVerifySignature"/>'s single admitted tag, rather than
+    /// misparsing a conformant session-decorated frame's authorization octets as parameter octets — a recorded
+    /// simulator limitation, not a wire violation, on a form <see cref="VerifyDigestSignatureInput"/>'s own
+    /// host-side framer never sends anyway.
+    /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the parse-rented context and signature carriers transfers to the constructed request input, whose consuming transition disposes the context once its emptiness is confirmed and transfers the signature into the verification action, and whose refusing arms dispose them both through the input's own Dispose; a rent that fails after an earlier carrier already succeeded releases it in the catch before rethrowing.")]
+    private static bool TryParseVerifyDigestSignature(ref TpmReader reader, ushort tag, BaseMemoryPool pool, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
+    {
+        input = null;
+        malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
+
+        if(tag != (ushort)TpmStConstants.TPM_ST_NO_SESSIONS)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_BAD_TAG;
+
+            return false;
+        }
+
+        //Handle area: keyHandle (the key whose public part verifies the signature; no authorization area).
+        if(reader.Remaining < sizeof(uint))
         {
             malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
 
             return false;
         }
 
-        TpmiAlgHash hashAlg = TpmiAlgHash.FromValue((TpmAlgIdConstants)reader.ReadUInt16());
+        uint keyHandle = reader.ReadUInt32();
 
-        ReadOnlyMemory<byte> signature;
-        if(sigAlg.Value == TpmAlgIdConstants.TPM_ALG_ECDSA)
+        //Parameter: context (TPM2B_SIGNATURE_CTX) — bound-first against MaxSize (255, TPM_RC_SIZE), matching
+        //the structure's own Parse throw (TPM 2.0 Library Part 2, clause 11.3.8).
+        Tpm2bSignatureCtx context;
+        try
         {
-            //TPMS_SIGNATURE_ECDSA: signatureR then signatureS, each a TPM2B_ECC_PARAMETER — concatenated into one
-            //IEEE P1363 r ‖ s buffer, the shape the verify delegate takes (the mirror of how the response
-            //serializer splits a P1363 signature into r and s when framing TPM2_Sign()/TPM2_Certify() and friends).
-            if(!TryReadTpm2b(ref reader, out ReadOnlyMemory<byte> signatureR, out malformedResponseCode))
-            {
-                return false;
-            }
-
-            if(!TryReadTpm2b(ref reader, out ReadOnlyMemory<byte> signatureS, out malformedResponseCode))
-            {
-                return false;
-            }
-
-            signature = ConcatenateEcdsaSignature(signatureR, signatureS);
+            context = Tpm2bSignatureCtx.Parse(ref reader, pool);
         }
-        else
+        catch(InvalidOperationException)
         {
-            //TPMS_SIGNATURE_RSA: the whole signature as one TPM2B_PUBLIC_KEY_RSA.
-            if(!TryReadTpm2b(ref reader, out ReadOnlyMemory<byte> rsaSignature, out malformedResponseCode))
-            {
-                return false;
-            }
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
 
-            signature = rsaSignature;
+            return false;
+        }
+        catch(ArgumentOutOfRangeException)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        //Parameter: digest (TPM2B_DIGEST) — bound-first against sizeof(TPMU_HA), matching the shared TPMT_SIGNATURE
+        //body this parse delegates to below — a digest that is both over-bound and truncated answers
+        //TPM_RC_SIZE, never TPM_RC_INSUFFICIENT.
+        if(!TryReadTpm2bSpanBounded(ref reader, Tpm2bDigest.MaxSize, out ReadOnlySpan<byte> digest, out malformedResponseCode))
+        {
+            context.Dispose();
+
+            return false;
+        }
+
+        //Parameter: signature (TPMT_SIGNATURE) — sigAlg (TPMI_ALG_SIG_SCHEME) selects the union member.
+        if(reader.Remaining < sizeof(ushort))
+        {
+            context.Dispose();
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        TpmiAlgSigScheme sigAlg = TpmiAlgSigScheme.FromValue((TpmAlgIdConstants)reader.ReadUInt16());
+        if(sigAlg.Value is not (TpmAlgIdConstants.TPM_ALG_ECDSA or TpmAlgIdConstants.TPM_ALG_RSASSA or TpmAlgIdConstants.TPM_ALG_RSAPSS))
+        {
+            context.Dispose();
+            malformedResponseCode = TpmRcConstants.TPM_RC_SCHEME;
+
+            return false;
+        }
+
+        //The post-gate TPMT_SIGNATURE body (hashAlg plus the sigAlg-selected member) is the shared helper's job;
+        //it rents the pooled signature carrier as its own last act.
+        if(!TryParseTpmtSignatureBody(ref reader, sigAlg, pool, out TpmtSignature? signature, out malformedResponseCode))
+        {
+            context.Dispose();
+
+            return false;
         }
 
         //signature is the final parameter; no octets may follow it (Part 3, 5.2).
+        if(reader.Remaining != 0)
+        {
+            context.Dispose();
+            signature.Dispose();
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+
+        //The owned pooled digest carrier is rented as its own statement, ahead of the request's own
+        //construction — a rent inline in the constructor argument list would let its failure orphan the
+        //context and signature carriers already rented earlier without a catch clause covering them, so it
+        //gets its own guarded statement instead, matching TryParseSignDigest's shape.
+        Tpm2bDigest digestCarrier = Tpm2bDigest.Empty;
+        try
+        {
+            digestCarrier = Tpm2bDigest.Create(digest, pool);
+            input = new TpmVerifyDigestSignatureRequested(
+                TpmiDhObject.FromValue(keyHandle), context, digestCarrier, sigAlg, TpmiAlgHash.FromValue(signature.Signature.HashAlgorithm), signature);
+        }
+        catch
+        {
+            digestCarrier.Dispose();
+            context.Dispose();
+            signature.Dispose();
+            throw;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// <c>TPM2_Encapsulate()</c>'s <c>keyHandle</c> carries no <c>@</c> (Auth Index None, a public-key
+    /// operation — "The TPM does not verify the objectAttributes of the key"), so its wire layout after the
+    /// header is: handle area (1 handle, no authorization area at all), then no parameters at all — Table 60
+    /// carries none. Table 60 marks this command's tag conditional (<c>TPM_ST_NO_SESSIONS</c> ordinarily,
+    /// <c>TPM_ST_SESSIONS</c> only when an audit or encrypt session decorates the command), but this
+    /// simulator parses no such session area on a handle-less command, so it refuses the
+    /// <c>TPM_ST_SESSIONS</c> form deterministically, exactly like <see cref="TryParseVerifyDigestSignature"/>'s
+    /// single admitted tag — a form <c>EncapsulateInput</c>'s own host-side framer never sends anyway. This
+    /// refusal has a confidentiality cost beyond parsing: Table 61's <c>sharedSecret</c> is the response's
+    /// only parameter, returned in the clear, and the SESSIONS form's encrypt session is the sole
+    /// protection Tables 60/61 offer it — so no path through this simulator ever demonstrates an encrypted
+    /// <c>TPM2_Encapsulate()</c> response. The host-side codec still declares
+    /// <c>responseFirstParameterIsEncryptable: true</c> for a real TPM that admits SESSIONS.
+    /// </summary>
+    private static bool TryParseEncapsulate(ref TpmReader reader, ushort tag, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
+    {
+        input = null;
+        malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
+
+        if(tag != (ushort)TpmStConstants.TPM_ST_NO_SESSIONS)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_BAD_TAG;
+
+            return false;
+        }
+
+        //Handle area: keyHandle (the KEM key; no authorization area at all — Table 60, Auth Index None).
+        if(reader.Remaining < sizeof(uint))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        uint keyHandle = reader.ReadUInt32();
+
+        //Table 60 carries no parameters at all; no octets may follow the handle area (Part 3, clause 5.2).
         if(reader.Remaining != 0)
         {
             malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
@@ -10915,20 +17649,93 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return false;
         }
 
-        //The owned pooled digest carrier is rented here, the parse's last act after every wire check has passed,
-        //so no refused parse ever creates one.
-        input = new TpmVerifySignatureRequested(TpmiDhObject.FromValue(keyHandle), Tpm2bDigest.Create(digest, pool), sigAlg, hashAlg, signature);
+        input = new TpmEncapsulateRequested(TpmiDhObject.FromValue(keyHandle));
 
         return true;
+    }
 
-        static ReadOnlyMemory<byte> ConcatenateEcdsaSignature(ReadOnlyMemory<byte> r, ReadOnlyMemory<byte> s)
+    /// <summary>
+    /// <c>TPM2_Decapsulate()</c> is authorized, so its wire layout after the header is: handle area
+    /// (@keyHandle, 1 handle), authorization area (a single password session), then the one parameter,
+    /// ciphertext (<c>TPM2B_KEM_CIPHERTEXT</c>). Tag pinned <c>TPM_ST_SESSIONS</c> (Table 62) — the same
+    /// key-slot authorization shape <see cref="TryParseSignDigest"/> parses.
+    /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the parse-rented key-password and ciphertext carriers transfers to the constructed request input, whose consuming transition releases the password once the key-slot compare has consumed it and transfers the ciphertext into the decapsulation action, and whose refusing arms dispose them both through the input's own Dispose; a rent that fails after an earlier carrier already succeeded releases it in the catch before rethrowing.")]
+    private static bool TryParseDecapsulate(ref TpmReader reader, ushort tag, BaseMemoryPool pool, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
+    {
+        input = null;
+        malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
+
+        if(tag != (ushort)TpmStConstants.TPM_ST_SESSIONS)
         {
-            byte[] concatenated = new byte[r.Length + s.Length];
-            r.Span.CopyTo(concatenated);
-            s.Span.CopyTo(concatenated.AsSpan(r.Length));
+            malformedResponseCode = TpmRcConstants.TPM_RC_AUTH_MISSING;
 
-            return concatenated;
+            return false;
         }
+
+        //Handle area: @keyHandle (the KEM key).
+        if(reader.Remaining < sizeof(uint))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        uint keyHandle = reader.ReadUInt32();
+
+        if(!TryReadPasswordAuthArea(ref reader, out ReadOnlySpan<byte> suppliedAuth, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //Parameter: ciphertext (TPM2B_KEM_CIPHERTEXT) — bound-first against MaxSize (1568, TPM_RC_SIZE),
+        //truncation TPM_RC_INSUFFICIENT, matching the structure's own Parse throw and the bound-before-truncation order.
+        Tpm2bKemCiphertext ciphertext;
+        try
+        {
+            ciphertext = Tpm2bKemCiphertext.Parse(ref reader, pool);
+        }
+        catch(InvalidOperationException)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+        catch(ArgumentOutOfRangeException)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        //ciphertext is the final parameter; no octets may follow it (Part 3, clause 5.2).
+        if(reader.Remaining != 0)
+        {
+            ciphertext.Dispose();
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+
+        //The owned pooled password carrier is rented as the parse's last act, so no refused parse ever
+        //creates one.
+        Tpm2bAuth suppliedKeyPassword = Tpm2bAuth.Empty;
+        try
+        {
+            suppliedKeyPassword = Tpm2bAuth.Create(suppliedAuth, pool);
+            input = new TpmDecapsulateRequested(TpmiDhObject.FromValue(keyHandle), suppliedKeyPassword, ciphertext);
+        }
+        catch
+        {
+            //These carriers' only owner is this frame until the request adopts them, so a failing later rent
+            //must release them or the pinned rentals are orphaned.
+            suppliedKeyPassword.Dispose();
+            ciphertext.Dispose();
+            throw;
+        }
+
+        return true;
     }
 
     /// <summary>
@@ -10973,8 +17780,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return false;
         }
 
-        //A TPM2B_DIGEST buffer can be no wider than sizeof(TPMU_HA) (TPM 2.0 Library Part 2, clause 10.4.2,
-        //Table 92), so the wire bound is answered here, ahead of the rental whose Create refuses the same bound
+        //A TPM2B_DIGEST buffer can be no wider than sizeof(TPMU_HA) (TPM 2.0 Library Part 2, clause 10.3.2,
+        //Table 90), so the wire bound is answered here, ahead of the rental whose Create refuses the same bound
         //by throwing.
         if(credential.Length > Tpm2bDigest.MaxSize)
         {
@@ -10990,7 +17797,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         }
 
         //A TPM2B_NAME's content is bounded by sizeof(TPMU_NAME) — a 2-octet nameAlg plus the widest digest
-        //(TPM 2.0 Library Part 2, clause 10.5.3, Table 104; the reference enforces it in TPM2B_NAME_Unmarshal),
+        //(TPM 2.0 Library Part 2, clause 10.4.3, Table 105; the reference enforces it in TPM2B_NAME_Unmarshal),
         //so an oversized Name is refused here rather than reaching the carrier's own throwing bound.
         if(objectName.Length > Tpm2bName.MaxSize)
         {
@@ -11044,7 +17851,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// whether it satisfies the key's authPolicy.
     /// </remarks>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-        Justification = "Ownership of the parse-rented activate-password (and, for the plain form, key-password) carriers transfers to the constructed request input, whose consuming transition releases them once the per-slot compares have consumed them, and whose refusing arms dispose them through the input's own Dispose; the plain form's rent that fails after the activate carrier already succeeded releases it in the catch before rethrowing.")]
+        Justification = "Ownership of the parse-rented credentialBlob, secret, activate-password (and, for the plain form, key-password) carriers transfers to the constructed request input, whose consuming transition releases them once the per-slot compares have consumed them and the recovery action has been built, and whose refusing arms dispose them through the input's own Dispose; a rent that fails after an earlier carrier already succeeded releases the earlier ones in the enclosing catch before rethrowing.")]
     private static bool TryParseActivateCredential(ref TpmReader reader, ushort tag, BaseMemoryPool pool, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
     {
         input = null;
@@ -11097,14 +17904,23 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return false;
         }
 
-        //Parameter: credentialBlob (TPM2B_ID_OBJECT) — the credential from TPM2_MakeCredential().
-        if(!TryReadTpm2b(ref reader, out ReadOnlyMemory<byte> credentialBlob, out malformedResponseCode))
+        //ActivateCredential's entire parameter set (credentialBlob ‖ secret) is every octet left after the
+        //authorization area — captured verbatim, before either field is decoded, as the term the key slot's
+        //policy session is judged against when it latched a cpHash or pHash binding (Part 1, clause 15.7
+        //equation 15; Part 4 CompareParametersHash); unused by the password form.
+        ReadOnlySpan<byte> rawParameterAreaOctets = reader.PeekBytes(reader.Remaining);
+
+        //Parameter: credentialBlob (TPM2B_ID_OBJECT) — the credential from TPM2_MakeCredential(), bound-checked
+        //ahead of the remaining-octets check (Table 245), so a declared size that is BOTH over-bound and
+        //truncated answers TPM_RC_SIZE rather than TPM_RC_INSUFFICIENT.
+        if(!TryReadTpm2bSpanBounded(ref reader, Tpm2bIdObject.MaxSize, out ReadOnlySpan<byte> credentialBlobSpan, out malformedResponseCode))
         {
             return false;
         }
 
-        //Parameter: secret (TPM2B_ENCRYPTED_SECRET) — the encrypted seed from TPM2_MakeCredential().
-        if(!TryReadTpm2b(ref reader, out ReadOnlyMemory<byte> secret, out malformedResponseCode))
+        //Parameter: secret (TPM2B_ENCRYPTED_SECRET) — the encrypted seed from TPM2_MakeCredential(), same
+        //bound-before-truncation ordering (Table 224).
+        if(!TryReadTpm2bSpanBounded(ref reader, Tpm2bEncryptedSecret.MaxSize, out ReadOnlySpan<byte> secretSpan, out malformedResponseCode))
         {
             return false;
         }
@@ -11117,27 +17933,58 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return false;
         }
 
-        //The request, with its owned password carrier(s), is constructed as the parse's last act, so no refused
-        //parse ever creates one.
-        if(keyPolicySession.IsPasswordSession)
+        //credentialBlob and secret are rented as the parse's last act, alongside the password carrier(s), so
+        //no refused parse ever creates one.
+        Tpm2bIdObject credentialBlob = Tpm2bIdObject.Empty;
+        Tpm2bEncryptedSecret secret = Tpm2bEncryptedSecret.Empty;
+        try
         {
-            Tpm2bAuth suppliedActivatePassword = Tpm2bAuth.Empty;
-            try
+            credentialBlob = Tpm2bIdObject.Create(credentialBlobSpan, pool);
+            secret = Tpm2bEncryptedSecret.Create(secretSpan, pool);
+
+            if(keyPolicySession.IsPasswordSession)
             {
-                suppliedActivatePassword = Tpm2bAuth.Create(activatePassword, pool);
-                input = new TpmActivateCredentialRequested(TpmiDhObject.FromValue(activateHandle), suppliedActivatePassword, TpmiDhObject.FromValue(keyHandle), Tpm2bAuth.Create(keyHmac, pool), credentialBlob, secret);
+                Tpm2bAuth suppliedActivatePassword = Tpm2bAuth.Empty;
+                try
+                {
+                    suppliedActivatePassword = Tpm2bAuth.Create(activatePassword, pool);
+                    input = new TpmActivateCredentialRequested(TpmiDhObject.FromValue(activateHandle), suppliedActivatePassword, TpmiDhObject.FromValue(keyHandle), Tpm2bAuth.Create(keyHmac, pool), credentialBlob, secret);
+                }
+                catch
+                {
+                    //This carrier's only owner is this frame until the request adopts it, so a failing later rent
+                    //must release it or the pinned rental is orphaned.
+                    suppliedActivatePassword.Dispose();
+                    throw;
+                }
             }
-            catch
+            else
             {
-                //This carrier's only owner is this frame until the request adopts it, so a failing later rent
-                //must release it or the pinned rental is orphaned.
-                suppliedActivatePassword.Dispose();
-                throw;
+                Tpm2bAuth suppliedActivatePassword = Tpm2bAuth.Empty;
+                try
+                {
+                    suppliedActivatePassword = Tpm2bAuth.Create(activatePassword, pool);
+                    input = new TpmActivateCredentialOverSessionRequested(
+                        TpmiDhObject.FromValue(activateHandle), suppliedActivatePassword, TpmiDhObject.FromValue(keyHandle), credentialBlob, secret,
+                        keyPolicySession, keyPolicyAttributes, TpmParameterArea.Create(rawParameterAreaOctets, pool));
+                }
+                catch
+                {
+                    //This carrier's only owner is this frame until the request adopts it, so a failing later rent
+                    //must release it or the pinned rental is orphaned.
+                    suppliedActivatePassword.Dispose();
+                    throw;
+                }
             }
         }
-        else
+        catch
         {
-            input = new TpmActivateCredentialOverSessionRequested(TpmiDhObject.FromValue(activateHandle), Tpm2bAuth.Create(activatePassword, pool), TpmiDhObject.FromValue(keyHandle), credentialBlob, secret, keyPolicySession, keyPolicyAttributes);
+            //credentialBlob and secret are this frame's only owner until whichever branch's request adopts
+            //them, so a failing later rent (the password branch's own carrier, or the over-session branch's
+            //activate password) must release both or the pinned rentals are orphaned.
+            secret.Dispose();
+            credentialBlob.Dispose();
+            throw;
         }
 
         return true;
@@ -11147,17 +17994,431 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// <c>TPM2_PCR_Read()</c> takes no handles and no authorization (Part 3, clause 22.4): its wire body after
     /// the header is a single TPML_PCR_SELECTION parameter, and it is framed with <c>TPM_ST_NO_SESSIONS</c>.
     /// </summary>
-    /// <remarks>The selection is captured verbatim (to echo as pcrSelectionOut) and decoded against the PCR bank in the transition.</remarks>
-    private static bool TryParsePcrRead(ref TpmReader reader, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
+    /// <remarks>
+    /// The selection is decoded into an owned pooled carrier that both drives the PCR gather in the transition
+    /// and is written back verbatim into the response's <c>pcrSelectionOut</c> — the <c>TPM2_Quote()</c> idiom
+    /// (<see cref="TryParseQuote"/>): a by-value probe through <see cref="TrySkipPcrSelection"/> answers a
+    /// truncated or over-bound list before any rental, then <see cref="TpmlPcrSelection.Parse"/> decodes it.
+    /// </remarks>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the parse-rented selection carrier transfers to the constructed request input, whose consuming transition transfers it into the response; a refused parse never rents one.")]
+    private static bool TryParsePcrRead(ref TpmReader reader, BaseMemoryPool pool, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
     {
         input = null;
 
-        if(!TryReadFinalPcrSelection(ref reader, out ReadOnlyMemory<byte> pcrSelection, out malformedResponseCode))
+        TpmReader probe = reader;
+        if(!TrySkipPcrSelection(ref probe, out malformedResponseCode))
         {
             return false;
         }
 
+        if(probe.Remaining != 0)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+
+        TpmlPcrSelection pcrSelection;
+        try
+        {
+            pcrSelection = TpmlPcrSelection.Parse(ref reader, pool);
+        }
+        catch(InvalidOperationException)
+        {
+            //A list naming more banks than HASH_COUNT selections is out of the structure's declared bound
+            //(Part 2, clause 10.8.7, Table 128: #TPM_RC_SIZE).
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+        catch(ArgumentOutOfRangeException)
+        {
+            //A selection whose sizeofSelect lies outside PCR_SELECT_MIN..PCR_SELECT_MAX is out of the member's
+            //own declared bounds (Part 2, clause 10.5.2, Table 107: #TPM_RC_VALUE). The probe above already
+            //refuses that width, so this is the fail-closed backstop rather than the answering layer.
+            malformedResponseCode = TpmRcConstants.TPM_RC_VALUE;
+
+            return false;
+        }
+
         input = new TpmPcrReadRequested(pcrSelection);
+
+        return true;
+    }
+
+    /// <summary>
+    /// Reads a <c>TPMI_DH_PCR</c> handle (TPM 2.0 Library Part 2, clause 9.7, Table 53): <c>PCR_FIRST</c> is
+    /// zero, so the range check is the upper bound alone — this simulator's <c>PCR_LAST</c> is register 23
+    /// (<see cref="PcrBankState.PcrCount"/>), and any other value, a higher index or a handle of another type
+    /// alike, is <c>#TPM_RC_VALUE</c> (Part 3, clause 22.8.1's note). <c>TPM_RH_NULL</c> is admitted only for
+    /// the <c>+</c> form (Tables 95, 130 and 132; not Table 142).
+    /// </summary>
+    /// <param name="reader">The reader positioned at the handle.</param>
+    /// <param name="isNullAdmitted">Whether the table carries <c>TPMI_DH_PCR+</c>.</param>
+    /// <param name="pcrHandle">The parsed handle.</param>
+    /// <param name="malformedResponseCode">The refusal when the handle is not admitted.</param>
+    /// <returns><see langword="true"/> when a handle was read and admitted.</returns>
+    private static bool TryParsePcrHandle(ref TpmReader reader, bool isNullAdmitted, out TpmiDhPcr pcrHandle, out TpmRcConstants malformedResponseCode)
+    {
+        pcrHandle = default;
+        malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
+
+        if(reader.Remaining < sizeof(uint))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        uint value = reader.ReadUInt32();
+        if(isNullAdmitted && value == (uint)TpmRh.TPM_RH_NULL)
+        {
+            pcrHandle = TpmiDhPcr.FromValue(value);
+
+            return true;
+        }
+
+        if(value >= PcrBankState.PcrCount)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_VALUE;
+
+            return false;
+        }
+
+        pcrHandle = TpmiDhPcr.FromValue(value);
+
+        return true;
+    }
+
+    /// <summary>
+    /// Walks a <c>TPML_DIGEST_VALUES</c> by value, before any rental, answering each of its wire rules with the
+    /// code Part 2 names: a <c>count</c> above the simulator's implemented-hash count → <c>TPM_RC_SIZE</c>
+    /// (Table 127's <c>{:HASH_COUNT}</c>; Part 4 <c>TPML_DIGEST_VALUES_Unmarshal</c>); an entry whose
+    /// <c>hashAlg</c> is not a hash the simulator implements — a non-hash identifier, <c>TPM_ALG_NULL</c> (no
+    /// <c>+</c> in this list), or a TCG hash outside SHA-1/256/384/512 — → <c>TPM_RC_HASH</c> (Part 3, clause
+    /// 22.2.1: "If the TPM unmarshals the hashAlg of a list entry and the unmarshaled value is not a hash
+    /// algorithm implemented on the TPM, the TPM shall return TPM_RC_HASH"); a digest shorter than its
+    /// algorithm's width → <c>TPM_RC_INSUFFICIENT</c>. <see cref="TpmlDigestValues.Parse"/> then decodes the
+    /// validated octets.
+    /// </summary>
+    /// <param name="reader">A by-value copy of the reader positioned at the list.</param>
+    /// <param name="malformedResponseCode">The refusal when the list is not admitted.</param>
+    /// <returns><see langword="true"/> when the whole list is well-formed for this simulator.</returns>
+    private static bool TrySkipDigestValues(ref TpmReader reader, out TpmRcConstants malformedResponseCode)
+    {
+        malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
+
+        if(reader.Remaining < sizeof(uint))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        uint count = reader.ReadUInt32();
+        if(count > (uint)ImplementedHashAlgorithms.Length)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+
+        for(uint i = 0; i < count; i++)
+        {
+            if(reader.Remaining < sizeof(ushort))
+            {
+                malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+                return false;
+            }
+
+            var hashAlg = TpmiAlgHash.FromValue((TpmAlgIdConstants)reader.ReadUInt16());
+            if(!TpmLifecycleTransitions.IsImplementedSequenceHash(hashAlg))
+            {
+                malformedResponseCode = TpmRcConstants.TPM_RC_HASH;
+
+                return false;
+            }
+
+            int digestSize = hashAlg.DigestSize!.Value;
+            if(reader.Remaining < digestSize)
+            {
+                malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+                return false;
+            }
+
+            _ = reader.ReadBytes(digestSize);
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// <c>TPM2_PCR_Extend()</c> authorizes <c>@pcrHandle</c> (TPM 2.0 Library Part 3, clause 22.2, Table 130), so
+    /// its wire layout after the header is: handle area (<c>@pcrHandle</c> as <c>TPMI_DH_PCR+</c>), authorization
+    /// area (one <c>TPM_RS_PW</c> slot), parameter area (<c>digests</c> as <c>TPML_DIGEST_VALUES</c>). The list
+    /// is probed by value (<see cref="TrySkipDigestValues"/>) before the rentals, so every refusal — including
+    /// clause 22.2.1's <c>TPM_RC_HASH</c> — is answered with nothing rented.
+    /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the parse-rented password and digest-list carriers transfers to the constructed request input, whose consuming transition releases the password once the compare has consumed it and hands the list to the extend effect, and whose refusing and no-op arms dispose them both through the input's own Dispose; a rent that fails after an earlier carrier already succeeded releases it in the catch before rethrowing.")]
+    private static bool TryParsePcrExtend(ref TpmReader reader, ushort tag, BaseMemoryPool pool, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
+    {
+        input = null;
+        malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
+
+        if(tag != (ushort)TpmStConstants.TPM_ST_SESSIONS)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_AUTH_MISSING;
+
+            return false;
+        }
+
+        if(!TryParsePcrHandle(ref reader, isNullAdmitted: true, out TpmiDhPcr pcrHandle, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        if(!TryReadPasswordAuthArea(ref reader, out ReadOnlySpan<byte> suppliedAuth, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        TpmReader probe = reader;
+        if(!TrySkipDigestValues(ref probe, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //digests is the final parameter; no octets may follow it (Part 3, 5.2).
+        if(probe.Remaining != 0)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+
+        Tpm2bAuth suppliedPcrPassword = Tpm2bAuth.Empty;
+        TpmlDigestValues digests = TpmlDigestValues.Empty;
+        try
+        {
+            suppliedPcrPassword = Tpm2bAuth.Create(suppliedAuth, pool);
+            digests = TpmlDigestValues.Parse(ref reader, pool);
+            input = new TpmPcrExtendRequested(pcrHandle, suppliedPcrPassword, digests);
+        }
+        catch
+        {
+            digests.Dispose();
+            suppliedPcrPassword.Dispose();
+            throw;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// <c>TPM2_PCR_Event()</c> authorizes <c>@pcrHandle</c> (TPM 2.0 Library Part 3, clause 22.3, Table 132), so
+    /// its wire layout after the header is: handle area (<c>@pcrHandle</c> as <c>TPMI_DH_PCR+</c>), authorization
+    /// area (one <c>TPM_RS_PW</c> slot), parameter area (<c>eventData</c> as <c>TPM2B_EVENT</c>, bounded 1024 —
+    /// Part 2, Table 95; "A TPM shall support an eventData.size of zero through 1,024 inclusive").
+    /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the parse-rented password and event carriers transfers to the constructed request input, whose consuming transition releases the password once the compare has consumed it and hands the event to the digest effect, and whose refusing arms dispose them both through the input's own Dispose; a rent that fails after an earlier carrier already succeeded releases it in the catch before rethrowing.")]
+    private static bool TryParsePcrEvent(ref TpmReader reader, ushort tag, BaseMemoryPool pool, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
+    {
+        input = null;
+        malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
+
+        if(tag != (ushort)TpmStConstants.TPM_ST_SESSIONS)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_AUTH_MISSING;
+
+            return false;
+        }
+
+        if(!TryParsePcrHandle(ref reader, isNullAdmitted: true, out TpmiDhPcr pcrHandle, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        if(!TryReadPasswordAuthArea(ref reader, out ReadOnlySpan<byte> suppliedAuth, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        if(!TryReadTpm2bSpanBounded(ref reader, Tpm2bEvent.MaxSize, out ReadOnlySpan<byte> eventData, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //eventData is the final parameter; no octets may follow it (Part 3, 5.2).
+        if(reader.Remaining != 0)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+
+        Tpm2bAuth suppliedPcrPassword = Tpm2bAuth.Empty;
+        Tpm2bEvent eventCarrier = Tpm2bEvent.Empty;
+        try
+        {
+            suppliedPcrPassword = Tpm2bAuth.Create(suppliedAuth, pool);
+            eventCarrier = Tpm2bEvent.Create(eventData, pool);
+            input = new TpmPcrEventRequested(pcrHandle, suppliedPcrPassword, eventCarrier);
+        }
+        catch
+        {
+            eventCarrier.Dispose();
+            suppliedPcrPassword.Dispose();
+            throw;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// <c>TPM2_PCR_Reset()</c> authorizes <c>@pcrHandle</c> and carries no parameters (TPM 2.0 Library Part 3,
+    /// clause 22.8, Table 142), so its wire layout after the header is: handle area (<c>@pcrHandle</c> as
+    /// <c>TPMI_DH_PCR</c> — no <c>+</c>, so <c>TPM_RH_NULL</c> is <c>TPM_RC_VALUE</c>), authorization area (one
+    /// <c>TPM_RS_PW</c> slot), and nothing more.
+    /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the parse-rented password carrier transfers to the constructed request input, whose consuming transition releases it once the compare has consumed it and whose refusing arms dispose it through the input's own Dispose.")]
+    private static bool TryParsePcrReset(ref TpmReader reader, ushort tag, BaseMemoryPool pool, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
+    {
+        input = null;
+        malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
+
+        if(tag != (ushort)TpmStConstants.TPM_ST_SESSIONS)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_AUTH_MISSING;
+
+            return false;
+        }
+
+        if(!TryParsePcrHandle(ref reader, isNullAdmitted: false, out TpmiDhPcr pcrHandle, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        if(!TryReadPasswordAuthArea(ref reader, out ReadOnlySpan<byte> suppliedAuth, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //Table 142 has no parameter area; no octets may follow the authorization area (Part 3, 5.2).
+        if(reader.Remaining != 0)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+
+        input = new TpmPcrResetRequested(pcrHandle, Tpm2bAuth.Create(suppliedAuth, pool));
+
+        return true;
+    }
+
+    /// <summary>
+    /// <c>TPM2_EventSequenceComplete()</c> authorizes both <c>@pcrHandle</c> and <c>@sequenceHandle</c> (TPM 2.0
+    /// Library Part 3, clause 17.9, Table 95), so its wire layout after the header is: handle area
+    /// (<c>@pcrHandle</c> as <c>TPMI_DH_PCR+</c>, then <c>@sequenceHandle</c>), authorization area (two
+    /// <c>TPM_RS_PW</c> slots in handle order — a second slot missing is clause 5.5's "An authorization session
+    /// is present for each of the handles with the '@' decoration (TPM_RC_AUTH_MISSING)"), parameter area
+    /// (<c>buffer</c> as <c>TPM2B_MAX_BUFFER</c>) — the <see cref="TryParseSequenceComplete"/> shape with a PCR
+    /// handle and its slot in front and no ticket hierarchy behind.
+    /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the parse-rented password and buffer carriers transfers to the constructed request input, whose consuming transition releases the passwords once the compares have consumed them and hands the buffer to the digest effect, and whose refusing arms dispose all three through the input's own Dispose; a rent that fails after an earlier carrier already succeeded releases it in the catch before rethrowing.")]
+    private static bool TryParseEventSequenceComplete(ref TpmReader reader, ushort tag, BaseMemoryPool pool, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
+    {
+        input = null;
+        malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
+
+        if(tag != (ushort)TpmStConstants.TPM_ST_SESSIONS)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_AUTH_MISSING;
+
+            return false;
+        }
+
+        if(!TryParsePcrHandle(ref reader, isNullAdmitted: true, out TpmiDhPcr pcrHandle, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //Handle area, second slot: @sequenceHandle (the open Event Sequence), resolved by the transition.
+        if(reader.Remaining < sizeof(uint))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        uint sequenceHandle = reader.ReadUInt32();
+
+        if(!TryBeginAuthArea(ref reader, out int sessionsStart, out uint authorizationSize, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        if(!TryReadPasswordSessionBody(ref reader, out ReadOnlySpan<byte> pcrAuth, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        if(reader.Consumed - sessionsStart >= (int)authorizationSize)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_AUTH_MISSING;
+
+            return false;
+        }
+
+        if(!TryReadPasswordSessionBody(ref reader, out ReadOnlySpan<byte> sequenceAuth, out malformedResponseCode, sessionIndex: 1))
+        {
+            return false;
+        }
+
+        if(!TryEndAuthArea(ref reader, sessionsStart, authorizationSize, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //Parameter: buffer (TPM2B_MAX_BUFFER) — bound-first against MaxSize (1024, TPM_RC_SIZE); an empty
+        //buffer is admitted ("the last part of data, if any", clause 17.9.1).
+        if(!TryReadTpm2bSpanBounded(ref reader, Tpm2bMaxBuffer.MaxSize, out ReadOnlySpan<byte> buffer, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //buffer is the final parameter; no octets may follow it (Part 3, 5.2).
+        if(reader.Remaining != 0)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+
+        Tpm2bAuth suppliedPcrPassword = Tpm2bAuth.Empty;
+        Tpm2bAuth suppliedSequencePassword = Tpm2bAuth.Empty;
+        Tpm2bMaxBuffer trailingBuffer = Tpm2bMaxBuffer.Empty;
+        try
+        {
+            suppliedPcrPassword = Tpm2bAuth.Create(pcrAuth, pool);
+            suppliedSequencePassword = Tpm2bAuth.Create(sequenceAuth, pool);
+            trailingBuffer = Tpm2bMaxBuffer.Create(buffer, pool);
+            input = new TpmEventSequenceCompleteRequested(pcrHandle, suppliedPcrPassword, TpmiDhObject.FromValue(sequenceHandle), suppliedSequencePassword, trailingBuffer);
+        }
+        catch
+        {
+            trailingBuffer.Dispose();
+            suppliedSequencePassword.Dispose();
+            suppliedPcrPassword.Dispose();
+            throw;
+        }
 
         return true;
     }
@@ -11170,15 +18431,15 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// (qualifyingData as TPM2B_DATA, inScheme as TPMT_SIG_SCHEME, PCRselect as TPML_PCR_SELECTION). A lone
     /// password slot parses to <see cref="TpmQuoteRequested"/>; anything else, including a password slot
     /// ALONGSIDE a companion, parses to <see cref="TpmQuoteOverSessionRequested"/>, whose response owes one entry
-    /// per slot (TPM 2.0 Library Part 1, clause 16.6.1).
+    /// per slot (TPM 2.0 Library Part 1, clause 15.6.1).
     /// </summary>
     /// <remarks>
     /// The number of slots is read from the declared authorization size rather than assumed, the
     /// <c>TPM2_Create()</c> idiom: a slot that has not consumed the whole area leaves a companion behind it
-    /// (Part 1, clause 16.6.1, Table 9 — "authorization sessions come before sessions used only for encryption,
-    /// decryption, or audit"). One authorizing slot leaves BOTH of Table 9's later positions open, so the area may
+    /// (Part 1, clause 15.6.1, Table 12 — "authorization sessions come before sessions used only for encryption,
+    /// decryption, or audit"). One authorizing slot leaves BOTH of Table 12's later positions open, so the area may
     /// carry two companions; <c>TryEndAuthArea</c> answers <c>TPM_RC_AUTHSIZE</c> for a fourth slot or any surplus
-    /// octet, which is the "no more than three" bound of clause 16.6.1. The scheme's validation is entirely in the
+    /// octet, which is the "no more than three" bound of clause 15.6.1. The scheme's validation is entirely in the
     /// signing scheme selector (Part 3, clause 18.4).
     /// </remarks>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
@@ -11218,7 +18479,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         }
 
         //Octets left inside the declared authorization size after the last REQUIRED slot are a companion slot
-        //(Part 1, clause 16.6.1, Table 9, position after the authorization sessions).
+        //(Part 1, clause 15.6.1, Table 12, position after the authorization sessions).
         bool hasCompanion = reader.Consumed - sessionsStart != (int)authorizationSize;
         TpmiShAuthSession companionSessionHandle = TpmiShAuthSession.FromValue(0);
         TpmaSession companionSessionAttributes = default;
@@ -11234,9 +18495,9 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return false;
         }
 
-        //Octets STILL left after the first companion are a second one: with a single authorizing slot, Table 9's
+        //Octets STILL left after the first companion are a second one: with a single authorizing slot, Table 12's
         //positions 2 and 3 are both open, and each may be an encryption, decryption, or audit session (Part 1,
-        //clause 16.6.1). A fourth block would overrun the declared size, which TryEndAuthArea answers below.
+        //clause 15.6.1). A fourth block would overrun the declared size, which TryEndAuthArea answers below.
         bool hasSecondCompanion = reader.Consumed - sessionsStart != (int)authorizationSize;
         TpmiShAuthSession secondCompanionSessionHandle = TpmiShAuthSession.FromValue(0);
         TpmaSession secondCompanionSessionAttributes = default;
@@ -11256,7 +18517,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
         //The parameter set (qualifyingData ‖ inScheme ‖ PCRselect) is every octet left after the authorization
         //area — captured verbatim, before any field is decoded, as the session arm's cpHash parameter term
-        //(Part 1, clause 16.7 equation 15).
+        //(Part 1, clause 15.7 equation 15).
         ReadOnlySpan<byte> rawParameterAreaOctets = reader.PeekBytes(reader.Remaining);
 
         //Which arm the area belongs to is settled before the parameters are read, because it decides how
@@ -11264,7 +18525,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         bool isPasswordSlot = signSessionHandle.IsPasswordSession && !hasCompanion;
 
         //Parameter: qualifyingData (TPM2B_DATA) — the caller nonce echoed into the attestation, and the first
-        //command parameter, which is the one a decrypt session protects (Part 1, clause 16.4). On the session
+        //command parameter, which is the one a decrypt session protects (Part 1, clause 15.4). On the session
         //form these octets may be CIPHERTEXT, so the parse only steps over the field's framing to reach the
         //parameters behind it and the decrypt step supplies the plaintext (Part 3, clause 5.7 precedes clause
         //5.8); decoding here would also be futile, since a separately copied field is not updated by the in-place
@@ -11278,7 +18539,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                 return false;
             }
 
-            //TPM2B_DATA is bounded by sizeof(TPMT_HA) (Part 2, clause 10.4.3, Table 93), so a wider value is
+            //TPM2B_DATA is bounded by sizeof(TPMT_HA) (Part 2, clause 10.3.3, Table 91), so a wider value is
             //TPM_RC_SIZE here, before any carrier is rented; the consuming transition's own bound check stands as
             //the fail-closed backstop. The session form's bound is applied to the RECOVERED value instead, which
             //is the only form of it TPM2B_DATA is about.
@@ -11332,7 +18593,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         catch(InvalidOperationException)
         {
             //A list naming more banks than HASH_COUNT selections is out of the structure's declared bound
-            //(Part 2, clause 10.9.7, Table 125: #TPM_RC_SIZE).
+            //(Part 2, clause 10.8.7, Table 128: #TPM_RC_SIZE).
             malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
 
             return false;
@@ -11340,7 +18601,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         catch(ArgumentOutOfRangeException)
         {
             //A selection whose sizeofSelect lies outside PCR_SELECT_MIN..PCR_SELECT_MAX is out of the member's
-            //own declared bounds (Part 2, clause 10.6.2, Table 106: #TPM_RC_VALUE). The probe above already
+            //own declared bounds (Part 2, clause 10.5.2, Table 107: #TPM_RC_VALUE). The probe above already
             //refuses that width, so this is the fail-closed backstop rather than the answering layer.
             malformedResponseCode = TpmRcConstants.TPM_RC_VALUE;
 
@@ -11437,8 +18698,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return false;
         }
 
-        //A TPM2B_NONCE buffer can be no wider than sizeof(TPMU_HA) (TPM 2.0 Library Part 2, clause 10.4.4, Table
-        //94, page 134, which types it as a TPM2B_DIGEST, over clause 10.4.2, Table 92, page 134, which bounds
+        //A TPM2B_NONCE buffer can be no wider than sizeof(TPMU_HA) (TPM 2.0 Library Part 2, clause 10.3.4, Table
+        //94, page 134, which types it as a TPM2B_DIGEST, over clause 10.3.2, Table 90, page 134, which bounds
         //that structure's buffer and names TPM_RC_SIZE); the carrier's Create refuses the same bound by
         //throwing, so the wire answer is given here, ahead of the rental. Section 11.1.1's own floor and its
         //"no wider than the digest produced by authHash" ceiling are narrower, session-specific rules and stay
@@ -11459,8 +18720,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         }
 
         //A TPM2B_ENCRYPTED_SECRET's secret is bounded by sizeof(TPMU_ENCRYPTED_SECRET) (TPM 2.0 Library Part 2,
-        //clause 11.4.3, Table 210, page 180), the widest asymmetrically protected seed the union holds, and a
-        //sized buffer past its prescribed range is TPM_RC_SIZE (clause 10.4.2, Table 92, page 134's implied
+        //clause 11.4.3, Table 224, page 180), the widest asymmetrically protected seed the union holds, and a
+        //sized buffer past its prescribed range is TPM_RC_SIZE (clause 10.3.2, Table 90, page 134's implied
         //check). The carrier's Create refuses the same bound by throwing, so the wire answer is given here.
         if(encryptedSalt.Length > Tpm2bEncryptedSecret.MaxSize)
         {
@@ -11583,7 +18844,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         }
 
         //Parameter: bytesRequested (UINT16). Captured raw (before decode) as cpHash's parameter term (Part 1,
-        //clause 16.7 equation 15) — for this fixed 2-octet big-endian field the raw bytes and a re-encoded
+        //clause 15.7 equation 15) — for this fixed 2-octet big-endian field the raw bytes and a re-encoded
         //bytesRequested are byte-identical, but capturing the span read keeps the convention uniform with a
         //variable-length first parameter (TpmUnsealOverSessionsRequested has none to capture at all).
         if(reader.Remaining < sizeof(ushort))
@@ -11639,11 +18900,11 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// <remarks>
     /// Both sized fields go through <see cref="TryReadSessionCredentialSpan"/>, so each carries the structural
     /// width rule of its own type ahead of its body-length check, and the same layout serves a password slot and
-    /// a real session (Part 1, clause 17.6.4.1): the handle alone decides which. It is carried as read through
+    /// a real session (Part 1, clause 16.6.4.1): the handle alone decides which. It is carried as read through
     /// <see cref="TpmiShAuthSession.FromValue"/>, leaving a handle outside the interface type's set (Part 2, clause
-    /// 9.8, Table 55) to the consuming transition's response code rather than a parse-time exception. The reader is
+    /// 9.8, Table 54) to the consuming transition's response code rather than a parse-time exception. The reader is
     /// taken by reference so the returned spans, which alias the command buffer, are valid for the caller. A
-    /// <c>TPM_RS_PW</c> handle carries the structural rules of Part 1, clause 16.6.4, Table 12, applied through the
+    /// <c>TPM_RS_PW</c> handle carries the structural rules of Part 1, clause 15.6.4, Table 15, applied through the
     /// shared <see cref="TpmLifecycleTransitions.TryValidatePasswordSlot"/> at this slot's own index — the same one
     /// rule, at the same position, the reference's <c>RetrieveSessionData</c> applies to every slot it unmarshals.
     /// </remarks>
@@ -11651,7 +18912,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// <param name="sessionIndex">The slot's zero-based index in the authorization area, for the session-index-encoded response codes.</param>
     /// <param name="sessionHandle">The slot's session handle.</param>
     /// <param name="nonceCaller">The slot's caller nonce, aliasing the command buffer.</param>
-    /// <param name="sessionAttributes">The slot's command session attributes (<c>TPMA_SESSION</c>, Part 2, clause 8.4, Table 40).</param>
+    /// <param name="sessionAttributes">The slot's command session attributes (<c>TPMA_SESSION</c>, Part 2, clause 8.4, Table 38).</param>
     /// <param name="hmac">The slot's supplied <c>hmac</c> field, aliasing the command buffer.</param>
     /// <param name="malformedResponseCode">The response code a malformed frame answers with.</param>
     /// <returns><see langword="true"/> when the whole slot read cleanly.</returns>
@@ -11772,6 +19033,352 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     }
 
     /// <summary>Reads the single policy-session command handle of a parameterless policy command and confirms nothing follows.</summary>
+    /// <summary>
+    /// <c>TPM2_PolicyPassword()</c> carries only the policy session command handle with no parameters (Part 3,
+    /// clause 23.18, Table 174). Framed with no sessions.
+    /// </summary>
+    private static bool TryParsePolicyPassword(ref TpmReader reader, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
+    {
+        if(!TryReadPolicySessionOnly(ref reader, out uint policySession, out malformedResponseCode))
+        {
+            input = null;
+
+            return false;
+        }
+
+        input = new TpmPolicyPasswordRequested(TpmiShPolicy.FromValue(policySession));
+
+        return true;
+    }
+
+    /// <summary>
+    /// <c>TPM2_PolicyRestart()</c> carries only the session command handle with no parameters (Part 3, clause
+    /// 11.2, Table 16). Framed with no sessions.
+    /// </summary>
+    private static bool TryParsePolicyRestart(ref TpmReader reader, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
+    {
+        if(!TryReadPolicySessionOnly(ref reader, out uint sessionHandle, out malformedResponseCode))
+        {
+            input = null;
+
+            return false;
+        }
+
+        input = new TpmPolicyRestartRequested(TpmiShPolicy.FromValue(sessionHandle));
+
+        return true;
+    }
+
+    /// <summary>
+    /// <c>TPM2_PolicyCpHash()</c> carries the policy session command handle then the parameter cpHashA
+    /// (<c>TPM2B_DIGEST</c>) (Part 3, clause 23.13, Table 164). Framed with no sessions.
+    /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the parse-rented digest carrier transfers to the constructed request input, whose consuming transition transfers it onto the policy session and whose refusing arms dispose it through the input's own Dispose.")]
+    private static bool TryParsePolicyCpHash(ref TpmReader reader, BaseMemoryPool pool, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
+    {
+        input = null;
+        if(!TryReadPolicySessionThenDigest(ref reader, out uint policySession, out ReadOnlySpan<byte> digest, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        input = new TpmPolicyCpHashRequested(TpmiShPolicy.FromValue(policySession), Tpm2bDigest.Create(digest, pool));
+
+        return true;
+    }
+
+    /// <summary>
+    /// <c>TPM2_PolicyNameHash()</c> carries the policy session command handle then the parameter nameHash
+    /// (<c>TPM2B_DIGEST</c>) (Part 3, clause 23.14, Table 166). Framed with no sessions.
+    /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the parse-rented digest carrier transfers to the constructed request input, whose consuming transition transfers it onto the policy session and whose refusing arms dispose it through the input's own Dispose.")]
+    private static bool TryParsePolicyNameHash(ref TpmReader reader, BaseMemoryPool pool, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
+    {
+        input = null;
+        if(!TryReadPolicySessionThenDigest(ref reader, out uint policySession, out ReadOnlySpan<byte> digest, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        input = new TpmPolicyNameHashRequested(TpmiShPolicy.FromValue(policySession), Tpm2bDigest.Create(digest, pool));
+
+        return true;
+    }
+
+    /// <summary>
+    /// <c>TPM2_PolicyDuplicationSelect()</c> carries the policy session command handle then the parameters
+    /// objectName (<c>TPM2B_NAME</c>), newParentName (<c>TPM2B_NAME</c>) and includeObject (<c>TPMI_YES_NO</c>)
+    /// (Part 3, clause 23.15, Table 168). Framed with no sessions. Each Name is bounded by <c>sizeof(TPMU_NAME)</c>
+    /// (Part 2, clause 10.4.3, Table 105; <c>TPM_RC_SIZE</c> beyond it), the octet by Table 48's two values
+    /// (<c>TPM_RC_VALUE</c> otherwise, answered as the octet unmarshals), trailing octets are <c>TPM_RC_SIZE</c>
+    /// after every parameter has unmarshaled, and the two Name carriers are rented as the parse's last act, so no
+    /// refused parse ever creates one.
+    /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the two parse-rented Name carriers transfers to the constructed request input, whose consuming transition transfers them into the fold effect and whose refusing arms dispose them through the input's own Dispose.")]
+    private static bool TryParsePolicyDuplicationSelect(ref TpmReader reader, BaseMemoryPool pool, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
+    {
+        input = null;
+        malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
+
+        if(reader.Remaining < sizeof(uint))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        uint policySession = reader.ReadUInt32();
+
+        if(!TryReadTpm2bSpanBounded(ref reader, Tpm2bName.MaxSize, out ReadOnlySpan<byte> objectName, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        if(!TryReadTpm2bSpanBounded(ref reader, Tpm2bName.MaxSize, out ReadOnlySpan<byte> newParentName, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        if(reader.Remaining < sizeof(byte))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        //The octet's own value check answers before the trailing-octet check, the reference's order: each
+        //parameter unmarshals (TPMI_YES_NO_Unmarshal → TPM_RC_VALUE) before the dispatcher tests for octets left.
+        byte includeObject = reader.ReadByte();
+        if(includeObject > 1)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_VALUE;
+
+            return false;
+        }
+
+        if(reader.Remaining != 0)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+
+        Tpm2bName objectNameCarrier = Tpm2bName.Empty;
+        try
+        {
+            objectNameCarrier = Tpm2bName.Create(objectName, pool);
+            input = new TpmPolicyDuplicationSelectRequested(
+                TpmiShPolicy.FromValue(policySession), objectNameCarrier, Tpm2bName.Create(newParentName, pool), includeObject == 1);
+        }
+        catch
+        {
+            //This carrier's only owner is this frame until the request adopts it, so a failing second rent
+            //must release it or the pinned rental is orphaned.
+            objectNameCarrier.Dispose();
+            throw;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// <c>TPM2_PolicyParameters()</c> carries the policy session command handle then the parameter pHash
+    /// (<c>TPM2B_DIGEST</c>) (Part 3, clause 23.24, Table 187). Framed with no sessions.
+    /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the parse-rented digest carrier transfers to the constructed request input, whose consuming transition transfers it onto the policy session and whose refusing arms dispose it through the input's own Dispose.")]
+    private static bool TryParsePolicyParameters(ref TpmReader reader, BaseMemoryPool pool, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
+    {
+        input = null;
+        if(!TryReadPolicySessionThenDigest(ref reader, out uint policySession, out ReadOnlySpan<byte> digest, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        input = new TpmPolicyParametersRequested(TpmiShPolicy.FromValue(policySession), Tpm2bDigest.Create(digest, pool));
+
+        return true;
+    }
+
+    /// <summary>
+    /// <c>TPM2_PolicyTemplate()</c> carries the policy session command handle then the parameter templateHash
+    /// (<c>TPM2B_DIGEST</c>) (Part 3, clause 23.21, Table 180). Framed with no sessions.
+    /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the parse-rented digest carrier transfers to the constructed request input, whose consuming transition transfers it onto the policy session and whose refusing arms dispose it through the input's own Dispose.")]
+    private static bool TryParsePolicyTemplate(ref TpmReader reader, BaseMemoryPool pool, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
+    {
+        input = null;
+        if(!TryReadPolicySessionThenDigest(ref reader, out uint policySession, out ReadOnlySpan<byte> digest, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        input = new TpmPolicyTemplateRequested(TpmiShPolicy.FromValue(policySession), Tpm2bDigest.Create(digest, pool));
+
+        return true;
+    }
+
+    /// <summary>
+    /// The shared body of the four digest-latching policy commands: the policy session command handle, then
+    /// one <c>TPM2B_DIGEST</c> parameter bounded by <c>sizeof(TPMU_HA)</c> (Part 2, clause 10.3.2, Table 90), then
+    /// nothing. The digest's equality with the session's own digest width is the transition's rule (it needs the
+    /// session), not the parser's.
+    /// </summary>
+    private static bool TryReadPolicySessionThenDigest(ref TpmReader reader, out uint policySession, out ReadOnlySpan<byte> digest, out TpmRcConstants malformedResponseCode)
+    {
+        policySession = 0;
+        digest = ReadOnlySpan<byte>.Empty;
+        malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
+
+        if(reader.Remaining < sizeof(uint))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        policySession = reader.ReadUInt32();
+
+        if(!TryReadTpm2bSpanBounded(ref reader, Tpm2bDigest.MaxSize, out digest, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        if(reader.Remaining != 0)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// <c>TPM2_PolicyLocality()</c> carries the policy session command handle then the one-octet
+    /// <c>TPMA_LOCALITY</c> parameter (Part 3, clause 23.8, Table 154; Part 2, clause 8.5, Table 39). Framed with
+    /// no sessions. Every octet value is well-formed at unmarshal; the zero-selection and type rules are the
+    /// transition's (they need the session's prior setting).
+    /// </summary>
+    private static bool TryParsePolicyLocality(ref TpmReader reader, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
+    {
+        input = null;
+        malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
+
+        if(reader.Remaining < sizeof(uint) + sizeof(byte))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        uint policySession = reader.ReadUInt32();
+        byte locality = reader.ReadByte();
+
+        if(reader.Remaining != 0)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+
+        input = new TpmPolicyLocalityRequested(TpmiShPolicy.FromValue(policySession), locality);
+
+        return true;
+    }
+
+    /// <summary>
+    /// <c>TPM2_PolicyNvWritten()</c> carries the policy session command handle then the one-octet
+    /// <c>TPMI_YES_NO</c> parameter (Part 3, clause 23.20, Table 178; Part 2, clause 9.2, Table 48: <c>NO</c> is 0,
+    /// <c>YES</c> is 1, and any other octet fails the unmarshal with <c>TPM_RC_VALUE</c>). Framed with no sessions.
+    /// </summary>
+    private static bool TryParsePolicyNvWritten(ref TpmReader reader, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
+    {
+        input = null;
+        malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
+
+        if(reader.Remaining < sizeof(uint) + sizeof(byte))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        uint policySession = reader.ReadUInt32();
+        byte writtenSet = reader.ReadByte();
+
+        if(reader.Remaining != 0)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+
+        if(writtenSet > 1)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_VALUE;
+
+            return false;
+        }
+
+        input = new TpmPolicyNvWrittenRequested(TpmiShPolicy.FromValue(policySession), writtenSet == 1);
+
+        return true;
+    }
+
+    /// <summary>
+    /// <c>TPM2_PolicyAuthorizeNV()</c> carries three handles — <c>@authHandle</c> (authorized, USER role),
+    /// <c>nvIndex</c>, and <c>policySession</c> — a one-slot password authorization area, and no parameters (Part 3,
+    /// clause 23.22, Table 182). The read authorization is required even for a trial session, so the tag must be
+    /// <c>TPM_ST_SESSIONS</c>.
+    /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the parse-rented password carrier transfers to the constructed request input, whose consuming transition disposes it once the read authorization has consumed it and whose refusing arms dispose it through the input's own Dispose.")]
+    private static bool TryParsePolicyAuthorizeNv(ref TpmReader reader, ushort tag, BaseMemoryPool pool, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
+    {
+        input = null;
+        malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
+
+        if(tag != (ushort)TpmStConstants.TPM_ST_SESSIONS)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_AUTH_MISSING;
+
+            return false;
+        }
+
+        if(reader.Remaining < 3 * sizeof(uint))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        uint authHandle = reader.ReadUInt32();
+        uint nvIndex = reader.ReadUInt32();
+        uint policySession = reader.ReadUInt32();
+
+        if(!TryReadPasswordAuthArea(ref reader, out ReadOnlySpan<byte> suppliedAuth, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        if(reader.Remaining != 0)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+
+        input = new TpmPolicyAuthorizeNvRequested(
+            TpmiRhNvAuth.FromValue(authHandle), Tpm2bAuth.Create(suppliedAuth, pool), TpmiRhNvIndex.FromValue(nvIndex), TpmiShPolicy.FromValue(policySession));
+
+        return true;
+    }
+
     private static bool TryReadPolicySessionOnly(ref TpmReader reader, out uint policySession, out TpmRcConstants malformedResponseCode)
     {
         policySession = 0;
@@ -11798,11 +19405,16 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
     /// <summary>
     /// <c>TPM2_PolicyPCR()</c> carries the policy session command handle then the parameters pcrDigest
-    /// (TPM2B_DIGEST) and pcrs (TPML_PCR_SELECTION, the final parameter, captured verbatim to fold into the
-    /// policyDigest) (Part 3, clause 23.7). Framed with no sessions.
+    /// (TPM2B_DIGEST) and pcrs (TPML_PCR_SELECTION, the final parameter, decoded into an owned carrier that
+    /// folds into the policyDigest through its own <c>WriteTo</c>) (Part 3, clause 23.7). Framed with no sessions.
     /// </summary>
+    /// <remarks>
+    /// <c>pcrs</c> is read the <c>TPM2_Quote()</c> idiom (<see cref="TryParseQuote"/>): a by-value probe through
+    /// <see cref="TrySkipPcrSelection"/> answers a truncated or over-bound list before any rental, then
+    /// <see cref="TpmlPcrSelection.Parse"/> decodes it.
+    /// </remarks>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-        Justification = "Ownership of the parse-rented digest carrier transfers to the constructed request input, whose asserting transition is its terminal owner on every arm and releases it through the input's own Dispose.")]
+        Justification = "Ownership of the parse-rented digest and selection carriers transfers to the constructed request input, whose asserting transition is their terminal owner on every arm and releases them through the input's own Dispose.")]
     private static bool TryParsePolicyPcr(ref TpmReader reader, BaseMemoryPool pool, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
     {
         input = null;
@@ -11822,8 +19434,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return false;
         }
 
-        //A TPM2B_DIGEST buffer can be no wider than sizeof(TPMU_HA) (TPM 2.0 Library Part 2, clause 10.4.2,
-        //Table 92), so the wire bound is answered here, ahead of the rental whose Create refuses the same bound
+        //A TPM2B_DIGEST buffer can be no wider than sizeof(TPMU_HA) (TPM 2.0 Library Part 2, clause 10.3.2,
+        //Table 90), so the wire bound is answered here, ahead of the rental whose Create refuses the same bound
         //by throwing.
         if(pcrDigest.Length > Tpm2bDigest.MaxSize)
         {
@@ -11832,9 +19444,42 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return false;
         }
 
-        //Parameter: pcrs (TPML_PCR_SELECTION) — captured verbatim so it folds into the policyDigest exactly as sent.
-        if(!TryReadFinalPcrSelection(ref reader, out ReadOnlyMemory<byte> pcrSelection, out malformedResponseCode))
+        //Parameter: pcrs (TPML_PCR_SELECTION) — the final parameter, decoded into an owned carrier so the
+        //transition can shape it into the clause-23.7 pcrs term (masked to the implemented PCR on a real
+        //session, left as sent on a trial one) and the fold can re-marshal exactly that term.
+        TpmReader probe = reader;
+        if(!TrySkipPcrSelection(ref probe, out malformedResponseCode))
         {
+            return false;
+        }
+
+        if(probe.Remaining != 0)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+
+        TpmlPcrSelection pcrSelection;
+        try
+        {
+            pcrSelection = TpmlPcrSelection.Parse(ref reader, pool);
+        }
+        catch(InvalidOperationException)
+        {
+            //A list naming more banks than HASH_COUNT selections is out of the structure's declared bound
+            //(Part 2, clause 10.8.7, Table 128: #TPM_RC_SIZE).
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+        catch(ArgumentOutOfRangeException)
+        {
+            //A selection whose sizeofSelect lies outside PCR_SELECT_MIN..PCR_SELECT_MAX is out of the member's
+            //own declared bounds (Part 2, clause 10.5.2, Table 107: #TPM_RC_VALUE). The probe above already
+            //refuses that width, so this is the fail-closed backstop rather than the answering layer.
+            malformedResponseCode = TpmRcConstants.TPM_RC_VALUE;
+
             return false;
         }
 
@@ -11851,11 +19496,12 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// 23.6). Framed with no sessions.
     /// </summary>
     /// <remarks>
-    /// The branch count is bounded by the remaining octets — each branch needs at least a 2-byte size prefix —
-    /// so a malformed count runs out of input rather than over-allocating.
+    /// The branch count is bounded explicitly against Part 3, clause 23.6's own two-to-eight range before the
+    /// branch list is pre-sized to it, so an out-of-range count answers <c>TPM_RC_SIZE</c> before any
+    /// allocation rather than running the buffer out from an over-large declared count.
     /// </remarks>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-        Justification = "Ownership of the parse-rented branch list transfers to the constructed request input, whose accepting arm transfers it into the fold action and whose refusing arms dispose it through the input's own Dispose; a branch rent that fails after earlier ones succeeded releases them inside the list factory.")]
+        Justification = "Ownership of every branch rented in the loop transfers into the adopted list, and from there into the constructed request input, whose accepting arm transfers it into the fold action and whose refusing arms dispose it through the input's own Dispose; a branch refusal after earlier ones succeeded releases every digest already rented in the loop before returning false.")]
     private static bool TryParsePolicyOr(ref TpmReader reader, BaseMemoryPool pool, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
     {
         input = null;
@@ -11883,45 +19529,45 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return false;
         }
 
-        ImmutableArray<ReadOnlyMemory<byte>>.Builder branches = ImmutableArray.CreateBuilder<ReadOnlyMemory<byte>>();
+        var branches = new List<Tpm2bDigest>((int)count);
         for(uint i = 0; i < count; i++)
         {
-            //The copy this loop makes is TryReadTpm2b's. TpmlDigest.Parse(ref TpmReader, BaseMemoryPool) reads
-            //exactly this wire shape — a UINT32 count followed by that many TPM2B_DIGEST fields — straight into
-            //pooled carriers with no public-API change, releasing the carriers already rented when a later one
-            //fails. What it does not do is answer a response code: it reports a malformed list by THROWING, and
-            //it enforces neither Table 123's own {2:} / {:8} count bound nor the per-branch width bound below,
-            //so a parse built on it would read the count itself and answer both gates out of a caught throw.
-            if(!TryReadTpm2b(ref reader, out ReadOnlyMemory<byte> branch, out malformedResponseCode))
+            //Each branch is a TPM2B_DIGEST, so its declared size is checked against sizeof(TPMU_HA) (TPM 2.0
+            //Library Part 2, clause 10.3.2, Table 90) BEFORE the remaining-buffer comparison — a branch that is
+            //both over-bound and truncated answers the bound rather than the truncation. The bounded span rents
+            //its own pooled digest immediately, so a later branch's refusal has every earlier one to release.
+            if(!TryReadTpm2bSpanBounded(ref reader, Tpm2bDigest.MaxSize, out ReadOnlySpan<byte> branchSpan, out malformedResponseCode))
             {
-                return false;
-            }
-
-            //Each branch is a TPM2B_DIGEST, whose buffer can be no wider than sizeof(TPMU_HA) (TPM 2.0 Library
-            //Part 2, clause 10.4.2, Table 92), so the wire bound is answered here, ahead of the rental whose
-            //Create refuses the same bound by throwing.
-            if(branch.Length > Tpm2bDigest.MaxSize)
-            {
-                malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+                ReleaseBranches(branches);
 
                 return false;
             }
 
-            branches.Add(branch);
+            branches.Add(Tpm2bDigest.Create(branchSpan, pool));
         }
 
         if(reader.Remaining != 0)
         {
+            ReleaseBranches(branches);
             malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
 
             return false;
         }
 
-        //The owned pooled branch list is rented here, the parse's last act after every wire check has passed, so
-        //no refused parse ever creates one.
-        input = new TpmPolicyOrRequested(TpmiShPolicy.FromValue(policySession), TpmlDigest.Create(branches.ToImmutable(), pool));
+        //The branch list adopts every digest already rented above, transferring ownership without a second
+        //pooled copy; this is the parse's last act, so no refused parse ever creates one.
+        input = new TpmPolicyOrRequested(TpmiShPolicy.FromValue(policySession), TpmlDigest.Adopt(branches));
 
         return true;
+
+        //Releases every digest rented so far in the branch loop, for a refusal that must leave none orphaned.
+        static void ReleaseBranches(List<Tpm2bDigest> rented)
+        {
+            foreach(Tpm2bDigest digest in rented)
+            {
+                digest.Dispose();
+            }
+        }
     }
 
     /// <summary>
@@ -11987,7 +19633,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
         //PolicySecret's entire parameter set (nonceTPM ‖ cpHashA ‖ policyRef ‖ expiration) is every octet left
         //after the authorization area — captured verbatim, before any field is decoded, as the HMAC/POLICY
-        //arm's cpHash parameter term (Part 1, clause 16.7 equation 15); unused by the password arm.
+        //arm's cpHash parameter term (Part 1, clause 15.7 equation 15); unused by the password arm.
         ReadOnlySpan<byte> rawParameterAreaOctets = reader.PeekBytes(reader.Remaining);
 
         //Parameter: nonceTPM (TPM2B_NONCE).
@@ -11996,8 +19642,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return false;
         }
 
-        //A TPM2B_NONCE buffer can be no wider than sizeof(TPMU_HA) (TPM 2.0 Library Part 2, clause 10.4.4, Table
-        //94, page 134, which types it as a TPM2B_DIGEST, and clause 10.4.2, Table 92, page 134, which bounds that
+        //A TPM2B_NONCE buffer can be no wider than sizeof(TPMU_HA) (TPM 2.0 Library Part 2, clause 10.3.4, Table
+        //94, page 134, which types it as a TPM2B_DIGEST, and clause 10.3.2, Table 90, page 134, which bounds that
         //structure's buffer); the carrier's Create refuses the same bound by throwing, so the wire answer is
         //given here, ahead of the rental and ahead of any session-state comparison.
         if(nonceTpm.Length > Tpm2bNonce.MaxSize)
@@ -12013,8 +19659,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return false;
         }
 
-        //A TPM2B_DIGEST buffer can be no wider than sizeof(TPMU_HA) (TPM 2.0 Library Part 2, clause 10.4.2,
-        //Table 92), so the wire bound is answered here, ahead of the rental whose Create refuses the same bound
+        //A TPM2B_DIGEST buffer can be no wider than sizeof(TPMU_HA) (TPM 2.0 Library Part 2, clause 10.3.2,
+        //Table 90), so the wire bound is answered here, ahead of the rental whose Create refuses the same bound
         //by throwing. The transition's own "exactly the session's digest width" check stays as the backstop.
         if(cpHashA.Length > Tpm2bDigest.MaxSize)
         {
@@ -12029,8 +19675,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return false;
         }
 
-        //A TPM2B_NONCE buffer can be no wider than sizeof(TPMU_HA) (TPM 2.0 Library Part 2, clause 10.4.4, Table
-        //94, which types it as a TPM2B_DIGEST, and clause 10.4.2, Table 92, which bounds that structure's
+        //A TPM2B_NONCE buffer can be no wider than sizeof(TPMU_HA) (TPM 2.0 Library Part 2, clause 10.3.4, Table
+        //94, which types it as a TPM2B_DIGEST, and clause 10.3.2, Table 90, which bounds that structure's
         //buffer); the carrier's Create refuses the same bound by throwing, so the wire answer is given here.
         if(policyRef.Length > Tpm2bNonce.MaxSize)
         {
@@ -12100,12 +19746,16 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
     /// <summary>
     /// <c>TPM2_PolicySigned()</c> authorizes neither handle (Auth Index: None for both authObject and
-    /// policySession, TPM 2.0 Library Part 3, Table 124), so its wire layout after the header is: handle area
+    /// policySession, TPM 2.0 Library Part 3, Table 144), so its wire layout after the header is: handle area
     /// (authObject, policySession — 2 handles, no authorization area at all, <c>TPM_ST_NO_SESSIONS</c> exactly
     /// like <c>TPM2_VerifySignature()</c>), then parameters (nonceTPM as TPM2B_NONCE, cpHashA as TPM2B_DIGEST,
     /// policyRef as TPM2B_NONCE, expiration as INT32, auth as TPMT_SIGNATURE).
     /// </summary>
-    /// <remarks>The TPMT_SIGNATURE parsing is the same inline, fail-closed block <c>TryParseVerifySignature</c> uses (Part 3, clause 23.3).</remarks>
+    /// <remarks>
+    /// The <c>auth</c> parameter's <c>sigAlg</c> selector gate (<c>TPM_RC_SCHEME</c>) is inline here, exactly as
+    /// <see cref="TryParseVerifySignature"/>'s is; the post-gate <c>TPMT_SIGNATURE</c> body is the SAME shared
+    /// helper both parsers call, <see cref="TryParseTpmtSignatureBody"/> (Part 3, clause 23.3).
+    /// </remarks>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the parse-rented cpHashA and policyRef carriers transfers to the constructed request input, whose consuming transition transfers them into the verification action and whose refusing arms dispose them through the input's own Dispose; a rent that fails after the first carrier already succeeded releases it in the catch before rethrowing.")]
     private static bool TryParsePolicySigned(ref TpmReader reader, ushort tag, BaseMemoryPool pool, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
@@ -12137,8 +19787,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return false;
         }
 
-        //A TPM2B_NONCE buffer can be no wider than sizeof(TPMU_HA) (TPM 2.0 Library Part 2, clause 10.4.4, Table
-        //94, page 134, which types it as a TPM2B_DIGEST, and clause 10.4.2, Table 92, page 134, which bounds that
+        //A TPM2B_NONCE buffer can be no wider than sizeof(TPMU_HA) (TPM 2.0 Library Part 2, clause 10.3.4, Table
+        //94, page 134, which types it as a TPM2B_DIGEST, and clause 10.3.2, Table 90, page 134, which bounds that
         //structure's buffer); the carrier's Create refuses the same bound by throwing, so the wire answer is
         //given here, ahead of the rental and ahead of any session-state comparison.
         if(nonceTpm.Length > Tpm2bNonce.MaxSize)
@@ -12148,35 +19798,20 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return false;
         }
 
-        //Parameter: cpHashA (TPM2B_DIGEST).
-        if(!TryReadTpm2bSpan(ref reader, out ReadOnlySpan<byte> cpHashA, out malformedResponseCode))
+        //Parameter: cpHashA (TPM2B_DIGEST). Bound-first against sizeof(TPMU_HA) (TPM 2.0 Library Part 2, clause
+        //10.4.2, Table 90), matching the shared TPMT_SIGNATURE body this parse delegates to below — a cpHashA
+        //that is both over-bound and truncated answers TPM_RC_SIZE, never TPM_RC_INSUFFICIENT. The transition's
+        //own "exactly the session's digest width" check stays as the backstop.
+        if(!TryReadTpm2bSpanBounded(ref reader, Tpm2bDigest.MaxSize, out ReadOnlySpan<byte> cpHashA, out malformedResponseCode))
         {
             return false;
         }
 
-        //A TPM2B_DIGEST buffer can be no wider than sizeof(TPMU_HA) (TPM 2.0 Library Part 2, clause 10.4.2,
-        //Table 92), so the wire bound is answered here, ahead of the rental whose Create refuses the same bound
-        //by throwing. The transition's own "exactly the session's digest width" check stays as the backstop.
-        if(cpHashA.Length > Tpm2bDigest.MaxSize)
+        //Parameter: policyRef (TPM2B_NONCE). Bound-first against sizeof(TPMU_HA) (TPM 2.0 Library Part 2, clause
+        //10.4.4, Table 92, which types it as a TPM2B_DIGEST, and clause 10.3.2, Table 90, which bounds that
+        //structure's buffer), for the same over-bound-and-truncated priority as cpHashA above.
+        if(!TryReadTpm2bSpanBounded(ref reader, Tpm2bNonce.MaxSize, out ReadOnlySpan<byte> policyRef, out malformedResponseCode))
         {
-            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
-
-            return false;
-        }
-
-        //Parameter: policyRef (TPM2B_NONCE).
-        if(!TryReadTpm2bSpan(ref reader, out ReadOnlySpan<byte> policyRef, out malformedResponseCode))
-        {
-            return false;
-        }
-
-        //A TPM2B_NONCE buffer can be no wider than sizeof(TPMU_HA) (TPM 2.0 Library Part 2, clause 10.4.4, Table
-        //94, which types it as a TPM2B_DIGEST, and clause 10.4.2, Table 92, which bounds that structure's
-        //buffer); the carrier's Create refuses the same bound by throwing, so the wire answer is given here.
-        if(policyRef.Length > Tpm2bNonce.MaxSize)
-        {
-            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
-
             return false;
         }
 
@@ -12190,8 +19825,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
         int expiration = reader.ReadInt32();
 
-        //Parameter: auth (TPMT_SIGNATURE) — sigAlg (TPMI_ALG_SIG_SCHEME) selects the union member, mirroring
-        //TryParseVerifySignature's inline, fail-closed block exactly.
+        //Parameter: auth (TPMT_SIGNATURE) — sigAlg (TPMI_ALG_SIG_SCHEME) selects the union member; the gate stays
+        //inline, mirroring TryParseVerifySignature's.
         if(reader.Remaining < sizeof(ushort))
         {
             malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
@@ -12207,46 +19842,17 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return false;
         }
 
-        if(reader.Remaining < sizeof(ushort))
+        //The post-gate TPMT_SIGNATURE body (hashAlg plus the sigAlg-selected member) is the shared helper's job;
+        //it rents the pooled signature carrier as its own last act.
+        if(!TryParseTpmtSignatureBody(ref reader, sigAlg, pool, out TpmtSignature? signature, out malformedResponseCode))
         {
-            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
-
             return false;
-        }
-
-        TpmiAlgHash schemeHashAlg = TpmiAlgHash.FromValue((TpmAlgIdConstants)reader.ReadUInt16());
-
-        ReadOnlyMemory<byte> signature;
-        if(sigAlg.Value == TpmAlgIdConstants.TPM_ALG_ECDSA)
-        {
-            if(!TryReadTpm2b(ref reader, out ReadOnlyMemory<byte> signatureR, out malformedResponseCode))
-            {
-                return false;
-            }
-
-            if(!TryReadTpm2b(ref reader, out ReadOnlyMemory<byte> signatureS, out malformedResponseCode))
-            {
-                return false;
-            }
-
-            byte[] concatenated = new byte[signatureR.Length + signatureS.Length];
-            signatureR.Span.CopyTo(concatenated);
-            signatureS.Span.CopyTo(concatenated.AsSpan(signatureR.Length));
-            signature = concatenated;
-        }
-        else
-        {
-            if(!TryReadTpm2b(ref reader, out ReadOnlyMemory<byte> rsaSignature, out malformedResponseCode))
-            {
-                return false;
-            }
-
-            signature = rsaSignature;
         }
 
         //auth is the final parameter; no octets may follow it (Part 3, 5.2).
         if(reader.Remaining != 0)
         {
+            signature.Dispose();
             malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
 
             return false;
@@ -12264,12 +19870,13 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             suppliedNonceTpm = Tpm2bNonce.Create(nonceTpm, pool);
             input = new TpmPolicySignedRequested(
                 TpmiDhObject.FromValue(authObject), TpmiShPolicy.FromValue(policySession), suppliedNonceTpm, suppliedCpHash,
-                suppliedPolicyRef, expiration, sigAlg, schemeHashAlg, signature);
+                suppliedPolicyRef, expiration, sigAlg, TpmiAlgHash.FromValue(signature.Signature.HashAlgorithm), signature);
         }
         catch
         {
             //These carriers' only owner is this frame until the request adopts them, so a failing later rent
             //must release them or the pinned rentals are orphaned.
+            signature.Dispose();
             suppliedNonceTpm.Dispose();
             suppliedPolicyRef.Dispose();
             suppliedCpHash.Dispose();
@@ -12284,7 +19891,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// <c>TPM2_PolicyCommandCode()</c>/<c>TPM2_PolicyPCR()</c>/<c>TPM2_PolicyOR()</c>, none of which check the
     /// tag either), so its wire layout after the header is: handle area (policySession), then parameters
     /// (approvedPolicy as TPM2B_DIGEST, policyRef as TPM2B_NONCE, keySign as TPM2B_NAME, checkTicket as
-    /// TPMT_TK_VERIFIED: tag, hierarchy, digest as TPM2B_DIGEST) (Part 3, Section 23.16).
+    /// TPMT_TK_VERIFIED: tag, hierarchy, [tag]metadata present only for TPM_ST_DIGEST_VERIFIED, hmac as
+    /// TPM2B_DIGEST) (Part 3, Section 23.16; Part 2, clause 10.6.5, Tables 111–113).
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the parse-rented approvedPolicy, policyRef, keySign, and checkTicket digest carriers transfers to the constructed request input, whose trial arm transfers them into the policyDigest fold and whose non-trial arm transfers them into the re-verification action, and whose refusing arms dispose them through the input's own Dispose; a rent that fails after earlier carriers already succeeded releases those in the catch before rethrowing.")]
@@ -12307,8 +19915,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return false;
         }
 
-        //A TPM2B_DIGEST buffer can be no wider than sizeof(TPMU_HA) (TPM 2.0 Library Part 2, clause 10.4.2,
-        //Table 92), so the wire bound is answered here, ahead of the rental whose Create refuses the same bound
+        //A TPM2B_DIGEST buffer can be no wider than sizeof(TPMU_HA) (TPM 2.0 Library Part 2, clause 10.3.2,
+        //Table 90), so the wire bound is answered here, ahead of the rental whose Create refuses the same bound
         //by throwing. The transition's own equality check against the session's digest stays as the backstop.
         if(approvedPolicy.Length > Tpm2bDigest.MaxSize)
         {
@@ -12322,8 +19930,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return false;
         }
 
-        //A TPM2B_NONCE buffer can be no wider than sizeof(TPMU_HA) (TPM 2.0 Library Part 2, clause 10.4.4, Table
-        //94, which types it as a TPM2B_DIGEST, and clause 10.4.2, Table 92, which bounds that structure's
+        //A TPM2B_NONCE buffer can be no wider than sizeof(TPMU_HA) (TPM 2.0 Library Part 2, clause 10.3.4, Table
+        //94, which types it as a TPM2B_DIGEST, and clause 10.3.2, Table 90, which bounds that structure's
         //buffer); the carrier's Create refuses the same bound by throwing, so the wire answer is given here.
         if(policyRef.Length > Tpm2bNonce.MaxSize)
         {
@@ -12338,7 +19946,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         }
 
         //A TPM2B_NAME's content is bounded by sizeof(TPMU_NAME) — a 2-octet nameAlg plus the widest digest
-        //(TPM 2.0 Library Part 2, clause 10.5.3, Table 104; the reference enforces it in TPM2B_NAME_Unmarshal),
+        //(TPM 2.0 Library Part 2, clause 10.4.3, Table 105; the reference enforces it in TPM2B_NAME_Unmarshal),
         //so an oversized keySign is refused here rather than reaching the carrier's own throwing bound. The
         //transition's own nameAlg/width checks stay as the fail-closed backstop.
         if(keySign.Length > Tpm2bName.MaxSize)
@@ -12348,11 +19956,12 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return false;
         }
 
-        //checkTicket (TPMT_TK_VERIFIED): tag (UINT16) + hierarchy (UINT32) + digest (TPM2B_DIGEST). Both
-        //selector fields are constrained at the wire read, because that is what the command asks for: "The
-        //unmarshaling process requires that a proper TPMT_TK_VERIFIED be provided for checkTicket but it may be
-        //a NULL Ticket" (Part 3, clause 23.16, printed page 227). The NULL form is <TPM_ST_VERIFIED, TPM_RH_NULL,
-        //0x0000> (Part 2, clause 10.7.4, Table 110), so both gates admit it.
+        //checkTicket (TPMT_TK_VERIFIED): tag (UINT16) + hierarchy (UINT32) + [tag]metadata (UINT16, present only
+        //for TPM_ST_DIGEST_VERIFIED) + hmac (TPM2B_DIGEST). All three selector fields are constrained at the wire
+        //read, because that is what the command asks for: "The unmarshaling process requires that a proper
+        //TPMT_TK_VERIFIED be provided for checkTicket but it may be a NULL Ticket" (Part 3, clause 23.16, printed
+        //page 227). The NULL form is <tag, TPM_RH_NULL, 0x0000> for any of Table 112's three tags (Part 2, clause
+        //10.6.5, Table 113), so every gate below admits it.
         if(reader.Remaining < sizeof(ushort) + sizeof(uint))
         {
             malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
@@ -12360,19 +19969,27 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return false;
         }
 
-        //TPMT_TK_VERIFIED.tag is fixed to TPM_ST_VERIFIED (Part 2, Table 110: "TPM_RC_TAG error returned when
-        //tag is not TPM_ST_VERIFIED"). The re-verification recompute has no tag-legality check of its own — it
-        //would hash whatever tag the caller supplied — so this reader is the only place the constraint holds.
+        //TPMT_TK_VERIFIED.tag admits exactly Table 112's three values — TPM_ST_VERIFIED (TPM2_VerifySignature()),
+        //TPM_ST_MESSAGE_VERIFIED (TPM2_VerifySequenceComplete()), TPM_ST_DIGEST_VERIFIED
+        //(TPM2_VerifyDigestSignature(), Part 3 clause 23.16.2's preferred producer) — any other value is
+        //#TPM_RC_TAG (Part 2, Table 113: "error returned when tag is not one of the values in Table 112"). The
+        //re-verification recompute has no tag-legality check of its own — it hashes whatever tag this reader
+        //hands it — so this gate is the only place the constraint holds.
         ushort checkTicketTag = reader.ReadUInt16();
-        if(checkTicketTag != (ushort)TpmStConstants.TPM_ST_VERIFIED)
+        bool isCheckTicketTagAdmitted = checkTicketTag switch
+        {
+            (ushort)TpmStConstants.TPM_ST_VERIFIED or (ushort)TpmStConstants.TPM_ST_MESSAGE_VERIFIED or (ushort)TpmStConstants.TPM_ST_DIGEST_VERIFIED => true,
+            _ => false
+        };
+        if(!isCheckTicketTagAdmitted)
         {
             malformedResponseCode = TpmRcConstants.TPM_RC_TAG;
 
             return false;
         }
 
-        //TPMT_TK_VERIFIED.hierarchy is TPMI_RH_HIERARCHY+ (Part 2, Table 110), so the admitted set is the
-        //interface type's own (clause 9.13, Table 60) and a value outside it is TPM_RC_VALUE. The predicate is
+        //TPMT_TK_VERIFIED.hierarchy is TPMI_RH_HIERARCHY+ (Part 2, Table 113), so the admitted set is the
+        //interface type's own (clause 9.13, Table 59) and a value outside it is TPM_RC_VALUE. The predicate is
         //read from the type rather than restated here, so the admitted set is stated in exactly one place.
         uint checkTicketHierarchy = reader.ReadUInt32();
         if(!TpmiRhHierarchy.IsHierarchy(checkTicketHierarchy))
@@ -12382,12 +19999,37 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return false;
         }
 
+        //[tag]metadata (Table 111, TPMU_TK_VERIFIED_META): present only for TPM_ST_DIGEST_VERIFIED, where it is a
+        //TPMI_ALG_HASH with no NULL admission — an unrecognized value is TPM_RC_HASH, mirroring
+        //TpmiAlgHash.Parse's own gate. The two TPMS_EMPTY arms (TPM_ST_VERIFIED, TPM_ST_MESSAGE_VERIFIED) carry no
+        //metadata octets at all.
+        TpmiAlgHash? checkTicketMetadata = null;
+        if(checkTicketTag == (ushort)TpmStConstants.TPM_ST_DIGEST_VERIFIED)
+        {
+            if(reader.Remaining < sizeof(ushort))
+            {
+                malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+                return false;
+            }
+
+            var checkTicketMetadataAlg = (TpmAlgIdConstants)reader.ReadUInt16();
+            if(!TpmiAlgHash.IsAlgHash(checkTicketMetadataAlg))
+            {
+                malformedResponseCode = TpmRcConstants.TPM_RC_HASH;
+
+                return false;
+            }
+
+            checkTicketMetadata = TpmiAlgHash.FromValue(checkTicketMetadataAlg);
+        }
+
         if(!TryReadTpm2bSpan(ref reader, out ReadOnlySpan<byte> checkTicketDigest, out malformedResponseCode))
         {
             return false;
         }
 
-        //The ticket's own digest is a TPM2B_DIGEST too (Part 2, clause 10.7.4, Table 110), so it takes the same
+        //The ticket's own digest is a TPM2B_DIGEST too (Part 2, clause 10.6.5, Table 113), so it takes the same
         //sizeof(TPMU_HA) bound ahead of its rental.
         if(checkTicketDigest.Length > Tpm2bDigest.MaxSize)
         {
@@ -12416,7 +20058,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             suppliedKeySign = Tpm2bName.Create(keySign, pool);
             input = new TpmPolicyAuthorizeRequested(
                 TpmiShPolicy.FromValue(policySession), suppliedApprovedPolicy, suppliedPolicyRef, suppliedKeySign,
-                TpmiRhHierarchy.FromValue(checkTicketHierarchy), Tpm2bDigest.Create(checkTicketDigest, pool));
+                (TpmStConstants)checkTicketTag, TpmiRhHierarchy.FromValue(checkTicketHierarchy), checkTicketMetadata,
+                Tpm2bDigest.Create(checkTicketDigest, pool));
         }
         catch
         {
@@ -12433,14 +20076,14 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
     /// <summary>
     /// <c>TPM2_PolicyTicket()</c> carries the policy session command handle (no authorization — Auth Index:
-    /// None, TPM 2.0 Library Part 3, Table 131), so its wire layout after the header is: handle area
+    /// None, TPM 2.0 Library Part 3, Table 148), so its wire layout after the header is: handle area
     /// (policySession), then parameters (timeout as TPM2B_TIMEOUT, cpHashA as TPM2B_DIGEST, policyRef as
     /// TPM2B_NONCE, authName as TPM2B_NAME, ticket as TPMT_TK_AUTH: tag, hierarchy, digest as TPM2B_DIGEST)
     /// (Part 3, Section 23.5).
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The generic TPM2B_TIMEOUT length rule ("8 or less", Part 2, Table 100) is answered HERE, at the wire
+    /// The generic TPM2B_TIMEOUT length rule ("8 or less", Part 2, Table 98) is answered HERE, at the wire
     /// read, ahead of the carrier rental whose <c>Create</c> refuses the same bound by throwing — the same
     /// placement the reference's own <c>TPM2B_TIMEOUT_Unmarshal</c> gives it, which is before any command body
     /// runs. The command-specific "exactly 8" rule is a separate, tighter check and stays in the transition,
@@ -12454,7 +20097,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// re-verification recompute has no independent tag-legality check of its own (an illegal tag would still
     /// recompute a comparable HMAC, since both sides would hash the caller's own bogus tag), so the wire-level
     /// gate is the only place that constraint is actually enforced. TPMT_TK_AUTH.hierarchy is typed
-    /// TPMI_RH_HIERARCHY+ (Part 2, Table 111: {TPM_RH_OWNER, TPM_RH_PLATFORM, TPM_RH_ENDORSEMENT, TPM_RH_NULL},
+    /// TPMI_RH_HIERARCHY+ (Part 2, Table 114: {TPM_RH_OWNER, TPM_RH_PLATFORM, TPM_RH_ENDORSEMENT, TPM_RH_NULL},
     /// TPM_RC_VALUE otherwise) and is constrained to that legal set here for the identical reason — the
     /// re-verification recompute derives whatever proof the caller's hierarchy names with no legality check of
     /// its own (<c>TicketComputeAuth</c>'s own contract: the caller's claim is exactly what is being checked).
@@ -12488,7 +20131,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return false;
         }
 
-        //A TPM2B_TIMEOUT buffer is bounded by sizeof(UINT64) (Part 2, clause 10.4.10, Table 100), the bound the
+        //A TPM2B_TIMEOUT buffer is bounded by sizeof(UINT64) (Part 2, clause 10.3.10, Table 98), the bound the
         //reference's own unmarshal applies before any command body runs; the carrier's Create refuses the same
         //bound by throwing, so the wire answer is given here.
         if(timeout.Length > Tpm2bTimeout.MaxSize)
@@ -12503,7 +20146,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return false;
         }
 
-        //A TPM2B_DIGEST buffer can be no wider than sizeof(TPMU_HA) (Part 2, clause 10.4.2, Table 92); the
+        //A TPM2B_DIGEST buffer can be no wider than sizeof(TPMU_HA) (Part 2, clause 10.3.2, Table 90); the
         //transition's own "exactly the session's digest width" check stays as the backstop.
         if(cpHashA.Length > Tpm2bDigest.MaxSize)
         {
@@ -12517,8 +20160,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return false;
         }
 
-        //A TPM2B_NONCE buffer can be no wider than sizeof(TPMU_HA) (TPM 2.0 Library Part 2, clause 10.4.4, Table
-        //94, which types it as a TPM2B_DIGEST, and clause 10.4.2, Table 92, which bounds that structure's
+        //A TPM2B_NONCE buffer can be no wider than sizeof(TPMU_HA) (TPM 2.0 Library Part 2, clause 10.3.4, Table
+        //94, which types it as a TPM2B_DIGEST, and clause 10.3.2, Table 90, which bounds that structure's
         //buffer); the carrier's Create refuses the same bound by throwing, so the wire answer is given here.
         if(policyRef.Length > Tpm2bNonce.MaxSize)
         {
@@ -12555,8 +20198,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return false;
         }
 
-        //TPMT_TK_AUTH.hierarchy is TPMI_RH_HIERARCHY+ (Part 2, clause 10.7.5, Table 111), so the admitted set is
-        //the interface type's own (clause 9.13, Table 60) and a value outside it is TPM_RC_VALUE. The predicate
+        //TPMT_TK_AUTH.hierarchy is TPMI_RH_HIERARCHY+ (Part 2, clause 10.6.6, Table 114), so the admitted set is
+        //the interface type's own (clause 9.13, Table 59) and a value outside it is TPM_RC_VALUE. The predicate
         //is read from the type rather than restated here, so the admitted set is stated in exactly one place.
         uint ticketHierarchy = reader.ReadUInt32();
         if(!TpmiRhHierarchy.IsHierarchy(ticketHierarchy))
@@ -12571,7 +20214,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return false;
         }
 
-        //The ticket's own digest is a TPM2B_DIGEST (Part 2, clause 10.7.5, Table 111), so it takes the same
+        //The ticket's own digest is a TPM2B_DIGEST (Part 2, clause 10.6.6, Table 114), so it takes the same
         //sizeof(TPMU_HA) bound ahead of its rental.
         if(ticketDigest.Length > Tpm2bDigest.MaxSize)
         {
@@ -12661,8 +20304,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return false;
         }
 
-        //TPM2B_OPERAND is "size limited to the same as the digest structure" (Part 2, clause 10.4.6, Table 96),
-        //so its buffer is bounded by sizeof(TPMU_HA) exactly as a TPM2B_DIGEST is (Table 92). The bound is
+        //TPM2B_OPERAND is "size limited to the same as the digest structure" (Part 2, clause 10.3.6, Table 94),
+        //so its buffer is bounded by sizeof(TPMU_HA) exactly as a TPM2B_DIGEST is (Table 90). The bound is
         //answered here, ahead of the rental, because the carrier factory throws above it.
         if(operandB.Length > Tpm2bOperand.MaxSize)
         {
@@ -12689,7 +20332,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return false;
         }
 
-        //TPM_EO carries only 12 defined values (Part 2, Section 6.8, Table 22); an undefined value is rejected here,
+        //TPM_EO carries only 12 defined values (Part 2, Section 6.8, Table 20); an undefined value is rejected here,
         //at unmarshal (Part 3, clause 5.1), so a REAL session's TpmEoComparator.TryEvaluate and a TRIAL session's
         //unconditional fold reject an invalid operation identically, rather than the real session throwing while the
         //trial session silently folds it.
@@ -12746,8 +20389,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return false;
         }
 
-        //TPM2B_OPERAND is "size limited to the same as the digest structure" (Part 2, clause 10.4.6, Table 96),
-        //so its buffer is bounded by sizeof(TPMU_HA) exactly as a TPM2B_DIGEST is (Table 92). The bound is
+        //TPM2B_OPERAND is "size limited to the same as the digest structure" (Part 2, clause 10.3.6, Table 94),
+        //so its buffer is bounded by sizeof(TPMU_HA) exactly as a TPM2B_DIGEST is (Table 90). The bound is
         //answered here, ahead of the rental, because the carrier factory throws above it.
         if(operandB.Length > Tpm2bOperand.MaxSize)
         {
@@ -12774,7 +20417,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return false;
         }
 
-        //TPM_EO carries only 12 defined values (Part 2, Section 6.8, Table 22); an undefined value is rejected here,
+        //TPM_EO carries only 12 defined values (Part 2, Section 6.8, Table 20); an undefined value is rejected here,
         //at unmarshal (Part 3, clause 5.1), so a REAL session's TpmEoComparator.TryEvaluate and a TRIAL session's
         //unconditional fold reject an invalid operation identically, rather than the real session throwing while the
         //trial session silently folds it.
@@ -12823,50 +20466,21 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     }
 
     /// <summary>
-    /// Reads a <c>TPML_PCR_SELECTION</c> that is the command's final parameter, capturing its exact wire bytes
-    /// (so they can be echoed into the attestation / the PCR_Read response and decoded against the bank) and
-    /// validating its structure.
-    /// </summary>
-    /// <remarks>Any octets after the selection are malformed (Part 3, 5.2).</remarks>
-    private static bool TryReadFinalPcrSelection(ref TpmReader reader, out ReadOnlyMemory<byte> selectionBytes, out TpmRcConstants malformedResponseCode)
-    {
-        selectionBytes = ReadOnlyMemory<byte>.Empty;
-
-        //Capture the whole remaining region (which begins at the selection) before the reader advances; the copy
-        //is taken only after the structure validates and no trailing octets remain, so it is exactly the selection.
-        ReadOnlySpan<byte> region = reader.PeekBytes(reader.Remaining);
-
-        if(!TrySkipPcrSelection(ref reader, out malformedResponseCode))
-        {
-            return false;
-        }
-
-        if(reader.Remaining != 0)
-        {
-            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
-
-            return false;
-        }
-
-        selectionBytes = region.ToArray();
-
-        return true;
-    }
-
-    /// <summary>
     /// Skips a <c>TPML_PCR_SELECTION</c> (UINT32 count + count selections of UINT16 hash + BYTE sizeofSelect +
     /// select), answering the structure's own response codes for a malformed one.
     /// </summary>
     /// <remarks>
-    /// A selection's <c>sizeofSelect</c> is bounded on both sides —
-    /// <c>sizeofSelect {PCR_SELECT_MIN:}</c> and <c>pcrSelect[sizeofSelect] {:PCR_SELECT_MAX}</c> with
-    /// <c>#TPM_RC_VALUE</c> (TPM 2.0 Library Part 2, clause 10.6.2, Table 106; the widths themselves are clause
-    /// 10.6.1's equations 1 and 2) — and the bound is tested HERE rather than at the decode that follows,
-    /// because this probe runs on a by-value reader copy before anything is rented. The reference unmarshaler
-    /// makes the same check in the same place (<c>TPMS_PCR_SELECTION_Unmarshal</c> answers <c>TPM_RC_VALUE</c>
-    /// between reading <c>sizeofSelect</c> and reading the bitmap). <see cref="TpmlPcrSelection.Parse"/> keeps
-    /// its own range guard as the fail-closed backstop, so the response code has exactly one origin while the
-    /// structure still refuses to rent for a width it cannot hold.
+    /// The list's own two bounds are both enforced here, each at the point the reference unmarshaler enforces it:
+    /// <c>count</c> against <see cref="TpmlPcrSelection.MaxSelections"/> (Table 128's <c>#TPM_RC_SIZE</c>,
+    /// "response code when count is greater than the possible number of banks", checked immediately after
+    /// <c>count</c> is read and BEFORE any element is walked, TPM 2.0 Library Part 2, clause 10.8.7), then each
+    /// selection's <c>sizeofSelect</c> against <see cref="TpmlPcrSelection.PcrSelectMin"/>..
+    /// <see cref="TpmlPcrSelection.PcrSelectMax"/> (Table 107's <c>#TPM_RC_VALUE</c>, TPM 2.0 Library Part 2,
+    /// clause 10.5.2; the widths themselves are clause 10.5.1's equations 1 and 2). Both run on a by-value reader
+    /// copy before anything is rented, so a list that is both over-bound and truncated answers the count bound
+    /// rather than a truncation further in. <see cref="TpmlPcrSelection.Parse"/> keeps its own two guards as the
+    /// fail-closed backstop, so each response code has exactly one origin while the structure still refuses to
+    /// rent for a shape it cannot hold.
     /// </remarks>
     /// <param name="reader">The reader positioned at the list's <c>count</c>.</param>
     /// <param name="malformedResponseCode">The response code for a malformed list; meaningless when this returns <see langword="true"/>.</param>
@@ -12883,6 +20497,13 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         }
 
         uint count = reader.ReadUInt32();
+        if(count > TpmlPcrSelection.MaxSelections)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+
         for(uint i = 0; i < count; i++)
         {
             if(reader.Remaining < sizeof(ushort) + sizeof(byte))
@@ -12969,10 +20590,27 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return false;
         }
 
+        //The smallest well-formed block is a session handle, an empty nonce, the attributes octet, and an
+        //empty hmac (Part 3, clause 5.5, step 3.1: an authorizationSize below it is TPM_RC_AUTHSIZE; Part 4
+        //ExecCommand refuses the same size before the area is ever walked).
+        if(authorizationSize < MinimumAuthorizationSize)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_AUTHSIZE;
+
+            return false;
+        }
+
         sessionsStart = reader.Consumed;
 
         return true;
     }
+
+    /// <summary>
+    /// The smallest an authorization area can be: one block holding a session handle (UINT32), an empty
+    /// nonceCaller (its 2-octet size alone), the <c>sessionAttributes</c> octet, and an empty hmac (its 2-octet
+    /// size alone) — TPM 2.0 Library Part 3, clause 5.5, step 3.1.
+    /// </summary>
+    private const int MinimumAuthorizationSize = sizeof(uint) + sizeof(ushort) + sizeof(byte) + sizeof(ushort);
 
     /// <summary>
     /// Confirms the sessions consumed exactly the declared authorization octets; any surplus means additional
@@ -13002,16 +20640,18 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// kind is already known and no lookup has happened yet — the position the reference gives them in
     /// <c>RetrieveSessionData</c> — through the shared
     /// <see cref="TpmLifecycleTransitions.TryValidatePasswordSlot"/>, which is the one place they are stated
-    /// (TPM 2.0 Library Part 1, clause 16.6.4, Table 12). Both refusals are session-index-encoded to slot 0,
-    /// which is the only position this helper ever reads. The two sized fields carry the width rule of their own
+    /// (TPM 2.0 Library Part 1, clause 15.6.4, Table 15). Both refusals are session-index-encoded to
+    /// <paramref name="sessionIndex"/> — slot 0 for every single-authorization command, slot 1 when a caller reads
+    /// a second password slot (<c>TPM2_EventSequenceComplete()</c>). The two sized fields carry the width rule of their own
     /// types ahead of that, through <see cref="TryReadSessionCredentialSpan"/>: a password slot's <c>hmac</c> is the same <c>TPM2B_AUTH</c> wire
-    /// field a real session's credential is (Part 2, clause 10.13.2, Table 153), so it takes the same bound.
+    /// field a real session's credential is (Part 2, clause 10.12.2, Table 156), so it takes the same bound.
     /// </remarks>
     /// <param name="reader">The reader positioned at the session's handle.</param>
     /// <param name="suppliedAuth">The supplied authorization value, aliasing the command buffer; the caller rents the owning carrier as its own last act.</param>
     /// <param name="malformedResponseCode">The response code for a malformed session; meaningless when this returns <see langword="true"/>.</param>
+    /// <param name="sessionIndex">The zero-based position of the slot being read, for the session-index encoding of its refusals.</param>
     /// <returns><see langword="true"/> when a well-formed password session was read.</returns>
-    private static bool TryReadPasswordSessionBody(ref TpmReader reader, out ReadOnlySpan<byte> suppliedAuth, out TpmRcConstants malformedResponseCode)
+    private static bool TryReadPasswordSessionBody(ref TpmReader reader, out ReadOnlySpan<byte> suppliedAuth, out TpmRcConstants malformedResponseCode, int sessionIndex = 0)
     {
         suppliedAuth = ReadOnlySpan<byte>.Empty;
         malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
@@ -13031,7 +20671,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return false;
         }
 
-        if(!TryReadSessionCredentialSpan(ref reader, sessionIndex: 0, Tpm2bNonce.MaxSize, out ReadOnlySpan<byte> nonceCaller, out malformedResponseCode))
+        if(!TryReadSessionCredentialSpan(ref reader, sessionIndex, Tpm2bNonce.MaxSize, out ReadOnlySpan<byte> nonceCaller, out malformedResponseCode))
         {
             return false;
         }
@@ -13045,12 +20685,12 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
         var sessionAttributes = (TpmaSession)reader.ReadByte();
 
-        if(!TryReadSessionCredentialSpan(ref reader, sessionIndex: 0, Tpm2bAuth.MaxSize, out suppliedAuth, out malformedResponseCode))
+        if(!TryReadSessionCredentialSpan(ref reader, sessionIndex, Tpm2bAuth.MaxSize, out suppliedAuth, out malformedResponseCode))
         {
             return false;
         }
 
-        return TpmLifecycleTransitions.TryValidatePasswordSlot(sessionAttributes, nonceCaller.Length, sessionIndex: 0, out malformedResponseCode);
+        return TpmLifecycleTransitions.TryValidatePasswordSlot(sessionAttributes, nonceCaller.Length, sessionIndex, out malformedResponseCode);
     }
 
     /// <summary>
@@ -13061,11 +20701,11 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// <remarks>
     /// <para>
     /// <c>TPMS_AUTH_COMMAND</c> types both fields as sized buffers the hash union bounds — <c>nonce</c> is a
-    /// <c>TPM2B_NONCE</c> and <c>hmac</c> a <c>TPM2B_AUTH</c> (TPM 2.0 Library Part 2, clause 10.13.2, Table
-    /// 153, page 159), and both are <c>TPM2B_DIGEST</c> by definition (clause 10.4.4, Table 94, page 134 and
-    /// clause 10.4.5, Table 95, page 135), so both carry clause 10.4.2's implied check: "As with all sized
+    /// <c>TPM2B_NONCE</c> and <c>hmac</c> a <c>TPM2B_AUTH</c> (TPM 2.0 Library Part 2, clause 10.12.2, Table
+    /// 153, page 159), and both are <c>TPM2B_DIGEST</c> by definition (clause 10.3.4, Table 92, page 134 and
+    /// clause 10.3.5, Table 93, page 135), so both carry clause 10.3.2's implied check: "As with all sized
     /// buffers, the size is checked to see if it is within the prescribed range. If not, the response code is
-    /// TPM_RC_SIZE" (Table 92, page 134). Each field names its OWN carrier's bound —
+    /// TPM_RC_SIZE" (Table 90, page 134). Each field names its OWN carrier's bound —
     /// <see cref="Tpm2bNonce.MaxSize"/> for the nonce, <see cref="Tpm2bAuth.MaxSize"/> for the hmac — so the
     /// value this frame compares against is the one whose factory would refuse the same octets downstream, even
     /// though both resolve to <c>sizeof(TPMU_HA)</c>. The bound is the hash union's width and never the width of
@@ -13131,43 +20771,14 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         return TryReadTpm2bSpan(ref reader, out bytes, out malformedResponseCode);
     }
 
-    /// <summary>Reads a TPM2B (UINT16 size prefix + octets) and copies the octets into durable model memory.</summary>
-    private static bool TryReadTpm2b(ref TpmReader reader, out ReadOnlyMemory<byte> bytes, out TpmRcConstants malformedResponseCode)
-    {
-        bytes = ReadOnlyMemory<byte>.Empty;
-        malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
-
-        if(reader.Remaining < sizeof(ushort))
-        {
-            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
-
-            return false;
-        }
-
-        ushort size = reader.ReadUInt16();
-        if(reader.Remaining < size)
-        {
-            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
-
-            return false;
-        }
-
-        if(size > 0)
-        {
-            bytes = reader.ReadBytes(size).ToArray();
-        }
-
-        return true;
-    }
-
     /// <summary>
     /// Reads a TPM2B (UINT16 size prefix + octets) as a span over the command buffer, for a parse that rents the
     /// owning carrier as its last act — the octets reach the request through that carrier alone, never through an
     /// intermediate heap copy.
     /// </summary>
     /// <remarks>
-    /// The wire checks are <c>TryReadTpm2b</c>'s: a size prefix the command cannot carry, or a declared size the
-    /// remaining octets cannot cover, is <c>TPM_RC_INSUFFICIENT</c> (Part 3, clause 5.2). The reader is taken by
+    /// Two wire checks precede the read: a size prefix the command cannot carry, or a declared size the
+    /// remaining octets cannot cover, is <c>TPM_RC_INSUFFICIENT</c> (Part 3, clause 5.8.2, Table 2). The reader is taken by
     /// reference so the returned span, which aliases the command buffer, is valid for the caller.
     /// </remarks>
     /// <param name="reader">The reader positioned at the size prefix.</param>
@@ -13202,6 +20813,160 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         return true;
     }
 
+    /// <summary>
+    /// Reads a TPM2B (UINT16 size prefix + octets) as a span over the command buffer, refusing a declared size
+    /// over <paramref name="maxSize"/> BEFORE checking it against the octets remaining in the reader — so a
+    /// field that is both over-bound and truncated answers <c>TPM_RC_SIZE</c> rather than
+    /// <c>TPM_RC_INSUFFICIENT</c>.
+    /// </summary>
+    /// <remarks>
+    /// This is <see cref="TryProbeOutsideInfo"/>'s ordering generalized to any TPM2B leaf field: the reference
+    /// unmarshaler checks a TPM2B's declared size against its structure's own bound before the array read that
+    /// would otherwise report a short buffer, and this bound-first check is what reproduces that priority for a
+    /// field this parser actually captures (rather than only probes and skips).
+    /// </remarks>
+    /// <param name="reader">The reader positioned at the size prefix.</param>
+    /// <param name="maxSize">The field's declared-size bound (its owning TPM2B carrier's <c>MaxSize</c>).</param>
+    /// <param name="bytes">The octets, aliasing the command buffer.</param>
+    /// <param name="malformedResponseCode">The response code a malformed frame answers with.</param>
+    /// <returns><see langword="true"/> when the field read cleanly within its bound.</returns>
+    private static bool TryReadTpm2bSpanBounded(ref TpmReader reader, int maxSize, out ReadOnlySpan<byte> bytes, out TpmRcConstants malformedResponseCode)
+    {
+        bytes = ReadOnlySpan<byte>.Empty;
+        malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
+
+        if(reader.Remaining < sizeof(ushort))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        ushort size = reader.ReadUInt16();
+        if(size > maxSize)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+
+        if(reader.Remaining < size)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        if(size > 0)
+        {
+            bytes = reader.ReadBytes(size);
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Parses a <c>TPMT_SIGNATURE</c>'s post-selector body — <c>hashAlg</c> followed by the <c>sigAlg</c>-selected
+    /// <c>TPMU_SIGNATURE</c> member — shared by <see cref="TryParseVerifySignature"/>,
+    /// <see cref="TryParseVerifySequenceComplete"/>, <see cref="TryParseVerifyDigestSignature"/> and
+    /// <see cref="TryParsePolicySigned"/> once each has already gated <paramref name="sigAlg"/> to its own
+    /// admitted set (TPM 2.0 Library Part 2, clause 11.3.6, Table
+    /// 219; the <c>TPM_RC_SCHEME</c> gate on the selector itself stays exactly where each caller already has
+    /// it, so <see cref="TpmuSignature"/>'s own selector throw stays unreachable here). The <c>TPM_ALG_HMAC</c>
+    /// member is a <c>TPMT_HA</c> — the shared <c>hashAlg</c> field followed by an unsized digest the hashAlg
+    /// itself sizes; the other members are TPM2B-framed.
+    /// </summary>
+    /// <remarks>
+    /// <c>signatureR</c>/<c>signatureS</c> (<c>TPMS_SIGNATURE_ECC</c>, Part 2, clause 11.3.2, Table 214; each a
+    /// <c>TPM2B_ECC_PARAMETER</c>, clause 11.2.5.1, Table 197) and the RSA signature (<c>TPMS_SIGNATURE_RSA</c>,
+    /// clause 11.3.1, Table 212) are each read through <see cref="TryReadTpm2bSpanBounded"/>, so a declared size
+    /// over the member's own bound answers <c>TPM_RC_SIZE</c> before a declared size the remaining buffer cannot
+    /// cover answers <c>TPM_RC_INSUFFICIENT</c> — bound-before-truncation, the order
+    /// <see cref="TryParseActivateCredential"/> already established for the credential fields. The pooled
+    /// <see cref="TpmtSignature"/> is rented as the parse's last act: the RSA member through
+    /// <see cref="TpmtSignature.Create"/> (the same surface the signing effects use), the ECDSA member through
+    /// <see cref="TpmtSignature.CreateEcdsaFromComponents"/>, which takes the already-bound-checked r and s spans
+    /// directly — <c>signatureR</c> and <c>signatureS</c> are unrelated in length on the wire (Table 214 imposes
+    /// no relation between them), so a genuine pair whose combined length happens to be odd is accepted rather
+    /// than rejected the way a P1363-concatenation-shaped constructor would; the verifying effect then reads each
+    /// component as the integer it is and rebuilds the fixed-width pair itself
+    /// (<see cref="TpmLifecycleTransitions.TryWriteNormalizedEcdsaSignature"/>).
+    /// </remarks>
+    /// <param name="reader">The reader positioned at the signature body's <c>hashAlg</c> field.</param>
+    /// <param name="sigAlg">The already wire-gated signing-algorithm selector.</param>
+    /// <param name="pool">The memory pool the signature's carrier is rented from.</param>
+    /// <param name="signature">The parsed signature, owned by the caller.</param>
+    /// <param name="malformedResponseCode">The response code a malformed frame answers with.</param>
+    /// <returns><see langword="true"/> when the signature body read cleanly within its bounds.</returns>
+    private static bool TryParseTpmtSignatureBody(ref TpmReader reader, TpmiAlgSigScheme sigAlg, BaseMemoryPool pool, [NotNullWhen(true)] out TpmtSignature? signature, out TpmRcConstants malformedResponseCode)
+    {
+        signature = null;
+
+        if(reader.Remaining < sizeof(ushort))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        var hashAlg = (TpmAlgIdConstants)reader.ReadUInt16();
+
+        if(sigAlg.Value == TpmAlgIdConstants.TPM_ALG_HMAC)
+        {
+            //TPMU_SIGNATURE's HMAC member is a TPMT_HA (TPM 2.0 Library Part 2, clause 10.2.2, Table 89): the
+            //hashAlg just read followed by an UNSIZED digest whose width the hashAlg itself fixes — no TPM2B
+            //length prefix. An unadmitted or NULL hashAlg cannot size the digest and answers #TPM_RC_HASH,
+            //the TPMI_ALG_HASH unmarshal channel (the reference unmarshals this member with the null flag
+            //CLEAR, so a NULL hash never reaches the command action).
+            if(hashAlg.GetDigestSize() is not int hmacDigestSize)
+            {
+                malformedResponseCode = TpmRcConstants.TPM_RC_HASH;
+
+                return false;
+            }
+
+            if(reader.Remaining < hmacDigestSize)
+            {
+                malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+                return false;
+            }
+
+            signature = TpmtSignature.Hmac(TpmiAlgHash.FromValue(hashAlg), reader.ReadBytes(hmacDigestSize), pool);
+            malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
+
+            return true;
+        }
+
+        if(sigAlg.Value == TpmAlgIdConstants.TPM_ALG_ECDSA)
+        {
+            if(!TryReadTpm2bSpanBounded(ref reader, Tpm2bEccParameter.MaxSize, out ReadOnlySpan<byte> signatureR, out malformedResponseCode))
+            {
+                return false;
+            }
+
+            if(!TryReadTpm2bSpanBounded(ref reader, Tpm2bEccParameter.MaxSize, out ReadOnlySpan<byte> signatureS, out malformedResponseCode))
+            {
+                return false;
+            }
+
+            signature = TpmtSignature.CreateEcdsaFromComponents(hashAlg, signatureR, signatureS, pool);
+            malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
+
+            return true;
+        }
+
+        if(!TryReadTpm2bSpanBounded(ref reader, Tpm2bPublicKeyRsa.MaxRsaKeyBytes, out ReadOnlySpan<byte> rsaSignature, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        signature = TpmtSignature.Create(sigAlg.Value, hashAlg, rsaSignature, pool);
+        malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
+
+        return true;
+    }
+
     /// <summary>Skips a TPM2B (UINT16 size prefix + octets) without copying — used for fields the model does not retain.</summary>
     private static bool TrySkipTpm2b(ref TpmReader reader, out TpmRcConstants malformedResponseCode)
     {
@@ -13225,6 +20990,40 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         reader.Skip(size);
 
         return true;
+    }
+
+    /// <summary>
+    /// Probes an <c>outsideInfo</c> (<c>TPM2B_DATA</c>) parameter on a by-value reader copy: the declared
+    /// <c>size</c> is peeked and checked against <see cref="Tpm2bData.MaxSize"/> BEFORE
+    /// <see cref="TrySkipTpm2b"/>'s own truncation probe runs, so an <c>outsideInfo</c> that is BOTH over-bound
+    /// and truncated answers <c>TPM_RC_SIZE</c> rather than <c>TPM_RC_INSUFFICIENT</c>.
+    /// </summary>
+    /// <remarks>
+    /// <c>TPM2B_DATA</c>'s buffer is bounded by <c>sizeof(TPMT_HA)</c> (TPM 2.0 Library Part 2, clause 10.3.3,
+    /// Table 91), and the reference unmarshaler settles that bound in the same order this probe does: the
+    /// reference checks the declared size against <c>sizeof(TPMT_HA)</c> in <c>TPM2B_DATA_Unmarshal</c> before
+    /// the <c>Array_Unmarshal</c> call that would otherwise need to declare the buffer insufficient (Part 4,
+    /// Marshal.c). When <paramref name="reader"/> is too short to carry even the <c>size</c> field, this peek is
+    /// skipped and <see cref="TrySkipTpm2b"/> answers the shortfall as it always has.
+    /// </remarks>
+    /// <param name="reader">The reader positioned at the field's <c>size</c>; a probe copy the caller discards regardless of outcome.</param>
+    /// <param name="malformedResponseCode">The response code for a malformed field; meaningless when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when the field is within its size bound and not truncated.</returns>
+    private static bool TryProbeOutsideInfo(ref TpmReader reader, out TpmRcConstants malformedResponseCode)
+    {
+        TpmReader sizePeek = reader;
+        if(sizePeek.Remaining >= sizeof(ushort))
+        {
+            ushort declaredSize = sizePeek.ReadUInt16();
+            if(declaredSize > Tpm2bData.MaxSize)
+            {
+                malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+                return false;
+            }
+        }
+
+        return TrySkipTpm2b(ref reader, out malformedResponseCode);
     }
 
     private static TpmSuConstants ReadStartupType(ref TpmReader reader)
@@ -13283,6 +21082,20 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return SerializeNvSessionResponse(nvSession, pool);
         }
 
+        //The session-authorized KEYEDHASH commands share that single-entry shape but TPM2_HMAC_Start() also
+        //returns a handle (Table 81's sequenceHandle, ahead of parameterSize), which the NV shape has no slot
+        //for, so both frame through their own helper.
+        if(intent is TpmHmacOverSessionResponse hmacOverSession)
+        {
+            return SerializeKeyedHashOverSessionResponse(hmacOverSession.ResponseCode, sequenceHandle: null, hmacOverSession.ParameterArea, hmacOverSession.Entry, pool);
+        }
+
+        if(intent is TpmHmacStartOverSessionResponse hmacStartOverSession)
+        {
+            return SerializeKeyedHashOverSessionResponse(
+                hmacStartOverSession.ResponseCode, hmacStartOverSession.SequenceHandle, TpmParameterArea.Empty, hmacStartOverSession.Entry, pool);
+        }
+
         //TPM2_NV_ChangeAuth() is TPM_ST_SESSIONS-tagged with no response parameters and one entry per command
         //session — the ADMIN policy session, plus a separate decrypt session when the caller protected newAuth
         //in flight — so it is framed by its own helper rather than the single-entry NV shape above.
@@ -13291,13 +21104,14 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return SerializeNvChangeAuthResponse(nvChangeAuth, pool);
         }
 
-        //An attest command over sessions (Certify/CertifyCreation/Quote/GetTime/NV_Certify) is BOTH
-        //parameter-bearing and multi-entry (a TPM2B_ATTEST/TPMT_SIGNATURE pair over independently authorized
-        //handles — Part 3, Tables 90/92/94/100/255), so neither of the two NV shapes above can frame it and the
-        //attest family shares its own helper.
-        if(intent is TpmAttestOverSessionsResponse attestOverSessions)
+        //A command whose slots are independent of one another — the attest family (Certify/CertifyCreation/
+        //Quote/GetTime/NV_Certify, a TPM2B_ATTEST/TPMT_SIGNATURE pair over independently authorized handles,
+        //Part 3, Tables 90/92/94/100/255) and the signing family (Sign/SignDigest/SequenceUpdate/
+        //SignSequenceComplete/VerifySequenceComplete, Tables 92/119/123/125/127) — owes its parameter area AND
+        //one entry per slot with the placeholder decided per entry, which neither NV shape above can frame.
+        if(intent is TpmOverSessionsResponse overSessions)
         {
-            return SerializeAttestOverSessionsResponse(attestOverSessions, pool);
+            return SerializeOverSessionsResponse(overSessions, pool);
         }
 
         //The TpmRandomResponse intent is the terminal owner of the RNG buffer rented by the action
@@ -13345,8 +21159,23 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         TpmtSignature? nvCertifySignature = (intent as TpmNvCertifyResponse)?.Signature;
 
         //The VerifySignature intent owns only its validation ticket — no attest, no signature (unlike every
-        //other attest-family intent above).
+        //other attest-family intent above). VerifyDigestSignature's ticket is the same shape, owned the same way.
         TpmtTkVerified? verifySignatureValidation = (intent as TpmVerifySignatureResponse)?.Validation;
+        TpmtTkVerified? verifyDigestSignatureValidation = (intent as TpmVerifyDigestSignatureResponse)?.Validation;
+        TpmtTkVerified? verifySequenceCompleteValidation = (intent as TpmVerifySequenceCompleteResponse)?.Validation;
+
+        //The SequenceComplete/Hash intent owns its digest and its ticket; release both in the finally once framed.
+        Tpm2bDigest? digestResult = (intent as TpmDigestResponse)?.Result;
+        TpmtTkHashcheck? digestValidation = (intent as TpmDigestResponse)?.Validation;
+
+        //The HMAC intent owns its outHMAC digest; release it in the finally once framed.
+        Tpm2bDigest? hmacOutHmac = (intent as TpmHmacResponse)?.OutHmac;
+
+        //The Encapsulate intent owns its shared secret and ciphertext; Decapsulate owns only the shared
+        //secret (Table 63's single response parameter). Release them in the finally once framed.
+        Tpm2bSharedSecret? encapsulateSharedSecret = (intent as TpmEncapsulateResponse)?.SharedSecret;
+        Tpm2bKemCiphertext? encapsulateCiphertext = (intent as TpmEncapsulateResponse)?.Ciphertext;
+        Tpm2bSharedSecret? decapsulateSharedSecret = (intent as TpmDecapsulateResponse)?.SharedSecret;
 
         //The PolicySecret/PolicySigned intents own their framed timeout, and their minted ticket-digest carrier
         //only when a real ticket was minted (null for a NULL ticket, so nothing to dispose there).
@@ -13355,9 +21184,15 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         Tpm2bTimeout? policySignedTimeout = (intent as TpmPolicySignedResponse)?.Timeout;
         Tpm2bDigest? policySignedTicketDigest = (intent as TpmPolicySignedResponse)?.TicketDigest;
 
-        //The Quote intent likewise owns the marshaled attest buffer and the signature; release them in the finally
-        //once framed. The PCR_Read intent's octets are the echoed selection and references into durable bank state,
-        //so nothing is disposed for it.
+        //The PCR_Read intent owns the selection carrier its own request transferred here; release it in the
+        //finally once framed. Its PcrValues are references into durable bank state, so nothing is disposed for them.
+        TpmlPcrSelection? pcrReadSelection = (intent as TpmPcrReadResponse)?.PcrSelection;
+
+        //The PCR_Event/EventSequenceComplete intent owns its digest list; release it in the finally once framed.
+        TpmlDigestValues? eventDigests = (intent as TpmDigestValuesResponse)?.Digests;
+
+        //The Quote intent likewise owns the marshaled attest buffer and the signature; release them in the
+        //finally once framed.
         Tpm2bAttest? quotedBuffer = (intent as TpmQuoteResponse)?.Quoted;
         TpmtSignature? quoteSignature = (intent as TpmQuoteResponse)?.Signature;
 
@@ -13366,6 +21201,16 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         //it is zeroed before disposal (the clear-before-dispose discipline used for the decrypted response parameter).
         Tpm2bIdObject? credentialBlobBuffer = (intent as TpmMakeCredentialResponse)?.CredentialBlob;
         Tpm2bEncryptedSecret? credentialSecretBuffer = (intent as TpmMakeCredentialResponse)?.Secret;
+
+        //The Duplicate intent owns the duplication blob and the protected seed; release them in the finally
+        //once framed. A wrapped blob and a transported seed protect themselves, while the TPM_RH_NULL form's
+        //blob is plaintext sensitive material by design — it rides a pinned rental, which the pool zeroes when
+        //the release below returns it.
+        TpmDuplicateResponse? duplicateIntent = intent as TpmDuplicateResponse;
+
+        //The Import intent owns the re-wrapped blob — a self-protecting wire value; release it in the finally
+        //once framed.
+        TpmImportResponse? importIntent = intent as TpmImportResponse;
         TpmActivateCredentialResponse? activatedCredential = intent as TpmActivateCredentialResponse;
 
         //The StartAuthSession intent owns the framing step's own copy of the started session's nonceTPM, rented
@@ -13391,7 +21236,11 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
                 //ECDSA: sigAlg + hash + r (TPM2B) + s (TPM2B), r and s splitting the IEEE P1363 signature at its
                 //half. RSA: sigAlg + hash + sig (one TPM2B). The signature octets are the remaining length.
+                //Shared by TPM2_Sign(), TPM2_SignDigest(), and TPM2_SignSequenceComplete() alike.
                 TpmSignResponse sign => sign.Signature.GetSerializedSize(),
+
+                //sequenceHandle (the response handle area) — no parameters at all (Tables 88/90).
+                TpmSequenceStartResponse sequenceStart => sizeof(uint),
 
                 //outPrivate (TPM2B_PRIVATE) + outPublic + creationData + creationHash + creationTicket, each
                 //sized by its own structure. TPM2_Create() returns no Name (Part 3, clause 12.1).
@@ -13414,6 +21263,10 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                 //nvPublic (TPM2B_NV_PUBLIC, a UINT16 size prefix around the marshaled TPMS_NV_PUBLIC) + nvName (TPM2B_NAME).
                 TpmNvReadPublicResponse nvReadPublic => (sizeof(ushort) + nvReadPublic.NvPublic.SerializedSize) + nvReadPublic.NvName.SerializedSize,
 
+                //outPublic (TPM2B_PUBLIC) + name (TPM2B_NAME) + qualifiedName (TPM2B_NAME), each sized by its own
+                //structure (Part 3, clause 12.4, Table 25).
+                TpmReadPublicResponse readPublic => readPublic.OutPublic.GetSerializedSize() + readPublic.Name.SerializedSize + readPublic.QualifiedName.SerializedSize,
+
                 //certifyInfo (TPM2B_ATTEST) + signature (TPMT_SIGNATURE), each sized by its own structure — the
                 //same arithmetic the session arm's parameter-area framing uses, so the two arms cannot drift
                 //apart in what rpHash would have to cover.
@@ -13432,12 +21285,38 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                 //attest and no signature, unlike every other attest-family response above.
                 TpmVerifySignatureResponse verifySignature => verifySignature.Validation.SerializedSize,
 
+                //validation (TPMT_TK_VERIFIED): the same shape as TpmVerifySignatureResponse, but tagged
+                //TPM_ST_DIGEST_VERIFIED with a conditional metadata field the structure itself accounts for.
+                TpmVerifyDigestSignatureResponse verifyDigestSignature => verifyDigestSignature.Validation.SerializedSize,
+
+                //validation (TPMT_TK_VERIFIED): the same shape again, tagged TPM_ST_MESSAGE_VERIFIED with no
+                //metadata field at all — the sequence-command counterpart of both responses above.
+                TpmVerifySequenceCompleteResponse verifySequenceComplete => verifySequenceComplete.Validation.SerializedSize,
+
+                //result/outHash (TPM2B_DIGEST) + validation (TPMT_TK_HASHCHECK), each sized by its own structure
+                //(Tables 94 and 70 share the shape).
+                TpmDigestResponse digestResponseSizing => digestResponseSizing.Result.SerializedSize + digestResponseSizing.Validation.SerializedSize,
+
+                //outHMAC (TPM2B_DIGEST): Table 72's single response parameter, no ticket.
+                TpmHmacResponse hmacResponseSizing => hmacResponseSizing.OutHmac.SerializedSize,
+
+                //sharedSecret (TPM2B_SHARED_SECRET) + ciphertext (TPM2B_KEM_CIPHERTEXT), each sized by its own
+                //structure, in Table 61's order.
+                TpmEncapsulateResponse encapsulate => encapsulate.SharedSecret.SerializedSize + encapsulate.Ciphertext.SerializedSize,
+
+                //sharedSecret (TPM2B_SHARED_SECRET): Table 63's single response parameter.
+                TpmDecapsulateResponse decapsulate => decapsulate.SharedSecret.SerializedSize,
+
                 //currentTime (TPMS_TIME_INFO, fixed layout): the uncertified Time/Clock/resetCount/restartCount/Safe snapshot.
                 TpmReadClockResponse => TpmsTimeInfo.SerializedSize,
 
-                //pcrUpdateCounter (UINT32) + pcrSelectionOut (TPML_PCR_SELECTION echoed) + pcrValues (TPML_DIGEST).
+                //pcrUpdateCounter (UINT32) + pcrSelectionOut (TPML_PCR_SELECTION, re-marshaled) + pcrValues (TPML_DIGEST).
                 TpmPcrReadResponse pcrRead =>
-                    sizeof(uint) + pcrRead.SelectionBytes.Length + PcrValuesSerializedSize(pcrRead.PcrValues),
+                    sizeof(uint) + pcrRead.PcrSelection.GetSerializedSize() + PcrValuesSerializedSize(pcrRead.PcrValues),
+
+                //digests / results (TPML_DIGEST_VALUES): count then each TPMT_HA, sized by the structure (Tables 133
+                //and 96 share the shape).
+                TpmDigestValuesResponse digestValues => digestValues.Digests.GetSerializedSize(),
 
                 //quoted (TPM2B_ATTEST) + signature (TPMT_SIGNATURE), the same shape as TpmCertifyResponse.
                 TpmQuoteResponse quote => quote.Quoted.GetSerializedSize() + quote.Signature.GetSerializedSize(),
@@ -13465,6 +21344,14 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                 TpmMakeCredentialResponse makeCredential =>
                     makeCredential.CredentialBlob.SerializedSize + makeCredential.Secret.SerializedSize,
 
+                //encryptionKeyOut (an empty TPM2B_DATA in the no-inner-wrapper model) + duplicate
+                //(TPM2B_PRIVATE) + outSymSeed (TPM2B_ENCRYPTED_SECRET).
+                TpmDuplicateResponse duplicateSizing =>
+                    sizeof(ushort) + duplicateSizing.Duplicate.SerializedSize + duplicateSizing.OutSymSeed.SerializedSize,
+
+                //outPrivate (TPM2B_PRIVATE).
+                TpmImportResponse importSizing => importSizing.OutPrivate.SerializedSize,
+
                 //certInfo (TPM2B_DIGEST): the recovered credential secret.
                 TpmActivateCredentialResponse activateCredential => activateCredential.CertInfo.SerializedSize,
 
@@ -13481,6 +21368,22 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
                 switch(intent)
                 {
+                    case TpmImportResponse importResponse:
+                    {
+                        importResponse.OutPrivate.WriteTo(ref writer);
+
+                        break;
+                    }
+                    case TpmDuplicateResponse duplicateResponse:
+                    {
+                        //encryptionKeyOut: the Empty Buffer the no-inner-wrapper form frames, then the blob and
+                        //the protected seed.
+                        writer.WriteUInt16(0);
+                        duplicateResponse.Duplicate.WriteTo(ref writer);
+                        duplicateResponse.OutSymSeed.WriteTo(ref writer);
+
+                        break;
+                    }
                     case TpmTestResultResponse { ResponseCode: TpmRcConstants.TPM_RC_SUCCESS } testResultResponse:
                     {
                         writer.WriteTpm2b(ReadOnlySpan<byte>.Empty);
@@ -13524,6 +21427,13 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                     {
                         //signature (TPMT_SIGNATURE): the structure writes its own selector, hash, and member.
                         signResponse.Signature.WriteTo(ref writer);
+
+                        break;
+                    }
+                    case TpmSequenceStartResponse sequenceStartResponse:
+                    {
+                        //sequenceHandle (the response handle area) — no parameters follow it.
+                        writer.WriteUInt32(sequenceStartResponse.SequenceHandle.Value);
 
                         break;
                     }
@@ -13580,6 +21490,16 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
                         break;
                     }
+                    case TpmReadPublicResponse readPublicResponse:
+                    {
+                        //outPublic (TPM2B_PUBLIC), name, and qualifiedName (TPM2B_NAME each), in Table 25's order —
+                        //every carrier borrowed from the still-loaded object's record, so framing never releases them.
+                        readPublicResponse.OutPublic.WriteTo(ref writer);
+                        readPublicResponse.Name.WriteTo(ref writer);
+                        readPublicResponse.QualifiedName.WriteTo(ref writer);
+
+                        break;
+                    }
                     case TpmCertifyResponse certifyResponse:
                     {
                         //certifyInfo (TPM2B_ATTEST) then signature (TPMT_SIGNATURE): each structure writes itself.
@@ -13623,6 +21543,58 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
                         break;
                     }
+                    case TpmVerifyDigestSignatureResponse verifyDigestSignatureResponse:
+                    {
+                        //validation (TPMT_TK_VERIFIED): tag (TPM_ST_DIGEST_VERIFIED) + hierarchy + [tag]metadata
+                        //(the verified scheme's hash algorithm) + hmac (TPM2B_DIGEST), written by the structure
+                        //itself. No attest, no TPMT_SIGNATURE — the same odd-one-out shape as
+                        //TpmVerifySignatureResponse.
+                        verifyDigestSignatureResponse.Validation.WriteTo(ref writer);
+
+                        break;
+                    }
+                    case TpmVerifySequenceCompleteResponse verifySequenceCompleteResponse:
+                    {
+                        //validation (TPMT_TK_VERIFIED): tag (TPM_ST_MESSAGE_VERIFIED) + hierarchy + hmac
+                        //(TPM2B_DIGEST) — no metadata field, no attest, no TPMT_SIGNATURE, the same odd-one-out
+                        //shape as TpmVerifySignatureResponse and TpmVerifyDigestSignatureResponse.
+                        verifySequenceCompleteResponse.Validation.WriteTo(ref writer);
+
+                        break;
+                    }
+                    case TpmDigestResponse digestResponse:
+                    {
+                        //result/outHash (TPM2B_DIGEST) then validation (TPMT_TK_HASHCHECK): tag + hierarchy +
+                        //TPM2B digest, each written by its own structure (Tables 94 and 70 share the shape).
+                        digestResponse.Result.WriteTo(ref writer);
+                        digestResponse.Validation.WriteTo(ref writer);
+
+                        break;
+                    }
+                    case TpmHmacResponse hmacResponse:
+                    {
+                        //outHMAC (TPM2B_DIGEST): Table 72's single response parameter — no ticket, the structure
+                        //writes its own size prefix and body.
+                        hmacResponse.OutHmac.WriteTo(ref writer);
+
+                        break;
+                    }
+                    case TpmEncapsulateResponse encapsulateResponse:
+                    {
+                        //sharedSecret (TPM2B_SHARED_SECRET) then ciphertext (TPM2B_KEM_CIPHERTEXT), in Table
+                        //61's order; each structure writes its own size prefix and body.
+                        encapsulateResponse.SharedSecret.WriteTo(ref writer);
+                        encapsulateResponse.Ciphertext.WriteTo(ref writer);
+
+                        break;
+                    }
+                    case TpmDecapsulateResponse decapsulateResponse:
+                    {
+                        //sharedSecret (TPM2B_SHARED_SECRET): Table 63's single response parameter.
+                        decapsulateResponse.SharedSecret.WriteTo(ref writer);
+
+                        break;
+                    }
                     case TpmReadClockResponse readClockResponse:
                     {
                         //currentTime (TPMS_TIME_INFO): fixed layout, no TPM2B wrapping.
@@ -13630,14 +21602,23 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
                         break;
                     }
+                    case TpmDigestValuesResponse digestValuesResponse:
+                    {
+                        //digests / results (TPML_DIGEST_VALUES): the structure writes its count and each tagged
+                        //digest (Tables 133 and 96 share the shape).
+                        digestValuesResponse.Digests.WriteTo(ref writer);
+
+                        break;
+                    }
                     case TpmPcrReadResponse pcrReadResponse:
                     {
-                        //pcrUpdateCounter (UINT32): zero this slice (no register has been extended).
+                        //pcrUpdateCounter (UINT32): the TPM-wide PCR-change count the state carried in — moved by
+                        //every extend or reset of a counted register, by TPM2_Startup(), and by TPM2_Clear().
                         writer.WriteUInt32(pcrReadResponse.PcrUpdateCounter);
 
-                        //pcrSelectionOut (TPML_PCR_SELECTION): the caller's selection echoed verbatim — the
-                        //simulator returns every selected register in one read.
-                        writer.WriteBytes(pcrReadResponse.SelectionBytes.Span);
+                        //pcrSelectionOut (TPML_PCR_SELECTION): the structure re-marshals itself, reproducing the
+                        //octets it was parsed from — the simulator returns every selected register in one read.
+                        pcrReadResponse.PcrSelection.WriteTo(ref writer);
 
                         //pcrValues (TPML_DIGEST): count then each register value as a TPM2B_DIGEST, in ascending
                         //PCR-index order.
@@ -13752,14 +21733,27 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             nvCertifyInfoBuffer?.Dispose();
             nvCertifySignature?.Dispose();
             verifySignatureValidation?.Dispose();
+            verifyDigestSignatureValidation?.Dispose();
+            verifySequenceCompleteValidation?.Dispose();
+            digestResult?.Dispose();
+            digestValidation?.Dispose();
+            hmacOutHmac?.Dispose();
+            encapsulateSharedSecret?.Dispose();
+            encapsulateCiphertext?.Dispose();
+            decapsulateSharedSecret?.Dispose();
             policySecretTimeout?.Dispose();
             policySecretTicketDigest?.Dispose();
             policySignedTimeout?.Dispose();
             policySignedTicketDigest?.Dispose();
+            pcrReadSelection?.Dispose();
+            eventDigests?.Dispose();
             quotedBuffer?.Dispose();
             quoteSignature?.Dispose();
             credentialBlobBuffer?.Dispose();
             credentialSecretBuffer?.Dispose();
+            duplicateIntent?.Duplicate.Dispose();
+            duplicateIntent?.OutSymSeed.Dispose();
+            importIntent?.OutPrivate.Dispose();
             startedSessionNonce?.Dispose();
 
             //The recovered credential secret is confidential: releasing its carrier returns the pinned segment to
@@ -13783,7 +21777,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
     /// <summary>
     /// Frames an encrypt-attributed <c>TPM2_GetRandom()</c> response (TPM 2.0 Library Part 3, clause 16.1; Part
-    /// 1, clause 16.7). Unlike every no-sessions response, this is <c>TPM_ST_SESSIONS</c>-tagged and carries a
+    /// 1, clause 15.7). Unlike every no-sessions response, this is <c>TPM_ST_SESSIONS</c>-tagged and carries a
     /// trailing response session area: after the header (GetRandom has no response handles) come parameterSize
     /// (UINT32), the encrypted response parameter area, then TPMS_AUTH_RESPONSE (nonceTPM as TPM2B_NONCE +
     /// sessionAttributes (BYTE) + hmac as TPM2B).
@@ -13813,7 +21807,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             {
                 var writer = new TpmWriter(owner.Memory.Span[..total]);
 
-                //Header carries the sessions tag so the caller parses the response session area (Part 1, clause 18).
+                //Header carries the sessions tag so the caller parses the response session area (Part 1, clause 17).
                 var header = new TpmHeader((ushort)TpmStConstants.TPM_ST_SESSIONS, (uint)total, (uint)intent.ResponseCode);
                 header.WriteTo(ref writer);
 
@@ -13911,7 +21905,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// one session: the NV family (<c>TPM2_NV_Read()</c>, <c>TPM2_NV_Write()</c>, <c>TPM2_NV_DefineSpace()</c>,
     /// <c>TPM2_NV_UndefineSpace()</c>) and the parameter-free hierarchy and provisioning commands
     /// (<c>TPM2_Clear()</c>, <c>TPM2_ClearControl()</c>, <c>TPM2_HierarchyControl()</c>,
-    /// <c>TPM2_SetPrimaryPolicy()</c>) (TPM 2.0 Library Part 1, clause 16.6.1).
+    /// <c>TPM2_SetPrimaryPolicy()</c>) (TPM 2.0 Library Part 1, clause 15.6.1).
     /// </summary>
     /// <remarks>
     /// The same TPM_ST_SESSIONS-tagged, one-session-entry shape <c>SerializePolicySecretOverSessionResponse</c>
@@ -13974,10 +21968,81 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     }
 
     /// <summary>
+    /// Frames a session-authorized <c>TPM2_HMAC()</c> or <c>TPM2_HMAC_Start()</c> response (TPM 2.0 Library
+    /// Part 1, clause 15.6.1): a <c>TPM_ST_SESSIONS</c>-tagged envelope, <c>TPM2_HMAC_Start()</c>'s
+    /// <c>sequenceHandle</c> in the handle area (Table 81), <c>parameterSize</c>, the already-framed parameter
+    /// octets verbatim (<c>outHMAC</c> for <c>TPM2_HMAC()</c>, nothing for <c>TPM2_HMAC_Start()</c>), then the
+    /// single authorizing session's entry — nonceTPM, the echoed attributes, and the response HMAC or the empty
+    /// hmac Part 4 <c>BuildSingleResponseAuth</c> assigns a <c>TPM2_PolicyPassword()</c> session.
+    /// </summary>
+    /// <remarks>
+    /// The parameter area, the framed nonce and the HMAC are released here, as the terminal owner; the entry's
+    /// retained nonce is not this step's — the completing transition installed it on the durable session record.
+    /// </remarks>
+    /// <param name="responseCode">The command response code (success).</param>
+    /// <param name="sequenceHandle">The new sequence's handle for <c>TPM2_HMAC_Start()</c>, or <see langword="null"/> for <c>TPM2_HMAC()</c>, which returns no handle.</param>
+    /// <param name="parameterArea">The framed response parameter octets; disposed after framing.</param>
+    /// <param name="entry">The session's framed response entry; its framed nonce and HMAC are disposed after framing.</param>
+    /// <param name="pool">The memory pool for the response buffer.</param>
+    /// <returns>The serialized <see cref="TpmResponse"/> wrapped in a <see cref="TpmResult{T}"/>.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "TpmResponse takes ownership of the rented buffer and is owned by the returned TpmResult, which the caller disposes.")]
+    private static TpmResult<TpmResponse> SerializeKeyedHashOverSessionResponse(
+        TpmRcConstants responseCode, TpmiDhObject? sequenceHandle, TpmParameterArea parameterArea, TpmHmacFramedSession entry, BaseMemoryPool pool)
+    {
+        try
+        {
+            int handleAreaSize = sequenceHandle is null ? 0 : sizeof(uint);
+            int authAreaSize =
+                entry.NewNonceTpm.SerializedSize     //nonceTPM (TPM2B_NONCE).
+                + sizeof(byte)                       //sessionAttributes.
+                + entry.Hmac.SerializedSize;         //hmac (TPM2B), empty where Part 4 frames it empty.
+
+            int parameterSize = parameterArea.Length;
+            int total = TpmHeader.HeaderSize + handleAreaSize + sizeof(uint) + parameterSize + authAreaSize;
+
+            IMemoryOwner<byte> owner = pool.Rent(total);
+            try
+            {
+                var writer = new TpmWriter(owner.Memory.Span[..total]);
+
+                var header = new TpmHeader((ushort)TpmStConstants.TPM_ST_SESSIONS, (uint)total, (uint)responseCode);
+                header.WriteTo(ref writer);
+
+                //The response handle area precedes parameterSize (Part 1, clause 15.6.1's response layout).
+                if(sequenceHandle is { } handle)
+                {
+                    writer.WriteUInt32(handle.Value);
+                }
+
+                writer.WriteUInt32((uint)parameterSize);
+                writer.WriteBytes(parameterArea.Span);
+
+                entry.NewNonceTpm.WriteTo(ref writer);
+                writer.WriteByte((byte)entry.SessionAttributes);
+                entry.Hmac.WriteTo(ref writer);
+
+                return TpmResult<TpmResponse>.Success(new TpmResponse(owner, total));
+            }
+            catch
+            {
+                owner.Dispose();
+                throw;
+            }
+        }
+        finally
+        {
+            parameterArea.Dispose();
+            entry.NewNonceTpm.Dispose();
+            entry.Hmac.Dispose();
+        }
+    }
+
+    /// <summary>
     /// Frames an authValue rotation's response — <c>TPM2_NV_ChangeAuth()</c> or
     /// <c>TPM2_HierarchyChangeAuth()</c>: a <c>TPM_ST_SESSIONS</c>-tagged envelope with a zero-length parameter
-    /// area — neither command returns parameters (TPM 2.0 Library Part 3, clause 31.15, Table 253 and clause
-    /// 24.8, Table 189) — followed by one entry per command session, in command-session order (Part 1, clause 17.6).
+    /// area — neither command returns parameters (TPM 2.0 Library Part 3, clause 31.15, Table 270 and clause
+    /// 24.8, Table 206) — followed by one entry per command session, in command-session order (Part 1, clause 16.6).
     /// </summary>
     /// <remarks>
     /// The <c>parameterSize</c> field is still written, and still zero, because the envelope is
@@ -14056,7 +22121,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
     /// <summary>
     /// Frames a <c>TPM2_Unseal()</c> response over 0, 1, or 2 real sessions plus an optional leading policy
-    /// placeholder entry (TPM 2.0 Library Part 3, clause 12.7; Part 1, clause 16.7).
+    /// placeholder entry (TPM 2.0 Library Part 3, clause 12.7; Part 1, clause 15.7).
     /// </summary>
     /// <remarks>
     /// Like the encrypt-attributed GetRandom response it is <c>TPM_ST_SESSIONS</c>-tagged, but its response
@@ -14064,7 +22129,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// handles) come parameterSize (UINT32), the (possibly encrypted) outData (TPM2B_SENSITIVE_DATA), then the
     /// policy placeholder entry when present (a zero nonceTPM of its hash width + echoed sessionAttributes + an
     /// EMPTY hmac — a satisfied plain policy session carries no key, so the TPM returns a zero-length response
-    /// HMAC for it, Part 1, clause 17.6), followed by every real session's entry (its rolled nonceTPM + echoed
+    /// HMAC for it, Part 1, clause 16.6), followed by every real session's entry (its rolled nonceTPM + echoed
     /// sessionAttributes + its own response hmac). The order matches the order the executor parses and verifies
     /// the sessions in, so a byte-off in any entry fails the caller's verification. The parameter-area and each
     /// entry's HMAC buffer are the terminal owners released here; the parameter area holds the recovered secret,
@@ -14103,7 +22168,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             {
                 var writer = new TpmWriter(owner.Memory.Span[..total]);
 
-                //Header carries the sessions tag so the caller parses the response session area (Part 1, clause 18).
+                //Header carries the sessions tag so the caller parses the response session area (Part 1, clause 17).
                 var header = new TpmHeader((ushort)TpmStConstants.TPM_ST_SESSIONS, (uint)total, (uint)intent.ResponseCode);
                 header.WriteTo(ref writer);
 
@@ -14162,7 +22227,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// <remarks>
     /// Like the Unseal response it is <c>TPM_ST_SESSIONS</c>-tagged with a trailing response session area, in
     /// command-session order: a <c>TPM_RS_PW</c> parent-auth session's placeholder entry (an EMPTY nonceTPM —
-    /// unlike a policy placeholder's zero-VALUE, hash-width nonce, Part 1, clause 17.6.4 — plus an empty hmac)
+    /// unlike a policy placeholder's zero-VALUE, hash-width nonce, Part 1, clause 16.6.4 — plus an empty hmac)
     /// when HasPasswordPlaceholder is set, then every real session's entry (its rolled nonceTPM, echoed
     /// attributes, its own response HMAC). <c>TPM2_Create()</c> has no response handle, so parameterSize then
     /// the parameter area (outPrivate ‖ outPublic ‖ creationByProducts, never encrypted here) follow the header
@@ -14176,7 +22241,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         try
         {
             //Password placeholder entry (present only when HasPasswordPlaceholder is set): an EMPTY nonceTPM
-            //(size 0, Part 1, clause 17.6.4 — unlike a policy session's zero-VALUE, hash-width nonce), the echoed
+            //(size 0, Part 1, clause 16.6.4 — unlike a policy session's zero-VALUE, hash-width nonce), the echoed
             //(forced continueSession) attributes, and an empty hmac.
             int passwordAuthSize = intent.HasPasswordPlaceholder
                 ? sizeof(ushort) + sizeof(byte) + sizeof(ushort)
@@ -14243,18 +22308,22 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     }
 
     /// <summary>
-    /// Frames an attest command's response — <c>TPM2_Certify()</c>, <c>TPM2_CertifyCreation()</c>,
-    /// <c>TPM2_Quote()</c>, <c>TPM2_GetTime()</c>, <c>TPM2_NV_Certify()</c> — over an authorization area carrying at
-    /// least one real session (TPM 2.0 Library Part 3, Tables 90, 92, 94, 100, and 255; Part 1, clause 16.6.1).
+    /// Frames the response of a command whose authorization slots are independent of one another — an attest
+    /// command (<c>TPM2_Certify()</c>, <c>TPM2_CertifyCreation()</c>, <c>TPM2_Quote()</c>, <c>TPM2_GetTime()</c>,
+    /// <c>TPM2_NV_Certify()</c>) or a signing-family command (<c>TPM2_Sign()</c>, <c>TPM2_SignDigest()</c>,
+    /// <c>TPM2_SequenceUpdate()</c>, <c>TPM2_SignSequenceComplete()</c>, <c>TPM2_VerifySequenceComplete()</c>) —
+    /// over an authorization area carrying at least one real session (TPM 2.0 Library Part 3, Tables 90, 92, 94,
+    /// 100, 255, 119, 123, 125, and 127; Part 1, clause 15.6.1).
     /// </summary>
     /// <remarks>
     /// The shape <see cref="SerializeCreateOverSessionsResponse"/> frames, with the placeholder decided per entry
-    /// instead of by a single leading flag: an attest command authorizes each of its handles independently, so a
-    /// <c>TPM_RS_PW</c> slot can sit at any index. After the header (no attest command returns a response handle)
-    /// come parameterSize (UINT32), the framed <c>TPM2B_ATTEST ‖ TPMT_SIGNATURE</c>, then one entry per command
-    /// session in command-session order — a password slot's empty nonceTPM, echoed attributes, and empty hmac, or
-    /// a real session's rolled nonceTPM, echoed attributes, and its own response hmac. The order matches the order
-    /// the executor parsed and verified the sessions in, so a byte off in any entry fails the caller's own
+    /// instead of by a single leading flag: each of these commands authorizes its handles independently, so a
+    /// <c>TPM_RS_PW</c> slot can sit at any index. After the header (none of them returns a response handle)
+    /// come parameterSize (UINT32), the framed parameter area — empty for <c>TPM2_SequenceUpdate()</c> — then one
+    /// entry per command session in command-session order — a password slot's empty nonceTPM, echoed attributes,
+    /// and empty hmac, or a real session's rolled nonceTPM, echoed attributes, and its own response hmac (the
+    /// Empty Buffer under the No-HMAC-Authorization rule, Part 1, clause 16.6.16). The order matches the order the
+    /// executor parsed and verified the sessions in, so a byte off in any entry fails the caller's own
     /// verification. The parameter-area and each real entry's HMAC buffer are the terminal owners released here.
     /// </remarks>
     /// <param name="intent">The framed response to serialize.</param>
@@ -14262,12 +22331,12 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// <returns>The serialized <see cref="TpmResponse"/> wrapped in a <see cref="TpmResult{T}"/>.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "TpmResponse takes ownership of the rented buffer and is owned by the returned TpmResult, which the caller disposes.")]
-    private static TpmResult<TpmResponse> SerializeAttestOverSessionsResponse(TpmAttestOverSessionsResponse intent, BaseMemoryPool pool)
+    private static TpmResult<TpmResponse> SerializeOverSessionsResponse(TpmOverSessionsResponse intent, BaseMemoryPool pool)
     {
         try
         {
             int authAreaSize = 0;
-            foreach(TpmAttestFramedSessionEntry entry in intent.Entries)
+            foreach(TpmFramedSessionEntry entry in intent.Entries)
             {
                 authAreaSize +=
                     entry.NewNonceTpm.SerializedSize  //nonceTPM (TPM2B_NONCE), empty for a password slot.
@@ -14289,7 +22358,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                 writer.WriteUInt32((uint)parameterSize);
                 writer.WriteBytes(intent.ParameterArea.Span);
 
-                foreach(TpmAttestFramedSessionEntry entry in intent.Entries)
+                foreach(TpmFramedSessionEntry entry in intent.Entries)
                 {
                     if(entry.Hmac is Tpm2bAuth entryHmac)
                     {
@@ -14318,7 +22387,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         finally
         {
             intent.ParameterArea.Dispose();
-            foreach(TpmAttestFramedSessionEntry entry in intent.Entries)
+            foreach(TpmFramedSessionEntry entry in intent.Entries)
             {
                 entry.NewNonceTpm.Dispose();
                 entry.Hmac?.Dispose();

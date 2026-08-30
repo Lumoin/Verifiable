@@ -26,10 +26,10 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// <para>
 /// ADMIN role on an NV Index has no authValue fallback: this command requires that a policy session be used
 /// for authorization of <c>nvIndex</c>, with the policy session's <c>commandCode</c> set to
-/// <c>TPM_CC_NV_ChangeAuth</c> (TPM 2.0 Library Part 1, Section 17.2; Section 35.2.3). A password or HMAC
+/// <c>TPM_CC_NV_ChangeAuth</c> (TPM 2.0 Library Part 1, Section 16.2; Section 34.2.3). A password or HMAC
 /// session on <c>nvIndex</c> can never authorize this command. This command is authorized, so it is sent with
 /// <c>TPM_ST_SESSIONS</c>. Rotation never perturbs the Index's Name (authValue is outside TPMS_NV_PUBLIC). See
-/// TPM 2.0 Library Part 3, Section 31.15 (Table 252/253).
+/// TPM 2.0 Library Part 3, Section 31.15 (Table 269/270).
 /// </para>
 /// </remarks>
 public sealed class NvChangeAuthInput: ITpmCommandInput, IDisposable
@@ -61,7 +61,7 @@ public sealed class NvChangeAuthInput: ITpmCommandInput, IDisposable
     /// <inheritdoc/>
     /// <remarks>
     /// <c>newAuth</c> is the command's sole parameter, so it is trivially the first sized parameter and is
-    /// eligible for session-based parameter encryption (TPM 2.0 Library Part 1, Section 19.1). This is the
+    /// eligible for session-based parameter encryption (TPM 2.0 Library Part 1, Section 18.1). This is the
     /// highest-value confidentiality target in the whole NV command family: unlike a one-time definition
     /// value, <c>newAuth</c> is a secret that may be rotated repeatedly over the Index's lifetime.
     /// </remarks>

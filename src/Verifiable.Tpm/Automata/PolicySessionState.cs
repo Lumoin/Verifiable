@@ -11,7 +11,7 @@ namespace Verifiable.Tpm.Automata;
 /// <summary>
 /// The simulator's model of a started policy (enhanced authorization) session: the policy hash algorithm, the
 /// trial flag, and the accumulated policyDigest a sequence of <c>TPM2_Policy*()</c> assertions drives (TPM 2.0
-/// Library Part 1, clause 17.7). It is the smallest session model the policy command family needs — a session
+/// Library Part 1, clause 16.7). It is the smallest session model the policy command family needs — a session
 /// begins with an all-zero policyDigest of the hash width, and each assertion extends it toward the value an
 /// object's <c>authPolicy</c> would be set to.
 /// </summary>
@@ -20,11 +20,11 @@ namespace Verifiable.Tpm.Automata;
 /// The session key is held in a pooled, zero-on-dispose sensitive carrier (<see cref="SymmetricKeyMemory"/>),
 /// fixed at <c>TPM2_StartAuthSession()</c> for the session's whole life; this record is the carrier's single
 /// owner, and everything downstream reads it through non-owning <see cref="ReadOnlyMemory{T}"/> views. The
-/// nonceTPM is the structure Part 2, clause 10.4.4, Table 94 names — <c>TPM2B_NONCE</c>, the declared type of
-/// <c>TPMS_AUTH_RESPONSE.nonce</c> (clause 10.13.3, Table 154) — so it rides in a <see cref="Tpm2bNonce"/>
+/// nonceTPM is the structure Part 2, clause 10.3.4, Table 92 names — <c>TPM2B_NONCE</c>, the declared type of
+/// <c>TPMS_AUTH_RESPONSE.nonce</c> (clause 10.12.3, Table 157) — so it rides in a <see cref="Tpm2bNonce"/>
 /// carrier this record likewise owns, replaced wholesale by <see cref="WithNonceTpm(Tpm2bNonce)"/> once per
 /// command response. The accumulated policyDigest and the latched cpHash are both the structure Part 2, clause
-/// 10.4.2, Table 92 names — <c>TPM2B_DIGEST</c> — so each rides in a <see cref="Tpm2bDigest"/> carrier this
+/// 10.4.2, Table 90 names — <c>TPM2B_DIGEST</c> — so each rides in a <see cref="Tpm2bDigest"/> carrier this
 /// record owns as well, replaced wholesale by <see cref="WithPolicyDigest(Tpm2bDigest)"/> and
 /// <see cref="WithCpHash(Tpm2bDigest)"/> and never mutated in place. Before the first assertion, and again
 /// after the context reset, the policyDigest is the shared dispose-immune
@@ -40,7 +40,7 @@ namespace Verifiable.Tpm.Automata;
 /// <param name="PolicyHash">The session's policy hash algorithm (the <c>authHash</c> supplied at start), whose digest width the policyDigest carries.</param>
 /// <param name="IsTrial">Whether this is a trial session (started with <c>TPM_SE_TRIAL</c>): it computes the policyDigest but authorizes nothing.</param>
 /// <param name="PolicyDigest">
-/// The accumulated policyDigest (<c>TPM2B_DIGEST</c>, TPM 2.0 Library Part 2, clause 10.4.2, Table 92) in an
+/// The accumulated policyDigest (<c>TPM2B_DIGEST</c>, TPM 2.0 Library Part 2, clause 10.3.2, Table 90) in an
 /// owned pooled carrier: the shared <see cref="Tpm2bDigest.Zero(TpmiAlgHash)"/> of <see cref="PolicyHash"/>'s
 /// width before the first assertion, then a freshly rented carrier per extension, installed through
 /// <see cref="WithPolicyDigest(Tpm2bDigest)"/>, which releases the superseded one as the replacement lands.
@@ -48,10 +48,10 @@ namespace Verifiable.Tpm.Automata;
 /// and never dispose it.
 /// </param>
 /// <param name="NonceTpm">
-/// The session's retained nonceTPM (<c>TPM2B_NONCE</c>, TPM 2.0 Library Part 2, clause 10.4.4, Table 94, of
+/// The session's retained nonceTPM (<c>TPM2B_NONCE</c>, TPM 2.0 Library Part 2, clause 10.3.4, Table 92, of
 /// <see cref="PolicyHash"/>'s digest width) in an owned pooled carrier: drawn from the TPM's RNG when the session
 /// started (Part 3, clause 11.1) and framed verbatim in the <c>TPM2_StartAuthSession()</c> response, then rolled
-/// to a fresh value on each command response (Part 1, clause 17.6.5) through <see cref="WithNonceTpm(Tpm2bNonce)"/>,
+/// to a fresh value on each command response (Part 1, clause 16.6.5) through <see cref="WithNonceTpm(Tpm2bNonce)"/>,
 /// which releases the superseded carrier as the replacement lands. <c>TPM2_PolicySigned()</c>'s <c>aHash</c>
 /// binds to this exact value (Part 3, Section 23.3), so it must be the real per-session nonce, not a
 /// placeholder. This record owns the carrier; the pending-verification queue and the response-framing records
@@ -59,7 +59,7 @@ namespace Verifiable.Tpm.Automata;
 /// </param>
 /// <param name="CpHash">
 /// The command-parameter digest this session has been bound to (<c>TPM2B_DIGEST</c>, TPM 2.0 Library Part 2,
-/// clause 10.4.2, Table 92) in an owned pooled carrier, or the dispose-immune
+/// clause 10.3.2, Table 90) in an owned pooled carrier, or the dispose-immune
 /// <see cref="Tpm2bDigest.Empty"/> sentinel when unlatched. Part 3, Section 23.2.4: once a policy assertion (for
 /// example <c>TPM2_PolicySigned()</c>) sets this to a non-empty value, it is immutable for the life of the
 /// session (first-writer-wins) — a later assertion proposing a different, non-empty value is rejected rather
@@ -68,7 +68,7 @@ namespace Verifiable.Tpm.Automata;
 /// by the arm that accepted it.
 /// </param>
 /// <param name="StartTime">
-/// A snapshot of the simulator's <c>Time</c> (TPM 2.0 Library Part 1, clause 36.2) taken when the session
+/// A snapshot of the simulator's <c>Time</c> (TPM 2.0 Library Part 1, clause 33.2) taken when the session
 /// started, used as the base for a session-relative <c>expiration</c> deadline (Part 3, Section 23.2.2). There is
 /// deliberately no separate "time epoch" field: a TPM Reset invalidates every policy session outright (this
 /// simulator clears <see cref="TpmSimulatorState.PolicySessions"/> on <c>OnStartup</c>'s Reset branch), so a
@@ -90,63 +90,94 @@ namespace Verifiable.Tpm.Automata;
 /// The session key, derived identically to <see cref="HmacSessionState.SessionKey"/> by the same
 /// <c>TPM2_StartAuthSession()</c> bind/salt ladder regardless of session type (Part 3, Section 11.1.1: "For all
 /// session types, this command will cause initialization of the sessionKey"): <c>KDFa</c>-derived (Part 1,
-/// clause 17.6.10 equation 20 / clause 17.6.12 equation 25) when the session is bound and/or salted, or the
-/// shared Empty-Buffer carrier <see cref="TpmSimulatorState.EmptySessionKey"/> when it is neither (clause 17.6.9
+/// clause 16.6.10 equation 20 / clause 16.6.12 equation 25) when the session is bound and/or salted, or the
+/// shared Empty-Buffer carrier <see cref="TpmSimulatorState.EmptySessionKey"/> when it is neither (clause 16.6.9
 /// — no KDFa runs at all); this record owns the carrier. Unlike an HMAC session, a POLICY
 /// session never applies the bind-entity-omission optimization (Section 11.1.1's own "the session is not
 /// bound") — whether this key's bind-entity authValue is layered on top of it for a given command's authHMAC is
 /// decided solely by <see cref="IsAuthValueNeeded"/>/<see cref="IsPasswordNeeded"/> (equations 26/27, Part 1
-/// clause 17.6.12), never by binding.
+/// clause 16.6.12), never by binding.
 /// </param>
 /// <param name="IsAuthValueNeeded">
 /// SET by <c>TPM2_PolicyAuthValue()</c>; CLEAR by default, by <c>TPM2_PolicyPassword()</c>, and once this
-/// session has been successfully used to authorize a command (TPM 2.0 Library Part 1, clause 17.7.8; Part 3,
+/// session has been successfully used to authorize a command (TPM 2.0 Library Part 1, clause 16.7.8; Part 3,
 /// Section 23.2.4). When SET, a command this session authorizes folds the authorized entity's authValue into
-/// the authHMAC key alongside <see cref="SessionKey"/> (equation 26, Part 1 clause 17.6.12); when CLEAR, the key
-/// is <see cref="SessionKey"/> alone (equation 27). <c>TPM2_PolicyRestart()</c> would also CLEAR it as part of a
-/// full context reset, but that command is constants-only in this simulator, so that CLEAR path is unreachable
-/// and not modelled here.
+/// the authHMAC key alongside <see cref="SessionKey"/> (equation 26, Part 1 clause 16.6.12); when CLEAR, the key
+/// is <see cref="SessionKey"/> alone (equation 27). CLEAR also by <c>TPM2_PolicyPassword()</c> (Part 1, clause
+/// 16.7.8's "It will also be CLEAR by TPM2_PolicyPassword()") and by <c>TPM2_PolicyRestart()</c> as part of a
+/// full context reset (Part 3, Section 11.2).
 /// </param>
 /// <param name="IsPasswordNeeded">
-/// SET by <c>TPM2_PolicyPassword()</c> (TPM 2.0 Library Part 1, clause 17.7.8) — reserved: this simulator does
-/// not implement <c>TPM2_PolicyPassword()</c>, so this flag is never SET. It is carried alongside
-/// <see cref="IsAuthValueNeeded"/> only so a check against Part 3, Section 23.4.1's exact wording ("the session
-/// for authHandle must have either isAuthValueNeeded or isPasswordNeeded SET") names the same two flags the
-/// spec does, rather than silently collapsing to one.
+/// SET by <c>TPM2_PolicyPassword()</c>; CLEAR by default, by <c>TPM2_PolicyAuthValue()</c>, and by
+/// <c>TPM2_PolicyRestart()</c> (TPM 2.0 Library Part 1, clause 16.7.8; Part 3, Section 23.18). When SET, a
+/// command this session authorizes proves the authorized entity's authValue by presenting it in the clear in
+/// the session's <c>hmac</c> field — "the comparison of hmac to authValue is performed as if the authorization
+/// is a password" (Section 23.18) — and the response carries an empty <c>hmac</c> (Part 1, clause 16.6.16).
+/// The mutual exclusion with <see cref="IsAuthValueNeeded"/> is symmetric: whichever of the two ran last
+/// determines the presentation format the session then requires.
 /// </param>
 /// <param name="CommandCode">
-/// The command code <c>TPM2_PolicyCommandCode()</c> restricted this session to (Part 3, Section 23.11), or
-/// <see langword="null"/> while no such assertion has been made. The restriction is carried in
+/// The command code <c>TPM2_PolicyCommandCode()</c> restricted this session to (Part 3, Section 23.11) — or
+/// <c>TPM_CC_Duplicate</c> once <c>TPM2_PolicyDuplicationSelect()</c> has run (Section 23.15) — or
+/// <see langword="null"/> while no such assertion has been made. A later assertion that would set it to a
+/// different value is refused (Part 1, clause 16.7.8). The restriction is carried in
 /// <see cref="PolicyDigest"/> as well — the digest fold is what a USER-role entity's authPolicy match enforces
 /// implicitly — but an ADMIN-role authorization additionally consults this field directly, because Part 1,
-/// clause 17.2's ADMIN Note requires BOTH conditions independently ("an authPolicy is satisfied when
+/// clause 16.2's ADMIN Note requires BOTH conditions independently ("an authPolicy is satisfied when
 /// policySession→policyDigest matches the value of the authPolicy value of the object AND
 /// policySession→commandCode matches commandCode for the authorized command"). A session that never asserted a
 /// command code therefore fails an ADMIN-role check outright rather than being decided by the digest alone,
 /// and a session that asserted the wrong one is distinguishable from a session that asserted none.
 /// Cleared alongside the rest of the policy context when the session is successfully used to authorize a
-/// command (Part 3, Section 23.2.4).
+/// command (Part 3, Section 23.2.4) or by <c>TPM2_PolicyRestart()</c> (Section 11.2).
+/// </param>
+/// <param name="CpHashKind">
+/// Which deferred assertion occupies the shared <see cref="CpHash"/> slot (TPM 2.0 Library Part 1, Table 8): a
+/// command-parameter digest (<c>TPM2_PolicyCpHash()</c> or the cpHashA a <c>TPM2_PolicySigned()</c>/
+/// <c>TPM2_PolicySecret()</c>/<c>TPM2_PolicyTicket()</c> authorization bound), a Name digest
+/// (<c>TPM2_PolicyNameHash()</c>, or the one <c>TPM2_PolicyDuplicationSelect()</c> computes), a command-code-and-
+/// parameters digest (<c>TPM2_PolicyParameters()</c>), or a template digest (<c>TPM2_PolicyTemplate()</c>). The kind decides what
+/// <see cref="CpHash"/> is compared against at use and which later assertions may re-propose the slot; its
+/// default <see cref="TpmPolicyCpHashKind.None"/> is the unlatched slot. Cleared by the after-use reset (Part 3,
+/// Section 23.2.4) and <c>TPM2_PolicyRestart()</c>.
+/// </param>
+/// <param name="CommandLocality">
+/// The marshaled <c>TPMA_LOCALITY</c> octet the session is restricted to (TPM 2.0 Library Part 3, Section 23.8;
+/// Part 2, Section 8.5, Table 39), the logical AND of every <c>TPM2_PolicyLocality()</c> the policy asserted, or
+/// zero for the initial "any locality" state. At use, a restricted session authorizes only when the command's
+/// locality is enabled here — this simulator receives every command at locality 0. Cleared by the after-use
+/// reset and <c>TPM2_PolicyRestart()</c>.
+/// </param>
+/// <param name="IsNvWrittenChecked">
+/// Whether <c>TPM2_PolicyNvWritten()</c> has recorded a deferred check on the authorized NV Index's
+/// <c>TPMA_NV_WRITTEN</c> attribute (TPM 2.0 Library Part 1, clause 16.7.8; Part 3, Section 23.20). When SET, the
+/// authorized command must reference an NV Index whose written state equals <see cref="IsNvWrittenRequired"/>.
+/// Cleared by the after-use reset and <c>TPM2_PolicyRestart()</c>.
+/// </param>
+/// <param name="IsNvWrittenRequired">
+/// The <c>TPMA_NV_WRITTEN</c> value the check demands — SET (the Index must have been written) or CLEAR (it must
+/// not) — meaningful only while <see cref="IsNvWrittenChecked"/> is SET (Part 1, clause 16.7.8).
 /// </param>
 /// <param name="IsBoundEntityDaProtected">
 /// Whether the entity named by <c>bind</c> at <c>TPM2_StartAuthSession()</c> receives dictionary-attack
-/// protection, captured once when the session started — TPM 2.0 Library Part 1, clause 17.6.10: "The noDA
+/// protection, captured once when the session started — TPM 2.0 Library Part 1, clause 16.6.10: "The noDA
 /// attribute of the bind entity is recorded in the session context." A policy session records this even though
 /// it records no bound-entity Name, because the two serve different mechanisms: the Name serves the
 /// bind-omission optimization a policy session never applies (Part 3, Section 11.1.1's own "the session is not
-/// bound"), while this flag serves dictionary-attack accounting, which clause 17.8.7 states for a session
+/// bound"), while this flag serves dictionary-attack accounting, which clause 16.8.7 states for a session
 /// without qualifying it by session type. A policy session's <see cref="SessionKey"/> folds the bind entity's
 /// authValue through the same KDFa an HMAC session's does (Section 11.1.1: "For all session types, this command
 /// will cause initialization of the sessionKey"), so a failed use of it is evidence against that authValue in
-/// exactly the sense clause 17.8.1 means by "the authValue parameter in the computation of sessionKey for a
+/// exactly the sense clause 16.8.1 means by "the authValue parameter in the computation of sessionKey for a
 /// bound session" being one of the three ways an authValue is used, all of which "receive DA protection". Part 4
 /// likewise sets its <c>isDaBound</c> session attribute for every session type.
 /// </param>
 /// <param name="IsBoundToLockout">
 /// Whether the bind entity is <c>TPM_RH_LOCKOUT</c>, whose authValue is the one permanent-entity authValue that
-/// is dictionary-attack protected (TPM 2.0 Library Part 1, clause 17.8.1: "lockoutAuth is DA protected even
+/// is dictionary-attack protected (TPM 2.0 Library Part 1, clause 16.8.1: "lockoutAuth is DA protected even
 /// though it is a permanent entity"). Never set without <see cref="IsBoundEntityDaProtected"/> also being set,
 /// matching Part 4's derivation of <c>isLockoutBound</c> from <c>isDaBound</c>. A failed use of a session whose
-/// key folded lockoutAuth takes the one-strike discipline of clause 17.8.5 rather than the ordinary failure
+/// key folded lockoutAuth takes the one-strike discipline of clause 16.8.5 rather than the ordinary failure
 /// counter, whichever entity the policy went on to authorize.
 /// </param>
 public sealed record PolicySessionState(
@@ -163,12 +194,16 @@ public sealed record PolicySessionState(
     bool IsPasswordNeeded = false,
     TpmCcConstants? CommandCode = null,
     bool IsBoundEntityDaProtected = false,
-    bool IsBoundToLockout = false): IDisposable
+    bool IsBoundToLockout = false,
+    TpmPolicyCpHashKind CpHashKind = TpmPolicyCpHashKind.None,
+    byte CommandLocality = 0,
+    bool IsNvWrittenChecked = false,
+    bool IsNvWrittenRequired = false): IDisposable
 {
     /// <summary>
     /// Returns a copy of this session carrying <paramref name="rolledNonceTpm"/> as its nonceTPM, releasing the
     /// superseded carrier as the replacement lands — the roll a command response performs exactly once (TPM 2.0
-    /// Library Part 1, clause 17.6.5). The dispose-immune shared empty carrier is safe to supersede.
+    /// Library Part 1, clause 16.6.5). The dispose-immune shared empty carrier is safe to supersede.
     /// </summary>
     /// <param name="rolledNonceTpm">The freshly generated nonceTPM in an owned carrier; ownership transfers to the returned session.</param>
     /// <returns>The session with its nonceTPM rolled.</returns>
@@ -184,7 +219,7 @@ public sealed record PolicySessionState(
     /// <summary>
     /// Returns a copy of this session carrying <paramref name="extendedPolicyDigest"/> as its accumulated
     /// policyDigest, releasing the superseded carrier as the replacement lands — the wholesale replacement each
-    /// policy assertion performs (TPM 2.0 Library Part 1, clause 17.7). The shared Zero Digest a session starts
+    /// policy assertion performs (TPM 2.0 Library Part 1, clause 16.7). The shared Zero Digest a session starts
     /// from is dispose-immune, so the very first assertion supersedes it safely.
     /// </summary>
     /// <param name="extendedPolicyDigest">The freshly extended policyDigest in an owned carrier; ownership transfers to the returned session.</param>
@@ -205,14 +240,15 @@ public sealed record PolicySessionState(
     /// carrier an unlatched session holds is safe to supersede.
     /// </summary>
     /// <param name="latchedCpHash">The cpHash in an owned carrier, or the empty sentinel to unlatch; ownership transfers to the returned session.</param>
+    /// <param name="kind">The kind the slot takes — <see cref="TpmPolicyCpHashKind.None"/> when unlatching, otherwise the assertion that latched it.</param>
     /// <returns>The session with its cpHash replaced.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of latchedCpHash transfers to the returned PolicySessionState's CpHash, which the record's Dispose or the context reset releases; the outgoing carrier is disposed here before the with-copy replaces it.")]
-    public PolicySessionState WithCpHash(Tpm2bDigest latchedCpHash)
+    public PolicySessionState WithCpHash(Tpm2bDigest latchedCpHash, TpmPolicyCpHashKind kind)
     {
         CpHash.Dispose();
 
-        return this with { CpHash = latchedCpHash };
+        return this with { CpHash = latchedCpHash, CpHashKind = kind };
     }
 
     /// <summary>
@@ -256,7 +292,11 @@ public sealed record PolicySessionState(
         && IsPasswordNeeded == other.IsPasswordNeeded
         && CommandCode == other.CommandCode
         && IsBoundEntityDaProtected == other.IsBoundEntityDaProtected
-        && IsBoundToLockout == other.IsBoundToLockout;
+        && IsBoundToLockout == other.IsBoundToLockout
+        && CpHashKind == other.CpHashKind
+        && CommandLocality == other.CommandLocality
+        && IsNvWrittenChecked == other.IsNvWrittenChecked
+        && IsNvWrittenRequired == other.IsNvWrittenRequired;
 
     /// <summary>
     /// Hashes the session's immutable identity fields, consistent with

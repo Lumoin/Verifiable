@@ -5,7 +5,7 @@ namespace Verifiable.Tests.Tpm;
 
 /// <summary>
 /// Proves how <see cref="TpmsTaggedPolicy"/> reads a policy slot that was never set. The structure is a value
-/// type whose <c>policyHash</c> is a <c>TPMT_HA</c> reference (TPM 2.0 Library Part 2, clause 10.8.4, Table 116),
+/// type whose <c>policyHash</c> is a <c>TPMT_HA</c> reference (TPM 2.0 Library Part 2, clause 10.7.4, Table 119),
 /// so <c>default(TpmsTaggedPolicy)</c> — the shape any array, collection slot, or uninitialized local takes —
 /// leaves that reference unset. Every accessor reads it as <see cref="TpmtHa.Null"/>, which is exactly the value
 /// the table gives a handle with no policy restriction, so the default-valued structure reports "no policy"
@@ -26,7 +26,7 @@ internal sealed class TpmsTaggedPolicyTests
 
         Assert.IsTrue(
             policy.HasEmptyPolicy(),
-            "An unset policyHash is TPM_ALG_NULL-shaped, which Table 116 gives a handle with no policy restriction.");
+            "An unset policyHash is TPM_ALG_NULL-shaped, which Table 119 gives a handle with no policy restriction.");
 
         Assert.AreEqual(
             string.Empty, policy.GetPolicyHashHex(),

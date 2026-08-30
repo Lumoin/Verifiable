@@ -28,7 +28,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// AES-CFB-encrypted channel.
 /// </para>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 3, Section 12.7 (Table 32).
+/// Specification reference: TPM 2.0 Library Part 3, Section 12.7 (Table 30).
 /// </para>
 /// </remarks>
 public readonly record struct UnsealInput: ITpmCommandInput

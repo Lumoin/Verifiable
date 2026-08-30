@@ -10,14 +10,14 @@ namespace Verifiable.Tpm.Spec.Handles;
 /// <para>
 /// Used to identify an NV index in the <c>TPM2_NV_DefineSpace()</c> and <c>TPM2_NV_ReadPublic()</c>
 /// commands, and as the <c>nvIndex</c> field of the legacy <c>TPMS_NV_PUBLIC</c> structure (Part 2,
-/// Section 13.6, Table 235), which only supports regular NV indexes.
+/// Section 13.6, Table 251), which only supports regular NV indexes.
 /// </para>
 /// <para>
 /// <b>Valid values:</b> the ordinary NV index range. Unmarshaling a value outside it — an external or a
 /// permanent NV index included — is <c>TPM_RC_VALUE</c>.
 /// </para>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 9.27, Table 74.
+/// Specification reference: TPM 2.0 Library Part 2, Section 9.27, Table 73.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]

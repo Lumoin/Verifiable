@@ -68,7 +68,8 @@ internal sealed class SourceHygieneTests
         string contractMdLine = "// see " + "foo" + "-contract.md for detail";
         string fixspecMdLine = "// see " + "foo" + "-fix" + "spec.md for detail";
         string contractRLine = "// see " + "contract" + " R5 for the rule";
-        string contractRHyphenLine = "// see " + "contract" + " R-6 for the rule";
+        string contractRHyphenLine = "// see " + "contract" + " R" + "-6 for the rule";
+        string bareRHyphenLine = "// see " + "R" + "-4 for the rule";
         string vbcLine = "// see " + "vbc" + "-3 cited here";
         string rjLine = "// see " + "RJ" + "-2 cited here";
         string jdLine = "// see " + "JD" + "7 cited here";
@@ -206,11 +207,12 @@ internal sealed class SourceHygieneTests
             seamsFindingLine,
             findingLetterLine,
             sectionLNumberLine,
+            bareRHyphenLine,
         ];
 
         IReadOnlyList<SourceHygieneViolation> violations = SourceHygieneScanner.ScanLines("Sample.cs", sampleLines);
 
-        Assert.HasCount(76, violations);
+        Assert.HasCount(77, violations);
         Assert.IsTrue(violations.All(static v => v.FilePath == "Sample.cs"));
         Assert.Contains(static v => v.LineNumber == 3 && v.Kind == SourceHygieneViolationKind.BannerDivider, violations);
         Assert.Contains(static v => v.LineNumber == 4 && v.Kind == SourceHygieneViolationKind.PlanningVocabulary, violations);
@@ -299,6 +301,8 @@ internal sealed class SourceHygieneTests
         Assert.HasCount(1, violations.Where(static v => v.LineNumber == 78));
         Assert.Contains(static v => v.LineNumber == 79 && v.Kind == SourceHygieneViolationKind.SpecLineShorthand, violations);
         Assert.HasCount(1, violations.Where(static v => v.LineNumber == 79));
+        Assert.Contains(static v => v.LineNumber == 80 && v.Kind == SourceHygieneViolationKind.InternalProvenancePointer, violations);
+        Assert.HasCount(1, violations.Where(static v => v.LineNumber == 80));
         Assert.HasCount(1, violations.Where(static v => v.LineNumber == 23));
         Assert.HasCount(2, violations.Where(static v => v.LineNumber == 24));
         Assert.HasCount(1, violations.Where(static v => v.LineNumber == 26));
@@ -510,9 +514,14 @@ internal static class SourceHygieneScanner
     /// it was written for.
     /// </para>
     /// <para>
-    /// Bare <c>R&lt;n&gt;</c>/<c>D&lt;n&gt;</c> forms (no <c>contract</c> prefix, no dash-pair) are
+    /// Bare <c>R&lt;n&gt;</c>/<c>D&lt;n&gt;</c> forms (no <c>contract</c> prefix, no hyphen) are
     /// deliberately not banned here: unlike the <c>contract R</c>/hyphenated-id shapes below, a lone
-    /// letter-digit token collides too broadly with genuine specification numbering to gate safely.
+    /// letter-digit token collides too broadly with genuine specification numbering to gate safely. The
+    /// HYPHENATED bare form (<c>R-&lt;n&gt;</c>, no prefix) is banned, case-restricted (<c>(?-i:…)</c>) because a
+    /// lower-case <c>r-&lt;n&gt;</c> occurs as ordinary fixture data in the tree (a PREMIS rights-statement
+    /// identifier): a full-tree collision check found no legitimate upper-case hit — no specification, algorithm,
+    /// or curve name in the tree takes that shape — and every occurrence it did find outside this file's own
+    /// samples was a leaked requirement id in a doc comment.
     /// </para>
     /// <para>
     /// The round-4 additions — a spaced citation combining the wave word with a following digit, an
@@ -599,6 +608,7 @@ internal static class SourceHygieneScanner
         "|" + @"\bDV\d+-\d+\b" +
         "|" + @"^\s*//.*\bfindings?\s+#\d\b" +
         "|" + @"\bcontract R-?\d" +
+        "|" + @"(?-i:\bR-\d+\b)" +
         "|" + @"\bVBC-\d" +
         "|" + @"\bRJ-\d" +
         "|" + @"\bJD\d+\b" +

@@ -17,7 +17,7 @@ namespace Verifiable.Tests.Tpm;
 
 /// <summary>
 /// Proves the pooled-carrier ownership of the authorization policy digest (<c>TPM2B_DIGEST</c>, TPM 2.0 Library
-/// Part 2, clause 10.4.2, Table 92) wherever the simulator retains one: an object's
+/// Part 2, clause 10.3.2, Table 90) wherever the simulator retains one: an object's
 /// <c>TPMT_PUBLIC.authPolicy</c>, an NV Index's <c>TPMS_NV_PUBLIC.authPolicy</c>, and a permanent entity's
 /// policy slot installed by <c>TPM2_SetPrimaryPolicy()</c> (Part 3, clause 24.3). Each digest is rented once,
 /// transferred into durable state, deep-copied when <c>TPM2_EvictControl()</c> persists an object (clause 28.5),
@@ -79,14 +79,17 @@ internal sealed class TpmInHouseSimulatorAuthPolicyCarrierTests
     public TestContext TestContext { get; set; } = null!;
 
     /// <summary>
-    /// A loaded object created from a policy-bearing template holds exactly one pooled carrier more than the
-    /// otherwise identical policy-free template does — the retained <c>TPMT_PUBLIC.authPolicy</c> digest — and
-    /// <c>TPM2_FlushContext()</c> returns it. The policy-bearing template is the standard endorsement key's
-    /// (TCG EK Credential Profile, Annex B.3.4, Template L-2), whose "PolicyA" is a real SHA-256 digest rather
-    /// than the Empty Buffer, so the difference cannot be the dispose-immune empty sentinel.
+    /// A loaded object created from a policy-bearing template holds exactly two pooled carriers more than the
+    /// otherwise identical policy-free template does — the retained standalone <c>TPMT_PUBLIC.authPolicy</c>
+    /// digest and the same digest inside the object's retained public area (the <c>TPM2B_PUBLIC</c> a
+    /// <c>TPM2_ReadPublic()</c> answers with, TPM 2.0 Library Part 3, clause 12.4.1, whose parsed
+    /// <c>authPolicy</c> member rents its own carrier) — and <c>TPM2_FlushContext()</c> returns both. The
+    /// policy-bearing template is the standard endorsement key's (TCG EK Credential Profile, Annex B.3.4,
+    /// Template L-2), whose "PolicyA" is a real SHA-256 digest rather than the Empty Buffer, so the difference
+    /// cannot be the dispose-immune empty sentinel.
     /// </summary>
     [TestMethod]
-    public async Task LoadedPolicyBearingObjectHoldsOneCarrierMoreThanAPolicyFreeObject()
+    public async Task LoadedPolicyBearingObjectHoldsTwoCarriersMoreThanAPolicyFreeObject()
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool).ConfigureAwait(false);
@@ -106,8 +109,8 @@ internal sealed class TpmInHouseSimulatorAuthPolicyCarrierTests
         long policyBearingCost = trackingPool.OutstandingCount - baseline;
 
         Assert.AreEqual(
-            policyFreeCost + 1, policyBearingCost,
-            "A retained non-empty authPolicy is exactly one more pooled carrier than the policy-free object holds.");
+            policyFreeCost + 2, policyBearingCost,
+            "A retained non-empty authPolicy is exactly two more pooled carriers than the policy-free object holds: the standalone digest and its copy inside the retained public area.");
 
         await FlushAsync(tpm, registry, trackingPool.Pool, policyBearingHandle).ConfigureAwait(false);
 
@@ -118,10 +121,11 @@ internal sealed class TpmInHouseSimulatorAuthPolicyCarrierTests
 
     /// <summary>
     /// <c>TPM2_EvictControl()</c>'s persist arm deep-copies the object into its persistent instance (TPM 2.0
-    /// Library Part 3, clause 28.5), so persisting a policy-bearing object rents exactly one carrier more than
-    /// persisting a policy-free one: the persistent entry's OWN authPolicy digest, never an alias of the
-    /// transient entry's. Evicting the persistent copy afterwards returns everything, which a shared buffer
-    /// could not do without one entry's disposal reaching the other's octets.
+    /// Library Part 3, clause 28.5), so persisting a policy-bearing object rents exactly two carriers more than
+    /// persisting a policy-free one: the persistent entry's OWN standalone authPolicy digest and the OWN copy
+    /// inside its cloned public area, never aliases of the transient entry's. Evicting the persistent copy
+    /// afterwards returns everything, which a shared buffer could not do without one entry's disposal reaching
+    /// the other's octets.
     /// </summary>
     [TestMethod]
     public async Task PersistingAPolicyBearingObjectDeepCopiesItsAuthPolicyCarrier()
@@ -150,8 +154,8 @@ internal sealed class TpmInHouseSimulatorAuthPolicyCarrierTests
         long policyBearingCopyCost = trackingPool.OutstandingCount - beforePolicyBearingPersist;
 
         Assert.AreEqual(
-            policyFreeCopyCost + 1, policyBearingCopyCost,
-            "The persistent instance must rent its OWN authPolicy digest, so the deep copy costs one carrier more than a policy-free object's.");
+            policyFreeCopyCost + 2, policyBearingCopyCost,
+            "The persistent instance must rent its OWN authPolicy digest both standalone and inside its cloned public area, so the deep copy costs two carriers more than a policy-free object's.");
 
         await FlushAsync(tpm, registry, trackingPool.Pool, policyBearingHandle).ConfigureAwait(false);
         await EvictAsync(tpm, registry, trackingPool.Pool).ConfigureAwait(false);
@@ -240,7 +244,7 @@ internal sealed class TpmInHouseSimulatorAuthPolicyCarrierTests
     /// 24.3) holds exactly one live carrier however many times it is written: installing a policy costs one,
     /// replacing it with a different policy of the same width costs nothing further (the superseded digest is
     /// disposed as the replacement is installed), and installing the Empty Buffer — which disables policy
-    /// authorization of that entity outright (Part 1, clause 11.2, Table 5) — returns the slot to the
+    /// authorization of that entity outright (Part 1, clause 10.2, Table 8) — returns the slot to the
     /// dispose-immune empty sentinel and the pool to its baseline.
     /// </summary>
     [TestMethod]
@@ -273,7 +277,7 @@ internal sealed class TpmInHouseSimulatorAuthPolicyCarrierTests
     /// <summary>
     /// <c>TPM2_Load()</c>'s <c>inPublic</c> carries a <c>TPMT_PUBLIC.authPolicy</c>, and a <c>TPM2B_DIGEST</c>'s
     /// buffer is bounded by <c>sizeof(TPMU_HA)</c> — the widest member of the hash union (TPM 2.0 Library Part 2,
-    /// clause 10.4.2, Table 92). A hand-framed public area declaring one octet more is answered
+    /// clause 10.3.2, Table 90). A hand-framed public area declaring one octet more is answered
     /// <c>TPM_RC_SIZE</c> as a response code: the structure parser's only refusal channel is a throw, and an
     /// unmarshaling error means no command processing occurs (Part 3, clause 5.8.2), so the wire parse answers
     /// it rather than letting an exception escape the command surface. The frame is built by hand because
@@ -303,7 +307,7 @@ internal sealed class TpmInHouseSimulatorAuthPolicyCarrierTests
 
         Assert.AreEqual(
             TpmRcConstants.TPM_RC_SIZE, responseCode,
-            "An inPublic authPolicy wider than sizeof(TPMU_HA) is TPM_RC_SIZE (TPM 2.0 Library Part 2, clause 10.4.2, Table 92).");
+            "An inPublic authPolicy wider than sizeof(TPMU_HA) is TPM_RC_SIZE (TPM 2.0 Library Part 2, clause 10.3.2, Table 90).");
 
         Assert.AreEqual(
             baseline, trackingPool.OutstandingCount,
@@ -313,7 +317,7 @@ internal sealed class TpmInHouseSimulatorAuthPolicyCarrierTests
     /// <summary>
     /// The <c>TPM2_Create()</c> sibling of <see cref="LoadWithAnOversizeInPublicAuthPolicyIsRefusedWithSize"/>:
     /// the sealed object's template carries the same <c>TPMT_PUBLIC.authPolicy</c>, so the same over-bound
-    /// <c>TPM2B_DIGEST</c> (Part 2, clause 10.4.2, Table 92) is answered <c>TPM_RC_SIZE</c> on the plain
+    /// <c>TPM2B_DIGEST</c> (Part 2, clause 10.3.2, Table 90) is answered <c>TPM_RC_SIZE</c> on the plain
     /// password-authorized seal path too, and the sealed-data carriers the parse would otherwise rent behind it
     /// are never rented.
     /// </summary>
@@ -340,7 +344,7 @@ internal sealed class TpmInHouseSimulatorAuthPolicyCarrierTests
 
         Assert.AreEqual(
             TpmRcConstants.TPM_RC_SIZE, responseCode,
-            "An inPublic authPolicy wider than sizeof(TPMU_HA) is TPM_RC_SIZE on the seal path too (TPM 2.0 Library Part 2, clause 10.4.2, Table 92).");
+            "An inPublic authPolicy wider than sizeof(TPMU_HA) is TPM_RC_SIZE on the seal path too (TPM 2.0 Library Part 2, clause 10.3.2, Table 90).");
 
         Assert.AreEqual(
             baseline, trackingPool.OutstandingCount,

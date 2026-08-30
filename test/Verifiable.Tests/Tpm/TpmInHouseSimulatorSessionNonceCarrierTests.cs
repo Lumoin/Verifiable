@@ -20,13 +20,13 @@ namespace Verifiable.Tests.Tpm;
 
 /// <summary>
 /// The pool-accounting proofs for a session's retained nonceTPM (<c>TPM2B_NONCE</c>, TPM 2.0 Library Part 2,
-/// clause 10.4.4, Table 94), which every session record owns for the session's whole life and replaces wholesale
-/// once per command response (Part 1, clause 17.6.5). Each proof drives the real wire through the production
+/// clause 10.3.4, Table 92), which every session record owns for the session's whole life and replaces wholesale
+/// once per command response (Part 1, clause 16.6.5). Each proof drives the real wire through the production
 /// command path and reads real pool telemetry (<see cref="MeteredHousePool"/>), never an internal hook.
 /// </summary>
 /// <remarks>
 /// An unbound, unsalted session is the isolating fixture: its session key is the shared Empty-Buffer carrier and
-/// its bound-entity value is the shared unbound sentinel (Part 1, clause 17.6.9 — no <c>KDFa</c> runs at all), so
+/// its bound-entity value is the shared unbound sentinel (Part 1, clause 16.6.9 — no <c>KDFa</c> runs at all), so
 /// neither rents anything and the retained nonceTPM is the ONLY rental such a session holds. A balance taken over
 /// it therefore counts nonce carriers and nothing else.
 /// </remarks>
@@ -61,7 +61,7 @@ internal sealed class TpmInHouseSimulatorSessionNonceCarrierTests
     /// A started unbound, unsalted HMAC session holds EXACTLY ONE pooled rental — its retained nonceTPM — and
     /// <c>TPM2_FlushContext()</c> returns it: the balance rises by exactly one over the start and falls back to
     /// the pre-start baseline once the session leaves the table (TPM 2.0 Library Part 3, clause 28.4; Part 1,
-    /// clause 17.6.5 for the nonce the session retains).
+    /// clause 16.6.5 for the nonce the session retains).
     /// </summary>
     [TestMethod]
     public async Task FlushContextReturnsAnHmacSessionsRetainedNonceCarrierToPool()
@@ -133,7 +133,7 @@ internal sealed class TpmInHouseSimulatorSessionNonceCarrierTests
     /// <summary>
     /// Two live sessions hold two DISTINCT nonce carriers: the balance rises by exactly one per start and falls
     /// by exactly one per flush, so no session shares another's carrier and none is left behind (TPM 2.0 Library
-    /// Part 1, clause 17.6.5 — the nonce is per session).
+    /// Part 1, clause 16.6.5 — the nonce is per session).
     /// </summary>
     [TestMethod]
     public async Task EachStartedSessionHoldsItsOwnRetainedNonceCarrier()
@@ -172,7 +172,7 @@ internal sealed class TpmInHouseSimulatorSessionNonceCarrierTests
     /// The nonceTPM ROLL replaces the retained carrier rather than accumulating one per command: three
     /// encrypt-attributed <c>TPM2_GetRandom()</c> commands over one session leave the pool balance exactly where
     /// the first one did, proving the roll releases the superseded carrier as the replacement lands (TPM 2.0
-    /// Library Part 1, clause 17.6.5).
+    /// Library Part 1, clause 16.6.5).
     /// </summary>
     /// <remarks>
     /// The measurement starts AFTER the first command so that the balance being compared is the session's steady
@@ -271,7 +271,7 @@ internal sealed class TpmInHouseSimulatorSessionNonceCarrierTests
     /// A POLICY session's nonceTPM roll likewise replaces the retained carrier rather than accumulating one:
     /// a <c>TPM2_NV_ChangeAuth()</c> authorized by a policy session — the ADMIN-role shape Part 3, clause
     /// 31.15.1 demands — rolls that session's nonce as part of the success-only policy-context reset (Part 3,
-    /// Section 23.2.4; Part 1, clause 17.6.5), and the pool balance returns to where it stood before the
+    /// Section 22.2.4; Part 1, clause 16.6.5), and the pool balance returns to where it stood before the
     /// rotation once the session is flushed.
     /// </summary>
     /// <remarks>
@@ -355,7 +355,7 @@ internal sealed class TpmInHouseSimulatorSessionNonceCarrierTests
     /// <summary>
     /// Defines an ordinary, dictionary-attack-exempt NV Index carrying <paramref name="authPolicy"/>, authorized
     /// by the empty owner authValue, and returns the Index's Name (<c>nameAlg ‖ H(TPMS_NV_PUBLIC)</c>, TPM 2.0
-    /// Library Part 1, clause 14, Table 6) computed independently of the simulator so the executor can build cpHash.
+    /// Library Part 1, clause 13, Table 9) computed independently of the simulator so the executor can build cpHash.
     /// </summary>
     /// <param name="tpm">The TPM device.</param>
     /// <param name="pool">The memory pool.</param>

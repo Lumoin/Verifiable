@@ -17,7 +17,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// no authorization area at all (<c>TPM_ST_NO_SESSIONS</c>), exactly as TPM2_VerifySignature() does.
 /// </para>
 /// <para>
-/// Command structure (TPM 2.0 Part 3, Section 23.3, Table 124):
+/// Command structure (TPM 2.0 Part 3, Section 23.3, Table 144):
 /// </para>
 /// <list type="bullet">
 ///   <item><description>authObject (TPMI_DH_OBJECT): The key that validates the signature. Requires no authorization.</description></item>

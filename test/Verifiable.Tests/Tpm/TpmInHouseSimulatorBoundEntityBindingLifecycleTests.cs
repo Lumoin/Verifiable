@@ -21,11 +21,11 @@ namespace Verifiable.Tests.Tpm;
 /// Drives the LIFECYCLE of a session's binding — how it ends — against the in-house behavioural
 /// <see cref="TpmSimulator"/>, entirely in-process through the production command path
 /// (<see cref="TpmCommandExecutor"/>, <see cref="TpmSession"/>, and the real codecs). The governing mechanism is
-/// TPM 2.0 Library Part 1, clause 17.6.10's bound-entity record: the bind entity's Name COMBINED with its
+/// TPM 2.0 Library Part 1, clause 16.6.10's bound-entity record: the bind entity's Name COMBINED with its
 /// authValue ("In the Reference Code, the authorization value is combined with the Name and stored in the
 /// SESSION boundEntity member"), recomputed from the entity's LIVE authValue at every bind-omission decision
 /// (Part 4, <c>IsSessionBindEntity()</c>). A Name-only record would keep a session bound across the very events
-/// clause 17.6.10 requires to end it: an authValue rotation ("sessions bound to the old authorization should no
+/// clause 16.6.10 requires to end it: an authValue rotation ("sessions bound to the old authorization should no
 /// longer be valid") and the clause's own NV Index "squatting" attack.
 /// </summary>
 /// <remarks>
@@ -70,7 +70,7 @@ internal sealed class TpmInHouseSimulatorBoundEntityBindingLifecycleTests
     /// <summary>
     /// The same-command rotation arc: <c>TPM2_HierarchyChangeAuth()</c> authorized BY a session bound to the very
     /// hierarchy it rotates. The command HMAC omits the authValue (the binding is valid when the command arrives,
-    /// TPM 2.0 Library Part 1, clause 17.6.10 equation 22), and the RESPONSE HMAC must omit it too — clause
+    /// TPM 2.0 Library Part 1, clause 16.6.10 equation 22), and the RESPONSE HMAC must omit it too — clause
     /// 17.6.10: "The TPM will record the fact that the authValue was not used in the HMAC computation of the
     /// authorization and not include it in the HMAC computation on the response" (the reference's recorded
     /// <c>includeAuth</c> session attribute) — NOT re-derive the decision against the just-rotated value, which
@@ -105,7 +105,7 @@ internal sealed class TpmInHouseSimulatorBoundEntityBindingLifecycleTests
                     tpm, registry, pool, session, suppliedAuth: ReadOnlyMemory<byte>.Empty, newAuth: SecondOwnerAuth).ConfigureAwait(false);
                 Assert.IsTrue(
                     boundRotation.IsSuccess,
-                    $"The bound session's own rotation must succeed with the authValue omitted on BOTH HMAC legs (clause 17.6.10's record-and-mirror rule); got '{boundRotation.ResponseCode}'.");
+                    $"The bound session's own rotation must succeed with the authValue omitted on BOTH HMAC legs (clause 16.6.10's record-and-mirror rule); got '{boundRotation.ResponseCode}'.");
 
                 //The rotation ended the binding: the recomputed bound-entity value now folds the NEW ownerAuth
                 //and no longer equals the recorded one, so the omission form stops authorizing. Owner is
@@ -117,14 +117,14 @@ internal sealed class TpmInHouseSimulatorBoundEntityBindingLifecycleTests
                     SessionEncodedRc(TpmRcConstants.TPM_RC_BAD_AUTH, sessionIndex: 0), staleOmission.ResponseCode,
                     "After the rotation the session is no longer bound, so an omission-form use must fail its command HMAC.");
 
-                //The session itself stays usable (clause 17.6.10's Note): folding the CURRENT ownerAuth
+                //The session itself stays usable (clause 16.6.10's Note): folding the CURRENT ownerAuth
                 //authorizes an owner command whose response reuses the same key (TPM2_SetPrimaryPolicy changes
                 //no authValue, so both HMAC legs agree client-side).
                 TpmResult<SetPrimaryPolicyResponse> unboundUse = await SetEmptyOwnerPolicyOverSessionAsync(
                     tpm, registry, pool, session, suppliedAuth: SecondOwnerAuth).ConfigureAwait(false);
                 Assert.IsTrue(
                     unboundUse.IsSuccess,
-                    $"The unbound session folding the new ownerAuth must still authorize (clause 17.6.10's Note); got '{unboundUse.ResponseCode}'.");
+                    $"The unbound session folding the new ownerAuth must still authorize (clause 16.6.10's Note); got '{unboundUse.ResponseCode}'.");
             }
         }
         finally
@@ -134,7 +134,7 @@ internal sealed class TpmInHouseSimulatorBoundEntityBindingLifecycleTests
     }
 
     /// <summary>
-    /// The cross-path rotation rider (TPM 2.0 Library Part 1, clause 17.6.10: "If the administrator for a
+    /// The cross-path rotation rider (TPM 2.0 Library Part 1, clause 16.6.10: "If the administrator for a
     /// persistent object changes the authorization, sessions bound to the old authorization should no longer be
     /// valid"): a session bound to the owner hierarchy, whose authValue is then rotated by a DIFFERENT
     /// authorization path (a password session), must stop applying the bind-omission — the recomputed
@@ -176,7 +176,7 @@ internal sealed class TpmInHouseSimulatorBoundEntityBindingLifecycleTests
                     tpm, registry, pool, session, suppliedAuth: ReadOnlyMemory<byte>.Empty).ConfigureAwait(false);
                 Assert.AreEqual(
                     SessionEncodedRc(TpmRcConstants.TPM_RC_BAD_AUTH, sessionIndex: 0), staleOmission.ResponseCode,
-                    "A session bound to the OLD ownerAuth must no longer authorize with the omission after the rotation (clause 17.6.10).");
+                    "A session bound to the OLD ownerAuth must no longer authorize with the omission after the rotation (clause 16.6.10).");
 
                 //Positive control: the session folding the NEW ownerAuth authorizes — unbound but alive.
                 TpmResult<SetPrimaryPolicyResponse> unboundUse = await SetEmptyOwnerPolicyOverSessionAsync(
@@ -191,7 +191,7 @@ internal sealed class TpmInHouseSimulatorBoundEntityBindingLifecycleTests
     }
 
     /// <summary>
-    /// TPM 2.0 Library Part 1, clause 17.6.10's own NV Index "squatting" attack, verbatim: "The attacker would
+    /// TPM 2.0 Library Part 1, clause 16.6.10's own NV Index "squatting" attack, verbatim: "The attacker would
     /// then start an authorization session bound to the NV Index and delete the NV Index. When the NV Index to be
     /// attacked is created, the attacker would have an authorization session bound to an Index with the same Name
     /// and could [have] access to the NV Index even though the actual authorization value is unknown" — the
@@ -199,7 +199,7 @@ internal sealed class TpmInHouseSimulatorBoundEntityBindingLifecycleTests
     /// survives the Index's undefine-then-recreate with an identical public area (identical Name) ONLY as a stale
     /// handle: the recomputed bound-entity value folds the recreated Index's DIFFERENT authValue, the comparison
     /// fails, and the omission form is refused — charging <c>failedTries</c>, since the recreated Index is
-    /// dictionary-attack protected (clause 17.8.7).
+    /// dictionary-attack protected (clause 16.8.7).
     /// </summary>
     [TestMethod]
     public async Task ASessionBoundToAnUndefinedIndexMustNotAuthorizeAnIdenticallyNamedSquatterIndex()
@@ -238,19 +238,19 @@ internal sealed class TpmInHouseSimulatorBoundEntityBindingLifecycleTests
 
                 //The recomputed bound-entity value folds the squatter's authValue and no longer matches the
                 //recorded one, so the omission form fails its command HMAC — and charges failedTries, because
-                //the squatter Index is DA-protected (clause 17.8.7).
+                //the squatter Index is DA-protected (clause 16.8.7).
                 TpmResult<NvReadResponse> squattedRead = await ReadIndexOverSessionAsync(
                     tpm, registry, pool, session, SquatIndexHandle, squatterName, suppliedAuth: ReadOnlyMemory<byte>.Empty).ConfigureAwait(false);
                 Assert.AreEqual(
                     SessionEncodedRc(TpmRcConstants.TPM_RC_AUTH_FAIL, sessionIndex: 0), squattedRead.ResponseCode,
-                    "The session bound to the deleted Index must NOT authorize the identically-Named squatter with the omission (clause 17.6.10's squatting attack).");
+                    "The session bound to the deleted Index must NOT authorize the identically-Named squatter with the omission (clause 16.6.10's squatting attack).");
 
                 TpmResult<TpmDictionaryAttackParameters> after = await tpm.GetDictionaryAttackParametersAsync(pool, TestContext.CancellationToken).ConfigureAwait(false);
                 Assert.IsTrue(after.IsSuccess);
                 Assert.AreEqual(before.Value.LockoutCounter + 1, after.Value.LockoutCounter, "The refused omission must charge failedTries by exactly 1.");
 
                 //Positive control: folding the squatter's own authValue authorizes — the session is alive, the
-                //BINDING is what ended (clause 17.6.10's Note), so the refusal above can only have come from the
+                //BINDING is what ended (clause 16.6.10's Note), so the refusal above can only have come from the
                 //bound-entity comparison.
                 TpmResult<NvReadResponse> explicitRead = await ReadIndexOverSessionAsync(
                     tpm, registry, pool, session, SquatIndexHandle, squatterName, suppliedAuth: SquatterIndexAuth).ConfigureAwait(false);
@@ -297,7 +297,7 @@ internal sealed class TpmInHouseSimulatorBoundEntityBindingLifecycleTests
 
     /// <summary>
     /// An authValue "should not be larger than the digest size of the algorithm used to compute the Name of the
-    /// object" (TPM 2.0 Library Part 1, clause 17.6.4.2, enforced by the reference's <c>TPM2_Create()</c> with
+    /// object" (TPM 2.0 Library Part 1, clause 16.6.4.2, enforced by the reference's <c>TPM2_Create()</c> with
     /// <c>TPM_RC_SIZE</c>): sealing under a 33-octet <c>userAuth</c> against a SHA-256 nameAlg template is
     /// refused, while an exactly-digest-width <c>userAuth</c> seals — the creation-time bound that keeps every
     /// sealed object's authValue inside the bound-entity fold's fixed width.
@@ -322,7 +322,7 @@ internal sealed class TpmInHouseSimulatorBoundEntityBindingLifecycleTests
         overWideAuth.AsSpan().Fill(0x5A);
 
         TpmResult<CreateResponse> refused = await SealExpectingAsync(tpm, registry, pool, parent.ObjectHandle.Value, overWideAuth).ConfigureAwait(false);
-        Assert.AreEqual(TpmRcConstants.TPM_RC_SIZE, refused.ResponseCode, "A userAuth wider than the nameAlg digest must be refused with TPM_RC_SIZE (Part 1, clause 17.6.4.2).");
+        Assert.AreEqual(TpmRcConstants.TPM_RC_SIZE, refused.ResponseCode, "A userAuth wider than the nameAlg digest must be refused with TPM_RC_SIZE (Part 1, clause 16.6.4.2).");
 
         byte[] digestWidthAuth = new byte[32];
         digestWidthAuth.AsSpan().Fill(0x5A);
@@ -486,7 +486,7 @@ internal sealed class TpmInHouseSimulatorBoundEntityBindingLifecycleTests
     /// <summary>
     /// Issues <c>TPM2_HierarchyChangeAuth()</c> for the owner hierarchy over <paramref name="session"/>, folding
     /// <paramref name="suppliedAuth"/> as the entity authValue term (empty composes the bind-omission form,
-    /// TPM 2.0 Library Part 1, clause 17.6.10 equation 22).
+    /// TPM 2.0 Library Part 1, clause 16.6.10 equation 22).
     /// </summary>
     /// <param name="tpm">The TPM device.</param>
     /// <param name="registry">The response codec registry.</param>
@@ -583,7 +583,7 @@ internal sealed class TpmInHouseSimulatorBoundEntityBindingLifecycleTests
 
     /// <summary>
     /// Undefines <paramref name="nvIndex"/> under owner authorization with a <c>TPM_RS_PW</c> session (TPM 2.0
-    /// Library Part 3, clause 31.4) — the deletion step of clause 17.6.10's squatting attack.
+    /// Library Part 3, clause 31.4) — the deletion step of clause 16.6.10's squatting attack.
     /// </summary>
     /// <param name="device">The TPM device.</param>
     /// <param name="pool">The memory pool.</param>
@@ -625,7 +625,7 @@ internal sealed class TpmInHouseSimulatorBoundEntityBindingLifecycleTests
 
     /// <summary>
     /// Reads an NV Index's current Name over <c>TPM2_NV_ReadPublic()</c> — the cpHash Name term a
-    /// session-authorized NV command needs (TPM 2.0 Library Part 1, clause 16.7, equation 15).
+    /// session-authorized NV command needs (TPM 2.0 Library Part 1, clause 15.7, equation 15).
     /// </summary>
     /// <param name="device">The TPM device.</param>
     /// <param name="nvIndex">The NV Index handle.</param>
@@ -643,7 +643,7 @@ internal sealed class TpmInHouseSimulatorBoundEntityBindingLifecycleTests
     /// <summary>
     /// Starts a bound, unsalted HMAC session against <paramref name="bindHandle"/> through the production
     /// <c>TPM2_StartAuthSession()</c> path, deriving the client-side session key from
-    /// <paramref name="bindAuthValue"/> (TPM 2.0 Library Part 1, clause 17.6.10, equation 20).
+    /// <paramref name="bindAuthValue"/> (TPM 2.0 Library Part 1, clause 16.6.10, equation 20).
     /// </summary>
     /// <param name="tpm">The TPM device.</param>
     /// <param name="registry">The response codec registry.</param>

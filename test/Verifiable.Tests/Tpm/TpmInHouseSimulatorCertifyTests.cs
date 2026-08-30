@@ -90,7 +90,7 @@ internal sealed class TpmInHouseSimulatorCertifyTests
 
     /// <summary>
     /// The Name algorithm of the ECC decrypt key a salted session's <c>tpmKey</c> is created with — independent
-    /// of <see cref="HmacSessionAlg"/> (TPM 2.0 Library Part 1, Annex C.6.1).
+    /// of <see cref="HmacSessionAlg"/> (TPM 2.0 Library Part 1, clause 44.7.1).
     /// </summary>
     private const TpmAlgIdConstants TpmKeyNameAlg = TpmAlgIdConstants.TPM_ALG_SHA256;
 
@@ -330,7 +330,7 @@ internal sealed class TpmInHouseSimulatorCertifyTests
     }
 
     /// <summary>
-    /// Verifies the TPM2B_DATA qualifyingData size bound (TPM 2.0 Library Part 2, clause 10.4.3: bounded by the
+    /// Verifies the TPM2B_DATA qualifyingData size bound (TPM 2.0 Library Part 2, clause 10.3.3: bounded by the
     /// size of a marshaled TPMT_HA, 66 octets for the largest supported digest): a 66-octet qualifyingData
     /// succeeds, and a 67-octet qualifyingData is rejected with <c>TPM_RC_SIZE</c>.
     /// </summary>
@@ -367,11 +367,11 @@ internal sealed class TpmInHouseSimulatorCertifyTests
 
     /// <summary>
     /// TPM2_Certify()'s objectHandle slot (Auth Index 1, Auth Role ADMIN, session index 0; TPM 2.0 Library Part
-    /// 3, clause 18.2, Table 89) is verified against the certified object's own retained authValue over a plain
+    /// 3, clause 18.2, Table 97) is verified against the certified object's own retained authValue over a plain
     /// <c>TPM_RS_PW</c> session: a DA-protected subject created with a real password admits a certification
     /// authorized by the CORRECT password and moves no dictionary-attack counter, while a WRONG password is
     /// refused with the session-index-encoded <c>TPM_RC_AUTH_FAIL</c> at index 0 (Part 2, clause 6.6.2) and
-    /// charges <c>failedTries</c> exactly once (Part 1, clause 17.8.7). The signHandle slot carries its own
+    /// charges <c>failedTries</c> exactly once (Part 1, clause 16.8.7). The signHandle slot carries its own
     /// (empty, correct) auth throughout, isolating the objectHandle arm.
     /// </summary>
     [TestMethod]
@@ -420,16 +420,16 @@ internal sealed class TpmInHouseSimulatorCertifyTests
             pool, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(
             afterCorrect.Value.LockoutCounter + 1, afterWrong.Value.LockoutCounter,
-            "A wrong certified-object password against a DA-protected object must charge failedTries exactly once (TPM 2.0 Library Part 1, clause 17.8.7).");
+            "A wrong certified-object password against a DA-protected object must charge failedTries exactly once (TPM 2.0 Library Part 1, clause 16.8.7).");
     }
 
     /// <summary>
     /// TPM2_Certify()'s signHandle slot (Auth Index 2, Auth Role USER, session index 1; TPM 2.0 Library Part 3,
-    /// clause 18.2, Table 89) is verified against the signing key's own retained authValue over a plain
+    /// clause 18.2, Table 97) is verified against the signing key's own retained authValue over a plain
     /// <c>TPM_RS_PW</c> session: a DA-protected AK created with a real password admits a certification
     /// authorized by the CORRECT password and moves no dictionary-attack counter, while a WRONG password is
     /// refused with the session-index-encoded <c>TPM_RC_AUTH_FAIL</c> at index 1 (Part 2, clause 6.6.2) and
-    /// charges <c>failedTries</c> exactly once (Part 1, clause 17.8.7). The objectHandle slot carries its own
+    /// charges <c>failedTries</c> exactly once (Part 1, clause 16.8.7). The objectHandle slot carries its own
     /// (empty, correct) auth throughout, isolating the signHandle arm — the differing session index from
     /// <see cref="CertifyVerifiesTheCertifiedObjectsAuthValue"/> proves the two slots are checked independently
     /// rather than one compare covering both.
@@ -480,12 +480,12 @@ internal sealed class TpmInHouseSimulatorCertifyTests
             pool, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(
             afterCorrect.Value.LockoutCounter + 1, afterWrong.Value.LockoutCounter,
-            "A wrong signing-key password against a DA-protected key must charge failedTries exactly once (TPM 2.0 Library Part 1, clause 17.8.7).");
+            "A wrong signing-key password against a DA-protected key must charge failedTries exactly once (TPM 2.0 Library Part 1, clause 16.8.7).");
     }
 
     /// <summary>
     /// TPM2_Certify()'s signHandle slot is Auth Role USER (Auth Index 2, session index 1; TPM 2.0 Library Part
-    /// 3, clause 18.2, Table 89). When the signing key's <c>TPMA_OBJECT.userWithAuth</c> attribute is CLEAR,
+    /// 3, clause 18.2, Table 97). When the signing key's <c>TPMA_OBJECT.userWithAuth</c> attribute is CLEAR,
     /// USER-role authorization by authValue — a plain <c>TPM_RS_PW</c> password here — is inadmissible: the
     /// command is refused with a bare <c>TPM_RC_POLICY_FAIL</c> (not session-index-encoded), returned before
     /// any credential is compared and before any command HMAC is queued (TPM 2.0 Library Part 3, clause 5.6,
@@ -536,7 +536,7 @@ internal sealed class TpmInHouseSimulatorCertifyTests
 
     /// <summary>
     /// TPM2_Certify()'s objectHandle slot is Auth Role ADMIN (Auth Index 1, session index 0; TPM 2.0 Library
-    /// Part 3, clause 18.2, Table 89), governed by check 5.1: while <c>TPMA_OBJECT.adminWithPolicy</c> is
+    /// Part 3, clause 18.2, Table 97), governed by check 5.1: while <c>TPMA_OBJECT.adminWithPolicy</c> is
     /// CLEAR, ADMIN-role authorization by password (authValue) remains admissible regardless of
     /// <c>TPMA_OBJECT.userWithAuth</c> on the same object — the USER-role check 7.1 userWithAuth gate applies
     /// only to the USER-role slot (signHandle) and never leaks onto the ADMIN-role slot. Certifying a subject
@@ -815,7 +815,7 @@ internal sealed class TpmInHouseSimulatorCertifyTests
 
     /// <summary>
     /// Recomputes a loaded object's Name from its exported public area: <c>nameAlg || H_nameAlg(TPMT_PUBLIC)</c>
-    /// (TPM 2.0 Library Part 1, clause 14, Table 6), through the registered digest seam. The test keys use a SHA-256 nameAlg.
+    /// (TPM 2.0 Library Part 1, clause 13, Table 9), through the registered digest seam. The test keys use a SHA-256 nameAlg.
     /// </summary>
     /// <param name="outPublic">The object's exported public area.</param>
     /// <param name="pool">The memory pool.</param>
@@ -838,7 +838,7 @@ internal sealed class TpmInHouseSimulatorCertifyTests
 
     /// <summary>
     /// Recomputes an object's Qualified Name independently: <c>nameAlg || H(hierarchyHandle || Name)</c> (TPM 2.0
-    /// Library Part 1, clause 14, Table 6), through the registered digest seam. Every object this simulator certifies is a
+    /// Library Part 1, clause 13, Table 9), through the registered digest seam. Every object this simulator certifies is a
     /// primary created directly under a permanent hierarchy, so the hierarchy's own Qualified Name is its 4-octet
     /// big-endian handle value — this test never calls the production <c>TpmObjectName</c> helper, matching the
     /// file's firewalled, off-TPM oracle style.
@@ -1001,12 +1001,12 @@ internal sealed class TpmInHouseSimulatorCertifyTests
 
     /// <summary>
     /// TPM2_Certify()'s signHandle slot (Auth Index 2, USER role, session index 1; TPM 2.0 Library Part 3, clause
-    /// 18.2, Table 89) admits a genuine, unbound HMAC session exactly as it admits a password: a DA-protected AK
+    /// 18.2, Table 97) admits a genuine, unbound HMAC session exactly as it admits a password: a DA-protected AK
     /// created with a real authValue attests once the session folds the CORRECT value into its command HMAC (TPM
-    /// 2.0 Library Part 1, clause 17.6.5, equation 17), with the objectHandle slot authorized by an ordinary
+    /// 2.0 Library Part 1, clause 16.6.5, equation 17), with the objectHandle slot authorized by an ordinary
     /// password session — the mixed password-object/HMAC-sign area. A SECOND certify issued over the SAME
     /// session succeeds again and adopts a genuinely rolled nonceTPM from its own response entry: the response
-    /// HMAC (clause 17.6.5) verifies, and only then is the new value adopted, so a byte-identical nonceTPM across
+    /// HMAC (clause 16.6.5) verifies, and only then is the new value adopted, so a byte-identical nonceTPM across
     /// two commands would mean the roll never happened.
     /// </summary>
     [TestMethod]
@@ -1072,8 +1072,8 @@ internal sealed class TpmInHouseSimulatorCertifyTests
     /// The HMAC-arm DA-charge companion to <see cref="CertifyVerifiesTheSigningKeysAuthValue"/>: a WRONG guess at
     /// a DA-protected signing key's authValue, folded into an unbound HMAC session at the signHandle slot (Auth
     /// Index 2, USER role, session index 1), fails the session's command HMAC verification server-side (TPM 2.0
-    /// Library Part 1, clause 17.6.5, equation 17) and is refused with the session-encoded <c>TPM_RC_AUTH_FAIL</c>
-    /// at index 1 (Part 2, clause 6.6.2), charging <c>failedTries</c> exactly once (Part 1, clause 17.8.1).
+    /// Library Part 1, clause 16.6.5, equation 17) and is refused with the session-encoded <c>TPM_RC_AUTH_FAIL</c>
+    /// at index 1 (Part 2, clause 6.6.2), charging <c>failedTries</c> exactly once (Part 1, clause 16.8.1).
     /// </summary>
     [TestMethod]
     public async Task CertifyOverHmacSignSlotWithWrongAuthOnDaProtectedSignerChargesFailedTries()
@@ -1103,12 +1103,12 @@ internal sealed class TpmInHouseSimulatorCertifyTests
             pool, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(
             before.Value.LockoutCounter + 1, after.Value.LockoutCounter,
-            "A wrong signing-key authValue against a DA-protected key must charge failedTries exactly once (TPM 2.0 Library Part 1, clause 17.8.1).");
+            "A wrong signing-key authValue against a DA-protected key must charge failedTries exactly once (TPM 2.0 Library Part 1, clause 16.8.1).");
     }
 
     /// <summary>
     /// The NO_DA-half contrast to <see cref="CertifyOverHmacSignSlotWithWrongAuthOnDaProtectedSignerChargesFailedTries"/>
-    /// (TPM 2.0 Library Part 2, Table 233, bit 25): a wrong guess folded into an unbound HMAC session at the
+    /// (TPM 2.0 Library Part 2, Table 249, bit 25): a wrong guess folded into an unbound HMAC session at the
     /// signHandle slot against a dictionary-attack-EXEMPT signing key answers the plain <c>TPM_RC_BAD_AUTH</c>
     /// rather than the DA-counted <c>TPM_RC_AUTH_FAIL</c> — still session-encoded at index 1 (Part 2, clause
     /// 6.6.2) — and leaves <c>failedTries</c> untouched.
@@ -1198,8 +1198,8 @@ internal sealed class TpmInHouseSimulatorCertifyTests
     /// A salted-and-bound HMAC session at the objectHandle slot (Auth Index 1, ADMIN role, session index 0),
     /// bound DIRECTLY to the certified object with NO per-command authValue supplied, attests: the ADMIN slot
     /// admits an HMAC session exactly as it admits a password, and only the eq. 26 (TPM 2.0 Library Part 1,
-    /// clause 17.6.12) bind-omission — the bound entity's real, non-empty authValue folded into the session key
-    /// derived from the ECDH-recovered salt (Annex C.6.1/C.6.2) — lets this succeed, proving salting composes
+    /// clause 16.6.12) bind-omission — the bound entity's real, non-empty authValue folded into the session key
+    /// derived from the ECDH-recovered salt (clause 44.7.1/16.6.13.1) — lets this succeed, proving salting composes
     /// with genuine bind resolution to a non-empty authValue on the ADMIN-role slot.
     /// </summary>
     [TestMethod]
@@ -1266,9 +1266,9 @@ internal sealed class TpmInHouseSimulatorCertifyTests
 
     /// <summary>
     /// TPM2_Certify()'s objectHandle slot (Auth Index 1, ADMIN role, session index 0; TPM 2.0 Library Part 3,
-    /// clause 18.2, Table 89) admits a genuine, unbound HMAC session exactly as it admits a password: a
+    /// clause 18.2, Table 97) admits a genuine, unbound HMAC session exactly as it admits a password: a
     /// DA-protected certified object created with a real authValue attests once the session folds that CORRECT
-    /// value into its command HMAC (TPM 2.0 Library Part 1, clause 17.6.5, equation 17), with the signHandle
+    /// value into its command HMAC (TPM 2.0 Library Part 1, clause 16.6.5, equation 17), with the signHandle
     /// slot authorized by an ordinary password session — the mixed HMAC-object/password-sign area, the mirror
     /// composition to <see cref="CertifySignSlotOverUnboundHmacSessionAttestsAndAdoptsARolledNonceOnASecondCommand"/>.
     /// </summary>
@@ -1298,8 +1298,8 @@ internal sealed class TpmInHouseSimulatorCertifyTests
     /// <summary>
     /// Two REAL, unbound/unsalted HMAC sessions — one at objectHandle's slot, one at signHandle's slot — both
     /// succeed and both adopt a genuinely rolled nonceTPM from their own response entry: a session's nonceTPM
-    /// changes on every use, command and response alike (TPM 2.0 Library Part 1, clause 17.6.3.1), and the HMAC
-    /// that authenticates a response entry (clause 17.6.5, equation 17) verifies — and only then lets the
+    /// changes on every use, command and response alike (TPM 2.0 Library Part 1, clause 16.6.3.1), and the HMAC
+    /// that authenticates a response entry (clause 16.6.5, equation 17) verifies — and only then lets the
     /// session adopt the new value — solely when that entry is genuine.
     /// </summary>
     [TestMethod]
@@ -1365,7 +1365,7 @@ internal sealed class TpmInHouseSimulatorCertifyTests
     /// <summary>
     /// A single real HMAC session named in BOTH authorization slots is refused: "a specific HMAC or policy
     /// session handle can occur only once in the Authorization Area; TPM_RS_PW may repeat" (TPM 2.0 Library Part
-    /// 1, clause 16.6.3). Composing the SAME live <see cref="TpmSession"/> into both slots through the
+    /// 1, clause 15.6.3). Composing the SAME live <see cref="TpmSession"/> into both slots through the
     /// production <see cref="TpmCommandExecutor"/> already produces the identical wire scenario the rule
     /// forbids (two <c>TPMS_AUTH_COMMAND</c> entries naming the same real sessionHandle), through the same
     /// request-framing code path every other test in this file uses. Part 1 names no response code for the
@@ -1739,7 +1739,7 @@ internal sealed class TpmInHouseSimulatorCertifyTests
     /// given hierarchy with a real, non-empty authValue — the NO_DA contrast fixture the sign-slot HMAC-arm
     /// needs: a wrong guess against this key must answer <c>TPM_RC_BAD_AUTH</c>, never the dictionary-attack-
     /// counted <c>TPM_RC_AUTH_FAIL</c> <see cref="CreatePasswordProtectedSigningPrimaryAsync"/>'s DA-protected
-    /// key answers (TPM 2.0 Library Part 1, clause 17.8.1).
+    /// key answers (TPM 2.0 Library Part 1, clause 16.8.1).
     /// </summary>
     /// <param name="tpm">The TPM device.</param>
     /// <param name="registry">The response codec registry.</param>
@@ -1768,7 +1768,7 @@ internal sealed class TpmInHouseSimulatorCertifyTests
 
     /// <summary>
     /// Certifies <paramref name="subject"/> with <paramref name="ak"/>, authorizing the SIGN slot with a fresh,
-    /// real, unbound/unsalted HMAC session (TPM 2.0 Library Part 1, clause 17.6.9, equation 19) carrying
+    /// real, unbound/unsalted HMAC session (TPM 2.0 Library Part 1, clause 16.6.9, equation 19) carrying
     /// <paramref name="signSlotAuthValue"/>, and the objectHandle slot with an empty-auth password session — the
     /// mirror composition to <see cref="CertifyOverHmacObjectSlotAsync"/>, which puts the real session at the
     /// object slot instead.
@@ -1814,7 +1814,7 @@ internal sealed class TpmInHouseSimulatorCertifyTests
 
     /// <summary>
     /// Certifies <paramref name="subject"/> with <paramref name="ak"/>, authorizing the OBJECT slot with a
-    /// fresh, real, unbound/unsalted HMAC session (TPM 2.0 Library Part 1, clause 17.6.9, equation 19) carrying
+    /// fresh, real, unbound/unsalted HMAC session (TPM 2.0 Library Part 1, clause 16.6.9, equation 19) carrying
     /// <paramref name="objectSlotAuthValue"/>, and the signHandle slot with an empty-auth password session — the
     /// mirror composition to <see cref="CertifyOverHmacSignSlotAsync"/>, which puts the real session at the sign
     /// slot instead.
@@ -1858,7 +1858,7 @@ internal sealed class TpmInHouseSimulatorCertifyTests
         }
     }
 
-    /// <summary>Extracts a primary ECC key's exported public point, SEC1 uncompressed (<c>0x04 ‖ X ‖ Y</c>) — the point a salted <c>TPM2_StartAuthSession()</c> encrypts its salt to (TPM 2.0 Library Part 1, Annex C.6.1).</summary>
+    /// <summary>Extracts a primary ECC key's exported public point, SEC1 uncompressed (<c>0x04 ‖ X ‖ Y</c>) — the point a salted <c>TPM2_StartAuthSession()</c> encrypts its salt to (TPM 2.0 Library Part 1, clause 44.7.1).</summary>
     /// <param name="primary">The primary's CreatePrimary response.</param>
     /// <returns>The uncompressed public point.</returns>
     private static ReadOnlyMemory<byte> ExtractEccPoint(CreatePrimaryResponse primary)

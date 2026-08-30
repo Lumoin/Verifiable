@@ -26,7 +26,7 @@ namespace Verifiable.Tests.Tpm;
 /// <see cref="TpmSimulator"/> — entirely in-process, with no external assets — through the same production
 /// command path the production code uses (<see cref="TpmCommandExecutor"/> with the real
 /// <see cref="CreatePrimaryInput"/>, <see cref="QuoteInput"/>, and response codecs): a restricted signing key
-/// created under the endorsement hierarchy (TPM 2.0 Library Part 1, clause 25.1: an AK's <c>sign</c> attribute is
+/// created under the endorsement hierarchy (TPM 2.0 Library Part 1, clause 24.1: an AK's <c>sign</c> attribute is
 /// SET, unlike the EK's restricted-decrypt role) stands in for the AK, is certified by a test manufacturer CA over
 /// its wire-exported public key, and then quotes through <c>TPM2_Quote()</c>. The verifier side never touches the
 /// AK's in-memory key: it validates the certificate chain to the CA and verifies the quote signature against the
@@ -225,7 +225,7 @@ internal sealed class TpmInHouseSimulatorAkCertificateTests
         request.CertificateExtensions.Add(
             new X509BasicConstraintsExtension(certificateAuthority: false, hasPathLengthConstraint: false, pathLengthConstraint: 0, critical: true));
 
-        //An AK is a restricted SIGNING key (TPM 2.0 Library Part 1, clause 25.1: the sign attribute is SET) —
+        //An AK is a restricted SIGNING key (TPM 2.0 Library Part 1, clause 24.1: the sign attribute is SET) —
         //digitalSignature only, unlike the EK's restricted-decrypt keyEncipherment/keyAgreement.
         request.CertificateExtensions.Add(
             new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature, critical: true));

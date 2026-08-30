@@ -58,7 +58,7 @@ internal sealed class TpmInHouseSimulatorDictionaryAttackTests
     /// Verifies repeated wrong-authValue reads against a dictionary-attack-protected Index increment
     /// <c>FailedTries</c> one at a time, that the TPM enters Lockout mode exactly at <c>maxTries</c>
     /// without a further increment, and that a subsequent attempt with the RIGHT authValue is rejected
-    /// too — Lockout mode blocks any use of a DA-protected authValue, not just wrong ones (clause 17.8.3).
+    /// too — Lockout mode blocks any use of a DA-protected authValue, not just wrong ones (clause 16.8.3).
     /// </summary>
     [TestMethod]
     public async Task NvReadBruteForceIncrementsFailedTriesAndLocksOutAtMaxTries()
@@ -100,7 +100,7 @@ internal sealed class TpmInHouseSimulatorDictionaryAttackTests
     /// <summary>
     /// Verifies repeated wrong-authValue reads against a <c>TPMA_NV_NO_DA</c> Index never increment
     /// <c>FailedTries</c> — the Index is exempt from the global dictionary-attack mechanism by construction
-    /// (clause 17.8.1).
+    /// (clause 16.8.1).
     /// </summary>
     [TestMethod]
     public async Task NvReadOnNoDaExemptIndexDoesNotIncrementFailedTries()
@@ -132,13 +132,13 @@ internal sealed class TpmInHouseSimulatorDictionaryAttackTests
 
     /// <summary>
     /// Verifies <c>FailedTries</c> self-heals by exactly one decrement per <c>RecoveryTime</c> seconds of
-    /// elapsed <c>Time</c> (clause 17.8.4), driven deterministically through the simulator's fixed
+    /// elapsed <c>Time</c> (clause 16.8.4), driven deterministically through the simulator's fixed
     /// per-command <see cref="TpmSimulatorState.ClockAdvanceQuantumMs"/> rather than a wall clock.
     /// </summary>
     /// <remarks>
     /// Every dispatched command — including the <c>TPM2_GetCapability()</c> round trip
     /// <see cref="TpmDictionaryAttackExtensions.GetDictionaryAttackParametersAsync"/> issues to read the
-    /// counter back — advances <c>Time</c> by one quantum itself (clause 36.1), so the ledger below counts
+    /// counter back — advances <c>Time</c> by one quantum itself (clause 33.1), so the ledger below counts
     /// every command from the seeding failure onward, not just the ones that look DA-related.
     /// </remarks>
     [TestMethod]
@@ -180,7 +180,7 @@ internal sealed class TpmInHouseSimulatorDictionaryAttackTests
 
     /// <summary>
     /// Verifies a single wrong <c>lockoutAuth</c> use disables <c>lockoutAuth</c> independently of
-    /// <c>FailedTries</c>/<c>MaxTries</c> (clause 17.8.5) — no brute-force counting is involved, a lone
+    /// <c>FailedTries</c>/<c>MaxTries</c> (clause 16.8.5) — no brute-force counting is involved, a lone
     /// wrong attempt suffices — and that a subsequent CORRECT <c>lockoutAuth</c> use is itself rejected
     /// with <c>TPM_RC_LOCKOUT</c> until <c>LockoutRecovery</c> seconds of <c>Time</c> have elapsed.
     /// </summary>
@@ -221,7 +221,7 @@ internal sealed class TpmInHouseSimulatorDictionaryAttackTests
 
     /// <summary>
     /// Verifies <c>TPM2_DictionaryAttackLockReset()</c> resets <c>FailedTries</c> to zero and lifts Lockout
-    /// mode, re-arming DA-protected authValue use (clause 17.8.4/25.2).
+    /// mode, re-arming DA-protected authValue use (clause 16.8.4/24.2).
     /// </summary>
     [TestMethod]
     public async Task DictionaryAttackLockResetClearsFailedTriesAndReArmsAfterLockout()
@@ -263,7 +263,7 @@ internal sealed class TpmInHouseSimulatorDictionaryAttackTests
 
     /// <summary>
     /// Verifies <c>TPM2_DictionaryAttackParameters()</c> sets all three knobs and deliberately leaves
-    /// <c>FailedTries</c> untouched (clause 17.8.6's errata correction).
+    /// <c>FailedTries</c> untouched (clause 16.8.6's errata correction).
     /// </summary>
     [TestMethod]
     public async Task DictionaryAttackParametersSetsKnobsWithoutResettingFailedTries()
@@ -299,7 +299,7 @@ internal sealed class TpmInHouseSimulatorDictionaryAttackTests
     }
 
     /// <summary>
-    /// Verifies the errata-documented side effect (Part 1, clause 17.8.6): lowering <c>maxTries</c> to at or
+    /// Verifies the errata-documented side effect (Part 1, clause 16.8.6): lowering <c>maxTries</c> to at or
     /// below the current <c>FailedTries</c> takes the TPM into Lockout mode immediately, with no distinct
     /// error code for the transition itself — the very next DA-gated authorization then rejects with
     /// <c>TPM_RC_LOCKOUT</c>.
@@ -336,9 +336,9 @@ internal sealed class TpmInHouseSimulatorDictionaryAttackTests
 
     /// <summary>
     /// Verifies <c>maxTries == 0</c> is fail-CLOSED — permanently in Lockout mode — rather than the pre-fix
-    /// fail-OPEN behavior of never locking out (TPM 2.0 Library Part 1, clause 17.8.3). With <c>FailedTries</c>
+    /// fail-OPEN behavior of never locking out (TPM 2.0 Library Part 1, clause 16.8.3). With <c>FailedTries</c>
     /// a <c>uint</c>, <c>IsInLockout =&gt; FailedTries &gt;= MaxTries</c> holds unconditionally once
-    /// <c>MaxTries</c> is 0, so <c>TPM2_DictionaryAttackLockReset()</c> remains callable (clause 25.2: it is not
+    /// <c>MaxTries</c> is 0, so <c>TPM2_DictionaryAttackLockReset()</c> remains callable (clause 24.2: it is not
     /// itself gated by Lockout mode) and resets <c>FailedTries</c> to zero, but the TPM stays locked until
     /// <c>MaxTries</c> is raised again by a lockoutAuth-authorized <c>TPM2_DictionaryAttackParameters()</c> —
     /// the genuine recovery path, since <c>DictionaryAttackLockReset()</c> deliberately never touches
@@ -445,9 +445,9 @@ internal sealed class TpmInHouseSimulatorDictionaryAttackTests
 
     /// <summary>
     /// <c>TPM2_Clear()</c> is one of the two documented owner changes that reset the dictionary-attack failure
-    /// counter: "TPM2_Clear() will reset this counter to zero" (TPM 2.0 Library Part 1, clause 17.8.2), and it
+    /// counter: "TPM2_Clear() will reset this counter to zero" (TPM 2.0 Library Part 1, clause 16.8.2), and it
     /// empties <c>lockoutAuth</c> along with the other two hierarchy authorization values (Part 3, Section
-    /// 24.6.1). The counter reset is all clause 24.6.1's effect list and clause 17.8.2's sentence between them
+    /// 24.6.1). The counter reset is all clause 24.6.1's effect list and clause 16.8.2's sentence between them
     /// state, so the administrator's CONFIGURED thresholds - <c>maxTries</c>, <c>recoveryTime</c>,
     /// <c>lockoutRecovery</c> - are deliberately retained here rather than restored to manufacturer defaults; a
     /// clear that reset them would silently widen or narrow the attack window an operator had chosen. The

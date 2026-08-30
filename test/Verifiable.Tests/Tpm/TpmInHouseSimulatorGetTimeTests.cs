@@ -32,12 +32,12 @@ namespace Verifiable.Tests.Tpm;
 /// <para>
 /// The result is verified <b>off-TPM</b> from wire bytes only: the magic / type / nonce fields, that the attested
 /// time image carries the real Clock/Time/resetCount/restartCount/Safe/firmwareVersion snapshot the transition
-/// folded from state after the per-command advance (TPM 2.0 Library Part 1, clause 36; Part 3, clause 18.7), and
+/// folded from state after the per-command advance (TPM 2.0 Library Part 1, clause 35; Part 3, clause 18.7), and
 /// the ECDSA/RSA signature over the raw attestation bytes against the AK's exported public key reconstructed
 /// from <c>outPublic</c> alone.
 /// </para>
 /// <para>
-/// Both handles require authorization (TPM 2.0 Library Part 3, clause 18.7, Table 99), so the executor is given
+/// Both handles require authorization (TPM 2.0 Library Part 3, clause 18.7, Table 107), so the executor is given
 /// two empty-auth password sessions in handle order: <c>@privacyAdminHandle</c> first, <c>@signHandle</c> second.
 /// </para>
 /// </remarks>
@@ -55,10 +55,10 @@ internal sealed class TpmInHouseSimulatorGetTimeTests
 
     /// <summary>
     /// The simulator's synthetic firmware version this test expects: a UINT32 major half of 1 and a minor
-    /// half of 184, mirroring <c>TpmSimulator</c>'s own <c>SimulatedFirmwareVersion</c> constant (TPM 2.0
-    /// Library Part 2, clause 10.12.12).
+    /// half of 185, mirroring <c>TpmSimulator</c>'s own <c>SimulatedFirmwareVersion</c> constant (TPM 2.0
+    /// Library Part 2, clause 10.11.12).
     /// </summary>
-    private const ulong ExpectedFirmwareVersion = (1UL << 32) | 184UL;
+    private const ulong ExpectedFirmwareVersion = (1UL << 32) | 185UL;
 
     /// <summary>The real password installed on the endorsement hierarchy for the hierarchy authValue proof.</summary>
     private const string EndorsementHierarchyPassword = "get-time-endorsement-auth-proof";
@@ -177,7 +177,7 @@ internal sealed class TpmInHouseSimulatorGetTimeTests
     /// <summary>
     /// Verifies that <c>Clock</c> and <c>Time</c> strictly increase across two sequential
     /// <c>TPM2_GetTime()</c> calls within one power cycle, while <c>resetCount</c>/<c>restartCount</c> stay
-    /// stable (TPM 2.0 Library Part 1, clause 36.1: each dispatched command advances the free-running
+    /// stable (TPM 2.0 Library Part 1, clause 33.1: each dispatched command advances the free-running
     /// counters by one fixed quantum).
     /// </summary>
     [TestMethod]
@@ -277,11 +277,11 @@ internal sealed class TpmInHouseSimulatorGetTimeTests
 
     /// <summary>
     /// TPM2_GetTime()'s privacyAdminHandle slot (Auth Index 1, Auth Role USER, fixed to
-    /// <see cref="TpmRh.TPM_RH_ENDORSEMENT"/>; TPM 2.0 Library Part 3, clause 18.7, Table 99) is verified
+    /// <see cref="TpmRh.TPM_RH_ENDORSEMENT"/>; TPM 2.0 Library Part 3, clause 18.7, Table 107) is verified
     /// against the endorsement hierarchy's own retained authorization value, installed by
     /// <c>TPM2_HierarchyChangeAuth</c> (Part 3, clause 24.8.1): permanent hierarchies are dictionary-attack
-    /// exempt (Part 1, clause 17.8.1), so a WRONG password is refused with the plain, never
-    /// session-index-encoded, <c>TPM_RC_BAD_AUTH</c> (clause 17.8.7's downgrade) and moves no dictionary-attack
+    /// exempt (Part 1, clause 16.8.1), so a WRONG password is refused with the plain, never
+    /// session-index-encoded, <c>TPM_RC_BAD_AUTH</c> (clause 16.8.7's downgrade) and moves no dictionary-attack
     /// counter, while the CORRECT password authorizes the command and the attestation carries the real time
     /// image.
     /// </summary>
@@ -329,20 +329,20 @@ internal sealed class TpmInHouseSimulatorGetTimeTests
         Assert.IsTrue(wrongResult.IsTpmError, "A wrong endorsement hierarchy password must be refused.");
         Assert.AreEqual(
             TpmRcConstants.TPM_RC_BAD_AUTH, wrongResult.ResponseCode,
-            "Owner, endorsement and platform authorization values are dictionary-attack exempt permanent-entity values (TPM 2.0 Library Part 1, clause 17.8.1), so a mismatch is the plain, never session-index-encoded, TPM_RC_BAD_AUTH.");
+            "Owner, endorsement and platform authorization values are dictionary-attack exempt permanent-entity values (TPM 2.0 Library Part 1, clause 16.8.1), so a mismatch is the plain, never session-index-encoded, TPM_RC_BAD_AUTH.");
 
         TpmResult<TpmDictionaryAttackParameters> afterWrong = await tpm.GetDictionaryAttackParametersAsync(pool, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(
             afterCorrect.Value.LockoutCounter, afterWrong.Value.LockoutCounter,
-            "A wrong hierarchy authorization value must never move the dictionary-attack counter: permanent entities are dictionary-attack exempt (TPM 2.0 Library Part 1, clause 17.8.1).");
+            "A wrong hierarchy authorization value must never move the dictionary-attack counter: permanent entities are dictionary-attack exempt (TPM 2.0 Library Part 1, clause 16.8.1).");
     }
 
     /// <summary>
     /// TPM2_GetTime()'s signHandle slot (Auth Index 2, Auth Role USER; TPM 2.0 Library Part 3, clause 18.7,
-    /// Table 99) is verified against the signing key's own retained authorization value: a dictionary-attack
+    /// Table 107) is verified against the signing key's own retained authorization value: a dictionary-attack
     /// protected AK created with a real password is refused with the session-index-encoded
     /// <c>TPM_RC_AUTH_FAIL</c> at slot 1 (Part 2, clause 6.6.2) and charges <c>failedTries</c> exactly once
-    /// (Part 1, clause 17.8.7) when the wrong password is supplied — while the endorsement hierarchy's own
+    /// (Part 1, clause 16.8.7) when the wrong password is supplied — while the endorsement hierarchy's own
     /// privacyAdminHandle slot (slot 0) still authorizes with its factory-empty value — and the CORRECT
     /// signing-key password authorizes the command and the attestation carries the real time image.
     /// </summary>
@@ -390,12 +390,12 @@ internal sealed class TpmInHouseSimulatorGetTimeTests
         TpmResult<TpmDictionaryAttackParameters> afterWrong = await tpm.GetDictionaryAttackParametersAsync(pool, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(
             afterCorrect.Value.LockoutCounter + 1, afterWrong.Value.LockoutCounter,
-            "A wrong signing-key password against a dictionary-attack-protected signing key must charge failedTries exactly once (TPM 2.0 Library Part 1, clause 17.8.7).");
+            "A wrong signing-key password against a dictionary-attack-protected signing key must charge failedTries exactly once (TPM 2.0 Library Part 1, clause 16.8.7).");
     }
 
     /// <summary>
     /// TPM2_GetTime()'s signHandle slot (Auth Index 2, Auth Role USER; TPM 2.0 Library Part 3, clause 18.7,
-    /// Table 99) refuses authValue-based authorization outright when the signing key's
+    /// Table 107) refuses authValue-based authorization outright when the signing key's
     /// <c>TPMA_OBJECT.userWithAuth</c> is CLEAR, even given the key's own correct password: check 7.1 in Part 3,
     /// clause 5.6's mandatory order runs before checks 9/10 (the credential comparison and any command-HMAC
     /// queuing), so the command is refused with the bare <c>TPM_RC_POLICY_FAIL</c> — never the session-index-
@@ -497,7 +497,7 @@ internal sealed class TpmInHouseSimulatorGetTimeTests
     /// Asserts the envelope (magic/type/nonce), that the attested time image carries the real
     /// Clock/Time/resetCount/restartCount/Safe/firmwareVersion snapshot — both the envelope-level
     /// <c>TPMS_ATTEST.clockInfo</c> and the nested <c>TPMS_TIME_ATTEST_INFO</c> copy agree (TPM 2.0 Library
-    /// Part 1, clause 36.7) — and qualifiedSigner against an independent (non-collapsed) Qualified Name
+    /// Part 1, clause 33.7) — and qualifiedSigner against an independent (non-collapsed) Qualified Name
     /// recomputation.
     /// </summary>
     /// <param name="getTime">The parsed get-time response.</param>
@@ -514,12 +514,12 @@ internal sealed class TpmInHouseSimulatorGetTimeTests
         TpmsTimeAttestInfo timeInfo = attest.Attested.Time!.Value;
         Assert.IsGreaterThan(0ul, timeInfo.Time.Time, "Time must be real: > 0 after at least CreatePrimary and GetTime have each advanced it by one quantum.");
         Assert.IsGreaterThan(0ul, timeInfo.Time.ClockInfo.Clock, "Clock must be real: > 0 after Startup, CreatePrimary, and GetTime have each advanced it by one quantum.");
-        Assert.AreEqual(1u, timeInfo.Time.ClockInfo.ResetCount, "A fresh simulator's single Startup(CLEAR) is exactly one TPM Reset (Part 1, clause 36.4).");
+        Assert.AreEqual(1u, timeInfo.Time.ClockInfo.ResetCount, "A fresh simulator's single Startup(CLEAR) is exactly one TPM Reset (Part 1, clause 33.4).");
         Assert.AreEqual(0u, timeInfo.Time.ClockInfo.RestartCount, "No Restart or Resume has occurred in this fresh simulator's single power cycle.");
-        Assert.IsTrue(timeInfo.Time.ClockInfo.Safe.IsYes, "A fresh simulator's very first Reset is Safe: no prior Clock value could ever have been reported (Part 1, clause 36.3).");
+        Assert.IsTrue(timeInfo.Time.ClockInfo.Safe.IsYes, "A fresh simulator's very first Reset is Safe: no prior Clock value could ever have been reported (Part 1, clause 33.3).");
         Assert.AreEqual(ExpectedFirmwareVersion, timeInfo.FirmwareVersion, "The simulator reports its fixed synthetic firmware version.");
 
-        Assert.AreEqual(attest.ClockInfo.Clock, timeInfo.Time.ClockInfo.Clock, "The envelope-level clockInfo and the nested TPMS_TIME_ATTEST_INFO copy must agree (Part 1, clause 36.7).");
+        Assert.AreEqual(attest.ClockInfo.Clock, timeInfo.Time.ClockInfo.Clock, "The envelope-level clockInfo and the nested TPMS_TIME_ATTEST_INFO copy must agree (Part 1, clause 33.7).");
         Assert.AreEqual(attest.ClockInfo.ResetCount, timeInfo.Time.ClockInfo.ResetCount, "The envelope-level clockInfo and the nested copy must agree on resetCount.");
         Assert.AreEqual(attest.ClockInfo.RestartCount, timeInfo.Time.ClockInfo.RestartCount, "The envelope-level clockInfo and the nested copy must agree on restartCount.");
         Assert.AreEqual(attest.ClockInfo.Safe.IsYes, timeInfo.Time.ClockInfo.Safe.IsYes, "The envelope-level clockInfo and the nested copy must agree on Safe.");
@@ -567,7 +567,7 @@ internal sealed class TpmInHouseSimulatorGetTimeTests
     /// Creates a primary ECC P-256 signing key under the given hierarchy with a real, non-empty password and
     /// dictionary-attack protection left engaged (<c>TPMA_OBJECT.NO_DA</c> clear) — the fixture the signing
     /// key's own authValue verification proof needs to exercise TPM2_GetTime()'s signHandle slot (TPM 2.0
-    /// Library Part 3, clause 18.7, Table 99) against a genuine retained authorization value.
+    /// Library Part 3, clause 18.7, Table 107) against a genuine retained authorization value.
     /// </summary>
     /// <param name="tpm">The TPM device.</param>
     /// <param name="registry">The response codec registry.</param>
@@ -750,7 +750,7 @@ internal sealed class TpmInHouseSimulatorGetTimeTests
 
     /// <summary>
     /// Recomputes an object's Qualified Name independently: <c>nameAlg || H(hierarchyHandle || Name)</c> (TPM 2.0
-    /// Library Part 1, clause 14, Table 6), through the registered digest seam. Every object this simulator certifies is a
+    /// Library Part 1, clause 13, Table 9), through the registered digest seam. Every object this simulator certifies is a
     /// primary created directly under a permanent hierarchy, so the hierarchy's own Qualified Name is its 4-octet
     /// big-endian handle value — this test never calls the production <c>TpmObjectName</c> helper, matching the
     /// firewalled, off-TPM oracle style the Certify test file uses.
@@ -821,17 +821,17 @@ internal sealed class TpmInHouseSimulatorGetTimeTests
     /// <summary>The signing key's authValue in wire form — the UTF-8 octets <see cref="SigningKeyPassword"/> derives.</summary>
     private static byte[] SigningKeyPasswordBytes { get; } = System.Text.Encoding.UTF8.GetBytes(SigningKeyPassword);
 
-    /// <summary>tpmKey's own Name algorithm for the salted-session tests, sizing the drawn salt and driving OAEP (TPM 2.0 Library Part 1, Annex B.10.3/B.10.4).</summary>
+    /// <summary>tpmKey's own Name algorithm for the salted-session tests, sizing the drawn salt and driving OAEP (TPM 2.0 Library Part 1, clause 20.3.2.3/21.3).</summary>
     private const TpmAlgIdConstants TpmKeyNameAlg = TpmAlgIdConstants.TPM_ALG_SHA256;
 
-    /// <summary>The RSA public exponent the framework RSA key generator uses (the wire template's own "0" encodes this default, TPM 2.0 Library Part 2, Table 215).</summary>
+    /// <summary>The RSA public exponent the framework RSA key generator uses (the wire template's own "0" encodes this default, TPM 2.0 Library Part 2, Table 228).</summary>
     private const uint DefaultRsaExponent = 65537;
 
     /// <summary>
     /// Verifies a REAL, unbound/unsalted HMAC session at TPM2_GetTime()'s sign slot: a CORRECT authValue folded
     /// into the command HMAC attests, and a SECOND command over the SAME session also attests, adopting a
     /// genuinely rolled nonceTPM from its own response entry — a session's nonceTPM changes on every use, and
-    /// the response HMAC that authenticates the entry (TPM 2.0 Library Part 1, clause 17.6.5, equation 17)
+    /// the response HMAC that authenticates the entry (TPM 2.0 Library Part 1, clause 16.6.5, equation 17)
     /// verifies, and only then lets the session adopt the new value, solely when that entry is genuine (Part 3,
     /// clause 18.7).
     /// </summary>
@@ -889,7 +889,7 @@ internal sealed class TpmInHouseSimulatorGetTimeTests
     /// The DA-charge half: a REAL HMAC sign session carrying a WRONG guess against a dictionary-attack-protected
     /// signing key fails the sign slot's command HMAC and charges <c>failedTries</c> exactly once — a
     /// session-encoded <c>TPM_RC_AUTH_FAIL</c> naming the sign slot (index 1, TPM 2.0 Library Part 2, clause
-    /// 6.6.2), per Part 1, clause 17.8.7's OR: the entity being authorized is itself dictionary-attack protected.
+    /// 6.6.2), per Part 1, clause 16.8.7's OR: the entity being authorized is itself dictionary-attack protected.
     /// </summary>
     [TestMethod]
     public async Task GetTimeOverHmacSignSessionWithWrongAuthOnDaProtectedSignerChargesFailedTries()
@@ -933,13 +933,13 @@ internal sealed class TpmInHouseSimulatorGetTimeTests
         TpmResult<TpmDictionaryAttackParameters> after = await tpm.GetDictionaryAttackParametersAsync(pool, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(
             before.Value.LockoutCounter + 1, after.Value.LockoutCounter,
-            "A wrong sign-slot HMAC guess against a dictionary-attack-protected signing key must charge failedTries exactly once (TPM 2.0 Library Part 1, clause 17.8.7).");
+            "A wrong sign-slot HMAC guess against a dictionary-attack-protected signing key must charge failedTries exactly once (TPM 2.0 Library Part 1, clause 16.8.7).");
     }
 
     /// <summary>
     /// The NO_DA contrast: a REAL HMAC sign session carrying a WRONG guess against a <c>noDA</c> signing key
     /// answers a plain <c>TPM_RC_BAD_AUTH</c>, never the dictionary-attack-counted <c>TPM_RC_AUTH_FAIL</c> (TPM
-    /// 2.0 Library Part 2, Table 233, bit 25), and the shared <c>failedTries</c> counter stays untouched. Still
+    /// 2.0 Library Part 2, Table 249, bit 25), and the shared <c>failedTries</c> counter stays untouched. Still
     /// session-index-encoded to the sign slot (index 1, Part 2, clause 6.6.2).
     /// </summary>
     [TestMethod]
@@ -984,7 +984,7 @@ internal sealed class TpmInHouseSimulatorGetTimeTests
 
     /// <summary>
     /// A sign session BOUND TO THE SIGNING KEY ITSELF attests with no per-command authValue supplied: binding
-    /// already incorporated the key's authValue into the session key (TPM 2.0 Library Part 1, clause 17.6.10,
+    /// already incorporated the key's authValue into the session key (TPM 2.0 Library Part 1, clause 16.6.10,
     /// equation 20), so the command HMAC omits it (equations 21/22) — the bind-omission path.
     /// </summary>
     [TestMethod]
@@ -1032,9 +1032,9 @@ internal sealed class TpmInHouseSimulatorGetTimeTests
 
     /// <summary>
     /// A salted-and-bound session (RSA tpmKey) authorizing the privacy-administrator slot, bound DIRECTLY to
-    /// <see cref="TpmRh.TPM_RH_ENDORSEMENT"/>, attests: salting (TPM 2.0 Library Part 1, clause 17.6.12) and
-    /// binding a HIERARCHY entity (clause 17.6.10) compose exactly as binding an object does — <c>@signHandle</c>
-    /// stays a plain password (Part 3, clause 18.7, Table 99).
+    /// <see cref="TpmRh.TPM_RH_ENDORSEMENT"/>, attests: salting (TPM 2.0 Library Part 1, clause 16.6.12) and
+    /// binding a HIERARCHY entity (clause 16.6.10) compose exactly as binding an object does — <c>@signHandle</c>
+    /// stays a plain password (Part 3, clause 18.7, Table 107).
     /// </summary>
     [TestMethod]
     public async Task GetTimeOverSaltedAndBoundEndorsementSessionAttests()
@@ -1096,7 +1096,7 @@ internal sealed class TpmInHouseSimulatorGetTimeTests
     /// <summary>
     /// <c>TPM2_GetTime()</c> over MIXED sessions — a REAL HMAC session authorizing the privacy-administrator
     /// slot, a plain password authorizing the sign slot — succeeds: both slots require USER-role authorization
-    /// (TPM 2.0 Library Part 3, clause 18.7, Table 99), and neither slot's session shape constrains the other's.
+    /// (TPM 2.0 Library Part 3, clause 18.7, Table 107), and neither slot's session shape constrains the other's.
     /// </summary>
     [TestMethod]
     public async Task GetTimeOverHmacPrivacyAdminAndPasswordSignSlotAttests()
@@ -1132,7 +1132,7 @@ internal sealed class TpmInHouseSimulatorGetTimeTests
     /// <summary>
     /// The mirror composition to <see cref="GetTimeOverHmacPrivacyAdminAndPasswordSignSlotAttests"/>: a plain
     /// password authorizes the privacy-administrator slot, a REAL HMAC session authorizes the sign slot. Succeeds
-    /// for the identical reason (TPM 2.0 Library Part 3, clause 18.7, Table 99).
+    /// for the identical reason (TPM 2.0 Library Part 3, clause 18.7, Table 107).
     /// </summary>
     [TestMethod]
     public async Task GetTimeOverPasswordPrivacyAdminAndHmacSignSlotAttests()
@@ -1168,7 +1168,7 @@ internal sealed class TpmInHouseSimulatorGetTimeTests
     /// <summary>
     /// A single real HMAC session named in BOTH GetTime authorization slots is refused: "a specific HMAC or
     /// policy session handle can occur only once in the Authorization Area; TPM_RS_PW may repeat" (TPM 2.0
-    /// Library Part 1, clause 16.6.3). Part 1 names no response code for the violation; the reference does, its
+    /// Library Part 1, clause 15.6.3). Part 1 names no response code for the violation; the reference does, its
     /// <c>RetrieveSessionData</c> comparing each unmarshaled slot against every earlier one and answering
     /// <c>TPM_RCS_HANDLE + errorIndex</c>, so the refusal is a handle error naming the SECOND occurrence (index
     /// 1, TPM 2.0 Library Part 2, clause 6.6.2), the offending re-claim.
@@ -1193,7 +1193,7 @@ internal sealed class TpmInHouseSimulatorGetTimeTests
             ReadOnlyMemory<byte>[] handleNames = [EndorsementHandleBytes(), signer.Name.Span.ToArray()];
 
             //The SAME session names both slots, so the wire's two TPMS_AUTH_COMMAND entries carry the identical
-            //real sessionHandle - the exact composition clause 16.6.3 forbids.
+            //real sessionHandle - the exact composition clause 15.6.3 forbids.
             TpmResult<GetTimeResponse> result = await TpmCommandExecutor.ExecuteAsync<GetTimeResponse>(
                 tpm, getTimeInput, [session, session], handleNames, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -1584,7 +1584,7 @@ internal sealed class TpmInHouseSimulatorGetTimeTests
     /// <summary>
     /// A WRONG endorsement hierarchy authValue proven over an UNBOUND HMAC session at the privacy-administrator
     /// slot answers a session-encoded <c>TPM_RC_BAD_AUTH</c>, UNCHARGED: permanent hierarchies other than
-    /// <c>lockoutAuth</c> are dictionary-attack exempt (TPM 2.0 Library Part 1, clause 17.8.1), so the mismatch
+    /// <c>lockoutAuth</c> are dictionary-attack exempt (TPM 2.0 Library Part 1, clause 16.8.1), so the mismatch
     /// never reaches <c>failedTries</c>, unlike the sign slot's own DA-protected key.
     /// </summary>
     [TestMethod]
@@ -1619,7 +1619,7 @@ internal sealed class TpmInHouseSimulatorGetTimeTests
 
             Assert.AreEqual(
                 TpmRcConstants.TPM_RC_BAD_AUTH, result.BaseError,
-                "A wrong endorsement hierarchy authValue proven over an HMAC session must fail the privacy-admin slot's command HMAC with TPM_RC_BAD_AUTH: permanent hierarchies other than lockoutAuth are dictionary-attack exempt (TPM 2.0 Library Part 1, clause 17.8.1).");
+                "A wrong endorsement hierarchy authValue proven over an HMAC session must fail the privacy-admin slot's command HMAC with TPM_RC_BAD_AUTH: permanent hierarchies other than lockoutAuth are dictionary-attack exempt (TPM 2.0 Library Part 1, clause 16.8.1).");
             Assert.AreEqual(
                 SessionEncodedRc(TpmRcConstants.TPM_RC_BAD_AUTH, sessionIndex: 0), result.ResponseCode,
                 "The mismatch names the privacy-admin slot (index 0), so the wire code carries the session-index modifier (TPM 2.0 Library Part 2, clause 6.6.2).");
@@ -1638,7 +1638,7 @@ internal sealed class TpmInHouseSimulatorGetTimeTests
     /// <summary>
     /// A DISABLED endorsement hierarchy is refused with <c>TPM_RC_HIERARCHY</c> before any credential is
     /// compared: "no authorization method... will be permitted" while a hierarchy's enable is CLEAR (TPM 2.0
-    /// Library Part 1, clause 11.2, Table 5), so the enable gate precedes the authValue availability gate and
+    /// Library Part 1, clause 10.2, Table 8), so the enable gate precedes the authValue availability gate and
     /// the compare/HMAC-queue steps entirely.
     /// </summary>
     [TestMethod]
@@ -1683,7 +1683,7 @@ internal sealed class TpmInHouseSimulatorGetTimeTests
         }
     }
 
-    /// <summary>The 4-octet big-endian wire form of <see cref="TpmRh.TPM_RH_ENDORSEMENT"/> — the privacy-administrator slot's cpHash handle-Name term (TPM 2.0 Library Part 1, clause 16.7, equation 15).</summary>
+    /// <summary>The 4-octet big-endian wire form of <see cref="TpmRh.TPM_RH_ENDORSEMENT"/> — the privacy-administrator slot's cpHash handle-Name term (TPM 2.0 Library Part 1, clause 15.7, equation 15).</summary>
     private static byte[] EndorsementHandleBytes()
     {
         byte[] bytes = new byte[sizeof(uint)];

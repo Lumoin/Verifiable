@@ -37,7 +37,7 @@ namespace Verifiable.Tests.Tpm;
 /// </para>
 /// <para>
 /// Sessions here are bound with an empty authValue, so sessionValue reduces unambiguously to the session key
-/// (Part 1 §19.1) regardless of the authValue-inclusion rule, and the oracle and the implementation must agree.
+/// (Part 1 §18.1) regardless of the authValue-inclusion rule, and the oracle and the implementation must agree.
 /// </para>
 /// </remarks>
 [TestClass]
@@ -236,7 +236,7 @@ internal sealed class TpmParameterEncryptionExecutorTests
             Assert.HasCount(PlaintextLength, encryptedFirstParam, "Parameter encryption must not change the data length.");
             Assert.IsFalse(encryptedFirstParam.Span.SequenceEqual(plaintext.Memory.Span[..PlaintextLength]), "The first command parameter must be encrypted on the wire.");
 
-            //Command direction (Part 1 §19.2): nonceNewer = nonceCaller, nonceOlder = nonceTPM (the session's
+            //Command direction (Part 1 §18.2): nonceNewer = nonceCaller, nonceOlder = nonceTPM (the session's
             //current nonceTPM, which for the first command is the StartAuthSession nonceTPM). XOR is self-inverse,
             //so the same call recovers the plaintext in place.
             using IMemoryOwner<byte> recovered = pool.Rent(PlaintextLength);
@@ -381,7 +381,7 @@ internal sealed class TpmParameterEncryptionExecutorTests
             Assert.HasCount(PlaintextLength, encryptedFirstParam, "Parameter encryption must not change the data length.");
             Assert.IsFalse(encryptedFirstParam.Span.SequenceEqual(plaintext.Memory.Span[..PlaintextLength]), "The first command parameter must be encrypted on the wire.");
 
-            //Command direction (Part 1 §19.2): nonceNewer = nonceCaller, nonceOlder = nonceTPM (the session's
+            //Command direction (Part 1 §18.2): nonceNewer = nonceCaller, nonceOlder = nonceTPM (the session's
             //current nonceTPM, which for the first command is the StartAuthSession nonceTPM).
             using IMemoryOwner<byte> recovered = pool.Rent(PlaintextLength);
             encryptedFirstParam.Span.CopyTo(recovered.Memory.Span);
@@ -531,7 +531,7 @@ internal sealed class TpmParameterEncryptionExecutorTests
 
     /// <summary>
     /// Derives the bound session key with the project's KDFa: <c>KDFa(SHA-256, bindAuth, "ATH", nonceTPM,
-    /// nonceCaller, 256)</c> (Part 1 §17.6.10), returning it in the same <see cref="Tpm2bAuth"/> semantic carrier
+    /// nonceCaller, 256)</c> (Part 1 §16.6.10), returning it in the same <see cref="Tpm2bAuth"/> semantic carrier
     /// the production session uses (<see cref="TpmSession.CreateBoundAsync"/> derives the identical key into the
     /// identical type). What makes this an independent oracle is that the KDF is driven by hand here, with the
     /// device-side nonce ordering. The caller disposes the returned value, which zeroes the key on release.

@@ -53,7 +53,7 @@ namespace Verifiable.Tpm.Infrastructure.Sessions;
 ///   <item><description>Dispose the <see cref="TpmSession"/> to release memory.</description></item>
 /// </list>
 /// <para>
-/// <b>HMAC computation (spec Part 1, Section 17.6.5):</b>
+/// <b>HMAC computation (spec Part 1, Section 16.6.5):</b>
 /// </para>
 /// <code>
 /// data := pHash || nonceNewer || nonceOlder || sessionAttributes
@@ -65,9 +65,9 @@ namespace Verifiable.Tpm.Infrastructure.Sessions;
 /// </para>
 /// <para>
 /// One session derives two keys from that material. The authorization HMAC uses the key above, except that a
-/// session declared <see cref="MarkBoundToAuthorizedEntity"/> keys on sessionKey alone (Section 17.6.10,
+/// session declared <see cref="MarkBoundToAuthorizedEntity"/> keys on sessionKey alone (Section 16.6.10,
 /// equation 22). Parameter encryption keys on sessionKey || authValue whenever the session authorizes an
-/// entity, whatever the session is bound to (Section 19.1: "The binding of the session is ignored").
+/// entity, whatever the session is bound to (Section 18.1: "The binding of the session is ignored").
 /// </para>
 /// <para>
 /// The two keys diverge only for a bound session, and only in the authorization direction, so a bound session
@@ -84,7 +84,7 @@ namespace Verifiable.Tpm.Infrastructure.Sessions;
 /// <see cref="CryptoTags"/> deliberately omit SHA-1 for new protocol code.
 /// </para>
 /// <para>
-/// See TPM 2.0 Part 1, Section 17 - Sessions.
+/// See TPM 2.0 Part 1, Section 16 - Sessions.
 /// </para>
 /// </remarks>
 public sealed class TpmSession: TpmSessionBase, IDisposable
@@ -99,8 +99,8 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
     /// <summary>
     /// Whether this session's <c>bind</c> entity is the same entity the session authorizes, which is the one
     /// condition under which the authorization HMAC key drops the entity's authValue (TPM 2.0 Library Part 1,
-    /// Section 17.6.10, equation 22). It never affects the parameter-encryption key, which folds the authValue
-    /// regardless (Section 19.1: "The binding of the session is ignored").
+    /// Section 16.6.10, equation 22). It never affects the parameter-encryption key, which folds the authValue
+    /// regardless (Section 18.1: "The binding of the session is ignored").
     /// </summary>
     private bool isBoundToAuthorizedEntity;
 
@@ -167,11 +167,11 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
     /// <param name="sessionHandle">The session handle from StartAuthSession.</param>
     /// <param name="bindAuthValue">
     /// The bind entity's authorization value (trailing zeros already removed per TPM 2.0 Library Part 1,
-    /// Section 17.6.4), folded into the session key by the bound-session KDFa (Section 17.6.10, equation 20).
+    /// Section 16.6.4), folded into the session key by the bound-session KDFa (Section 16.6.10, equation 20).
     /// The binding removes that value from the AUTHORIZATION HMAC key alone, and only once the caller declares
     /// the binding through <paramref name="isBoundToAuthorizedEntity"/> or
     /// <see cref="MarkBoundToAuthorizedEntity"/> (equation 22). It removes nothing from the
-    /// parameter-encryption key: Section 19.1 keys the cipher on <c>sessionKey ∥ authValue</c> whenever the
+    /// parameter-encryption key: Section 18.1 keys the cipher on <c>sessionKey ∥ authValue</c> whenever the
     /// session authorizes an entity and states that "The binding of the session is ignored". A session that
     /// carries <c>decrypt</c> or <c>encrypt</c> therefore MUST still receive the entity's authorization value
     /// through <see cref="SetAuthValue"/>; omitting it yields a cipher keyed on <c>sessionKey</c> alone, which
@@ -194,21 +194,21 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
     /// The session salt recovered from a salted <c>TPM2_StartAuthSession</c> (the plaintext value the caller
     /// encrypted into <c>encryptedSalt</c> — for example via <see cref="Commands.StartAuthSessionInputExtensions"/>'s
     /// salted factories), or empty for an unsalted session. Folded after <paramref name="bindAuthValue"/> in the
-    /// session-key KDFa (TPM 2.0 Library Part 1, Section 17.6.12, equation 25) — never reversed.
+    /// session-key KDFa (TPM 2.0 Library Part 1, Section 16.6.12, equation 25) — never reversed.
     /// </param>
     /// <param name="isBoundToAuthorizedEntity">
     /// <see langword="true"/> when the entity named by <paramref name="bindAuthValue"/> is the same entity this
     /// session will authorize, which makes the authorization HMAC key drop that entity's authValue (TPM 2.0
-    /// Library Part 1, Section 17.6.10, equation 22). It is equivalent to calling
+    /// Library Part 1, Section 16.6.10, equation 22). It is equivalent to calling
     /// <see cref="MarkBoundToAuthorizedEntity"/> on the returned session, and it leaves the
-    /// parameter-encryption key alone (Section 19.1). Leave it <see langword="false"/> for a session bound to
+    /// parameter-encryption key alone (Section 18.1). Leave it <see langword="false"/> for a session bound to
     /// some other entity purely to raise the session key's entropy.
     /// </param>
     /// <param name="cancellationToken">A token observed across the key-derivation HMACs.</param>
     /// <returns>The established bound session.</returns>
     /// <remarks>
     /// <para>
-    /// Per TPM 2.0 Library Part 1, Section 17.6.10 (equation 20) and Section 17.6.12 (equation 25) the session
+    /// Per TPM 2.0 Library Part 1, Section 16.6.10 (equation 20) and Section 16.6.12 (equation 25) the session
     /// key is <c>KDFa(sessionAlg, (bindAuthValue || salt), "ATH", nonceTPM, nonceCaller, bits)</c> — the bind
     /// authorization value first, then the salt, each empty when absent. An unsalted BOUND session (bound to a
     /// real entity, whose own resolved authValue may itself be empty) leaves <paramref name="salt"/> empty, so
@@ -221,7 +221,7 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
     /// This factory always derives a KDFa-based key — it has no way to represent "no bind entity at all", since
     /// <paramref name="bindAuthValue"/> alone cannot distinguish an unbound session from one bound to an
     /// empty-auth entity. A session that is genuinely neither bound nor salted has sessionKey = an Empty Buffer
-    /// with no KDFa run at all (Part 1, clause 17.6.9); construct that session with the plain
+    /// with no KDFa run at all (Part 1, clause 16.6.9); construct that session with the plain
     /// <see cref="TpmSession(TpmHandle, Tpm2bNonce, TpmAlgIdConstants, BaseMemoryPool, TpmtSymDef?)"/> constructor
     /// instead of calling this factory with an empty <paramref name="bindAuthValue"/> and no
     /// <paramref name="salt"/>.
@@ -247,7 +247,7 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
         {
             int size = GetDigestSize(sessionAlg);
 
-            //KDFa key = bindAuthValue || salt (Part 1, Section 17.6.12 equation 25), concatenated into a pooled
+            //KDFa key = bindAuthValue || salt (Part 1, Section 16.6.12 equation 25), concatenated into a pooled
             //buffer only when both are non-empty; the degenerate unsalted/unbound cases pass either term alone
             //with no extra allocation.
             int keyLength = bindAuthValue.Length + salt.Length;
@@ -330,12 +330,12 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
     /// <para>
     /// The declaration separates the two keys a session derives from the same material. The command and
     /// response authorization HMACs are keyed on <c>sessionKey</c> alone, because TPM 2.0 Library Part 1,
-    /// Section 17.6.10 has the TPM omit the authValue of the bound entity from the HMAC key when the
+    /// Section 16.6.10 has the TPM omit the authValue of the bound entity from the HMAC key when the
     /// authorization is for that entity (equation 22, against equation 21's <c>sessionKey || authValue</c>) —
     /// the value is already folded into <c>sessionKey</c> by the bound-session KDFa (equation 20).
     /// </para>
     /// <para>
-    /// Parameter encryption is unaffected: Section 19.1 keys the cipher on <c>sessionKey || authValue</c>
+    /// Parameter encryption is unaffected: Section 18.1 keys the cipher on <c>sessionKey || authValue</c>
     /// whenever the session also authorizes an entity and states that "The binding of the session is ignored",
     /// so <see cref="EncryptFirstParameterAsync"/> and <see cref="DecryptFirstParameterAsync"/> keep folding the
     /// value supplied to <see cref="SetAuthValue"/>.
@@ -346,7 +346,7 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
     /// value: with the value omitted the cipher key is <c>sessionKey</c> alone while the TPM computes it as
     /// <c>sessionKey || authValue</c>, and the two keystreams diverge for every entity whose authValue is not
     /// genuinely empty. Nothing detects that divergence on the wire — a wrong cipher key is undetectable
-    /// (Section 19.1's malleability property), so a command decrypts to garbage the TPM then acts on and signs.
+    /// (Section 18.1's malleability property), so a command decrypts to garbage the TPM then acts on and signs.
     /// </para>
     /// </remarks>
     public void MarkBoundToAuthorizedEntity()
@@ -372,8 +372,8 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <remarks>
     /// Trailing zero octets are removed from <paramref name="value"/> before it is stored, because this is the
-    /// authValue term of an authorization computation: TPM 2.0 Library Part 1, Section 17.6.4.3 ("Trailing octets
-    /// of zero are to be removed from any string before it is used as an authValue") and Section 17.6.5's
+    /// authValue term of an authorization computation: TPM 2.0 Library Part 1, Section 16.6.4.3 ("Trailing octets
+    /// of zero are to be removed from any string before it is used as an authValue") and Section 16.6.5's
     /// authValue term note. A TPM keys the command and response HMACs on the stripped form (the reference reaches
     /// every entity's authValue through <c>EntityGetAuthValue</c>, which strips unconditionally), so a session
     /// keyed on the unstripped bytes would fail its own authorization for a value the caller supplied correctly.
@@ -409,7 +409,7 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
 
     /// <inheritdoc/>
     /// <remarks>
-    /// <paramref name="foldedSessionNonces"/> (TPM 2.0 Library Part 1, clause 17.6.3.4) is folded in, when
+    /// <paramref name="foldedSessionNonces"/> (TPM 2.0 Library Part 1, clause 16.6.3.4) is folded in, when
     /// non-empty, immediately after nonceOlder and before <see cref="SessionAttributes"/> — the caller is
     /// responsible for supplying it only when this session is the first in the command's authorization area and
     /// authorizes an entity, and only the OTHER (decrypt/encrypt) session's nonceTPM, never this session's own.
@@ -485,7 +485,7 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
     /// response to release the HMAC.
     /// </para>
     /// <para>
-    /// This adoption is what fulfils the per-use nonce roll TPM 2.0 Library Part 1, Section 17.6.3.1 requires:
+    /// This adoption is what fulfils the per-use nonce roll TPM 2.0 Library Part 1, Section 16.6.3.1 requires:
     /// every subsequent <see cref="PrepareAuthHmacAsync"/> call folds this freshly adopted value as nonceOlder,
     /// so a byte-for-byte replay of an earlier command's authorization area carries a stale nonceTPM the TPM's
     /// own recomputed authHMAC will not match. The mechanism is session-type-agnostic — it applies identically
@@ -494,7 +494,7 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
     /// sessionType).
     /// </para>
     /// <para>
-    /// The nonceTPMdecrypt/nonceTPMencrypt fold (Part 1, clause 17.6.3.4) never applies here: its own defining text
+    /// The nonceTPMdecrypt/nonceTPMencrypt fold (Part 1, clause 16.6.3.4) never applies here: its own defining text
     /// and the two named terms are scoped explicitly to "the command" ("but only in the command"), and there is no
     /// corresponding fold term in the response HMAC's own equation. A response verification composes only
     /// rpHash‖nonceNewer‖nonceOlder‖sessionAttributes, with no folded-nonces term, regardless of session position.
@@ -572,7 +572,7 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
     {
         ObjectDisposedException.ThrowIf(disposed, this);
 
-        //Command direction (Part 1 §19.2): nonceNewer = nonceCaller, nonceOlder = nonceTPM.
+        //Command direction (Part 1 §18.2): nonceNewer = nonceCaller, nonceOlder = nonceTPM.
         await ApplyParameterEncryptionAsync(
             firstParameterData, nonceCaller, nonceTPM, encrypting: true, pool, cancellationToken).ConfigureAwait(false);
     }
@@ -585,7 +585,7 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
     {
         ObjectDisposedException.ThrowIf(disposed, this);
 
-        //Response direction (Part 1 §19.2): nonceNewer = nonceTPM (the value adopted in VerifyAndUpdateAsync),
+        //Response direction (Part 1 §18.2): nonceNewer = nonceTPM (the value adopted in VerifyAndUpdateAsync),
         //nonceOlder = nonceCaller (this command's caller nonce, not yet rolled).
         await ApplyParameterEncryptionAsync(
             firstParameterData, nonceTPM, nonceCaller, encrypting: false, pool, cancellationToken).ConfigureAwait(false);
@@ -615,10 +615,10 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
                 "Parameter encryption was requested on a session with no symmetric algorithm (TPM_ALG_NULL).");
         }
 
-        //sessionValue = sessionKey || authValue (Part 1, clause 19.1). The authValue is folded unconditionally:
-        //clause 19.1 states that "The binding of the session is ignored" for the cipher key, so a session bound
+        //sessionValue = sessionKey || authValue (Part 1, clause 18.1). The authValue is folded unconditionally:
+        //clause 18.1 states that "The binding of the session is ignored" for the cipher key, so a session bound
         //to the entity it authorizes still folds that entity's authValue here even though its authorization
-        //HMAC key omits it (clause 17.6.10, equation 22). For a session that authorizes no entity the caller
+        //HMAC key omits it (clause 16.6.10, equation 22). For a session that authorizes no entity the caller
         //never sets an authValue, so sessionValue reduces to sessionKey by itself.
         (IMemoryOwner<byte>? sessionValueOwner, ReadOnlyMemory<byte> sessionValue) = BuildSessionValue(pool, foldsAuthValue: true);
 
@@ -665,8 +665,8 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
     }
 
     /// <summary>
-    /// Builds <c>sessionValue = sessionKey || authValue</c> (TPM 2.0 Library Part 1, Section 17.6.5 equation 21
-    /// for the authorization HMAC key, Section 19.1 for the parameter-encryption key), or <c>sessionKey</c>
+    /// Builds <c>sessionValue = sessionKey || authValue</c> (TPM 2.0 Library Part 1, Section 16.6.5 equation 21
+    /// for the authorization HMAC key, Section 18.1 for the parameter-encryption key), or <c>sessionKey</c>
     /// alone when <paramref name="foldsAuthValue"/> is <see langword="false"/>. Returns an empty value with no
     /// owner when the result would be zero-length.
     /// </summary>
@@ -674,8 +674,8 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
     /// <param name="foldsAuthValue">
     /// Whether the authorization value set by <see cref="SetAuthValue"/> is concatenated onto the session key.
     /// The two consumers answer this differently on the same session: the authorization HMAC omits it for a
-    /// session bound to the entity it authorizes (Section 17.6.10, equation 22), while parameter encryption
-    /// folds it regardless of the binding (Section 19.1).
+    /// session bound to the entity it authorizes (Section 16.6.10, equation 22), while parameter encryption
+    /// folds it regardless of the binding (Section 18.1).
     /// </param>
     /// <returns>
     /// The pooled owner of the concatenation (<see langword="null"/> when nothing was rented) and the value
@@ -709,8 +709,8 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
         //HMAC key = sessionValue = sessionKey || authValue (concatenated without size fields, Part 1 clause
         //17.6.5 equation 21). A session bound to the entity it authorizes drops the authValue term, because the
         //bound-session KDFa already folded it into sessionKey and the TPM keys equation 22 on sessionKey alone
-        //(clause 17.6.10) — the cipher key built by ApplyParameterEncryptionAsync makes the opposite choice on
-        //the same session, per clause 19.1. For unbound/unsalted sessions with no authValue, the key is empty
+        //(clause 16.6.10) — the cipher key built by ApplyParameterEncryptionAsync makes the opposite choice on
+        //the same session, per clause 18.1. For unbound/unsalted sessions with no authValue, the key is empty
         //(length 0); HMAC is still well-defined over an empty key per RFC 2104.
         (IMemoryOwner<byte>? keyOwner, ReadOnlyMemory<byte> keyMemory) = BuildSessionValue(pool, foldsAuthValue: !isBoundToAuthorizedEntity);
 

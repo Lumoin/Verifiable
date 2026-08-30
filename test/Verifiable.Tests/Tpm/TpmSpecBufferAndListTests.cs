@@ -1,6 +1,7 @@
 using System;
 using System.Buffers;
 using System.Buffers.Binary;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
@@ -11,17 +12,19 @@ namespace Verifiable.Tests.Tpm;
 /// Round-trip and pool-balance proofs for the TPM2B sized-buffer and TPML list structures created for the
 /// wire-type census: <see cref="Tpm2bMaxNvBuffer"/>, <see cref="Tpm2bMaxBuffer"/>, <see cref="Tpm2bOperand"/>, <see cref="Tpm2bTimeout"/>,
 /// <see cref="TpmlHandle"/>, <see cref="TpmlCc"/>, <see cref="TpmlAlg"/>; plus <see cref="Tpm2bData"/>'s
-/// aliasing accessor, <see cref="TpmlDigest"/>'s wire-writing addition, and <see cref="TpmlPcrSelection"/>.
-/// The two command inputs that carry a <c>TPM2B_OPERAND</c> as a caller-owned buffer rather than as the
-/// carrier — <see cref="PolicyNvInput"/> and <see cref="PolicyCounterTimerInput"/> — are proved against the same
-/// bound here, because the bound is the structure's and the input is where a client-side caller meets it.
+/// aliasing accessor, <see cref="TpmlDigest"/>'s wire-writing addition and <see cref="TpmlDigest.Adopt"/>,
+/// <see cref="TpmlPcrSelection"/>, and the credential carriers <see cref="Tpm2bIdObject"/> and
+/// <see cref="Tpm2bEncryptedSecret"/>. The two command inputs that carry a <c>TPM2B_OPERAND</c> as a
+/// caller-owned buffer rather than as the carrier — <see cref="PolicyNvInput"/> and
+/// <see cref="PolicyCounterTimerInput"/> — are proved against the same bound here, because the bound is the
+/// structure's and the input is where a client-side caller meets it.
 /// </summary>
 /// <remarks>
 /// <see cref="TpmlPcrSelection"/> carries TWO bounds from two different tables, and the cases here keep them
 /// apart because the simulator maps them to different response codes: the LIST's <c>count</c> is bounded by
-/// <c>{:HASH_COUNT}</c> with <c>#TPM_RC_SIZE</c> (TPM 2.0 Library Part 2, clause 10.9.7, Table 125), while each
+/// <c>{:HASH_COUNT}</c> with <c>#TPM_RC_SIZE</c> (TPM 2.0 Library Part 2, clause 10.8.7, Table 128), while each
 /// selection's <c>sizeofSelect</c> is bounded by <c>{PCR_SELECT_MIN:}</c> and its bitmap by
-/// <c>{:PCR_SELECT_MAX}</c> with <c>#TPM_RC_VALUE</c> (clause 10.6.2, Table 106, over clause 10.6.1's
+/// <c>{:PCR_SELECT_MAX}</c> with <c>#TPM_RC_VALUE</c> (clause 10.5.2, Table 107, over clause 10.5.1's
 /// equation 1). Both <c>sizeofSelect</c> cases additionally read the pool balance, since the width is what sizes
 /// the rental the parse would otherwise make before the bound is known. A third case covers
 /// <see cref="TpmlPcrSelection.RetainImplementedPcrs"/>, the in-place mask that clears every bit naming a
@@ -33,7 +36,7 @@ internal sealed class TpmSpecBufferAndListTests
 {
     /// <summary>
     /// Proves <see cref="Tpm2bData.AsReadOnlyMemory"/> exposes the same bytes as <see cref="Tpm2bData.Span"/>,
-    /// matching the aliasing contract <see cref="Tpm2bName.AsReadOnlyMemory"/> establishes (Part 2, §10.4.3).
+    /// matching the aliasing contract <see cref="Tpm2bName.AsReadOnlyMemory"/> establishes (Part 2, §10.3.3).
     /// </summary>
     [TestMethod]
     public void Tpm2bDataAsReadOnlyMemoryMatchesSpanBytes()
@@ -77,7 +80,7 @@ internal sealed class TpmSpecBufferAndListTests
 
     /// <summary>
     /// Proves <see cref="TpmlDigest.WriteTo"/> reproduces the exact wire bytes <see cref="TpmlDigest.Parse"/>
-    /// consumed, for a non-empty digest list (TPM 2.0 Library Part 2, clause 10.9.5, Table 123).
+    /// consumed, for a non-empty digest list (TPM 2.0 Library Part 2, clause 10.8.5, Table 126).
     /// </summary>
     [TestMethod]
     public void TpmlDigestWriteToRoundtripsByteIdentical()
@@ -104,7 +107,7 @@ internal sealed class TpmSpecBufferAndListTests
     }
 
     /// <summary>
-    /// Proves an empty digest list round-trips as a bare zero count (TPM 2.0 Library Part 2, clause 10.9.5).
+    /// Proves an empty digest list round-trips as a bare zero count (TPM 2.0 Library Part 2, clause 10.8.5).
     /// </summary>
     [TestMethod]
     public void TpmlDigestEmptyWriteToRoundtrips()
@@ -125,9 +128,78 @@ internal sealed class TpmSpecBufferAndListTests
     }
 
     /// <summary>
+    /// Proves <see cref="TpmlDigest.Adopt"/> marshals to the literal Table 126 wire bytes — count as UINT32,
+    /// then each entry as a size-prefixed TPM2B_DIGEST — and that parsing those written bytes back reproduces
+    /// the adopted octets, round-tripping the zero-copy adoption path end to end against spec-derived bytes
+    /// rather than against a second call to <see cref="TpmlDigest.Create"/>
+    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
+    /// Specification</see>, Part 2: Structures, clause 10.8.5, Table 126).
+    /// </summary>
+    [TestMethod]
+    public void TpmlDigestAdoptRoundtripsToLiteralWireBytes()
+    {
+        byte[] wire =
+        [
+            0x00, 0x00, 0x00, 0x02, //count = 2.
+            0x00, 0x02, 0xAA, 0xBB, //digest[0]: size 2.
+            0x00, 0x03, 0x01, 0x02, 0x03 //digest[1]: size 3.
+        ];
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+
+        var alreadyBuilt = new List<Tpm2bDigest>
+        {
+            Tpm2bDigest.Create(new byte[] { 0xAA, 0xBB }, pool),
+            Tpm2bDigest.Create(new byte[] { 0x01, 0x02, 0x03 }, pool)
+        };
+
+        using TpmlDigest adopted = TpmlDigest.Adopt(alreadyBuilt);
+        Assert.AreEqual(wire.Length, adopted.GetSerializedSize());
+
+        byte[] written = new byte[wire.Length];
+        var writer = new TpmWriter(written);
+        adopted.WriteTo(ref writer);
+
+        Assert.AreSequenceEqual(wire, written, "Adopt marshals to the literal Table 126 wire bytes derived from the spec, not merely bytes equal to a second Create call.");
+
+        var reader = new TpmReader(written);
+        using TpmlDigest reparsed = TpmlDigest.Parse(ref reader, pool);
+
+        Assert.AreEqual(2, reparsed.Count);
+        Assert.AreSequenceEqual(new byte[] { 0xAA, 0xBB }, reparsed[0].AsReadOnlySpan().ToArray());
+        Assert.AreSequenceEqual(new byte[] { 0x01, 0x02, 0x03 }, reparsed[1].AsReadOnlySpan().ToArray());
+    }
+
+    /// <summary>
+    /// Proves <see cref="TpmlDigest.Adopt"/> disposes every already-built entry in the rejected list — both the
+    /// one before the <see langword="null"/> entry and the one after it — leaving the pool balanced, so a
+    /// rejected adoption never orphans a pinned rental regardless of where the null entry sits, and a caller
+    /// never disposes an entry it already handed to the failed call
+    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
+    /// Specification</see>, Part 2: Structures, clause 10.8.5, Table 126).
+    /// </summary>
+    [TestMethod]
+    [SuppressMessage("Microsoft.Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of 'first' and 'third' transfers to TpmlDigest.Adopt on the very next statement, which disposes both on its null-entry refusal path; the test proves exactly that.")]
+    public void TpmlDigestAdoptOnNullEntryReleasesAlreadyAcceptedDigestsAndBalancesThePool()
+    {
+        using var trackingPool = new MeteredHousePool();
+        long baseline = trackingPool.OutstandingCount;
+
+        Tpm2bDigest first = Tpm2bDigest.Create([0x01, 0x02], trackingPool.Pool);
+        Tpm2bDigest third = Tpm2bDigest.Create([0x03, 0x04, 0x05], trackingPool.Pool);
+        Assert.IsGreaterThan(baseline, trackingPool.OutstandingCount);
+
+        List<Tpm2bDigest> withNullEntry = [first, null!, third];
+
+        _ = Assert.ThrowsExactly<ArgumentException>(() => TpmlDigest.Adopt(withNullEntry));
+
+        Assert.AreEqual(baseline, trackingPool.OutstandingCount, "Every already-built entry is disposed when a later entry is rejected, whether it sits before or after the null entry, so both real rentals come back too.");
+    }
+
+    /// <summary>
     /// Proves <see cref="TpmlPcrSelection.Parse"/> then <see cref="TpmlPcrSelection.WriteTo"/> reproduce the
     /// original wire bytes exactly for a selection carrying the narrowest conformant <c>sizeofSelect</c>
-    /// (TPM 2.0 Library Part 2, clause 10.9.7, Table 125, over clause 10.6.2, Table 106's member).
+    /// (TPM 2.0 Library Part 2, clause 10.8.7, Table 128, over clause 10.5.2, Table 107's member).
     /// </summary>
     [TestMethod]
     public void TpmlPcrSelectionParseWriteToRoundtripsByteIdentical()
@@ -158,7 +230,7 @@ internal sealed class TpmSpecBufferAndListTests
     /// </summary>
     /// <remarks>
     /// The bound is the member's own: <c>sizeofSelect {PCR_SELECT_MIN:}</c> with <c>#TPM_RC_VALUE</c> (TPM 2.0
-    /// Library Part 2, clause 10.6.2, Table 106; <c>PCR_SELECT_MIN</c> itself is clause 10.6.1's equation 1). The
+    /// Library Part 2, clause 10.5.2, Table 107; <c>PCR_SELECT_MIN</c> itself is clause 10.5.1's equation 1). The
     /// exception type is what distinguishes it from the list's count bound, which is <c>#TPM_RC_SIZE</c> and
     /// raises <see cref="InvalidOperationException"/> — the simulator's parse maps the two to different response
     /// codes.
@@ -188,7 +260,7 @@ internal sealed class TpmSpecBufferAndListTests
 
     /// <summary>
     /// Proves <see cref="TpmlPcrSelection.Parse"/> refuses a <c>sizeofSelect</c> above
-    /// <see cref="TpmlPcrSelection.PcrSelectMax"/>, the other side of Table 106's
+    /// <see cref="TpmlPcrSelection.PcrSelectMax"/>, the other side of Table 107's
     /// <c>pcrSelect[sizeofSelect] {:PCR_SELECT_MAX}</c> bound, and that an earlier selection's rental is released
     /// when a later one is refused.
     /// </summary>
@@ -227,7 +299,7 @@ internal sealed class TpmSpecBufferAndListTests
     /// <remarks>
     /// The reference's <c>FilterPcr</c> does both in place ("if the required bank does not exist, clear input
     /// selection"; otherwise mask against the bank's own allocation), and the entry is retained either way, which
-    /// is why the width cannot move (TPM 2.0 Library Part 2, clause 10.6.1's own statement that PCR beyond the
+    /// is why the width cannot move (TPM 2.0 Library Part 2, clause 10.5.1's own statement that PCR beyond the
     /// bitmap "are not selected").
     /// </remarks>
     [TestMethod]
@@ -266,7 +338,7 @@ internal sealed class TpmSpecBufferAndListTests
 
     /// <summary>
     /// Proves <see cref="Tpm2bMaxNvBuffer.Parse"/> then <see cref="Tpm2bMaxNvBuffer.WriteTo"/> reproduce the
-    /// original wire bytes exactly (TPM 2.0 Library Part 2, clause 10.4.9, Table 99).
+    /// original wire bytes exactly (TPM 2.0 Library Part 2, clause 10.3.9, Table 97).
     /// </summary>
     [TestMethod]
     public void Tpm2bMaxNvBufferParseWriteToRoundtripsByteIdentical()
@@ -288,7 +360,7 @@ internal sealed class TpmSpecBufferAndListTests
 
     /// <summary>
     /// Proves <see cref="Tpm2bMaxNvBuffer.MaxSize"/> (2048 octets) itself is accepted by
-    /// <see cref="Tpm2bMaxNvBuffer.Create"/> (TPM 2.0 Library Part 2, Table 99).
+    /// <see cref="Tpm2bMaxNvBuffer.Create"/> (TPM 2.0 Library Part 2, Table 97).
     /// </summary>
     [TestMethod]
     public void Tpm2bMaxNvBufferAtMaxSizeIsAccepted()
@@ -370,7 +442,7 @@ internal sealed class TpmSpecBufferAndListTests
 
     /// <summary>
     /// Proves <see cref="Tpm2bMaxBuffer.Parse"/> then <see cref="Tpm2bMaxBuffer.WriteTo"/> reproduce the
-    /// original wire bytes exactly (TPM 2.0 Library Part 2, clause 10.4.8, Table 98).
+    /// original wire bytes exactly (TPM 2.0 Library Part 2, clause 10.3.8, Table 96).
     /// </summary>
     [TestMethod]
     public void Tpm2bMaxBufferParseWriteToRoundtripsByteIdentical()
@@ -456,7 +528,7 @@ internal sealed class TpmSpecBufferAndListTests
 
     /// <summary>
     /// Proves <see cref="Tpm2bOperand.Parse"/> then <see cref="Tpm2bOperand.WriteTo"/> reproduce the original
-    /// wire bytes exactly (TPM 2.0 Library Part 2, clause 10.4.6, Table 96).
+    /// wire bytes exactly (TPM 2.0 Library Part 2, clause 10.3.6, Table 94).
     /// </summary>
     [TestMethod]
     public void Tpm2bOperandParseWriteToRoundtripsByteIdentical()
@@ -477,7 +549,7 @@ internal sealed class TpmSpecBufferAndListTests
 
     /// <summary>
     /// Proves <see cref="Tpm2bOperand.MaxSize"/> (64 octets, this library's largest supported digest) is
-    /// accepted by <see cref="Tpm2bOperand.Create"/>, matching Table 96's "size limited to the same as the
+    /// accepted by <see cref="Tpm2bOperand.Create"/>, matching Table 94's "size limited to the same as the
     /// digest structure".
     /// </summary>
     [TestMethod]
@@ -546,8 +618,8 @@ internal sealed class TpmSpecBufferAndListTests
     /// <summary>
     /// Proves <see cref="Tpm2bPublicKeyRsa.Parse"/> then <see cref="Tpm2bPublicKeyRsa.WriteTo"/> reproduce the
     /// original wire bytes exactly. TPM 2.0 Library Part 2, clause 11.2.4.5, printed page 173 introduces the
-    /// structure — "This Table 193 sized buffer holds the largest RSA public key supported by the TPM" — and
-    /// Table 193, printed page 174 frames it as a <c>UINT16 size</c> ahead of <c>buffer[size]</c>.
+    /// structure — "This Table 194 sized buffer holds the largest RSA public key supported by the TPM" — and
+    /// Table 194, printed page 174 frames it as a <c>UINT16 size</c> ahead of <c>buffer[size]</c>.
     /// </summary>
     [TestMethod]
     public void Tpm2bPublicKeyRsaParseWriteToRoundtripsByteIdentical()
@@ -568,7 +640,7 @@ internal sealed class TpmSpecBufferAndListTests
     }
 
     /// <summary>
-    /// Proves <see cref="Tpm2bPublicKeyRsa.MaxRsaKeyBytes"/> — Table 193's <c>buffer[size] {: MAX_RSA_KEY_BYTES}</c>
+    /// Proves <see cref="Tpm2bPublicKeyRsa.MaxRsaKeyBytes"/> — Table 194's <c>buffer[size] {: MAX_RSA_KEY_BYTES}</c>
     /// bound (TPM 2.0 Library Part 2, printed page 174), 512 octets at the RSA-4096 this library supports — is
     /// accepted by <see cref="Tpm2bPublicKeyRsa.Create"/>, so the refusal one octet further on pins the bound
     /// and not merely a size.
@@ -586,7 +658,7 @@ internal sealed class TpmSpecBufferAndListTests
 
     /// <summary>
     /// Proves <see cref="Tpm2bPublicKeyRsa.Create"/> refuses content one octet over
-    /// <see cref="Tpm2bPublicKeyRsa.MaxRsaKeyBytes"/> (Table 193, printed page 174).
+    /// <see cref="Tpm2bPublicKeyRsa.MaxRsaKeyBytes"/> (Table 194, printed page 174).
     /// </summary>
     [TestMethod]
     public void Tpm2bPublicKeyRsaCreateOverMaxRsaKeyBytesThrows()
@@ -639,7 +711,7 @@ internal sealed class TpmSpecBufferAndListTests
     }
 
     /// <summary>
-    /// Proves the zero-size form is the shared dispose-immune sentinel: Table 193's <c>size</c> row (TPM 2.0
+    /// Proves the zero-size form is the shared dispose-immune sentinel: Table 194's <c>size</c> row (TPM 2.0
     /// Library Part 2, printed page 174) says "The value of zero is only valid for create", so the empty form
     /// is a real wire value, and it owns no pooled storage — every caller holds the same instance, so one
     /// consumer disposing it leaves it readable and framable for all the others, and it rents nothing.
@@ -674,9 +746,215 @@ internal sealed class TpmSpecBufferAndListTests
     }
 
     /// <summary>
+    /// Proves <see cref="Tpm2bIdObject.Parse"/> then <see cref="Tpm2bIdObject.WriteTo"/> reproduce the original
+    /// wire bytes exactly
+    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
+    /// Specification</see>, Part 2: Structures, clause 12.4.3, Table 245).
+    /// </summary>
+    [TestMethod]
+    public void Tpm2bIdObjectParseWriteToRoundtripsByteIdentical()
+    {
+        byte[] wire = [0x00, 0x04, 0xC0, 0xDE, 0xC0, 0xDE];
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        var reader = new TpmReader(wire);
+        using Tpm2bIdObject credential = Tpm2bIdObject.Parse(ref reader, pool);
+
+        Assert.AreEqual(4, credential.Length);
+        Assert.AreEqual(wire.Length, credential.SerializedSize);
+
+        byte[] rewritten = new byte[wire.Length];
+        var writer = new TpmWriter(rewritten);
+        credential.WriteTo(ref writer);
+
+        Assert.AreSequenceEqual(wire, rewritten);
+    }
+
+    /// <summary>
+    /// Proves <see cref="Tpm2bIdObject.Create"/> accepts a credential blob exactly at
+    /// <see cref="Tpm2bIdObject.MaxSize"/> — two TPM2B_DIGEST values, the width Table 244's TPMS_ID_OBJECT
+    /// carries — and refuses one octet more
+    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
+    /// Specification</see>, Part 2: Structures, clause 12.4.2, Table 244, and clause 12.4.3, Table 245).
+    /// </summary>
+    [TestMethod]
+    public void Tpm2bIdObjectAtMaxSizeIsAcceptedAndOneOctetMoreThrows()
+    {
+        byte[] atBound = new byte[Tpm2bIdObject.MaxSize];
+        byte[] pastBound = new byte[Tpm2bIdObject.MaxSize + 1];
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+
+        using(Tpm2bIdObject credential = Tpm2bIdObject.Create(atBound, pool))
+        {
+            Assert.AreEqual(Tpm2bIdObject.MaxSize, credential.Length);
+        }
+
+        _ = Assert.ThrowsExactly<ArgumentException>(() => Tpm2bIdObject.Create(pastBound, pool));
+    }
+
+    /// <summary>
+    /// Proves <see cref="Tpm2bIdObject.Parse"/> refuses a wire size one octet over
+    /// <see cref="Tpm2bIdObject.MaxSize"/> before renting or reading the payload, so the pool stays at its
+    /// baseline
+    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
+    /// Specification</see>, Part 2: Structures, clause 12.4.3, Table 245; <c>TPM_RC_SIZE</c>).
+    /// </summary>
+    [TestMethod]
+    public void Tpm2bIdObjectParseOverMaxSizeThrows()
+    {
+        byte[] wire = [0x00, (byte)(Tpm2bIdObject.MaxSize + 1)]; //Size = 133.
+        using var trackingPool = new MeteredHousePool();
+        long baseline = trackingPool.OutstandingCount;
+        var reader = new TpmReader(wire);
+
+        //TpmReader is a ref struct, so it cannot be captured by a lambda; the throw is asserted with a
+        //plain try/catch instead of Assert.ThrowsExactly.
+        try
+        {
+            _ = Tpm2bIdObject.Parse(ref reader, trackingPool.Pool);
+            Assert.Fail("Expected InvalidOperationException.");
+        }
+        catch(InvalidOperationException)
+        {
+        }
+
+        Assert.AreEqual(baseline, trackingPool.OutstandingCount, "The MaxSize bound is checked before any rental, so an over-max declared size never rents at all.");
+    }
+
+    /// <summary>
+    /// Proves <see cref="Tpm2bIdObject.Parse"/> refuses a declared size exceeding the octets actually remaining
+    /// in the reader before it rents anything, so a truncated credential blob leaves the pool balanced instead
+    /// of orphaning a rental the truncated read would otherwise have thrown out of
+    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
+    /// Specification</see>, Part 2: Structures, clause 12.4.3, Table 245).
+    /// </summary>
+    [TestMethod]
+    public void Tpm2bIdObjectParseTruncatedPayloadLeavesPoolBalanced()
+    {
+        //Declares 10 octets (within MaxSize) but only 2 follow the size prefix.
+        byte[] wire = [0x00, 0x0A, 0x01, 0x02];
+        using var trackingPool = new MeteredHousePool();
+        long baseline = trackingPool.OutstandingCount;
+        var reader = new TpmReader(wire);
+
+        try
+        {
+            _ = Tpm2bIdObject.Parse(ref reader, trackingPool.Pool);
+            Assert.Fail("Expected InvalidOperationException.");
+        }
+        catch(InvalidOperationException)
+        {
+        }
+
+        Assert.AreEqual(baseline, trackingPool.OutstandingCount, "The remaining-octet check runs before the rental it would otherwise size, so a truncated frame never orphans a rental.");
+    }
+
+    /// <summary>
+    /// Proves <see cref="Tpm2bEncryptedSecret.Parse"/> then <see cref="Tpm2bEncryptedSecret.WriteTo"/> reproduce
+    /// the original wire bytes exactly
+    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
+    /// Specification</see>, Part 2: Structures, clause 11.4.3, Table 224).
+    /// </summary>
+    [TestMethod]
+    public void Tpm2bEncryptedSecretParseWriteToRoundtripsByteIdentical()
+    {
+        byte[] wire = [0x00, 0x03, 0x01, 0x02, 0x03];
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        var reader = new TpmReader(wire);
+        using Tpm2bEncryptedSecret secret = Tpm2bEncryptedSecret.Parse(ref reader, pool);
+
+        Assert.AreEqual(3, secret.Length);
+        Assert.AreEqual(wire.Length, secret.SerializedSize);
+
+        byte[] rewritten = new byte[wire.Length];
+        var writer = new TpmWriter(rewritten);
+        secret.WriteTo(ref writer);
+
+        Assert.AreSequenceEqual(wire, rewritten);
+    }
+
+    /// <summary>
+    /// Proves <see cref="Tpm2bEncryptedSecret.Create"/> accepts a secret exactly at
+    /// <see cref="Tpm2bEncryptedSecret.MaxSize"/> — the widest TPMU_ENCRYPTED_SECRET arm, <c>rsa[MAX_RSA_KEY_BYTES]</c>
+    /// — and refuses one octet more
+    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
+    /// Specification</see>, Part 2: Structures, Table 223, and clause 11.4.3, Table 224).
+    /// </summary>
+    [TestMethod]
+    public void Tpm2bEncryptedSecretAtMaxSizeIsAcceptedAndOneOctetMoreThrows()
+    {
+        byte[] atBound = new byte[Tpm2bEncryptedSecret.MaxSize];
+        byte[] pastBound = new byte[Tpm2bEncryptedSecret.MaxSize + 1];
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+
+        using(Tpm2bEncryptedSecret secret = Tpm2bEncryptedSecret.Create(atBound, pool))
+        {
+            Assert.AreEqual(Tpm2bEncryptedSecret.MaxSize, secret.Length);
+        }
+
+        _ = Assert.ThrowsExactly<ArgumentException>(() => Tpm2bEncryptedSecret.Create(pastBound, pool));
+    }
+
+    /// <summary>
+    /// Proves <see cref="Tpm2bEncryptedSecret.Parse"/> refuses a wire size one octet over
+    /// <see cref="Tpm2bEncryptedSecret.MaxSize"/> before renting or reading the payload, so the pool stays at
+    /// its baseline
+    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
+    /// Specification</see>, Part 2: Structures, clause 11.4.3, Table 224; <c>TPM_RC_SIZE</c>).
+    /// </summary>
+    [TestMethod]
+    public void Tpm2bEncryptedSecretParseOverMaxSizeThrows()
+    {
+        byte[] wire = [0x02, 0x01]; //Size = 513.
+        using var trackingPool = new MeteredHousePool();
+        long baseline = trackingPool.OutstandingCount;
+        var reader = new TpmReader(wire);
+
+        //TpmReader is a ref struct, so it cannot be captured by a lambda; the throw is asserted with a
+        //plain try/catch instead of Assert.ThrowsExactly.
+        try
+        {
+            _ = Tpm2bEncryptedSecret.Parse(ref reader, trackingPool.Pool);
+            Assert.Fail("Expected InvalidOperationException.");
+        }
+        catch(InvalidOperationException)
+        {
+        }
+
+        Assert.AreEqual(baseline, trackingPool.OutstandingCount, "The MaxSize bound is checked before any rental, so an over-max declared size never rents at all.");
+    }
+
+    /// <summary>
+    /// Proves <see cref="Tpm2bEncryptedSecret.Parse"/> refuses a declared size exceeding the octets actually
+    /// remaining in the reader before it rents anything, so a truncated secret leaves the pool balanced instead
+    /// of orphaning a rental the truncated read would otherwise have thrown out of
+    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
+    /// Specification</see>, Part 2: Structures, clause 11.4.3, Table 224).
+    /// </summary>
+    [TestMethod]
+    public void Tpm2bEncryptedSecretParseTruncatedPayloadLeavesPoolBalanced()
+    {
+        //Declares 10 octets (within MaxSize) but only 2 follow the size prefix.
+        byte[] wire = [0x00, 0x0A, 0x01, 0x02];
+        using var trackingPool = new MeteredHousePool();
+        long baseline = trackingPool.OutstandingCount;
+        var reader = new TpmReader(wire);
+
+        try
+        {
+            _ = Tpm2bEncryptedSecret.Parse(ref reader, trackingPool.Pool);
+            Assert.Fail("Expected InvalidOperationException.");
+        }
+        catch(InvalidOperationException)
+        {
+        }
+
+        Assert.AreEqual(baseline, trackingPool.OutstandingCount, "The remaining-octet check runs before the rental it would otherwise size, so a truncated frame never orphans a rental.");
+    }
+
+    /// <summary>
     /// Proves <see cref="PolicyNvInput"/> refuses an <c>operandB</c> the <c>TPM2B_OPERAND</c> wire type cannot
     /// carry at construction, so a caller learns the bound before a command is framed rather than from the
-    /// TPM's own <c>TPM_RC_SIZE</c> after a round trip. Part 2, clause 10.4.6, Table 96 bounds
+    /// TPM's own <c>TPM_RC_SIZE</c> after a round trip. Part 2, clause 10.3.6, Table 94 bounds
     /// <c>TPM2B_OPERAND</c> by the digest structure's <c>sizeof(TPMU_HA)</c>; the operand exactly AT the bound
     /// is accepted, so the refusal pins the bound and not merely a size.
     /// </summary>
@@ -695,7 +973,7 @@ internal sealed class TpmSpecBufferAndListTests
 
     /// <summary>
     /// Proves <see cref="PolicyCounterTimerInput"/> refuses an <c>operandB</c> past the same
-    /// <c>TPM2B_OPERAND</c> bound (Part 2, clause 10.4.6, Table 96) at construction, and admits one exactly at
+    /// <c>TPM2B_OPERAND</c> bound (Part 2, clause 10.3.6, Table 94) at construction, and admits one exactly at
     /// the bound.
     /// </summary>
     [TestMethod]
@@ -727,8 +1005,8 @@ internal sealed class TpmSpecBufferAndListTests
 
     /// <summary>
     /// Proves <see cref="Tpm2bTimeout.Parse"/> then <see cref="Tpm2bTimeout.WriteTo"/> reproduce the original
-    /// wire bytes exactly for a short (non-8-octet) timeout value (TPM 2.0 Library Part 2, clause 10.4.10,
-    /// Table 100).
+    /// wire bytes exactly for a short (non-8-octet) timeout value (TPM 2.0 Library Part 2, clause 10.3.10,
+    /// Table 98).
     /// </summary>
     [TestMethod]
     public void Tpm2bTimeoutParseWriteToRoundtripsByteIdentical()
@@ -766,7 +1044,7 @@ internal sealed class TpmSpecBufferAndListTests
 
     /// <summary>
     /// Proves <see cref="Tpm2bTimeout.ExpiresOnReset"/> reads bit 63 of the full 8-octet wire form, per the
-    /// Reference Code note under Table 100 ("the MSb is used as a flag to indicate whether a ticket expires on
+    /// Reference Code note under Table 98 ("the MSb is used as a flag to indicate whether a ticket expires on
     /// TPM Reset or TPM Restart").
     /// </summary>
     [TestMethod]
@@ -785,7 +1063,7 @@ internal sealed class TpmSpecBufferAndListTests
     /// Proves <see cref="Tpm2bTimeout.Create(ulong, bool, BaseMemoryPool)"/> sets bit 63 of the constructed
     /// 8-octet form when the accompanying ticket expires on TPM Reset or TPM Restart, and otherwise reaches the
     /// wire carrying every octet of the supplied value as given — a bit 63 the caller already packed there
-    /// included, since the flag is folded in rather than rewritten (TPM 2.0 Library Part 2, Table 100's
+    /// included, since the flag is folded in rather than rewritten (TPM 2.0 Library Part 2, Table 98's
     /// Reference Code note: "the MSb is used as a flag to indicate whether a ticket expires on TPM Reset or TPM
     /// Restart").
     /// </summary>
@@ -809,7 +1087,7 @@ internal sealed class TpmSpecBufferAndListTests
 
     /// <summary>
     /// Proves <see cref="Tpm2bTimeout.MaxSize"/> (<c>sizeof(UINT64)</c> = 8 octets) is accepted by
-    /// <see cref="Tpm2bTimeout.Create(ReadOnlySpan{byte}, BaseMemoryPool)"/> (TPM 2.0 Library Part 2, Table 100).
+    /// <see cref="Tpm2bTimeout.Create(ReadOnlySpan{byte}, BaseMemoryPool)"/> (TPM 2.0 Library Part 2, Table 98).
     /// </summary>
     [TestMethod]
     public void Tpm2bTimeoutAtMaxSizeIsAccepted()
@@ -891,7 +1169,7 @@ internal sealed class TpmSpecBufferAndListTests
 
     /// <summary>
     /// Proves <see cref="TpmlHandle.Parse"/> then <see cref="TpmlHandle.WriteTo"/> reproduce the original wire
-    /// bytes exactly for a non-empty list (TPM 2.0 Library Part 2, clause 10.9.4, Table 122).
+    /// bytes exactly for a non-empty list (TPM 2.0 Library Part 2, clause 10.8.4, Table 125).
     /// </summary>
     [TestMethod]
     public void TpmlHandleParseWriteToRoundtripsByteIdentical()
@@ -933,7 +1211,7 @@ internal sealed class TpmSpecBufferAndListTests
 
     /// <summary>
     /// Proves <see cref="TpmlHandle.Parse"/> refuses a wire-declared count that cannot possibly fit in the
-    /// remaining buffer, rather than sizing the backing array from a hostile length (Part 2, §10.9.4;
+    /// remaining buffer, rather than sizing the backing array from a hostile length (Part 2, §10.8.4;
     /// <c>TPM_RC_SIZE</c>).
     /// </summary>
     [TestMethod]
@@ -956,7 +1234,7 @@ internal sealed class TpmSpecBufferAndListTests
 
     /// <summary>
     /// Proves <see cref="TpmlCc.Parse"/> then <see cref="TpmlCc.WriteTo"/> reproduce the original wire bytes
-    /// exactly for a non-empty list (TPM 2.0 Library Part 2, clause 10.9.1, Table 119).
+    /// exactly for a non-empty list (TPM 2.0 Library Part 2, clause 10.8.1, Table 122).
     /// </summary>
     [TestMethod]
     public void TpmlCcParseWriteToRoundtripsByteIdentical()
@@ -998,7 +1276,7 @@ internal sealed class TpmSpecBufferAndListTests
 
     /// <summary>
     /// Proves <see cref="TpmlCc.Parse"/> refuses a wire-declared count that cannot possibly fit in the
-    /// remaining buffer (Part 2, §10.9.1; <c>TPM_RC_SIZE</c>).
+    /// remaining buffer (Part 2, §10.8.1; <c>TPM_RC_SIZE</c>).
     /// </summary>
     [TestMethod]
     public void TpmlCcParseRefusesCountExceedingRemainingBuffer()
@@ -1020,7 +1298,7 @@ internal sealed class TpmSpecBufferAndListTests
 
     /// <summary>
     /// Proves <see cref="TpmlCca.Parse"/> then <see cref="TpmlCca.WriteTo"/> reproduce the original wire bytes
-    /// exactly for a non-empty list. TPM 2.0 Library Part 2, clause 10.9.2, Table 120, printed page 146 frames
+    /// exactly for a non-empty list. TPM 2.0 Library Part 2, clause 10.8.2, Table 123, printed page 146 frames
     /// a <c>UINT32 count</c> ahead of <c>commandAttributes[count]</c>, each entry a 4-octet <c>TPMA_CC</c>.
     /// </summary>
     [TestMethod]
@@ -1049,7 +1327,7 @@ internal sealed class TpmSpecBufferAndListTests
 
     /// <summary>
     /// Proves an empty command-attribute list round-trips as a bare zero count and yields
-    /// <see cref="TpmlCca.Empty"/> — a shape Table 120, printed page 146 admits explicitly ("number of values
+    /// <see cref="TpmlCca.Empty"/> — a shape Table 123, printed page 146 admits explicitly ("number of values
     /// in the commandAttributes list may be 0").
     /// </summary>
     [TestMethod]
@@ -1074,7 +1352,7 @@ internal sealed class TpmSpecBufferAndListTests
     /// <summary>
     /// Proves <see cref="TpmlCca.Parse"/> refuses a wire-declared count that cannot possibly fit in the
     /// remaining buffer, so a malformed response never sizes a backing array from an attacker-chosen count
-    /// (Part 2, clause 10.9.2, Table 120, printed page 146).
+    /// (Part 2, clause 10.8.2, Table 123, printed page 146).
     /// </summary>
     [TestMethod]
     public void TpmlCcaParseRefusesCountExceedingRemainingBuffer()
@@ -1096,7 +1374,7 @@ internal sealed class TpmSpecBufferAndListTests
 
     /// <summary>
     /// Proves <see cref="TpmlAlg.Parse"/> then <see cref="TpmlAlg.WriteTo"/> reproduce the original wire bytes
-    /// exactly for a non-empty list (TPM 2.0 Library Part 2, clause 10.9.3, Table 121).
+    /// exactly for a non-empty list (TPM 2.0 Library Part 2, clause 10.8.3, Table 124).
     /// </summary>
     [TestMethod]
     public void TpmlAlgParseWriteToRoundtripsByteIdentical()
@@ -1138,7 +1416,7 @@ internal sealed class TpmSpecBufferAndListTests
 
     /// <summary>
     /// Proves <see cref="TpmlAlg.Parse"/> refuses a wire-declared count that cannot possibly fit in the
-    /// remaining buffer (Part 2, §10.9.3; <c>TPM_RC_SIZE</c>).
+    /// remaining buffer (Part 2, §10.8.3; <c>TPM_RC_SIZE</c>).
     /// </summary>
     [TestMethod]
     public void TpmlAlgParseRefusesCountExceedingRemainingBuffer()
@@ -1162,9 +1440,9 @@ internal sealed class TpmSpecBufferAndListTests
     /// Every one of the four tickets round-trips through the wire byte-identically: what <c>WriteTo</c> frames,
     /// <c>Parse</c> reconstructs into the same tag, the same hierarchy and the same digest, and re-framing that
     /// reconstruction reproduces the original octets. The four are separate structures with separate tags —
-    /// <c>TPMT_TK_CREATION</c> (Part 2, clause 10.7.3, Table 109), <c>TPMT_TK_VERIFIED</c> (clause 10.7.4,
-    /// Table 110), <c>TPMT_TK_AUTH</c> (clause 10.7.5, Table 111) and <c>TPMT_TK_HASHCHECK</c> (clause 10.7.6,
-    /// Table 112) — and each frames the same three fields: the tag, a <c>TPMI_RH_HIERARCHY+</c> selector, and a
+    /// <c>TPMT_TK_CREATION</c> (Part 2, clause 10.6.3, Table 110), <c>TPMT_TK_VERIFIED</c> (clause 10.6.5,
+    /// Table 113), <c>TPMT_TK_AUTH</c> (clause 10.6.6, Table 114) and <c>TPMT_TK_HASHCHECK</c> (clause 10.6.7,
+    /// Table 115) — and each frames the same three fields: the tag, a <c>TPMI_RH_HIERARCHY+</c> selector, and a
     /// <c>TPM2B_DIGEST</c>.
     /// </summary>
     [TestMethod]
@@ -1189,7 +1467,7 @@ internal sealed class TpmSpecBufferAndListTests
                 (ushort)creation.Tag, TpmiRhHierarchy.Owner.Value, digest, "TPMT_TK_CREATION", pool);
         }
 
-        using(TpmtTkVerified verified = TpmtTkVerified.FromMarshaled(TpmiRhHierarchy.Platform, CopyToRental(digest, pool), digest.Length))
+        using(TpmtTkVerified verified = TpmtTkVerified.FromMarshaled(TpmStConstants.TPM_ST_VERIFIED, TpmiRhHierarchy.Platform, null, CopyToRental(digest, pool), digest.Length))
         {
             AssertTicketRoundTrip(
                 verified.SerializedSize,
@@ -1199,7 +1477,7 @@ internal sealed class TpmSpecBufferAndListTests
                     using TpmtTkVerified parsed = TpmtTkVerified.Parse(ref r, p);
 
                     return DescribeTicket(
-                        (ushort)parsed.Tag, parsed.Hierarchy.Value, parsed.Digest, parsed.SerializedSize, (ref TpmWriter w) => parsed.WriteTo(ref w), p);
+                        (ushort)parsed.Tag, parsed.Hierarchy.Value, parsed.Hmac, parsed.SerializedSize, (ref TpmWriter w) => parsed.WriteTo(ref w), p);
                 },
                 (ushort)verified.Tag, TpmiRhHierarchy.Platform.Value, digest, "TPMT_TK_VERIFIED", pool);
         }
@@ -1234,7 +1512,7 @@ internal sealed class TpmSpecBufferAndListTests
                 (ushort)hashcheck.Tag, TpmiRhHierarchy.Owner.Value, digest, "TPMT_TK_HASHCHECK", pool);
         }
 
-        //The NULL forms travel the same wire and must reconstruct identically: clause 10.7.2's tuple is the
+        //The NULL forms travel the same wire and must reconstruct identically: clause 10.6.2's tuple is the
         //ticket's own tag, TPM_RH_NULL and an Empty Buffer, so the round trip has to survive a zero-width digest.
         TpmtTkCreation nullCreation = TpmtTkCreation.Null;
         AssertTicketRoundTrip(
@@ -1258,7 +1536,7 @@ internal sealed class TpmSpecBufferAndListTests
                 TpmtTkVerified parsed = TpmtTkVerified.Parse(ref r, p);
 
                 return DescribeTicket(
-                    (ushort)parsed.Tag, parsed.Hierarchy.Value, parsed.Digest, parsed.SerializedSize, (ref TpmWriter w) => parsed.WriteTo(ref w), p);
+                    (ushort)parsed.Tag, parsed.Hierarchy.Value, parsed.Hmac, parsed.SerializedSize, (ref TpmWriter w) => parsed.WriteTo(ref w), p);
             },
             (ushort)nullVerified.Tag, TpmiRhHierarchy.Null.Value, [], "TPMT_TK_VERIFIED (NULL)", pool);
 
@@ -1290,7 +1568,7 @@ internal sealed class TpmSpecBufferAndListTests
     }
 
     /// <summary>
-    /// The NULL form of every ticket is the tuple clause 10.7.2 defines — the ticket's own tag, the NULL
+    /// The NULL form of every ticket is the tuple clause 10.6.2 defines — the ticket's own tag, the NULL
     /// hierarchy and an Empty Buffer digest — and each is the shared dispose-immune sentinel: it owns no pooled
     /// storage, so one consumer disposing it leaves it readable and framable for every other, and framing it
     /// produces the tag, <c>TPM_RH_NULL</c>, and a zero size field.
@@ -1306,8 +1584,8 @@ internal sealed class TpmSpecBufferAndListTests
             (ushort)TpmStConstants.TPM_ST_CREATION, TpmtTkCreation.Null.Dispose, () => TpmtTkCreation.Null.Digest.Length, trackingPool.Pool,
             (ref TpmWriter w) => TpmtTkCreation.Null.WriteTo(ref w));
         AssertNullTicket(
-            TpmtTkVerified.Null.IsNull, TpmtTkVerified.Null.Hierarchy, TpmtTkVerified.Null.Digest.Length, TpmtTkVerified.Null.SerializedSize,
-            (ushort)TpmStConstants.TPM_ST_VERIFIED, TpmtTkVerified.Null.Dispose, () => TpmtTkVerified.Null.Digest.Length, trackingPool.Pool,
+            TpmtTkVerified.Null.IsNull, TpmtTkVerified.Null.Hierarchy, TpmtTkVerified.Null.Hmac.Length, TpmtTkVerified.Null.SerializedSize,
+            (ushort)TpmStConstants.TPM_ST_VERIFIED, TpmtTkVerified.Null.Dispose, () => TpmtTkVerified.Null.Hmac.Length, trackingPool.Pool,
             (ref TpmWriter w) => TpmtTkVerified.Null.WriteTo(ref w));
         AssertNullTicket(
             TpmtTkAuth.Null.IsNull, TpmtTkAuth.Null.Hierarchy, TpmtTkAuth.Null.Digest.Length, TpmtTkAuth.Null.SerializedSize,
@@ -1322,8 +1600,8 @@ internal sealed class TpmSpecBufferAndListTests
     }
 
     /// <summary>
-    /// A ticket whose <c>hierarchy</c> field is not one of Table 60's selectors is refused at the wire read:
-    /// all four tickets type the field <c>TPMI_RH_HIERARCHY+</c> (Tables 109 through 112), and Table 60 names
+    /// A ticket whose <c>hierarchy</c> field is not one of Table 59's selectors is refused at the wire read:
+    /// all four tickets type the field <c>TPMI_RH_HIERARCHY+</c> (Tables 109 through 112), and Table 59 names
     /// <c>TPM_RC_VALUE</c> as the response when unmarshaling that type fails. A transient object handle is the
     /// case that matters, because it is exactly what a caller confusing an object's handle with its hierarchy
     /// would present.
@@ -1342,9 +1620,9 @@ internal sealed class TpmSpecBufferAndListTests
 
     /// <summary>
     /// A ticket whose <c>tag</c> is not the one its own structure fixes is refused at the wire read. Each of the
-    /// four tables declares the tag as a fixed value and names <c>TPM_RC_TAG</c> for anything else — Table 109
-    /// (<c>TPM_ST_CREATION</c>) and Table 110 (<c>TPM_ST_VERIFIED</c>) on printed page 141, Table 111
-    /// (<c>TPM_ST_AUTH_SIGNED</c> or <c>TPM_ST_AUTH_SECRET</c>) and Table 112 (<c>TPM_ST_HASHCHECK</c>) on
+    /// four tables declares the tag as a fixed value and names <c>TPM_RC_TAG</c> for anything else — Table 110
+    /// (<c>TPM_ST_CREATION</c>) and Table 113 (<c>TPM_ST_VERIFIED</c>) on printed page 141, Table 114
+    /// (<c>TPM_ST_AUTH_SIGNED</c> or <c>TPM_ST_AUTH_SECRET</c>) and Table 115 (<c>TPM_ST_HASHCHECK</c>) on
     /// printed page 143. Every arm here supplies a hierarchy the ticket WOULD accept, so only the tag can
     /// account for the refusal — and each arm offers a tag another ticket type uses legally, which is exactly
     /// the confusion the rule forecloses.
@@ -1364,8 +1642,8 @@ internal sealed class TpmSpecBufferAndListTests
     /// <summary>
     /// <c>TPM2_GetCapability(TPM_CAP_COMMANDS)</c> returns a <c>TPML_CCA</c> of <c>TPMA_CC</c> attribute words,
     /// not the bare <c>TPM_CC</c> command codes <c>TPM_CAP_PP_COMMANDS</c> and <c>TPM_CAP_AUDIT_COMMANDS</c>
-    /// return: "This Table 120 list is only used in TPM2_GetCapability(capability == TPM_CAP_COMMANDS)" (Part 2,
-    /// clause 10.9.2), and Table 135 selects <c>TPML_CCA</c> for <c>command</c> against <c>TPML_CC</c> for
+    /// return: "This Table 123 list is only used in TPM2_GetCapability(capability == TPM_CAP_COMMANDS)" (Part 2,
+    /// clause 10.8.2), and Table 138 selects <c>TPML_CCA</c> for <c>command</c> against <c>TPML_CC</c> for
     /// <c>ppCommands</c> and <c>auditCommands</c>. The three arms are therefore three distinct members, and a
     /// parsed capability data populates exactly the one its selector names.
     /// </summary>
@@ -1398,7 +1676,7 @@ internal sealed class TpmSpecBufferAndListTests
         using(TpmsCapabilityData auditCommands = ParseCapability(TpmCapConstants.TPM_CAP_AUDIT_COMMANDS, (uint)TpmCcConstants.TPM_CC_Clear, pool))
         {
             Assert.IsNotNull(auditCommands.AuditCommands, "TPM_CAP_AUDIT_COMMANDS populates its own TPML_CC member.");
-            Assert.IsNull(auditCommands.PhysicalPresenceCommands, "auditCommands and ppCommands are distinct union members (Table 135).");
+            Assert.IsNull(auditCommands.PhysicalPresenceCommands, "auditCommands and ppCommands are distinct union members (Table 138).");
         }
 
         using(TpmsCapabilityData handles = ParseCapability(TpmCapConstants.TPM_CAP_HANDLES, 0x8000_0000u, pool))
@@ -1489,7 +1767,7 @@ internal sealed class TpmSpecBufferAndListTests
     /// <returns>The reconstructed ticket's fields and its re-framed octets.</returns>
     private delegate TicketFacts TicketRoundTripper(ref TpmReader reader, BaseMemoryPool pool);
 
-    /// <summary>Asserts one NULL ticket is the clause 10.7.2 tuple and survives being disposed through.</summary>
+    /// <summary>Asserts one NULL ticket is the clause 10.6.2 tuple and survives being disposed through.</summary>
     /// <param name="isNull">The ticket's own NULL predicate.</param>
     /// <param name="hierarchy">The ticket's hierarchy field.</param>
     /// <param name="digestLength">The ticket's digest width.</param>

@@ -24,21 +24,21 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// } TPM2B_MAX_NV_BUFFER;
 /// </code>
 /// <para>
-/// Part 2, Table 99 declares <c>MAX_NV_BUFFER_SIZE</c> TPM-dependent, leaving no normative fixed value; a real
+/// Part 2, Table 97 declares <c>MAX_NV_BUFFER_SIZE</c> TPM-dependent, leaving no normative fixed value; a real
 /// TPM reports its own bound through <c>TPM_PT_NV_BUFFER_MAX</c>. <see cref="MaxSize"/> (2048 octets) is this
 /// library's own <c>MAX_NV_BUFFER_SIZE</c> — the bound the NV data-parameter sites (<c>TPM2_NV_Read()</c>,
-/// <c>TPM2_NV_Write()</c>, and the <c>TPM2_NV_Certify()</c> size parameter) enforce when parsing or
-/// constructing an NV payload.
+/// <c>TPM2_NV_Write()</c>, <c>TPM2_NV_Extend()</c>, and the <c>TPM2_NV_Certify()</c> size parameter) enforce
+/// when parsing or constructing an NV payload.
 /// </para>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, clause 10.4.9, Table 99.
+/// Specification reference: TPM 2.0 Library Part 2, clause 10.3.9, Table 97.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 public sealed class Tpm2bMaxNvBuffer: IDisposable
 {
     /// <summary>
-    /// This library's implementation bound for the NV buffer payload, in octets (Part 2, Table 99:
+    /// This library's implementation bound for the NV buffer payload, in octets (Part 2, Table 97:
     /// <c>MAX_NV_BUFFER_SIZE</c> is TPM-dependent; no value is normative).
     /// </summary>
     public const int MaxSize = 2048;

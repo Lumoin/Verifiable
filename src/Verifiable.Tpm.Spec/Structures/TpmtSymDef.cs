@@ -15,7 +15,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// block cipher such as AES in CFB mode is platform specific.
 /// </para>
 /// <para>
-/// <b>Wire format (TPM 2.0 Library Part 2, Section 11.1.6, Table 159):</b>
+/// <b>Wire format (TPM 2.0 Library Part 2, Section 11.1.6, Table 162):</b>
 /// </para>
 /// <code>
 /// typedef struct {
@@ -31,12 +31,12 @@ namespace Verifiable.Tpm.Spec.Structures;
 ///   <item><description><see cref="TpmAlgIdConstants.TPM_ALG_NULL"/>: only <c>algorithm</c> (no keyBits, no mode).</description></item>
 ///   <item><description><see cref="TpmAlgIdConstants.TPM_ALG_XOR"/>: <c>algorithm</c> and <c>keyBits</c>, where the
 ///   <c>keyBits.xor</c> union member is a <c>TPMI_ALG_HASH</c> selecting the KDF hash, not a key size; there is
-///   <b>no mode</b> for XOR (Part 2, Section 11.1.4, Table 157 - the mode union is empty under the XOR selector).</description></item>
+///   <b>no mode</b> for XOR (Part 2, Section 11.1.4, Table 160 - the mode union is empty under the XOR selector).</description></item>
 ///   <item><description>A block cipher (for example <see cref="TpmAlgIdConstants.TPM_ALG_AES"/>): <c>algorithm</c>,
 ///   <c>keyBits</c> (the key size in bits), and <c>mode</c>.</description></item>
 /// </list>
 /// <para>
-/// The <c>details</c> union (Part 2, Section 11.1.5, Table 158) is empty for every algorithm and contributes no
+/// The <c>details</c> union (Part 2, Section 11.1.5, Table 161) is empty for every algorithm and contributes no
 /// wire octets.
 /// </para>
 /// </remarks>
@@ -103,7 +103,7 @@ public readonly record struct TpmtSymDef
     /// </summary>
     /// <param name="hashAlgorithm">
     /// The hash carried in the <c>keyBits.xor</c> field on the wire. This must be the session's authHash: the
-    /// XOR mask KDF uses "the hash algorithm associated with the session" (Part 1 §19.2), which the TPM and this
+    /// XOR mask KDF uses "the hash algorithm associated with the session" (Part 1 §18.2), which the TPM and this
     /// library both take to be the session authHash, not this field. Passing a hash that differs from the
     /// session authHash negotiates an inconsistent value on the wire while both sides still key the mask with
     /// the session authHash.

@@ -1,21 +1,22 @@
 using System;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
+using Verifiable.Cryptography;
 using Verifiable.Fido2.Ctap.Authenticator.Custody;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Extensions.Seal;
 using Verifiable.Tpm.Infrastructure;
-using Verifiable.Tpm.Infrastructure.Commands;
+using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Fido2.Tpm.Ctap.Authenticator.Custody;
 
 /// <summary>
-/// Composes a <see cref="CtapStateCustody"/> bundle whose snapshot bytes are sealed to, and recovered
-/// from, an in-house simulated TPM — a thin adapter over the
-/// <see cref="TpmDeviceExtensions"/> business-capability verbs package B shipped (<c>SealAsync</c>/
-/// <c>UnsealAsync</c>), and their first production consumer.
+/// Composes a <see cref="CtapStateCustody"/> bundle whose snapshot bytes are protected by, and recovered
+/// through, an in-house simulated TPM — a thin adapter over the <see cref="TpmDeviceExtensions"/> seal
+/// envelope verbs (<c>SealEnvelopeAsync</c>/<c>UnsealEnvelopeAsync</c>), and their first production consumer.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -28,20 +29,23 @@ namespace Verifiable.Fido2.Tpm.Ctap.Authenticator.Custody;
 /// 12.2, 12.7).
 /// </para>
 /// <para>
-/// <b>Persist</b>: seals the received plaintext snapshot bytes under <c>sealAuth</c> via
-/// <see cref="TpmDeviceExtensions.SealAsync"/>, serializes the resulting <see cref="TpmSealedBlob"/>
-/// (<see cref="TpmSealedBlob.GetSerializedSize"/>/<see cref="TpmSealedBlob.WriteTo"/>), and hands the
-/// opaque bytes to the caller's store delegate. <b>Load</b>: fetches the opaque bytes via the caller's
-/// fetch delegate (absent ⇒ <see langword="null"/>, the "no snapshot" case), reparses them with
-/// <see cref="TpmSealedBlob.Parse"/>, and recovers the plaintext snapshot via
-/// <see cref="TpmDeviceExtensions.UnsealAsync"/>. <b>Wipe</b>: drives the caller's delete delegate only —
-/// nothing this adapter seals is ever loaded into the TPM's own persistent object store, so there is
-/// nothing else to evict.
+/// A sealed data object carries at most <c>MAX_SYM_DATA</c> (128) octets (TPM 2.0 Library Part 2, clause
+/// 11.1.13, Table 169; clause 11.1.14, Table 170) — an authenticator snapshot never fits — so what the TPM
+/// seals is a content-encryption key and the snapshot rides under it, which is exactly what
+/// <see cref="TpmSealedEnvelope"/> carries. <b>Persist</b>: hands the snapshot to
+/// <see cref="TpmDeviceExtensions.SealEnvelopeAsync(uint, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, bool, CancellationToken)"/>
+/// under <c>sealAuth</c> and stores the envelope's serialized form (<see cref="TpmSealedEnvelope.WriteTo"/>)
+/// through the caller's store delegate. <b>Load</b>: fetches the envelope via the caller's fetch delegate
+/// (absent ⇒ <see langword="null"/>, the "no snapshot" case), parses it
+/// (<see cref="TpmSealedEnvelope.Parse"/>), and recovers the snapshot through
+/// <see cref="TpmDeviceExtensions.UnsealEnvelopeAsync(uint, ReadOnlyMemory{byte}, TpmSealedEnvelope, ReadOnlyMemory{byte}, CancellationToken)"/>.
+/// <b>Wipe</b>: drives the caller's delete delegate only — nothing this adapter seals is ever loaded into the
+/// TPM's own persistent object store, so there is nothing else to evict.
 /// </para>
 /// <para>
-/// Every TPM-side failure — a seal, an unseal, or a parse of the stored bytes — surfaces as a
-/// <see cref="TpmSealedStateCustodyException"/> rather than a silently empty or partially rehydrated
-/// snapshot (fail closed).
+/// Every failure — a seal, an unseal, a parse of the stored envelope, or the ciphertext's authentication —
+/// surfaces as a <see cref="TpmSealedStateCustodyException"/> rather than a silently empty or partially
+/// rehydrated snapshot (fail closed).
 /// </para>
 /// </remarks>
 [SuppressMessage("Design", "CA1515:Consider making public types internal", Justification = "Staged composition-edge code: public by design so the boundary is already the future package's API boundary, per the promotability rules.")]
@@ -58,14 +62,14 @@ public static class TpmSealedStateCustody
     /// </param>
     /// <param name="parentAuth">The storage parent's authorization value, or empty when it has none.</param>
     /// <param name="sealAuth">
-    /// The authorization value every snapshot is sealed under and must be presented to recover — the TPM
-    /// counterpart of a CTAP custody backend's own "unlock secret."
+    /// The authorization value every snapshot's content key is sealed under and must be presented to
+    /// recover — the TPM counterpart of a CTAP custody backend's own "unlock secret."
     /// </param>
-    /// <param name="fetchSealedBlobAsync">Fetches the caller-stored sealed blob bytes for a run id.</param>
-    /// <param name="storeSealedBlobAsync">Stores the sealed blob bytes this adapter produces for a run id.</param>
-    /// <param name="deleteSealedBlobAsync">Deletes the caller-stored sealed blob bytes for a run id.</param>
+    /// <param name="fetchSealedBlobAsync">Fetches the caller-stored envelope bytes for a run id.</param>
+    /// <param name="storeSealedBlobAsync">Stores the envelope bytes this adapter produces for a run id.</param>
+    /// <param name="deleteSealedBlobAsync">Deletes the caller-stored envelope bytes for a run id.</param>
     /// <param name="pool">
-    /// The memory pool this adapter's own seal/unseal scratch work rents from. Defaults to
+    /// The memory pool this adapter's own envelope scratch work rents from. Defaults to
     /// <see cref="BaseMemoryPool.Shared"/> when <see langword="null"/>.
     /// </param>
     /// <returns>The composed seam-bundle record.</returns>
@@ -115,19 +119,19 @@ internal sealed class TpmSealedStateCustodyBinding
     /// <summary>The storage parent's own authorization value.</summary>
     private ReadOnlyMemory<byte> ParentAuth { get; }
 
-    /// <summary>The authorization value every snapshot is sealed under.</summary>
+    /// <summary>The authorization value every snapshot's content key is sealed under.</summary>
     private ReadOnlyMemory<byte> SealAuth { get; }
 
-    /// <summary>The caller-supplied delegate that fetches previously stored sealed-blob bytes.</summary>
+    /// <summary>The caller-supplied delegate that fetches previously stored envelope bytes.</summary>
     private TryFetchSealedSnapshotBlobAsyncDelegate FetchSealedBlobAsync { get; }
 
-    /// <summary>The caller-supplied delegate that stores freshly sealed blob bytes.</summary>
+    /// <summary>The caller-supplied delegate that stores freshly produced envelope bytes.</summary>
     private StoreSealedSnapshotBlobAsyncDelegate StoreSealedBlobAsync { get; }
 
-    /// <summary>The caller-supplied delegate that deletes stored sealed-blob bytes.</summary>
+    /// <summary>The caller-supplied delegate that deletes stored envelope bytes.</summary>
     private DeleteSealedSnapshotBlobAsyncDelegate DeleteSealedBlobAsync { get; }
 
-    /// <summary>The memory pool this binding's own TPM-facing scratch work rents from.</summary>
+    /// <summary>The memory pool this binding's own envelope scratch work rents from.</summary>
     private BaseMemoryPool Pool { get; }
 
 
@@ -137,11 +141,11 @@ internal sealed class TpmSealedStateCustodyBinding
     /// <param name="tpm">The TPM device to seal to and unseal from.</param>
     /// <param name="storageParentHandle">The handle of the already-loaded storage parent.</param>
     /// <param name="parentAuth">The storage parent's own authorization value.</param>
-    /// <param name="sealAuth">The authorization value every snapshot is sealed under.</param>
-    /// <param name="fetchSealedBlobAsync">Fetches previously stored sealed-blob bytes.</param>
-    /// <param name="storeSealedBlobAsync">Stores freshly sealed blob bytes.</param>
-    /// <param name="deleteSealedBlobAsync">Deletes stored sealed-blob bytes.</param>
-    /// <param name="pool">The memory pool this binding's own TPM-facing scratch work rents from.</param>
+    /// <param name="sealAuth">The authorization value every snapshot's content key is sealed under.</param>
+    /// <param name="fetchSealedBlobAsync">Fetches previously stored envelope bytes.</param>
+    /// <param name="storeSealedBlobAsync">Stores freshly produced envelope bytes.</param>
+    /// <param name="deleteSealedBlobAsync">Deletes stored envelope bytes.</param>
+    /// <param name="pool">The memory pool this binding's own scratch work rents from.</param>
     internal TpmSealedStateCustodyBinding(
         TpmDevice tpm,
         uint storageParentHandle,
@@ -164,107 +168,117 @@ internal sealed class TpmSealedStateCustodyBinding
 
 
     /// <summary>
-    /// Attempts to load and unseal a previously persisted snapshot for <paramref name="runId"/>. Has the
-    /// <see cref="TryLoadSnapshotAsyncDelegate"/> shape.
+    /// Attempts to load a previously persisted snapshot for <paramref name="runId"/>: parses the stored
+    /// envelope and recovers the snapshot through the TPM. Has the <see cref="TryLoadSnapshotAsyncDelegate"/>
+    /// shape.
     /// </summary>
     /// <param name="runId">The run id to load a snapshot for.</param>
     /// <param name="pool">The memory pool the returned snapshot bytes carrier rents from.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The recovered plaintext snapshot bytes, or <see langword="null"/> when none was ever stored.</returns>
     /// <exception cref="TpmSealedStateCustodyException">
-    /// The stored bytes did not parse as a well-formed <see cref="TpmSealedBlob"/>, or the TPM rejected the
-    /// unseal (for example a wrong <c>sealAuth</c>) — fails closed, never a partial or empty snapshot.
+    /// The stored bytes did not parse as a well-formed envelope, the TPM rejected the unseal (for example a
+    /// wrong <c>sealAuth</c>), the unsealed object is not a content key, or the ciphertext failed
+    /// authentication — fails closed, never a partial or empty snapshot.
     /// </exception>
     internal async ValueTask<PooledMemory?> TryLoadSnapshotAsync(string runId, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
-        PooledMemory? sealedBlobBytes = await FetchSealedBlobAsync(runId, Pool, cancellationToken).ConfigureAwait(false);
-        if(sealedBlobBytes is null)
+        PooledMemory? envelopeBytes = await FetchSealedBlobAsync(runId, Pool, cancellationToken).ConfigureAwait(false);
+        if(envelopeBytes is null)
         {
             return null;
         }
 
-        using TpmSealedBlob sealedBlob = ParseSealedBlob(runId, sealedBlobBytes);
+        using TpmSealedEnvelope envelope = ParseEnvelope(runId, envelopeBytes);
 
-        TpmResult<UnsealResponse> unsealResult = await Tpm.UnsealAsync(
-            StorageParentHandle, ParentAuth, sealedBlob, SealAuth, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            TpmResult<DecryptedContent> unsealResult = await Tpm.UnsealEnvelopeAsync(
+                StorageParentHandle, ParentAuth, envelope, SealAuth, cancellationToken).ConfigureAwait(false);
 
-        if(!unsealResult.IsSuccess)
+            if(!unsealResult.IsSuccess)
+            {
+                throw new TpmSealedStateCustodyException(
+                    $"Unsealing the content key of the snapshot envelope for run id '{runId}' failed: {DescribeFailure(unsealResult)}.");
+            }
+
+            using DecryptedContent plaintext = unsealResult.Value;
+
+            return PooledMemory.FromBytes(plaintext.AsReadOnlySpan(), pool, CtapAuthenticatorCustodyBufferTags.SnapshotPayload);
+        }
+        catch(CryptographicException ex)
         {
             throw new TpmSealedStateCustodyException(
-                $"Unsealing the TPM-sealed snapshot blob for run id '{runId}' failed: {DescribeFailure(unsealResult)}.");
+                $"The snapshot envelope for run id '{runId}' failed authentication under its unsealed content key.", ex);
         }
-
-        using UnsealResponse unsealed = unsealResult.Value;
-
-        return PooledMemory.FromBytes(unsealed.OutData.AsReadOnlySpan(), pool, CtapAuthenticatorCustodyBufferTags.SnapshotPayload);
     }
 
 
     /// <summary>
-    /// Seals <paramref name="snapshot"/> and hands the resulting sealed blob's serialized bytes to the
-    /// store delegate. Has the <see cref="PersistSnapshotAsyncDelegate"/> shape.
+    /// Seals <paramref name="snapshot"/> as an envelope through the TPM and hands the envelope's serialized
+    /// bytes to the store delegate. Has the <see cref="PersistSnapshotAsyncDelegate"/> shape.
     /// </summary>
     /// <param name="runId">The run id this snapshot belongs to.</param>
-    /// <param name="snapshot">The plaintext snapshot bytes to seal.</param>
+    /// <param name="snapshot">The plaintext snapshot bytes to protect — borrowed; the caller owns and disposes them.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
-    /// <exception cref="TpmSealedStateCustodyException">The TPM rejected the seal.</exception>
+    /// <exception cref="TpmSealedStateCustodyException">The TPM rejected the seal of the content key.</exception>
     internal async ValueTask PersistSnapshotAsync(string runId, PooledMemory snapshot, CancellationToken cancellationToken)
     {
-        TpmResult<TpmSealedBlob> sealResult = await Tpm.SealAsync(
+        TpmResult<TpmSealedEnvelope> sealResult = await Tpm.SealEnvelopeAsync(
             StorageParentHandle, ParentAuth, snapshot.AsReadOnlyMemory(), SealAuth, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         if(!sealResult.IsSuccess)
         {
-            throw new TpmSealedStateCustodyException($"Sealing the snapshot for run id '{runId}' failed: {DescribeFailure(sealResult)}.");
+            throw new TpmSealedStateCustodyException($"Sealing the content key for run id '{runId}' failed: {DescribeFailure(sealResult)}.");
         }
 
-        using TpmSealedBlob sealedBlob = sealResult.Value;
-        int size = sealedBlob.GetSerializedSize();
-        using IMemoryOwner<byte> scratch = Pool.Rent(size);
-        var writer = new TpmWriter(scratch.Memory.Span[..size]);
-        sealedBlob.WriteTo(ref writer);
+        using TpmSealedEnvelope envelope = sealResult.Value;
+        int size = envelope.GetSerializedSize();
+        using IMemoryOwner<byte> serialized = Pool.Rent(size);
+        var writer = new TpmWriter(serialized.Memory.Span[..size]);
+        envelope.WriteTo(ref writer);
 
-        using PooledMemory serializedSealedBlob = PooledMemory.FromBytes(
-            scratch.Memory.Span[..size], Pool, TpmSealedStateCustodyBufferTags.SealedSnapshotBlobPayload);
+        using PooledMemory serializedEnvelope = PooledMemory.FromBytes(
+            serialized.Memory.Span[..size], Pool, TpmSealedStateCustodyBufferTags.SealedSnapshotBlobPayload);
 
-        await StoreSealedBlobAsync(runId, serializedSealedBlob, cancellationToken).ConfigureAwait(false);
+        await StoreSealedBlobAsync(runId, serializedEnvelope, cancellationToken).ConfigureAwait(false);
     }
 
 
     /// <summary>
-    /// Deletes whatever sealed blob is stored for <paramref name="runId"/>. Has the
+    /// Deletes whatever envelope is stored for <paramref name="runId"/>. Has the
     /// <see cref="WipeSnapshotAsyncDelegate"/> shape.
     /// </summary>
-    /// <param name="runId">The run id whose sealed blob should be deleted.</param>
+    /// <param name="runId">The run id whose envelope should be deleted.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     internal ValueTask WipeSnapshotAsync(string runId, CancellationToken cancellationToken) =>
         DeleteSealedBlobAsync(runId, cancellationToken);
 
 
     /// <summary>
-    /// Parses previously fetched sealed-blob bytes into a <see cref="TpmSealedBlob"/>, disposing
-    /// <paramref name="sealedBlobBytes"/> once parsed (or on a parse failure) and wrapping any parse
-    /// failure into a fail-closed <see cref="TpmSealedStateCustodyException"/> — a tampered or truncated
-    /// stored blob never yields a partially restored snapshot.
+    /// Parses previously fetched envelope bytes, disposing <paramref name="envelopeBytes"/> once parsed (or on
+    /// a parse failure) and wrapping any parse failure into a fail-closed
+    /// <see cref="TpmSealedStateCustodyException"/> — a tampered or truncated stored envelope never yields a
+    /// partially restored snapshot.
     /// </summary>
     /// <param name="runId">The run id the failed-parse exception message names.</param>
-    /// <param name="sealedBlobBytes">The fetched sealed-blob bytes, consumed and disposed by this call.</param>
-    /// <returns>The parsed sealed blob. The caller owns it and must dispose it.</returns>
-    /// <exception cref="TpmSealedStateCustodyException">The bytes do not parse as a well-formed sealed blob.</exception>
-    private TpmSealedBlob ParseSealedBlob(string runId, PooledMemory sealedBlobBytes)
+    /// <param name="envelopeBytes">The fetched envelope bytes, consumed and disposed by this call.</param>
+    /// <returns>The parsed envelope. The caller owns it and must dispose it.</returns>
+    /// <exception cref="TpmSealedStateCustodyException">The bytes do not parse as a well-formed envelope.</exception>
+    private TpmSealedEnvelope ParseEnvelope(string runId, PooledMemory envelopeBytes)
     {
-        using(sealedBlobBytes)
+        using(envelopeBytes)
         {
             try
             {
-                var reader = new TpmReader(sealedBlobBytes.AsReadOnlySpan());
+                var reader = new TpmReader(envelopeBytes.AsReadOnlySpan());
 
-                return TpmSealedBlob.Parse(ref reader, Pool);
+                return TpmSealedEnvelope.Parse(ref reader, Pool);
             }
-            catch(Exception ex) when(ex is InvalidOperationException or ArgumentException)
+            catch(Exception ex) when(ex is InvalidOperationException or ArgumentException or OverflowException)
             {
                 throw new TpmSealedStateCustodyException(
-                    $"The stored TPM-sealed snapshot blob for run id '{runId}' did not parse as a well-formed sealed blob.", ex);
+                    $"The stored snapshot envelope for run id '{runId}' did not parse as a well-formed envelope.", ex);
             }
         }
     }

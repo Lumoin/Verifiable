@@ -19,12 +19,13 @@ namespace Verifiable.Tests.Tpm;
 
 /// <summary>
 /// Independent challenger-side oracle for the TPM2_MakeCredential / TPM2_ActivateCredential outer wrap (TPM 2.0
-/// Library Part 1, clauses 24.3-24.6; Annex C.6.1 "ECDH", C.6.4 "ECC Secret Sharing for Credentials"). Framework
+/// Library Part 1, clauses 21.3-21.6; clause 44.7.1 (the ECC Labeled KEM's One-Pass Diffie-Hellman), 21.3
+/// "Protection of Credential"). Framework
 /// <see cref="ECDiffieHellman"/> performs the P-256 agreement (a different provider from the simulator's ECC
 /// signing backend, <see cref="BouncyCastleTpmEccSigningBackend.ComputeSharedSecret"/>), and the inner
 /// encryption uses framework <see cref="Aes"/> in its native CFB mode (a different code path from the shipped
 /// ECB-loop CFB helper, <c>TpmParameterEncryption.AesCfb</c>) — both cross-provider/cross-implementation
-/// checks. KDFa and KDFe (Part 1, §11.4.10.2/§11.4.10.3) and the outer HMAC compose the spec message by hand
+/// checks. KDFa and KDFe (Part 1, §10.4.10.2/§11.4.10.3) and the outer HMAC compose the spec message by hand
 /// (field order, labels, context) but compute it through the project's own <see cref="Kdfa"/>/<see cref="Kdfe"/>
 /// and the registered HMAC seam — those primitives are proven separately by their own known-answer tests.
 /// This file never calls TPM2_MakeCredential(): the credential blob and encrypted secret are assembled here from
@@ -48,7 +49,7 @@ internal sealed class TpmInHouseSimulatorCredentialOracleTests
     /// <summary>The SHA-256 digest size in octets, also the size of every P-256 field element.</summary>
     private const int Sha256DigestSize = 32;
 
-    /// <summary>The credential symmetric key width in bits (Part 1, clause 25.2: AES-128 for the ECC storage/EK template).</summary>
+    /// <summary>The credential symmetric key width in bits (Part 1, clause 24.2: AES-128 for the ECC storage/EK template).</summary>
     private const int SymmetricKeyBits = 128;
 
     /// <summary>The credential symmetric key width in octets.</summary>
@@ -57,13 +58,13 @@ internal sealed class TpmInHouseSimulatorCredentialOracleTests
     /// <summary>The AES block size in octets, also the width of the all-zero CFB feedback register (IV).</summary>
     private const int AesBlockSize = 16;
 
-    /// <summary>The KDFe use label for seed derivation (Part 1, clause 24.4; Annex C.6.4).</summary>
+    /// <summary>The KDFe use label for seed derivation (Part 1, clause 21.3).</summary>
     private const string IdentityLabel = "IDENTITY";
 
-    /// <summary>The KDFa use label for the inner symmetric key (Part 1, clause 24.4, eq. (44)).</summary>
+    /// <summary>The KDFa use label for the inner symmetric key (Part 1, clause 21.4, eq. (44)).</summary>
     private const string StorageLabel = "STORAGE";
 
-    /// <summary>The KDFa use label for the outer HMAC key (Part 1, clause 24.4, eq. (46)).</summary>
+    /// <summary>The KDFa use label for the outer HMAC key (Part 1, clause 21.5, eq. (46)).</summary>
     private const string IntegrityLabel = "INTEGRITY";
 
     /// <summary>Gets or sets the per-test context (supplies the cancellation token).</summary>
@@ -197,7 +198,7 @@ internal sealed class TpmInHouseSimulatorCredentialOracleTests
 
     /// <summary>
     /// The credential <c>TPM2_ActivateCredential()</c> recovers is a <c>TPM2B_DIGEST</c> (TPM 2.0 Library Part 3,
-    /// clause 12.5), so its buffer is bounded by <c>sizeof(TPMU_HA)</c> (Part 2, clause 10.4.2, Table 92). A
+    /// clause 12.5), so its buffer is bounded by <c>sizeof(TPMU_HA)</c> (Part 2, clause 10.3.2, Table 90). A
     /// challenger-built blob that is valid in every other respect — a correct outer HMAC over a correctly
     /// wrapped inner structure — but whose inner credential declares more octets than that bound is refused with
     /// <c>TPM_RC_SIZE</c>: Part 4's <c>TPM2B_DIGEST_Unmarshal()</c> (page 1138) answers <c>TPM_RC_SIZE</c> for a
@@ -249,7 +250,7 @@ internal sealed class TpmInHouseSimulatorCredentialOracleTests
                     Assert.IsFalse(activateResult.IsSuccess, "A credential wider than a TPM2B_DIGEST must not activate.");
                     Assert.AreEqual(
                         TpmRcConstants.TPM_RC_SIZE, activateResult.ResponseCode,
-                        "A recovered credential wider than sizeof(TPMU_HA) is the unmarshal's own size refusal (Part 2, clause 10.4.2, Table 92; Part 4, TPM2B_DIGEST_Unmarshal(), page 1138).");
+                        "A recovered credential wider than sizeof(TPMU_HA) is the unmarshal's own size refusal (Part 2, clause 10.3.2, Table 90; Part 4, TPM2B_DIGEST_Unmarshal(), page 1138).");
                 }
                 finally
                 {
@@ -352,7 +353,7 @@ internal sealed class TpmInHouseSimulatorCredentialOracleTests
     /// credential's <c>TPM2B_DIGEST</c> and nothing else. A challenger who knows the credential key's PUBLIC
     /// point can build a blob whose outer HMAC PASSES and whose plaintext carries a well-formed, in-bound
     /// <c>TPM2B_DIGEST</c> followed by extra octets: every earlier gate admits it — the size field is present,
-    /// the declared width is within <c>sizeof(TPMU_HA)</c> (Part 2, clause 10.4.2, Table 92), and the plaintext
+    /// the declared width is within <c>sizeof(TPMU_HA)</c> (Part 2, clause 10.3.2, Table 90), and the plaintext
     /// supplies every declared octet — so this refusal is the only one that can answer it. Its code is
     /// <c>TPM_RC_SIZE</c>, the third of the three <c>CredentialToSecret()</c> declares (page 734:
     /// "TPM_RC_INSUFFICIENT error during credential unmarshaling / TPM_RC_INTEGRITY credential integrity is
@@ -425,7 +426,7 @@ internal sealed class TpmInHouseSimulatorCredentialOracleTests
     /// <summary>
     /// Builds a credential blob and encrypted secret: a fresh ephemeral P-256 key agreed with the credential
     /// key's public point via framework <see cref="ECDiffieHellman"/> (independent of the simulator's own ECC
-    /// backend), the project's own <see cref="Kdfe"/> derives the seed (Annex C.6.1, eq. (65)), and the outer
+    /// backend), the project's own <see cref="Kdfe"/> derives the seed (clause 44.7.1, eq. (63)), and the outer
     /// wrap (<see cref="BuildCredentialBlobAsync"/>) binds it to <paramref name="objectName"/>.
     /// </summary>
     /// <param name="credential">The plaintext credential to wrap.</param>
@@ -461,7 +462,7 @@ internal sealed class TpmInHouseSimulatorCredentialOracleTests
         byte[] z = ephemeral.DeriveRawSecretAgreement(credentialKeyEcdh.PublicKey);
         try
         {
-            //seed = KDFe(SHA256, z, "IDENTITY", ephemeralX, credentialKeyX, 256) — Part 1, Annex C.6.1, eq. (65).
+            //seed = KDFe(SHA256, z, "IDENTITY", ephemeralX, credentialKeyX, 256) — Part 1, clause 44.7.1, eq. (63).
             using IMemoryOwner<byte> seedOwner = await Kdfe.DeriveAsync(
                 HashAlgorithmName.SHA256, z, IdentityLabel, ephemeralX, credentialKeyX, Sha256DigestSize * 8, pool, cancellationToken).ConfigureAwait(false);
 
@@ -517,7 +518,7 @@ internal sealed class TpmInHouseSimulatorCredentialOracleTests
             ? credential.Length
             : declaredCredentialLength;
 
-        //symKey = KDFa(SHA256, seed, "STORAGE", objectName, Empty, 128) — Part 1, clause 24.4, eq. (44).
+        //symKey = KDFa(SHA256, seed, "STORAGE", objectName, Empty, 128) — Part 1, clause 21.4, eq. (44).
         using IMemoryOwner<byte> symKeyOwner = await Kdfa.DeriveAsync(
             HashAlgorithmName.SHA256, seed, StorageLabel, objectName, ReadOnlyMemory<byte>.Empty, SymmetricKeyBits, pool, cancellationToken).ConfigureAwait(false);
 
@@ -552,7 +553,7 @@ internal sealed class TpmInHouseSimulatorCredentialOracleTests
             symKeyOwner.Memory.Span[..SymmetricKeyBytes].Clear();
         }
 
-        //hmacKey = KDFa(SHA256, seed, "INTEGRITY", Empty, Empty, 256) — Part 1, clause 24.4, eq. (46).
+        //hmacKey = KDFa(SHA256, seed, "INTEGRITY", Empty, Empty, 256) — Part 1, clause 21.5, eq. (46).
         using IMemoryOwner<byte> hmacKeyOwner = await Kdfa.DeriveAsync(
             HashAlgorithmName.SHA256, seed, IntegrityLabel, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, Sha256DigestSize * 8, pool, cancellationToken).ConfigureAwait(false);
 
@@ -566,7 +567,7 @@ internal sealed class TpmInHouseSimulatorCredentialOracleTests
 
         try
         {
-            //outerHmac = HMAC_SHA256(hmacKey, encIdentity || objectName) — Part 1, clause 24.4, eq. (47).
+            //outerHmac = HMAC_SHA256(hmacKey, encIdentity || objectName) — Part 1, clause 21.5, eq. (47).
             using HmacValue outerHmac = await CryptographicKeyEvents.ComputeHmacAsync(
                 messageOwner.Memory[..messageLength], hmacKeyOwner.Memory[..Sha256DigestSize], outputByteLength: Sha256DigestSize, tag: HmacTag(), pool: pool, cancellationToken: cancellationToken).ConfigureAwait(false);
 

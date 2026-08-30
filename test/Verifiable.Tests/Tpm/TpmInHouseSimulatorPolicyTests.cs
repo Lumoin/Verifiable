@@ -26,7 +26,7 @@ namespace Verifiable.Tests.Tpm;
 /// <see cref="TpmCommandExecutor"/> and the real command/response codecs). Each test starts a trial or policy
 /// session, issues policy assertions, reads the accumulated policyDigest back via <c>TPM2_PolicyGetDigest()</c>,
 /// and asserts it equals the host prediction the shipped <see cref="TpmPolicyDigest"/> computes for the same
-/// assertions (TPM 2.0 Library Part 1, clause 17.7).
+/// assertions (TPM 2.0 Library Part 1, clause 16.7).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -79,6 +79,89 @@ internal sealed class TpmInHouseSimulatorPolicyTests
             Assert.IsTrue(
                 MatchesCommandCodePolicy(digest.PolicyDigest.AsReadOnlySpan(), TpmCcConstants.TPM_CC_Sign, PolicyHash),
                 "The simulator's policyDigest after PolicyCommandCode must match the host-computed value.");
+        }
+        finally
+        {
+            _ = await tpm.FlushContextAsync(sessionHandle, TestContext.CancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Verifies <c>TPM2_PolicyCommandCode()</c> for a DIFFERENT code on a session already restricted is refused
+    /// with <c>TPM_RC_VALUE</c> ("If policySession→commandCode does not have its default value, then the TPM
+    /// will return TPM_RC_VALUE if the two values are not the same") and leaves the policyDigest at the first
+    /// restriction's fold.
+    /// <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Part 3, clause 23.11; Part 1, clause 16.7.8</see>.
+    /// </summary>
+    [TestMethod]
+    public async Task PolicyCommandCodeRefusesADifferentCodeOnARestrictedSession()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        const TpmAlgIdConstants PolicyHash = TpmAlgIdConstants.TPM_ALG_SHA256;
+
+        TpmResult<StartAuthSessionResponse> startResult = await tpm.StartTrialPolicySessionAsync(PolicyHash, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession (trial) failed: '{startResult.ResponseCode}'.");
+        using StartAuthSessionResponse session = startResult.Value;
+        uint sessionHandle = session.SessionHandle.Value;
+        try
+        {
+            TpmResult<PolicyCommandCodeResponse> first = await tpm.PolicyCommandCodeAsync(sessionHandle, TpmCcConstants.TPM_CC_Unseal, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(first.IsSuccess, $"The first PolicyCommandCode failed: '{first.ResponseCode}'.");
+
+            TpmResult<PolicyCommandCodeResponse> second = await tpm.PolicyCommandCodeAsync(sessionHandle, TpmCcConstants.TPM_CC_Sign, TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.IsFalse(second.IsSuccess, "A different code on a restricted session must be refused.");
+            Assert.AreEqual(TpmRcConstants.TPM_RC_VALUE, second.ResponseCode, "A different prior commandCode is TPM_RC_VALUE.");
+
+            TpmResult<PolicyGetDigestResponse> digestResult = await tpm.PolicyGetDigestAsync(sessionHandle, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(digestResult.IsSuccess, $"PolicyGetDigest failed: '{digestResult.ResponseCode}'.");
+            using PolicyGetDigestResponse digest = digestResult.Value;
+            Assert.IsTrue(
+                MatchesCommandCodePolicy(digest.PolicyDigest.AsReadOnlySpan(), TpmCcConstants.TPM_CC_Unseal, PolicyHash),
+                "The refused assertion must leave the policyDigest at the first restriction's fold.");
+        }
+        finally
+        {
+            _ = await tpm.FlushContextAsync(sessionHandle, TestContext.CancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Verifies <c>TPM2_PolicyCommandCode()</c> with the SAME code as an existing restriction is accepted and
+    /// folds again ("If a previous TPM2_PolicyCommandCode() had been executed, then it is probable that the
+    /// policy expression is improperly formed but the TPM does not return an error if code is the same").
+    /// <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Part 3, clause 23.11</see>.
+    /// </summary>
+    [TestMethod]
+    public async Task PolicyCommandCodeAcceptsTheSameCodeAgainAndFoldsTwice()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        const TpmAlgIdConstants PolicyHash = TpmAlgIdConstants.TPM_ALG_SHA256;
+        int size = TpmPolicyDigest.Size(PolicyHash);
+        byte[] afterFirst = new byte[size];
+        _ = TpmPolicyDigest.ExtendForCommandCode(new byte[size], TpmCcConstants.TPM_CC_Unseal, PolicyHash, afterFirst);
+        byte[] predicted = new byte[size];
+        _ = TpmPolicyDigest.ExtendForCommandCode(afterFirst, TpmCcConstants.TPM_CC_Unseal, PolicyHash, predicted);
+
+        TpmResult<StartAuthSessionResponse> startResult = await tpm.StartTrialPolicySessionAsync(PolicyHash, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession (trial) failed: '{startResult.ResponseCode}'.");
+        using StartAuthSessionResponse session = startResult.Value;
+        uint sessionHandle = session.SessionHandle.Value;
+        try
+        {
+            TpmResult<PolicyCommandCodeResponse> first = await tpm.PolicyCommandCodeAsync(sessionHandle, TpmCcConstants.TPM_CC_Unseal, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(first.IsSuccess, $"The first PolicyCommandCode failed: '{first.ResponseCode}'.");
+            TpmResult<PolicyCommandCodeResponse> second = await tpm.PolicyCommandCodeAsync(sessionHandle, TpmCcConstants.TPM_CC_Unseal, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(second.IsSuccess, $"The same code again must be accepted: '{second.ResponseCode}'.");
+
+            TpmResult<PolicyGetDigestResponse> digestResult = await tpm.PolicyGetDigestAsync(sessionHandle, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(digestResult.IsSuccess, $"PolicyGetDigest failed: '{digestResult.ResponseCode}'.");
+            using PolicyGetDigestResponse digest = digestResult.Value;
+            Assert.IsTrue(digest.PolicyDigest.AsReadOnlySpan().SequenceEqual(predicted), "The accepted repeat folds its term a second time.");
         }
         finally
         {
@@ -366,7 +449,7 @@ internal sealed class TpmInHouseSimulatorPolicyTests
 
     /// <summary>
     /// TPM_RH_LOCKOUT is the one permanent handle PolicySecret's authorization check is dictionary-attack gated
-    /// for (TPM 2.0 Library Part 1, clause 17.8's own carve-out — every OTHER permanent handle is DA-exempt):
+    /// for (TPM 2.0 Library Part 1, clause 16.8's own carve-out — every OTHER permanent handle is DA-exempt):
     /// a wrong lockoutAuth over <c>PolicySecret(TPM_RH_LOCKOUT)</c> is an auth-failure (<c>TPM_RC_AUTH_FAIL</c>,
     /// not <c>TPM_RC_BAD_AUTH</c>) that disables <c>lockoutAuth</c> independently of FailedTries/MaxTries —
     /// observable both through a subsequent <c>PolicySecret(TPM_RH_LOCKOUT)</c> refusal and through the
@@ -454,10 +537,10 @@ internal sealed class TpmInHouseSimulatorPolicyTests
 
     /// <summary>
     /// PolicySecret over <c>TPM_RH_LOCKOUT</c> mints a ticket whose <c>hierarchy</c> field is LOCKOUT's OWNING
-    /// hierarchy — <c>TPM_RH_OWNER</c> (TPM 2.0 Library Part 1, clause 12.5's <c>EntityGetHierarchy</c> mapping:
+    /// hierarchy — <c>TPM_RH_OWNER</c> (TPM 2.0 Library Part 1, clause 11.5's <c>EntityGetHierarchy</c> mapping:
     /// every permanent handle other than Platform/Endorsement/Null belongs to Owner) — never the raw
     /// <c>TPM_RH_LOCKOUT</c> handle itself: <c>TPMT_TK_AUTH.hierarchy</c> is typed <c>TPMI_RH_HIERARCHY+</c>
-    /// (Part 2, Table 111), whose legal set excludes <c>TPM_RH_LOCKOUT</c>. The minted ticket then replays
+    /// (Part 2, Table 114), whose legal set excludes <c>TPM_RH_LOCKOUT</c>. The minted ticket then replays
     /// successfully through <c>TPM2_PolicyTicket()</c> on a fresh session, proving the mapped hierarchy is also
     /// what the HMAC was actually keyed on, not merely what got framed onto the wire.
     /// </summary>
@@ -567,12 +650,12 @@ internal sealed class TpmInHouseSimulatorPolicyTests
     }
 
     /// <summary>
-    /// R-9 capstone: <c>TPM_RH_NULL</c> is a permanent handle, so PolicySecret over it is accepted and mints a
+    /// <c>TPM_RH_NULL</c> is a permanent handle, so PolicySecret over it is accepted and mints a
     /// ticket bound to the Null hierarchy's proof. A NULL-hierarchy ticket minted before a TPM Reset must NOT
     /// verify after one when replayed through <c>TPM2_PolicyTicket()</c>: this simulator's own mechanism for
     /// that cross-Reset invalidation is <c>TimeEpoch</c> regeneration on every completed <c>TPM2_Startup()</c>
-    /// (equation 12's conditional <c>[timeEpoch]</c> term, TPM 2.0 Library Part 2, Section 10.7.5, Table 111) —
-    /// the simulator's realization of the same defense Part 2 Table 107 attributes to the Null hierarchy's own
+    /// (equation 12's conditional <c>[timeEpoch]</c> term, TPM 2.0 Library Part 2, clause 10.6.6, Table 114) —
+    /// the simulator's realization of the same defense Part 2 Table 108 attributes to the Null hierarchy's own
     /// proof changing on every Reset (here the per-hierarchy proof itself is seed-derived and stable; TimeEpoch
     /// regeneration is what carries the defense instead). A non-zero expiration is required to observe this:
     /// the <c>[timeEpoch]</c> term is omitted entirely when the ticket's timeout is zero.
@@ -643,6 +726,12 @@ internal sealed class TpmInHouseSimulatorPolicyTests
         }
     }
 
+    /// <summary>
+    /// Proves half of <c>TPM2_PolicyOR()</c>'s pHashList count bound: a branch count below two is
+    /// <c>TPM_RC_SIZE</c>, "response code when count is not at least two or is greater than eight"
+    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
+    /// Specification</see>, Part 2: Structures, clause 10.8.5, Table 126, printed page 147).
+    /// </summary>
     [TestMethod]
     public async Task PolicyOrRejectsBranchCountBelowTwo()
     {
@@ -665,6 +754,47 @@ internal sealed class TpmInHouseSimulatorPolicyTests
                 sessionHandle, oneBranch, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsFalse(orResult.IsSuccess, "PolicyOR with fewer than two branches must be rejected.");
+            Assert.AreEqual(TpmRcConstants.TPM_RC_SIZE, orResult.ResponseCode);
+        }
+        finally
+        {
+            _ = await tpm.FlushContextAsync(sessionHandle, TestContext.CancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Proves the other half of <c>TPM2_PolicyOR()</c>'s pHashList count bound: nine branches — one more than
+    /// Table 126's <c>{:8}</c> upper bound — is <c>TPM_RC_SIZE</c>
+    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
+    /// Specification</see>, Part 2: Structures, clause 10.8.5, Table 126, printed page 147).
+    /// </summary>
+    [TestMethod]
+    public async Task PolicyOrRejectsBranchCountAboveEight()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+
+        TpmResult<StartAuthSessionResponse> startResult = await tpm.StartPolicySessionAsync(
+            TpmAlgIdConstants.TPM_ALG_SHA256, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession failed: '{startResult.ResponseCode}'.");
+
+        using StartAuthSessionResponse session = startResult.Value;
+        uint sessionHandle = session.SessionHandle.Value;
+        try
+        {
+            var nineBranches = new ReadOnlyMemory<byte>[9];
+            for(int i = 0; i < nineBranches.Length; i++)
+            {
+                var branch = new byte[32];
+                branch.AsSpan().Fill((byte)(0x10 + i));
+                nineBranches[i] = branch;
+            }
+
+            TpmResult<PolicyOrResponse> orResult = await tpm.PolicyOrAsync(
+                sessionHandle, nineBranches, TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.IsFalse(orResult.IsSuccess, "PolicyOR with more than eight branches must be rejected.");
             Assert.AreEqual(TpmRcConstants.TPM_RC_SIZE, orResult.ResponseCode);
         }
         finally
@@ -963,7 +1093,7 @@ internal sealed class TpmInHouseSimulatorPolicyTests
 
     /// <summary>
     /// TPM2_PolicyNV folds the Index's REAL Name, which is computed over the whole retained public area
-    /// including <c>authPolicy</c> (TPM 2.0 Library Part 1, Section 14, Table 6 over the marshaled
+    /// including <c>authPolicy</c> (TPM 2.0 Library Part 1, Section 13, Table 9 over the marshaled
     /// TPMS_NV_PUBLIC of Part 2, Section 13.6). An Index defined WITH an access policy therefore folds a
     /// different Name than the otherwise identical Index defined without one: this test predicts with the real,
     /// policy-carrying Name and additionally proves the empty-policy Name gives a different digest, so a model
@@ -1291,10 +1421,10 @@ internal sealed class TpmInHouseSimulatorPolicyTests
     /// <summary>
     /// Verifies <c>TPM2_PolicyNV()</c>'s Index-authorization arm genuinely checks the supplied authValue against
     /// the Index's own retained value rather than parsing and discarding it (TPM 2.0 Library Part 3, clause
-    /// 23.9's authHandle authorization; Part 1, clause 17.6.4.1): a correct password against a dictionary-attack
+    /// 23.9's authHandle authorization; Part 1, clause 16.6.4.1): a correct password against a dictionary-attack
     /// protected, <c>AUTHWRITE|AUTHREAD</c> Index authorizes and folds the digest exactly as the predicted-digest
     /// tests above show; a wrong password is the NV family's own bare (never session-index encoded)
-    /// <c>TPM_RC_AUTH_FAIL</c> (clause 17.8.7's charge rule) and charges the shared lockout counter by exactly
+    /// <c>TPM_RC_AUTH_FAIL</c> (clause 16.8.7's charge rule) and charges the shared lockout counter by exactly
     /// one, observed through <c>TPM2_GetCapability</c>'s <c>TPM_PT_LOCKOUT_COUNTER</c> via
     /// <see cref="TpmDictionaryAttackExtensions.GetDictionaryAttackParametersAsync"/>.
     /// </summary>
@@ -1392,7 +1522,7 @@ internal sealed class TpmInHouseSimulatorPolicyTests
     /// Part 3, clause 23.9's <c>authHandle</c> role mirroring <c>TPM2_NV_Read()</c>'s own owner arm) genuinely
     /// checks the supplied value against the owner hierarchy's own authValue: a wrong owner authValue is the
     /// bare (never session-index encoded) <c>TPM_RC_BAD_AUTH</c> permanent-entity authorization always answers
-    /// (Part 1, clause 17.8.1 - owner authorization is dictionary-attack exempt, so the shared lockout counter
+    /// (Part 1, clause 16.8.1 - owner authorization is dictionary-attack exempt, so the shared lockout counter
     /// moves not at all), and the correct, freshly-rotated owner authValue then authorizes on the very same
     /// session.
     /// </summary>
@@ -1611,7 +1741,7 @@ internal sealed class TpmInHouseSimulatorPolicyTests
     /// <summary>
     /// Verifies a wrong password authorizing <c>TPM2_PolicyNV()</c> against a <c>TPM_NT_PIN_FAIL</c> Index
     /// applies the same localized pinCount outcome a wrong <c>TPM2_NV_Read()</c> would (TPM 2.0 Library Part 1,
-    /// clause 37.2.6.6): with <c>pinLimit</c> set to one, a single wrong PolicyNV attempt drives
+    /// clause 34.2.6.6): with <c>pinLimit</c> set to one, a single wrong PolicyNV attempt drives
     /// <c>pinCount</c> to <c>pinLimit</c>, so a SUBSEQUENT attempt with the CORRECT PIN is refused with
     /// <c>TPM_RC_AUTH_UNAVAILABLE</c> before any comparison — the same throttle-exhaustion observable the
     /// NV_Read PIN Fail tests assert, reached here through PolicyNV instead of NV_Read. A PIN Fail Index is
@@ -1635,7 +1765,7 @@ internal sealed class TpmInHouseSimulatorPolicyTests
         byte[] wrongPin = [0x09, 0x09, 0x09, 0x09];
 
         //A PIN Fail Index: TPMA_NV_NO_DA is spec-mandated, TPMA_NV_AUTHWRITE is spec-forbidden, and
-        //TPMA_NV_OWNERWRITE is the sole provisioning arm (TPM 2.0 Library Part 1, clause 37.2.6.1).
+        //TPMA_NV_OWNERWRITE is the sole provisioning arm (TPM 2.0 Library Part 1, clause 34.2.6.1).
         TpmaNv attributes = TpmaNv.TPMA_NV_AUTHREAD | TpmaNv.TPMA_NV_OWNERWRITE | TpmaNv.TPMA_NV_NO_DA
             | (TpmaNv)((uint)TpmNt.TPM_NT_PIN_FAIL << TpmaNvFields.TPM_NT_SHIFT);
 
@@ -1652,7 +1782,7 @@ internal sealed class TpmInHouseSimulatorPolicyTests
         try
         {
             //A PIN Index forbids its own authValue from authorizing writes, so pinCount/pinLimit are seeded
-            //through the owner-authorized write arm (TPM 2.0 Library Part 1, clause 37.2.6.1).
+            //through the owner-authorized write arm (TPM 2.0 Library Part 1, clause 34.2.6.1).
             using(TpmPasswordSession ownerWriteAuth = TpmPasswordSession.CreateEmpty(pool))
             {
                 using IMemoryOwner<byte> blobOwner = pool.Rent(PinCounterParametersSize);

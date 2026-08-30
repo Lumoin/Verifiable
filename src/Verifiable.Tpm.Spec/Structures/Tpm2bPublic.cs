@@ -25,7 +25,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// } TPM2B_PUBLIC;
 /// </code>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 12.2.5, Table 220.
+/// Specification reference: TPM 2.0 Library Part 2, Section 12.2.5, Table 236.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -33,7 +33,7 @@ public sealed class Tpm2bPublic: IDisposable, ITpmWireType
 {
     private IMemoryOwner<byte>? RawStorage { get; }
     private int RawLength { get; }
-    private bool disposed;
+    private bool Disposed { get; set; }
 
     /// <summary>
     /// Gets the public area.
@@ -60,7 +60,7 @@ public sealed class Tpm2bPublic: IDisposable, ITpmWireType
     /// </remarks>
     public ReadOnlySpan<byte> GetRawBytes()
     {
-        ObjectDisposedException.ThrowIf(disposed, this);
+        ObjectDisposedException.ThrowIf(Disposed, this);
 
         if(RawStorage is null)
         {
@@ -78,7 +78,7 @@ public sealed class Tpm2bPublic: IDisposable, ITpmWireType
     /// <returns>The raw public area bytes.</returns>
     public ReadOnlyMemory<byte> GetRawMemory()
     {
-        ObjectDisposedException.ThrowIf(disposed, this);
+        ObjectDisposedException.ThrowIf(Disposed, this);
 
         if(RawStorage is null)
         {
@@ -93,7 +93,7 @@ public sealed class Tpm2bPublic: IDisposable, ITpmWireType
     /// </summary>
     public int GetSerializedSize()
     {
-        ObjectDisposedException.ThrowIf(disposed, this);
+        ObjectDisposedException.ThrowIf(Disposed, this);
         return sizeof(ushort) + PublicArea.GetSerializedSize();
     }
 
@@ -103,7 +103,7 @@ public sealed class Tpm2bPublic: IDisposable, ITpmWireType
     /// <param name="writer">The writer.</param>
     public void WriteTo(ref TpmWriter writer)
     {
-        ObjectDisposedException.ThrowIf(disposed, this);
+        ObjectDisposedException.ThrowIf(Disposed, this);
 
         int innerSize = PublicArea.GetSerializedSize();
         writer.WriteUInt16((ushort)innerSize);
@@ -116,6 +116,8 @@ public sealed class Tpm2bPublic: IDisposable, ITpmWireType
     /// <param name="reader">The reader.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The parsed public buffer.</returns>
+    /// <exception cref="InvalidOperationException">The declared size is zero, or the public area inside is malformed.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The declared size exceeds the octets remaining in <paramref name="reader"/>; checked before any storage is rented, so a truncated frame orphans nothing.</exception>
     public static Tpm2bPublic Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
@@ -126,7 +128,12 @@ public sealed class Tpm2bPublic: IDisposable, ITpmWireType
             throw new InvalidOperationException("TPM2B_PUBLIC size cannot be zero.");
         }
 
-        // Read raw bytes for Name computation.
+        if(size > reader.Remaining)
+        {
+            throw new ArgumentOutOfRangeException(nameof(reader), (int)size, $"TPM2B_PUBLIC size {size} exceeds the {reader.Remaining} octets remaining in the reader.");
+        }
+
+        //The raw octets are retained for the Name computation.
         IMemoryOwner<byte> rawStorage = pool.Rent(size);
         try
         {
@@ -260,6 +267,51 @@ public sealed class Tpm2bPublic: IDisposable, ITpmWireType
     }
 
     /// <summary>
+    /// Creates a sized public buffer template for an unrestricted ECC decryption key usable with
+    /// <c>TPM2_Encapsulate()</c> and <c>TPM2_Decapsulate()</c> (TPM 2.0 Library Part 2, Table 229's KEM
+    /// admission gate; see <see cref="TpmtPublic.CreateEccKemKeyTemplate"/>).
+    /// </summary>
+    /// <param name="nameAlg">The hash algorithm for Name computation.</param>
+    /// <param name="objectAttributes">The object attributes (an unrestricted decryption key: DECRYPT set, RESTRICTED and SIGN_ENCRYPT clear).</param>
+    /// <param name="curve">The ECC curve — the DHKEM's <c>curveID</c>.</param>
+    /// <param name="kdfHashAlg">The HKDF hash algorithm — the DHKEM's KDF hash.</param>
+    /// <returns>The sized public buffer.</returns>
+    public static Tpm2bPublic CreateEccKemKeyTemplate(
+        TpmAlgIdConstants nameAlg,
+        TpmaObject objectAttributes,
+        TpmEccCurveConstants curve,
+        TpmAlgIdConstants kdfHashAlg)
+    {
+        return FromTemplate(TpmtPublic.CreateEccKemKeyTemplate(nameAlg, objectAttributes, curve, kdfHashAlg));
+    }
+
+    /// <summary>
+    /// Creates a TPM2B_PUBLIC for a generated ECC KEM key, carrying the key's actual public point (the
+    /// <c>outPublic</c> form), as opposed to the empty-unique template <see cref="CreateEccKemKeyTemplate"/>.
+    /// </summary>
+    /// <param name="nameAlg">Hash algorithm for Name computation.</param>
+    /// <param name="objectAttributes">The object attributes (an unrestricted decryption key: DECRYPT set, RESTRICTED and SIGN_ENCRYPT clear).</param>
+    /// <param name="curve">The ECC curve — the DHKEM's <c>curveID</c>.</param>
+    /// <param name="schemeHashAlg">The <c>scheme.details.ecdh.hashAlg</c> the creating template carried — echoed unchanged (Part 3, clause 24.1.1), independently of <paramref name="kdfHashAlg"/>.</param>
+    /// <param name="kdfHashAlg">The HKDF hash algorithm — the DHKEM's KDF hash.</param>
+    /// <param name="unique">The generated public point; ownership transfers to the returned buffer.</param>
+    /// <param name="pool">The memory pool backing the authPolicy digest (used only when one is supplied).</param>
+    /// <param name="authPolicy">The authorization policy digest to re-emit into the exported public area, or empty (default) for none.</param>
+    /// <returns>The sized public buffer.</returns>
+    public static Tpm2bPublic CreateEccKemKey(
+        TpmAlgIdConstants nameAlg,
+        TpmaObject objectAttributes,
+        TpmEccCurveConstants curve,
+        TpmAlgIdConstants schemeHashAlg,
+        TpmAlgIdConstants kdfHashAlg,
+        TpmsEccPoint unique,
+        BaseMemoryPool pool,
+        ReadOnlySpan<byte> authPolicy = default)
+    {
+        return FromTemplate(TpmtPublic.CreateEccKemKey(nameAlg, objectAttributes, curve, schemeHashAlg, kdfHashAlg, unique, pool, authPolicy));
+    }
+
+    /// <summary>
     /// Creates a sized public buffer template for an ECC restricted storage key, suitable as the parent
     /// of <c>TPM2_Create()</c>.
     /// </summary>
@@ -362,6 +414,22 @@ public sealed class Tpm2bPublic: IDisposable, ITpmWireType
     }
 
     /// <summary>
+    /// Creates a sized public buffer template for an ordinary (password-authorizable) RSA restricted storage
+    /// key — the RSA counterpart of <see cref="CreateEccStorageParentTemplate"/>.
+    /// </summary>
+    /// <param name="nameAlg">Hash algorithm for Name computation.</param>
+    /// <param name="keyBits">The RSA modulus size in bits.</param>
+    /// <param name="noDa">When <see langword="true"/>, sets TPMA_OBJECT.noDA so authorization failures against the parent do not advance the dictionary-attack lockout counter.</param>
+    /// <returns>The sized public buffer.</returns>
+    public static Tpm2bPublic CreateRsaStorageParentTemplate(
+        TpmAlgIdConstants nameAlg,
+        ushort keyBits,
+        bool noDa = false)
+    {
+        return FromTemplate(TpmtPublic.CreateRsaStorageParentTemplate(nameAlg, keyBits, noDa));
+    }
+
+    /// <summary>
     /// Creates a sized public buffer template for a sealed data object (KEYEDHASH, null scheme), optionally
     /// gated on an authorization policy (for example a <c>TPM2_PolicyPCR</c> digest).
     /// </summary>
@@ -376,14 +444,90 @@ public sealed class Tpm2bPublic: IDisposable, ITpmWireType
     /// Part 3, clause 5.6, check 7.1).
     /// </param>
     /// <returns>The sized public buffer.</returns>
+    /// <param name="isDuplicable">
+    /// When <see langword="true"/>, leaves TPMA_OBJECT.fixedTPM and fixedParent CLEAR so the created object may
+    /// later leave its parent through <c>TPM2_Duplicate()</c>; when <see langword="false"/> (the default), both
+    /// are SET and the object is bound to its parent and TPM for life (TPM 2.0 Library Part 2, clause 8.3.2,
+    /// Table 37; Part 1, Clause 20).
+    /// </param>
     public static Tpm2bPublic CreateSealedDataTemplate(
         TpmAlgIdConstants nameAlg,
         BaseMemoryPool pool,
         ReadOnlySpan<byte> authPolicy = default,
         bool noDa = false,
-        bool userWithAuth = true)
+        bool userWithAuth = true,
+        bool isDuplicable = false)
     {
-        return FromTemplate(TpmtPublic.CreateSealedDataTemplate(nameAlg, pool, authPolicy, noDa, userWithAuth));
+        return FromTemplate(TpmtPublic.CreateSealedDataTemplate(nameAlg, pool, authPolicy, noDa, userWithAuth, isDuplicable));
+    }
+
+    /// <summary>
+    /// Creates a sized public buffer template for an HMAC key (KEYEDHASH, HMAC scheme), optionally gated on an
+    /// authorization policy, delegating to <see cref="TpmtPublic.CreateHmacKeyTemplate"/>.
+    /// </summary>
+    /// <param name="nameAlg">Hash algorithm for Name computation.</param>
+    /// <param name="hashAlg">The HMAC hash algorithm (TPMS_SCHEME_HMAC's <c>hashAlg</c>).</param>
+    /// <param name="pool">The memory pool backing the authPolicy digest (used only when one is supplied).</param>
+    /// <param name="authPolicy">The authorization policy digest to bind the object to, or empty (default) for none.</param>
+    /// <param name="noDa">When <see langword="true"/>, sets TPMA_OBJECT.noDA so authorization failures against the key do not advance the dictionary-attack lockout counter.</param>
+    /// <param name="userWithAuth">
+    /// When <see langword="true"/> (the default), sets TPMA_OBJECT.userWithAuth so a USER-role action (such as
+    /// <c>TPM2_HMAC()</c>) may be authorized by an HMAC session or password as well as a policy session; when
+    /// <see langword="false"/>, only a policy session may authorize it (TPM 2.0 Library Part 2, clause 8.3.3;
+    /// Part 3, clause 5.6, check 7.1).
+    /// </param>
+    /// <param name="isDuplicable">
+    /// When <see langword="true"/>, leaves TPMA_OBJECT.fixedTPM and fixedParent CLEAR so the created key may
+    /// later leave its parent through <c>TPM2_Duplicate()</c>; when <see langword="false"/> (the default), both
+    /// are SET and the key is bound to its parent and TPM for life (TPM 2.0 Library Part 2, clause 8.3.2,
+    /// Table 37; Part 1, Clause 20).
+    /// </param>
+    /// <param name="isRestricted">
+    /// When <see langword="true"/>, sets TPMA_OBJECT.restricted, producing a restricted signing key rather than
+    /// an ordinary HMAC key usable with <c>TPM2_HMAC_Start()</c>/<c>TPM2_HMAC()</c>; <see langword="false"/> is
+    /// the default.
+    /// </param>
+    /// <param name="isSensitiveDataOrigin">
+    /// When <see langword="true"/> (the default), sets TPMA_OBJECT.sensitiveDataOrigin for a TPM-generated key;
+    /// set <see langword="false"/> when the caller supplies the key octets in <c>TPM2B_SENSITIVE_CREATE.data</c>.
+    /// </param>
+    /// <returns>The sized public buffer.</returns>
+    public static Tpm2bPublic CreateHmacKeyTemplate(
+        TpmAlgIdConstants nameAlg,
+        TpmAlgIdConstants hashAlg,
+        BaseMemoryPool pool,
+        ReadOnlySpan<byte> authPolicy = default,
+        bool noDa = false,
+        bool userWithAuth = true,
+        bool isDuplicable = false,
+        bool isRestricted = false,
+        bool isSensitiveDataOrigin = true)
+    {
+        return FromTemplate(TpmtPublic.CreateHmacKeyTemplate(
+            nameAlg, hashAlg, pool, authPolicy, noDa, userWithAuth, isDuplicable, isRestricted, isSensitiveDataOrigin));
+    }
+
+    /// <summary>
+    /// Creates a sized public buffer for a KEYEDHASH object that echoes an exact attribute word and scheme, the
+    /// form <c>TPM2_Create()</c> returns as <c>outPublic</c> (TPM 2.0 Library Part 3, clause 12.1). Delegates to
+    /// <see cref="TpmtPublic.CreateKeyedHashTemplate"/>.
+    /// </summary>
+    /// <param name="nameAlg">The object's name algorithm.</param>
+    /// <param name="objectAttributes">The exact <c>TPMA_OBJECT</c> attribute word.</param>
+    /// <param name="scheme">The keyed-hash scheme (NULL for a data object, HMAC for a signing key).</param>
+    /// <param name="authPolicy">The authorization policy digest.</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <param name="unique">The <c>unique</c> value to carry — <c>H_nameAlg(seedValue ‖ sensitive)</c> per Part 2, clause 12.2.3.1, equation (8); Part 1, clause 24.5.3.2, equation (48) — or empty for the template form a caller sends.</param>
+    /// <returns>The sized KEYEDHASH public buffer.</returns>
+    public static Tpm2bPublic CreateKeyedHashTemplate(
+        TpmAlgIdConstants nameAlg,
+        TpmaObject objectAttributes,
+        TpmsKeyedHashParms scheme,
+        ReadOnlySpan<byte> authPolicy,
+        BaseMemoryPool pool,
+        ReadOnlySpan<byte> unique = default)
+    {
+        return FromTemplate(TpmtPublic.CreateKeyedHashTemplate(nameAlg, objectAttributes, scheme, authPolicy, pool, unique));
     }
 
     /// <summary>
@@ -391,11 +535,11 @@ public sealed class Tpm2bPublic: IDisposable, ITpmWireType
     /// </summary>
     public void Dispose()
     {
-        if(!disposed)
+        if(!Disposed)
         {
             PublicArea.Dispose();
             RawStorage?.Dispose();
-            disposed = true;
+            Disposed = true;
         }
     }
 

@@ -98,7 +98,7 @@ public readonly record struct TpmiShAuthSession(uint Value)
     /// <summary>
     /// Decides whether a raw handle value belongs to the interface type's admitted set: an HMAC session
     /// (<c>TPM_HT_HMAC_SESSION</c>), a policy session (<c>TPM_HT_POLICY_SESSION</c>), or the password session
-    /// pseudo-handle <c>TPM_RS_PW</c> (TPM 2.0 Library Part 2, clause 9.8, Table 55).
+    /// pseudo-handle <c>TPM_RS_PW</c> (TPM 2.0 Library Part 2, clause 9.8, Table 54).
     /// </summary>
     /// <param name="value">The raw handle value.</param>
     /// <returns><see langword="true"/> when the value is one the interface type admits.</returns>

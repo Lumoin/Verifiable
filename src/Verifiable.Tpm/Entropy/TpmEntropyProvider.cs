@@ -138,7 +138,7 @@ public sealed class TpmEntropyProvider
 
     /// <summary>
     /// Assesses the entropy source's health by running <c>TPM2_SelfTest()</c> and mapping its response
-    /// code to an <see cref="EntropyHealthObservation"/> (TPM 2.0 Library Part 1, clause 10.3). The
+    /// code to an <see cref="EntropyHealthObservation"/> (TPM 2.0 Library Part 1, clause 9.3). The
     /// observation is retained as <see cref="CurrentHealth"/> and stamped on subsequent draws.
     /// </summary>
     /// <param name="cancellationToken">Token observed across the device round-trip.</param>
@@ -147,7 +147,7 @@ public sealed class TpmEntropyProvider
     {
         SelfTestResult selfTest = await SubmitSelfTestAsync(cancellationToken).ConfigureAwait(false);
 
-        //Map the self-test outcome (Part 1, clause 10.3): SUCCESS is healthy; TPM_RC_TESTING is a
+        //Map the self-test outcome (Part 1, clause 9.3): SUCCESS is healthy; TPM_RC_TESTING is a
         //warning (tests still in progress) so health is not yet determined; any other code is a genuine
         //failure. A transport loss yields no verdict at all, so it is likewise indeterminate — and its
         //evidence records the transport code, never a self-test code, so the two causes are not conflated.

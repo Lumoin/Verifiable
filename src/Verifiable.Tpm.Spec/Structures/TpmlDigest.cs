@@ -21,7 +21,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 ///   <item><description>digests[count] (TPM2B_DIGEST) - array of digests.</description></item>
 /// </list>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 10.9.5, Table 123.
+/// Specification reference: TPM 2.0 Library Part 2, Section 10.8.5, Table 126.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -99,7 +99,7 @@ public sealed class TpmlDigest: ITpmWireType, IDisposable
         uint count = reader.ReadUInt32();
 
         //Each digest is a TPM2B_DIGEST occupying at least its 2-byte size prefix, so a count larger than the
-        //remaining buffer can hold is a malformed length and must not size the backing list (Part 2, §10.9.5).
+        //remaining buffer can hold is a malformed length and must not size the backing list (Part 2, §10.8.5).
         reader.EnsureCount(count, sizeof(ushort));
 
         var digests = new List<Tpm2bDigest>((int)count);
@@ -162,6 +162,49 @@ public sealed class TpmlDigest: ITpmWireType, IDisposable
         }
 
         return new TpmlDigest(carriers);
+    }
+
+    /// <summary>
+    /// Adopts a caller-assembled sequence of already-built digests as this structure's storage: ownership of
+    /// every entry transfers to the returned instance, with no re-copy into a second pooled rental — the
+    /// zero-copy counterpart of <see cref="Create(IReadOnlyList{ReadOnlyMemory{byte}}, BaseMemoryPool)"/> for a
+    /// producer that already parsed or built each <see cref="Tpm2bDigest"/> one at a time (for example one
+    /// branch at a time in <c>TPM2_PolicyOR</c>'s branch loop) and now assembles them into a
+    /// <c>TPML_DIGEST</c> without a second pass over pooled storage.
+    /// </summary>
+    /// <remarks>
+    /// Ownership of every entry in <paramref name="digests"/> transfers to this call, regardless of outcome: on
+    /// success the returned instance owns them all; a <see langword="null"/> entry disposes every non-null
+    /// entry in <paramref name="digests"/> — whether it sits before or after the rejected index — before the
+    /// exception leaves, so a rejected adoption never orphans a pinned rental and a caller never disposes an
+    /// entry it has already handed to this method. Validation runs to completion over the whole list before any
+    /// entry is accepted into the returned instance, so no entry is ever both disposed by the failure path and
+    /// owned by a successfully constructed list.
+    /// </remarks>
+    /// <param name="digests">The already-built digests, in list order; ownership of each transfers to this call.</param>
+    /// <returns>The adopted digest list.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="digests"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">An entry of <paramref name="digests"/> is <see langword="null"/>.</exception>
+    public static TpmlDigest Adopt(IReadOnlyList<Tpm2bDigest> digests)
+    {
+        ArgumentNullException.ThrowIfNull(digests);
+
+        for(int i = 0; i < digests.Count; i++)
+        {
+            if(digests[i] is null)
+            {
+                for(int j = 0; j < digests.Count; j++)
+                {
+                    digests[j]?.Dispose();
+                }
+
+                throw new ArgumentException("The digest list contains a null entry.", nameof(digests));
+            }
+        }
+
+        var owned = new List<Tpm2bDigest>(digests);
+
+        return new TpmlDigest(owned);
     }
 
     /// <summary>

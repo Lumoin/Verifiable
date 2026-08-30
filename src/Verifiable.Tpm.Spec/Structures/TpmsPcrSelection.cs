@@ -31,7 +31,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// To select PCR 16: pcrSelect[2] bit 0 = 1 (0x01).
 /// </para>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, section 10.6.2, Table 106.
+/// Specification reference: TPM 2.0 Library Part 2, section 10.5.2, Table 107.
 /// </para>
 /// </remarks>
 /// <param name="HashAlgorithm">The hash algorithm associated with this PCR bank.</param>

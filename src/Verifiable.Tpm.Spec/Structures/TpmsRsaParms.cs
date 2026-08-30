@@ -24,7 +24,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// An exponent of zero indicates the default exponent of 2^16+1 (65537).
 /// </para>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 12.2.3.5, Table 215.
+/// Specification reference: TPM 2.0 Library Part 2, Section 12.2.3.5, Table 228.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]

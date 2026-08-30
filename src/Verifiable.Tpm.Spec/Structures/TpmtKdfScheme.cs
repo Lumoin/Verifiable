@@ -22,12 +22,21 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </code>
 /// <para>
 /// When scheme is TPM_ALG_NULL, details is not present on the wire.
-/// Currently, KDF schemes only contain a hash algorithm parameter.
+/// Currently, KDF schemes only contain a hash algorithm parameter: v185's
+/// <c>TPMU_KDF_SCHEME</c> (Table 187) adds the <c>hkdf</c> arm, <c>TPMS_KDF_SCHEME_HKDF</c>, but that
+/// type is itself just <c>TPMS_SCHEME_HASH</c> (a bare <c>hashAlg</c>) — the same shape every other arm
+/// already has, so this structure needs no field change to carry it.
 /// </para>
 /// <para>
-/// <b>Note:</b> Per the spec, there are currently no commands where the KDF
-/// parameter has effect, and in the Reference Code this field needs to be
-/// set to TPM_ALG_NULL.
+/// <b>v185: TPM_ALG_HKDF and the ECC KEM.</b> Library v185 adds <c>TPM_ALG_HKDF</c> to
+/// <c>TPMI_ALG_KDF</c> (Table 82). On an unrestricted decryption <c>TPM_ALG_ECDH</c> ECC key
+/// (<see cref="TpmsEccParms.Kdf"/>), a non-<c>NULL</c> <c>kdf</c> here — HKDF is currently the only
+/// admitted scheme (TPM 2.0 Library Part 2, Table 229) — marks the key usable with
+/// <c>TPM2_Encapsulate()</c> and <c>TPM2_Decapsulate()</c>: the KEM those commands perform is
+/// DHKEM(curveID, kdf) per <see href="https://www.rfc-editor.org/rfc/rfc9180">RFC 9180</see> (HPKE),
+/// with this scheme's <see cref="HashAlg"/> the KDF's hash. This is a distinct, newer path from
+/// <c>TPMS_ECC_PARMS.scheme</c>'s own <c>TPM_ALG_ECDH</c> arm (<see cref="TpmtEccScheme.Ecdh"/>), which
+/// selects raw ECDH key agreement (<c>TPM2_ECDH_ZGen</c>) rather than the KEM primitive.
 /// </para>
 /// <para>
 /// Specification reference: TPM 2.0 Library Part 2, Section 11.2.3.3.
@@ -40,7 +49,7 @@ public readonly record struct TpmtKdfScheme
     /// Gets the KDF algorithm.
     /// </summary>
     /// <remarks>
-    /// Common values: TPM_ALG_KDF1_SP800_56A, TPM_ALG_KDF1_SP800_108, TPM_ALG_NULL.
+    /// Common values: TPM_ALG_KDF1_SP800_56A, TPM_ALG_KDF1_SP800_108, TPM_ALG_HKDF, TPM_ALG_NULL.
     /// </remarks>
     public TpmAlgIdConstants Scheme { get; init; }
 

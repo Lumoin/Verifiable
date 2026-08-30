@@ -24,7 +24,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// } TPM2B_ATTEST;
 /// </code>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 10.12.13, Table 179.
+/// Specification reference: TPM 2.0 Library Part 2, Section 10.11.13, Table 155.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -145,9 +145,21 @@ public sealed class Tpm2bAttest: ITpmWireType, IDisposable
     /// <summary>
     /// Parses a sized attestation buffer from a TPM reader.
     /// </summary>
+    /// <remarks>
+    /// The declared size is checked against <see cref="TpmReader.Remaining"/> before <c>rawStorage</c> is
+    /// rented, so a truncated outer buffer throws the same <see cref="ArgumentOutOfRangeException"/>
+    /// <see cref="TpmReader.ReadBytes(int)"/> would have thrown without ever renting. Once <c>rawStorage</c> is
+    /// rented, a refusing <see cref="TpmsAttest.Parse"/> — any field of the enclosed structure, including the
+    /// nested <c>TPMU_ATTEST</c> body, declaring a size past its own bound, or truncated before it — is caught
+    /// and <c>rawStorage</c> is released before the exception leaves, the same try/catch/dispose/rethrow shape as
+    /// <see cref="FromMarshaled"/>.
+    /// </remarks>
     /// <param name="reader">The reader.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The parsed attestation buffer.</returns>
+    /// <exception cref="InvalidOperationException">The declared size is zero, or a field of the enclosed <c>TPMS_ATTEST</c> declares a size past its own structure's bound.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The declared size exceeds the octets remaining in <paramref name="reader"/>, or a field of the enclosed <c>TPMS_ATTEST</c> is truncated before its own declared size.</exception>
+    /// <exception cref="NotSupportedException">The enclosed <c>TPMS_ATTEST</c> names an attestation type <see cref="TpmuAttest.Parse"/> does not model.</exception>
     public static Tpm2bAttest Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
@@ -158,16 +170,29 @@ public sealed class Tpm2bAttest: ITpmWireType, IDisposable
             throw new InvalidOperationException("TPM2B_ATTEST size cannot be zero.");
         }
 
+        if(size > reader.Remaining)
+        {
+            throw new ArgumentOutOfRangeException(nameof(reader), size, $"TPM2B_ATTEST size {size} exceeds the {reader.Remaining} octets remaining in the reader.");
+        }
+
         //Retain the raw bytes: the signature is over them, so verification hashes these exact bytes.
         IMemoryOwner<byte> rawStorage = pool.Rent(size);
-        ReadOnlySpan<byte> source = reader.ReadBytes(size);
-        source.CopyTo(rawStorage.Memory.Span.Slice(0, size));
+        try
+        {
+            ReadOnlySpan<byte> source = reader.ReadBytes(size);
+            source.CopyTo(rawStorage.Memory.Span.Slice(0, size));
 
-        //Parse the TPMS_ATTEST from the raw bytes.
-        var innerReader = new TpmReader(rawStorage.Memory.Span.Slice(0, size));
-        TpmsAttest attestationData = TpmsAttest.Parse(ref innerReader, pool);
+            //Parse the TPMS_ATTEST from the raw bytes.
+            var innerReader = new TpmReader(rawStorage.Memory.Span.Slice(0, size));
+            TpmsAttest attestationData = TpmsAttest.Parse(ref innerReader, pool);
 
-        return new Tpm2bAttest(attestationData, rawStorage, size);
+            return new Tpm2bAttest(attestationData, rawStorage, size);
+        }
+        catch
+        {
+            rawStorage.Dispose();
+            throw;
+        }
     }
 
     /// <summary>

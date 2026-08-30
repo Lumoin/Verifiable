@@ -34,18 +34,18 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// for zero-length buffers.
 /// </para>
 /// <para>
-/// See TPM 2.0 Part 1, Section 17.6.3 - Session Nonces.
-/// See TPM 2.0 Part 2, Section 10.4.4.
+/// See TPM 2.0 Part 1, Section 16.6.3 - Session Nonces.
+/// See TPM 2.0 Part 2, Section 10.3.4.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 public sealed class Tpm2bNonce: SensitiveMemory, ITpmWireType
 {
     /// <summary>
-    /// The largest nonce a <c>TPM2B_NONCE</c> buffer may carry: <c>sizeof(TPMU_HA)</c>, 64 octets. Table 94
+    /// The largest nonce a <c>TPM2B_NONCE</c> buffer may carry: <c>sizeof(TPMU_HA)</c>, 64 octets. Table 92
     /// defines the type as a <c>TPM2B_DIGEST</c> whose "size limited to the same as the digest structure" (TPM
-    /// 2.0 Library Part 2, clause 10.4.4, page 134), and that structure's own table bounds its buffer field at
-    /// <c>buffer[size]{:sizeof(TPMU_HA)}</c> (clause 10.4.2, Table 92, page 134). The same clause states what a
+    /// 2.0 Library Part 2, clause 10.3.4, page 134), and that structure's own table bounds its buffer field at
+    /// <c>buffer[size]{:sizeof(TPMU_HA)}</c> (clause 10.3.2, Table 90, page 134). The same clause states what a
     /// wider value answers with: "As with all sized buffers, the size is checked to see if it is within the
     /// prescribed range. If not, the response code is TPM_RC_SIZE", and its note adds that "For any structure,
     /// like the one below, that contains an implied size check, it is implied that TPM_RC_SIZE is a possible

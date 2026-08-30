@@ -22,7 +22,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// } TPM2B_SENSITIVE_CREATE;
 /// </code>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 11.1.16, Table 169.
+/// Specification reference: TPM 2.0 Library Part 2, Section 11.1.16, Table 172.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -88,10 +88,39 @@ public sealed class Tpm2bSensitiveCreate: IDisposable
     /// <param name="userAuth">The authorization value the created object's <c>userAuth</c> is set to.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>Sensitive creation buffer carrying the authorization value and the data to seal.</returns>
+    /// <exception cref="ArgumentException"><paramref name="secret"/> is wider than <see cref="Tpm2bSensitiveData.MaxSize"/> or <paramref name="userAuth"/> wider than <see cref="Tpm2bAuth.MaxSize"/>; nothing stays rented.</exception>
     public static Tpm2bSensitiveCreate ForSealedData(ReadOnlySpan<byte> secret, ReadOnlySpan<byte> userAuth, BaseMemoryPool pool)
     {
-        return new Tpm2bSensitiveCreate(
-            new TpmsSensitiveCreate(Tpm2bAuth.Create(userAuth, pool), Tpm2bSensitiveData.Create(secret, pool)));
+        Tpm2bAuth auth = Tpm2bAuth.Create(userAuth, pool);
+        try
+        {
+            return new Tpm2bSensitiveCreate(new TpmsSensitiveCreate(auth, Tpm2bSensitiveData.Create(secret, pool)));
+        }
+        catch
+        {
+            //The authorization carrier is already rented when the data refusal throws; release it.
+            auth.Dispose();
+
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Creates a sensitive creation buffer for an HMAC key: the new object's <c>userAuth</c> plus the caller's
+    /// key octets as the sensitive data (TPM 2.0 Library Part 2, Section 11.1.15). This is the identical
+    /// TPMS_SENSITIVE_CREATE shape <see cref="ForSealedData(ReadOnlySpan{byte}, ReadOnlySpan{byte}, BaseMemoryPool)"/>
+    /// builds for a sealed data object — both a sealed secret and an HMAC key are TPM_ALG_KEYEDHASH sensitive
+    /// data, distinguished only by the public area's scheme (<see cref="TpmsKeyedHashParms.Hmac"/> versus
+    /// <see cref="TpmsKeyedHashParms.SealedData"/>). Both are copied into pooled storage the returned instance
+    /// owns and clears on disposal.
+    /// </summary>
+    /// <param name="key">The HMAC key octets, or empty to let the TPM generate the key (then the public area's TPMA_OBJECT.sensitiveDataOrigin must be SET).</param>
+    /// <param name="userAuth">The authorization value the created object's <c>userAuth</c> is set to.</param>
+    /// <param name="pool">The memory pool for allocating storage.</param>
+    /// <returns>Sensitive creation buffer carrying the authorization value and the HMAC key.</returns>
+    public static Tpm2bSensitiveCreate ForHmacKey(ReadOnlySpan<byte> key, ReadOnlySpan<byte> userAuth, BaseMemoryPool pool)
+    {
+        return ForSealedData(key, userAuth, pool);
     }
 
     /// <summary>

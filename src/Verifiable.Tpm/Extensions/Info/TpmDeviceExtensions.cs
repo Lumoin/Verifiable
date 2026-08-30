@@ -151,7 +151,7 @@ public static class TpmDeviceExtensions
         int fwPatch = (int)(fwv2 & 0xFFFF);
 
         int year = (int)properties.GetValueOrDefault(TpmPtConstants.TPM_PT_YEAR, 0u);
-        int dayOfYear = (int)properties.GetValueOrDefault(TpmPtConstants.TPM_PT_DAY_OF_YEAR, 0u);
+        int specErrata = (int)properties.GetValueOrDefault(TpmPtConstants.TPM_PT_ERRATA, 0u);
         int pcrCount = (int)properties.GetValueOrDefault(TpmPtConstants.TPM_PT_PCR_COUNT, 0u);
         int maxInputBuffer = (int)properties.GetValueOrDefault(TpmPtConstants.TPM_PT_INPUT_BUFFER, 0u);
         int maxNvBuffer = (int)properties.GetValueOrDefault(TpmPtConstants.TPM_PT_NV_BUFFER_MAX, 0u);
@@ -168,7 +168,7 @@ public static class TpmDeviceExtensions
             fwBuild,
             fwPatch,
             year,
-            dayOfYear,
+            specErrata,
             pcrCount,
             maxInputBuffer,
             maxNvBuffer);

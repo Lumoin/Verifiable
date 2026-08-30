@@ -41,7 +41,7 @@ internal sealed class TpmInHouseSimulatorPolicyCounterTimerTests
     /// <summary>The policy session hash algorithm used throughout.</summary>
     private const TpmAlgIdConstants SessionAlg = TpmAlgIdConstants.TPM_ALG_SHA256;
 
-    /// <summary>The byte offset of <c>resetCount</c> in the marshaled TPMS_TIME_INFO (Part 2, Section 10.11.1/10.11.6).</summary>
+    /// <summary>The byte offset of <c>resetCount</c> in the marshaled TPMS_TIME_INFO (Part 2, Section 10.10.1/10.10.6).</summary>
     private const ushort ResetCountOffset = 16;
 
     /// <summary>The fixed secret sealed and recovered by the flagship flow test.</summary>

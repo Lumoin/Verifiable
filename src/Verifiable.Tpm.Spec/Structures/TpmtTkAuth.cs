@@ -26,10 +26,10 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </code>
 /// <para>
 /// <b>NULL ticket:</b> "A NULL Auth Ticket is the tuple &lt;TPM_ST_AUTH_SIGNED, TPM_RH_NULL, 0x0000&gt;"
-/// (clause 10.7.5); clause 10.7.2 is the general construct.
+/// (clause 10.6.6); clause 10.6.2 is the general construct.
 /// </para>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, section 10.7.5, Table 111.
+/// Specification reference: TPM 2.0 Library Part 2, section 10.6.6, Table 114.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -66,8 +66,8 @@ public sealed class TpmtTkAuth: IDisposable, ITpmWireType
     public TpmStConstants Tag { get; }
 
     /// <summary>
-    /// Gets the hierarchy of the object used to produce the ticket, typed <c>TPMI_RH_HIERARCHY+</c> as Table 111
-    /// names it — the four hierarchy selectors of Part 2, clause 9.13, Table 60, the NULL hierarchy among them.
+    /// Gets the hierarchy of the object used to produce the ticket, typed <c>TPMI_RH_HIERARCHY+</c> as Table 114
+    /// names it — the four hierarchy selectors of Part 2, clause 9.13, Table 59, the NULL hierarchy among them.
     /// </summary>
     public TpmiRhHierarchy Hierarchy { get; }
 
@@ -83,12 +83,12 @@ public sealed class TpmtTkAuth: IDisposable, ITpmWireType
     }
 
     /// <summary>
-    /// Gets the NULL Auth Ticket in the <c>TPM_ST_AUTH_SIGNED</c> form clause 10.7.5 names.
+    /// Gets the NULL Auth Ticket in the <c>TPM_ST_AUTH_SIGNED</c> form clause 10.6.6 names.
     /// </summary>
     public static TpmtTkAuth Null => NullInstance;
 
     /// <summary>
-    /// Gets whether this is a NULL ticket: the NULL hierarchy with an Empty Buffer digest (clause 10.7.2).
+    /// Gets whether this is a NULL ticket: the NULL hierarchy with an Empty Buffer digest (clause 10.6.2).
     /// </summary>
     public bool IsNull => Hierarchy.IsNull && DigestLength == 0;
 
@@ -152,7 +152,7 @@ public sealed class TpmtTkAuth: IDisposable, ITpmWireType
     /// <param name="reader">The reader.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The parsed authorization ticket.</returns>
-    /// <exception cref="InvalidOperationException">The tag is neither <c>TPM_ST_AUTH_SIGNED</c> nor <c>TPM_ST_AUTH_SECRET</c> (<c>TPM_RC_TAG</c>, Table 111), or the hierarchy is not a <c>TPMI_RH_HIERARCHY</c> selector (<c>TPM_RC_VALUE</c>, Table 60).</exception>
+    /// <exception cref="InvalidOperationException">The tag is neither <c>TPM_ST_AUTH_SIGNED</c> nor <c>TPM_ST_AUTH_SECRET</c> (<c>TPM_RC_TAG</c>, Table 114), or the hierarchy is not a <c>TPMI_RH_HIERARCHY</c> selector (<c>TPM_RC_VALUE</c>, Table 59).</exception>
     public static TpmtTkAuth Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
@@ -197,7 +197,7 @@ public sealed class TpmtTkAuth: IDisposable, ITpmWireType
     /// assembler that frames a ticket back onto the wire for <c>TPM2_PolicyTicket()</c>.
     /// </summary>
     /// <remarks>
-    /// The tag is framed exactly as handed over and is NOT checked against Table 111's set: a caller replaying a
+    /// The tag is framed exactly as handed over and is NOT checked against Table 128's set: a caller replaying a
     /// ticket is asserting what the TPM gave it, and the TPM is the party that answers <c>TPM_RC_TAG</c> for a
     /// tag it does not recognize (Part 3, clause 23.5). The hierarchy likewise rides through unvalidated for the
     /// same reason, so an out-of-set selector reaches the TPM and is answered there.

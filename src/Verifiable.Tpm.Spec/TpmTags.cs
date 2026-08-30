@@ -33,7 +33,7 @@ public static class TpmTags
     /// </summary>
     /// <remarks>
     /// Used for nonceCaller and nonceTPM in session protocols.
-    /// See TPM 2.0 Part 1, Section 17.6.3 - Session Nonces.
+    /// See TPM 2.0 Part 1, Section 16.6.3 - Session Nonces.
     /// </remarks>
     public static Tag Nonce { get; } = Tag.Create(Purpose.Nonce).With(MaterialSemantics.Direct);
 
@@ -42,7 +42,7 @@ public static class TpmTags
     /// </summary>
     /// <remarks>
     /// Used for passwords, HMACs, and authValue in authorization protocols.
-    /// See TPM 2.0 Part 1, Section 17.6.4 - Authorization Values.
+    /// See TPM 2.0 Part 1, Section 16.6.4 - Authorization Values.
     /// </remarks>
     public static Tag Auth { get; } = Tag.Create(Purpose.Hmac).With(MaterialSemantics.Direct);
 
@@ -67,7 +67,7 @@ public static class TpmTags
     /// </summary>
     /// <remarks>
     /// Used for x and y coordinates in ECC public points.
-    /// See TPM 2.0 Part 2, Section 10.2.5.
+    /// See TPM 2.0 Part 2, Section 11.2.5.1.
     /// </remarks>
     public static Tag EccParameter { get; } = Tag.Create(Purpose.Verification).With(MaterialSemantics.Direct);
 
@@ -76,7 +76,7 @@ public static class TpmTags
     /// </summary>
     /// <remarks>
     /// Used for sensitive data in sealed objects or key derivation.
-    /// See TPM 2.0 Part 2, Section 10.9.3.
+    /// See TPM 2.0 Part 2, Section 11.1.14, Table 170 (Definition of TPM2B_SENSITIVE_DATA Structure).
     /// </remarks>
     public static Tag SensitiveData { get; } = Tag.Create(Purpose.Encryption).With(MaterialSemantics.Direct);
 
@@ -85,7 +85,7 @@ public static class TpmTags
     /// salted session carries for its whole life.
     /// </summary>
     /// <remarks>
-    /// See TPM 2.0 Part 1, Section 17.6.10 equation 20 - Bound Session Key Generation. Distinct from
+    /// See TPM 2.0 Part 1, Section 16.6.10 equation 20 - Bound Session Key Generation. Distinct from
     /// <see cref="Auth"/> (a caller-supplied authorization value) even though both are HMAC-purposed:
     /// a session key is KDFa output the TPM itself derives and retains.
     /// </remarks>
@@ -97,7 +97,7 @@ public static class TpmTags
     /// decision.
     /// </summary>
     /// <remarks>
-    /// See TPM 2.0 Part 1, Section 17.6.10 ("the authorization value is combined with the Name and
+    /// See TPM 2.0 Part 1, Section 16.6.10 ("the authorization value is combined with the Name and
     /// stored in the SESSION boundEntity member") and Part 4, <c>SessionComputeBoundEntity()</c>.
     /// </remarks>
     public static Tag BoundEntity { get; } = Tag.Create(Purpose.Verification).With(MaterialSemantics.Direct);
@@ -108,10 +108,22 @@ public static class TpmTags
     /// a real TPM keeps in NV.
     /// </summary>
     /// <remarks>
-    /// See TPM 2.0 Part 1, Sections 12.4.4 and 12.5. HMAC-purposed because every consumer keys a
+    /// See TPM 2.0 Part 1, Sections 11.4.4 and 11.5. HMAC-purposed because every consumer keys a
     /// proof HMAC from it (tickets, context integrity); distinct from <see cref="SessionKey"/> (a
     /// per-session KDFa output) and from <see cref="Auth"/> (a caller-supplied authorization value) —
     /// this seed is TPM-internal root material that never crosses the wire.
     /// </remarks>
     public static Tag StorageProofSeed { get; } = Tag.Create(Purpose.Hmac).With(MaterialSemantics.Direct);
+
+    /// <summary>
+    /// Tag for TPM2B_SHARED_SECRET - the shared secret a KEM key exchange produces.
+    /// </summary>
+    /// <remarks>
+    /// Used for the <c>sharedSecret</c> response of <c>TPM2_Encapsulate()</c> and
+    /// <c>TPM2_Decapsulate()</c> (TPM 2.0 Part 2, clause 10.3.12, Table 100). Carries
+    /// <see cref="Purpose.Exchange"/> — key-agreement output, the same purpose the ECC and X25519
+    /// exchange-key tags in <c>CryptoTags</c> carry — rather than <see cref="Digest"/>, because a KEM
+    /// shared secret is DHKEM/ML-KEM derived material feeding a further KDF, not a hash result.
+    /// </remarks>
+    public static Tag SharedSecret { get; } = Tag.Create(Purpose.Exchange).With(MaterialSemantics.Direct);
 }

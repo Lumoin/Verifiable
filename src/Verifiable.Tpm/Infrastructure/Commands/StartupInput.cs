@@ -3,7 +3,7 @@ using Verifiable.Tpm.Spec.Constants;
 namespace Verifiable.Tpm.Infrastructure.Commands;
 
 /// <summary>
-/// Input for the TPM2_Startup command (TPM 2.0 Library Part 1, clause 10.2.3; Part 3, clause 9.3).
+/// Input for the TPM2_Startup command (TPM 2.0 Library Part 1, clause 9.2.3; Part 3, clause 9.3).
 /// </summary>
 /// <remarks>
 /// <para>

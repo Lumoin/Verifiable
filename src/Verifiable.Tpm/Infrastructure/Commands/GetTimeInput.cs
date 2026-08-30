@@ -16,7 +16,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// the key referenced by <see cref="SignHandle"/>. This command requires Endorsement authorization.
 /// </para>
 /// <para>
-/// Command structure (TPM 2.0 Part 3, Section 18.7, Table 96):
+/// Command structure (TPM 2.0 Part 3, Section 18.7, Table 107):
 /// </para>
 /// <list type="bullet">
 ///   <item><description>privacyAdminHandle (TPMI_RH_ENDORSEMENT): Fixed to TPM_RH_ENDORSEMENT. Requires authorization (USER role).</description></item>
@@ -42,8 +42,8 @@ public sealed class GetTimeInput: ITpmCommandInput, IDisposable
     /// <inheritdoc/>
     /// <remarks>
     /// <c>qualifyingData</c> (<c>TPM2B_DATA</c>) is the first entry of the parameter area and carries an
-    /// explicit size field (TPM 2.0 Library Part 3, clause 18.7, Table 99), which is what TPM 2.0 Library Part 1,
-    /// clause 19.1 requires of an encryptable parameter and what clause 16.4 restates ("for a command or response
+    /// explicit size field (TPM 2.0 Library Part 3, clause 18.7, Table 107), which is what TPM 2.0 Library Part 1,
+    /// clause 18.1 requires of an encryptable parameter and what clause 15.4 restates ("for a command or response
     /// parameter to be encrypted, it must be the first parameter and it must be a TPM2B type"). A session without
     /// the <c>decrypt</c> attribute is unaffected; the attribute is what asks the TPM to decrypt the parameter
     /// after the command HMACs verify, so the caller nonce this command echoes into the attestation's

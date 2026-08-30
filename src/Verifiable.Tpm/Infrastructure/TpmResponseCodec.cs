@@ -91,7 +91,7 @@ public sealed class TpmResponseCodec
     /// encryption (the command's <c>encrypt</c> attribute).
     /// </summary>
     /// <remarks>
-    /// Per TPM 2.0 Library Part 1, Section 19.1 only the first response parameter can be encrypted, and only
+    /// Per TPM 2.0 Library Part 1, Section 18.1 only the first response parameter can be encrypted, and only
     /// when it has an explicit size field. The executor decrypts the first response parameter (after the
     /// response HMAC verifies) only when an <c>encrypt</c> session is present and this is <see langword="true"/>.
     /// </remarks>

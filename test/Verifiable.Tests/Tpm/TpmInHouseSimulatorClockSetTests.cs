@@ -82,8 +82,8 @@ internal sealed class TpmInHouseSimulatorClockSetTests
     }
 
     /// <summary>
-    /// Verifies that setting Clock above the clause 36.3 ceiling (<c>FF FF 00 00 00 00 00 00(16)</c>) is
-    /// rejected with <c>TPM_RC_VALUE</c> (TPM 2.0 Library Part 1, clause 36.3; Part 3, clause 29.2).
+    /// Verifies that setting Clock above the clause 33.3 ceiling (<c>FF FF 00 00 00 00 00 00(16)</c>) is
+    /// rejected with <c>TPM_RC_VALUE</c> (TPM 2.0 Library Part 1, clause 33.3; Part 3, clause 29.2).
     /// </summary>
     [TestMethod]
     public async Task ClockSetAboveTheCeilingReturnsValue()

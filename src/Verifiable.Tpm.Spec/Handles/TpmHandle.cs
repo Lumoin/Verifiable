@@ -23,7 +23,7 @@ namespace Verifiable.Tpm.Spec.Handles;
 /// (HMAC and policy), NV Indexes, permanent TPM locations, and PCR.
 /// </para>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 7.1, Table 34.
+/// Specification reference: TPM 2.0 Library Part 2, Section 7.1, Table 32.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]

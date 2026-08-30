@@ -5,7 +5,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// response is the 10-byte header alone.
 /// </summary>
 /// <remarks>
-/// See TPM 2.0 Library Part 3, Section 29.2 (Table 205).
+/// See TPM 2.0 Library Part 3, Section 29.2 (Table 235).
 /// </remarks>
 public sealed class ClockSetResponse: ITpmWireType
 {

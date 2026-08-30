@@ -3,13 +3,13 @@ using System;
 namespace Verifiable.Tpm.Spec.Constants;
 
 /// <summary>
-/// TPM_CLOCK_ADJUST constants (Table 21).
+/// TPM_CLOCK_ADJUST constants (Table 19).
 /// </summary>
 /// <remarks>
 /// <para>
 /// Specification:
 /// <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>
-/// (Part 2: Structures, section "6 Constants", Table 21).
+/// (Part 2: Structures, section "6 Constants", Table 19).
 /// </para>
 /// </remarks>
 public enum TpmClockAdjustConstants : sbyte

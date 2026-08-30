@@ -25,7 +25,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// } TPMT_SIG_SCHEME;
 /// </code>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 11.2.1.5, Table 180.
+/// Specification reference: TPM 2.0 Library Part 2, Section 11.2.1.5, Table 183.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]

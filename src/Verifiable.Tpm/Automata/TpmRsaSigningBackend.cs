@@ -27,7 +27,7 @@ public delegate ValueTask<TpmGeneratedRsaKey> TpmRsaKeyGenerationDelegate(
 
 /// <summary>
 /// Signs a pre-computed digest with an RSA private key, modelling <c>TPM2_Sign()</c> over an
-/// externally-computed digest with a NULL validation ticket (TPM 2.0 Library Part 3, clause 20.2).
+/// externally-computed digest with a NULL validation ticket (TPM 2.0 Library Part 3, clause 20.5).
 /// </summary>
 /// <remarks>
 /// The digest is signed <strong>directly</strong> under the requested padding scheme — the backend must not
@@ -51,15 +51,15 @@ public delegate ValueTask<Signature> TpmRsaDigestSignDelegate(
 
 /// <summary>
 /// OAEP-encrypts a plaintext value to an RSA public key, modelling the RSA arm of credential-protection seed
-/// transport for <c>TPM2_MakeCredential()</c> (TPM 2.0 Library Part 1, Annex B.4 "RSAES_OAEP", B.10.3, B.10.4;
-/// RFC 8017 §7.1.1 EME-OAEP encoding, which Annex B.4 references normatively for the encoding mechanics).
+/// transport for <c>TPM2_MakeCredential()</c> (TPM 2.0 Library Part 1, clauses 43.4 "RSAES_OAEP", 20.3.2.3, 21.3;
+/// RFC 8017 §7.1.1 EME-OAEP encoding, which clause 43.4 references normatively for the encoding mechanics).
 /// </summary>
 /// <remarks>
 /// A public-key-only operation — unlike <see cref="TpmEccSharedSecretDelegate"/>, which needs a local private
 /// scalar, OAEP-encrypting to a peer needs only their modulus and exponent, mirroring how
 /// <c>TPM2_MakeCredential()</c> resolves only the credential key's public area. <paramref name="lhashAlg"/> and
 /// <paramref name="mgfHashAlg"/> are kept as separate parameters even though the L-1 template's NULL scheme
-/// makes them coincide (Annex B.4: <c>lhash</c> uses the key's scheme hash, or the key's Name algorithm when
+/// makes them coincide (clause 43.4: <c>lhash</c> uses the key's scheme hash, or the key's Name algorithm when
 /// the scheme is <c>TPM_ALG_NULL</c>; MGF1 always uses the key's Name algorithm, independent of that choice).
 /// </remarks>
 /// <param name="modulus">The RSA public modulus, unsigned big-endian.</param>
@@ -83,17 +83,17 @@ public delegate ValueTask<IMemoryOwner<byte>> TpmRsaOaepEncryptDelegate(
 
 /// <summary>
 /// OAEP-decrypts a ciphertext with an RSA private key, modelling the RSA arm of credential-protection seed
-/// recovery for <c>TPM2_ActivateCredential()</c> (TPM 2.0 Library Part 1, Annex B.3 "RSADP", B.4, B.10.3,
-/// B.10.4; RFC 8017 §7.1.2 EME-OAEP decoding).
+/// recovery for <c>TPM2_ActivateCredential()</c> (TPM 2.0 Library Part 1, clauses 43.3 "RSADP", 43.4,
+/// 20.3.2.3, 21.3; RFC 8017 §7.1.2 EME-OAEP decoding).
 /// </summary>
 /// <remarks>
 /// Any OAEP decode failure (a non-zero leading octet, an <c>lhash</c> mismatch, malformed padding, or
-/// <c>c &gt;= n</c>) must not surface as a distinct outcome the caller can branch on early: Annex B.10.3's
-/// note, imported by B.10.4 for the credential case, requires the failure to stay silent until the outer
-/// integrity HMAC rejects it, so decryption cannot become a padding oracle. This delegate signals a decode
+/// <c>c &gt;= n</c>) must not surface as a distinct outcome the caller can branch on early: the v184 clause
+/// A.10.3 note, imported by A.10.4 for the credential case, requires the failure to stay silent until the outer
+/// integrity HMAC rejects it, so decryption cannot become a padding oracle; v185 keeps that rationale as
+/// Part 3, clause 13.3.1's integrity-before-use rule. This delegate signals a decode
 /// failure by returning <see langword="null"/> rather than throwing or returning a shaped error — the shape
-/// that lets the caller substitute an all-zero seed and proceed without an exception in the failure path
-/// (TPM 2.0 Library Part 1, Annex B.10.3).
+/// that lets the caller substitute an unpredictable seed and proceed without an exception in the failure path.
 /// </remarks>
 /// <param name="privateKey">The decrypting key's retained private key, in the backend's own encoding.</param>
 /// <param name="ciphertext">The OAEP ciphertext, the same octet width as the modulus.</param>
@@ -117,7 +117,7 @@ public delegate ValueTask<IMemoryOwner<byte>?> TpmRsaOaepDecryptDelegate(
 
 /// <summary>
 /// Verifies that a signature over a pre-computed digest is valid for an RSA key, modelling the public-key
-/// operation <c>TPM2_VerifySignature()</c> performs (TPM 2.0 Library Part 3, clause 20.1).
+/// operation <c>TPM2_VerifySignature()</c> performs (TPM 2.0 Library Part 3, clause 20.2).
 /// </summary>
 /// <remarks>
 /// The digest is verified <strong>directly</strong> under the requested padding scheme — the backend must not
@@ -158,11 +158,11 @@ public delegate ValueTask<bool> TpmRsaDigestVerifyDelegate(
 /// <param name="SignDigest">Signs a digest with a retained RSA key for <c>TPM2_Sign()</c>.</param>
 /// <param name="EncryptOaep">
 /// OAEP-encrypts the credential-protection seed to a credential key's public modulus for the RSA arm of
-/// <c>TPM2_MakeCredential()</c> (TPM 2.0 Library Part 1, Annex B.4, B.10.3, B.10.4).
+/// <c>TPM2_MakeCredential()</c> (TPM 2.0 Library Part 1, clauses 43.4, 20.3.2.3, 21.3).
 /// </param>
 /// <param name="DecryptOaep">
 /// OAEP-decrypts the credential-protection seed with a credential key's retained private key for the RSA arm
-/// of <c>TPM2_ActivateCredential()</c> (TPM 2.0 Library Part 1, Annex B.3, B.4, B.10.3, B.10.4).
+/// of <c>TPM2_ActivateCredential()</c> (TPM 2.0 Library Part 1, clauses 43.3, 43.4, 20.3.2.3, 21.3).
 /// </param>
 /// <param name="VerifyDigest">Verifies a digest/signature pair against a retained RSA key for <c>TPM2_VerifySignature()</c>.</param>
 public sealed record TpmRsaSigningBackend(

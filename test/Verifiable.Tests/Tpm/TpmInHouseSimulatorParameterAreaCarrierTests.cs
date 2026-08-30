@@ -23,7 +23,7 @@ namespace Verifiable.Tests.Tpm;
 
 /// <summary>
 /// The pool-accounting and identity proofs for a command's captured parameter area — cpHash's
-/// <c>parameters</c> term (TPM 2.0 Library Part 1, clause 16.7, equation 15), held in the pooled
+/// <c>parameters</c> term (TPM 2.0 Library Part 1, clause 15.7, equation 15), held in the pooled
 /// <see cref="TpmParameterArea"/> carrier the parse rents and the request owns — and for the handle-Name terms
 /// that same equation concatenates ahead of it. Every proof drives the real wire through the production command
 /// path and reads real pool telemetry (<see cref="MeteredHousePool"/>), never an internal hook.
@@ -242,7 +242,7 @@ internal sealed class TpmInHouseSimulatorParameterAreaCarrierTests
     /// <c>TPM2_NV_DefineSpace()</c> over an HMAC session returns its parameter-area carrier across a refusal (a
     /// second definition of an Index that already exists, <c>TPM_RC_NV_DEFINED</c>) and a success. It is the one
     /// NV command whose cpHash carries a single Name — the owner hierarchy's own 4-octet handle — because no
-    /// Index exists yet to contribute a second (Part 3, clause 31.3.2, Table 226).
+    /// Index exists yet to contribute a second (Part 3, clause 31.3.2, Table 245).
     /// </summary>
     [TestMethod]
     public async Task NvDefineSpaceOverSessionReturnsItsParameterAreaCarrierAcrossARefusalAndASuccess()
@@ -366,7 +366,7 @@ internal sealed class TpmInHouseSimulatorParameterAreaCarrierTests
         TpmResponseRegistry registry = CreateRegistry();
 
         //The session-tagged form of TPM2_GetRandom() always encrypts its response parameter (Part 3, clause
-        //16.1; Part 1, clause 19), so both sessions negotiate a symmetric definition and claim encrypt.
+        //16.1; Part 1, clause 18), so both sessions negotiate a symmetric definition and claim encrypt.
         TpmtSymDef symmetric = TpmtSymDef.Xor(SessionAlg);
         (uint flushedHandle, TpmSession flushedSession) = await StartUnboundSessionAsync(tpm, registry, pool, symmetric).ConfigureAwait(false);
         (uint sessionHandle, TpmSession session) = await StartUnboundSessionAsync(tpm, registry, pool, symmetric).ConfigureAwait(false);
@@ -490,9 +490,9 @@ internal sealed class TpmInHouseSimulatorParameterAreaCarrierTests
     /// <summary>
     /// The two sensitive values a session-authorized <c>TPM2_Create()</c> decodes OUT OF its parameter area —
     /// <c>inSensitive.userAuth</c> and <c>inSensitive.data</c> (<c>TPMS_SENSITIVE_CREATE</c>, TPM 2.0 Library
-    /// Part 2, clause 11.1.15, Table 168) — ride pooled carriers of their own, rented as the decode's last act
+    /// Part 2, clause 11.1.15, Table 171) — ride pooled carriers of their own, rented as the decode's last act
     /// and released by the sealing effect, which is their terminal owner: <c>TPM2_Create()</c> installs no
-    /// durable object, so the wrapped private blob it packs them into is their only use (Part 1, clause 17.6.4).
+    /// durable object, so the wrapped private blob it packs them into is their only use (Part 1, clause 16.6.4).
     /// Both values are deliberately NON-empty, since an empty one is the shared dispose-immune sentinel and
     /// would make the balance vacuous.
     /// </summary>
@@ -591,7 +591,7 @@ internal sealed class TpmInHouseSimulatorParameterAreaCarrierTests
             ReferenceEquals(observer.VerifiedArea, observer.DecryptedArea),
             "cpHash covers the octets exactly as received and the decryption transforms them in place, so both steps must hold the SAME carrier instance.");
 
-        //The auth parameter's 2-octet size field is never itself encrypted (Part 1, clause 19.1), so the value
+        //The auth parameter's 2-octet size field is never itself encrypted (Part 1, clause 18.1), so the value
         //sits directly behind it — as ciphertext in the octets the digest covered, and as the caller's own
         //plaintext once the same buffer has been transformed.
         byte[] digestedAuth = observer.DigestedOctets[sizeof(ushort)..(sizeof(ushort) + EncryptedIndexAuth.Length)];
@@ -633,8 +633,8 @@ internal sealed class TpmInHouseSimulatorParameterAreaCarrierTests
 
     /// <summary>
     /// A two-handle command's cpHash is <c>H(commandCode ‖ Name1 ‖ Name2 ‖ parameters)</c> (TPM 2.0 Library
-    /// Part 1, clause 16.7, equation 15), with the terms in the command's own handle order and a permanent
-    /// entity's Name written as its 4-octet BIG-ENDIAN handle value (clause 14, Table 6). This drives an owner-authorized
+    /// Part 1, clause 15.7, equation 15), with the terms in the command's own handle order and a permanent
+    /// entity's Name written as its 4-octet BIG-ENDIAN handle value (clause 13, Table 9). This drives an owner-authorized
     /// <c>TPM2_NV_Read()</c>, whose Name1 is that handle form and whose Name2 is the Index's computed Name,
     /// recomputes the digest and the command HMAC independently through the project's own digest and HMAC seams,
     /// and compares them against the octets on the wire — which the simulator accepted.
@@ -701,7 +701,7 @@ internal sealed class TpmInHouseSimulatorParameterAreaCarrierTests
 
     /// <summary>
     /// A session bound to a permanent entity records that entity's Name in its bound-entity value, and a
-    /// permanent entity's Name IS its 4-octet BIG-ENDIAN handle value (TPM 2.0 Library Part 1, clause 14, Table 6; Part
+    /// permanent entity's Name IS its 4-octet BIG-ENDIAN handle value (TPM 2.0 Library Part 1, clause 13, Table 9; Part
     /// 4, <c>SessionComputeBoundEntity()</c>). Binding to the owner hierarchy while its authValue is non-empty
     /// and then authorizing that same hierarchy exercises equation 22's omission: the caller leaves the
     /// authValue out of the HMAC key and the command is accepted only because the simulator recomputed the
@@ -830,7 +830,7 @@ internal sealed class TpmInHouseSimulatorParameterAreaCarrierTests
     /// <returns><see langword="true"/> when both hold the same octets in the same order.</returns>
     private static bool AreEqual(ReadOnlySpan<byte> first, ReadOnlySpan<byte> second) => first.SequenceEqual(second);
 
-    /// <summary>Renders a permanent entity's Name: its 4-octet big-endian handle value (Part 1, clause 14, Table 6).</summary>
+    /// <summary>Renders a permanent entity's Name: its 4-octet big-endian handle value (Part 1, clause 13, Table 9).</summary>
     /// <param name="handle">The entity's handle.</param>
     /// <returns>The handle-form Name.</returns>
     private static byte[] HandleFormName(uint handle)
@@ -863,7 +863,7 @@ internal sealed class TpmInHouseSimulatorParameterAreaCarrierTests
 
     /// <summary>
     /// Appends a one-session authorization area carrying a zero-length nonceCaller and a zero-length hmac — the
-    /// smallest well-formed <c>TPMS_AUTH_COMMAND</c> (TPM 2.0 Library Part 2, clause 10.13.2, Table 153) — which
+    /// smallest well-formed <c>TPMS_AUTH_COMMAND</c> (TPM 2.0 Library Part 2, clause 10.12.2, Table 156) — which
     /// is enough for a parse-time proof, since the parse never evaluates the credential.
     /// </summary>
     /// <param name="body">The body being built.</param>
@@ -941,7 +941,7 @@ internal sealed class TpmInHouseSimulatorParameterAreaCarrierTests
 
     /// <summary>
     /// Defines an Index with the given attributes under empty owner authorization and returns its Name
-    /// (<c>nameAlg ‖ H(TPMS_NV_PUBLIC)</c>, TPM 2.0 Library Part 1, clause 14, Table 6), computed independently of the
+    /// (<c>nameAlg ‖ H(TPMS_NV_PUBLIC)</c>, TPM 2.0 Library Part 1, clause 13, Table 9), computed independently of the
     /// simulator so a caller can build cpHash from it.
     /// </summary>
     /// <param name="tpm">The TPM device.</param>
@@ -979,7 +979,7 @@ internal sealed class TpmInHouseSimulatorParameterAreaCarrierTests
         }
 
         //The Name is read back from the TPM rather than recomputed, because TPMA_NV_WRITTEN is part of the
-        //public area the Name digests and a first write SETs it (TPM 2.0 Library Part 1, clause 35.2.6.3), so a
+        //public area the Name digests and a first write SETs it (TPM 2.0 Library Part 1, clause 34.2.6.3), so a
         //Name taken before the write would no longer name the Index.
         var readPublicInput = new NvReadPublicInput(nvIndex);
         TpmResult<NvReadPublicResponse> readPublic = await TpmCommandExecutor.ExecuteAsync<NvReadPublicResponse>(

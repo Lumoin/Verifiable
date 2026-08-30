@@ -11,7 +11,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// <para>
 /// Carries the modulus (n) of an RSA public key in the <c>unique</c> member of an RSA
 /// <c>TPMT_PUBLIC</c>, and the signature octets of an RSA <c>TPMS_SIGNATURE_RSA</c> — Part 2 gives both the
-/// same buffer type. Table 193 bounds it by <c>MAX_RSA_KEY_BYTES</c>, the octet width of the largest RSA key
+/// same buffer type. Table 194 bounds it by <c>MAX_RSA_KEY_BYTES</c>, the octet width of the largest RSA key
 /// the TPM supports, which this library takes as 4096 bits.
 /// </para>
 /// <para>
@@ -31,14 +31,14 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// } TPM2B_PUBLIC_KEY_RSA;
 /// </code>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 11.2.4.5, Table 193.
+/// Specification reference: TPM 2.0 Library Part 2, Section 11.2.4.5, Table 194.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 public sealed class Tpm2bPublicKeyRsa: IDisposable, ITpmWireType
 {
     /// <summary>
-    /// Maximum RSA key size in bytes (4096 bits) — Table 193's <c>MAX_RSA_KEY_BYTES</c>.
+    /// Maximum RSA key size in bytes (4096 bits) — Table 194's <c>MAX_RSA_KEY_BYTES</c>.
     /// </summary>
     public const int MaxRsaKeyBytes = 512;
 

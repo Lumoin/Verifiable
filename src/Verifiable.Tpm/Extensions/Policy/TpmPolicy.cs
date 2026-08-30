@@ -57,6 +57,15 @@ public sealed record TpmPolicy(IReadOnlyList<TpmPolicyAssertion> Assertions)
                 PcrPolicyAssertion a => ExtendPcr(running, a, policyHash),
                 SignedPolicyAssertion a => TpmPolicyDigest.ExtendForSigned(running, a.AuthName.Span, a.PolicyRef.Span, policyHash, running),
                 AuthorizePolicyAssertion a => TpmPolicyDigest.ExtendForAuthorize(a.KeySign.Span, a.PolicyRef.Span, policyHash, running),
+                PasswordPolicyAssertion => TpmPolicyDigest.ExtendForPassword(running, policyHash, running),
+                CpHashPolicyAssertion a => TpmPolicyDigest.ExtendForCpHash(running, a.CpHashA.Span, policyHash, running),
+                NameHashPolicyAssertion a => TpmPolicyDigest.ExtendForNameHash(running, a.NameHash.Span, policyHash, running),
+                DuplicationSelectPolicyAssertion a => TpmPolicyDigest.ExtendForDuplicationSelect(running, a.ObjectName.Span, a.NewParentName.Span, a.IsObjectIncluded, policyHash, running),
+                ParametersPolicyAssertion a => TpmPolicyDigest.ExtendForParameters(running, a.ParametersHash.Span, policyHash, running),
+                TemplatePolicyAssertion a => TpmPolicyDigest.ExtendForTemplate(running, a.TemplateHash.Span, policyHash, running),
+                LocalityPolicyAssertion a => TpmPolicyDigest.ExtendForLocality(running, a.Locality, policyHash, running),
+                NvWrittenPolicyAssertion a => TpmPolicyDigest.ExtendForNvWritten(running, a.IsWrittenSet, policyHash, running),
+                AuthorizeNvPolicyAssertion a => TpmPolicyDigest.ExtendForAuthorizeNv(a.NvName.Span, policyHash, running),
                 _ => throw new NotSupportedException($"Unsupported policy assertion '{Assertions[i].GetType().Name}'.")
             };
         }
@@ -65,7 +74,7 @@ public sealed record TpmPolicy(IReadOnlyList<TpmPolicyAssertion> Assertions)
 
         /// <summary>
         /// Folds a PolicySecret assertion: a permanent handle's Name is its 4-octet big-endian handle value
-        /// (TPM 2.0 Library Part 1, Section 14, Table 6), folded with an empty policyRef.
+        /// (TPM 2.0 Library Part 1, Section 13, Table 9), folded with an empty policyRef.
         /// </summary>
         static int ExtendSecret(Span<byte> running, uint authHandle, TpmAlgIdConstants policyHash)
         {
@@ -102,6 +111,15 @@ public sealed record TpmPolicy(IReadOnlyList<TpmPolicyAssertion> Assertions)
                 PcrPolicyAssertion a => await StepPcrAsync(device, policySession, a, cancellationToken).ConfigureAwait(false),
                 SignedPolicyAssertion a => await StepSignedAsync(device, policySession, a, cancellationToken).ConfigureAwait(false),
                 AuthorizePolicyAssertion a => await StepAuthorizeAsync(device, policySession, a, cancellationToken).ConfigureAwait(false),
+                PasswordPolicyAssertion => await StepPasswordAsync(device, policySession, cancellationToken).ConfigureAwait(false),
+                CpHashPolicyAssertion a => await StepCpHashAsync(device, policySession, a, cancellationToken).ConfigureAwait(false),
+                NameHashPolicyAssertion a => await StepNameHashAsync(device, policySession, a, cancellationToken).ConfigureAwait(false),
+                DuplicationSelectPolicyAssertion a => await StepDuplicationSelectAsync(device, policySession, a, cancellationToken).ConfigureAwait(false),
+                ParametersPolicyAssertion a => await StepParametersAsync(device, policySession, a, cancellationToken).ConfigureAwait(false),
+                TemplatePolicyAssertion a => await StepTemplateAsync(device, policySession, a, cancellationToken).ConfigureAwait(false),
+                LocalityPolicyAssertion a => await StepLocalityAsync(device, policySession, a, cancellationToken).ConfigureAwait(false),
+                NvWrittenPolicyAssertion a => await StepNvWrittenAsync(device, policySession, a, cancellationToken).ConfigureAwait(false),
+                AuthorizeNvPolicyAssertion a => await StepAuthorizeNvAsync(device, policySession, a, cancellationToken).ConfigureAwait(false),
                 _ => throw new NotSupportedException($"Unsupported policy assertion '{Assertions[i].GetType().Name}'.")
             };
 
@@ -210,6 +228,79 @@ public sealed record TpmPolicy(IReadOnlyList<TpmPolicyAssertion> Assertions)
         {
             TpmResult<PolicyAuthorizeResponse> result = await device.PolicyAuthorizeAsync(
                 policySession, assertion.ApprovedPolicy, assertion.PolicyRef, assertion.KeySign, assertion.CheckTicket, cancellationToken).ConfigureAwait(false);
+
+            return result.IsSuccess ? null : ToFailure(result);
+        }
+
+        /// <summary>Replays a TPM2_PolicyPassword assertion; <see langword="null"/> on success.</summary>
+        static async ValueTask<TpmResult<uint>?> StepPasswordAsync(TpmDevice device, uint policySession, CancellationToken cancellationToken)
+        {
+            TpmResult<PolicyPasswordResponse> result = await device.PolicyPasswordAsync(policySession, cancellationToken).ConfigureAwait(false);
+
+            return result.IsSuccess ? null : ToFailure(result);
+        }
+
+        /// <summary>Replays a TPM2_PolicyCpHash assertion; <see langword="null"/> on success.</summary>
+        static async ValueTask<TpmResult<uint>?> StepCpHashAsync(TpmDevice device, uint policySession, CpHashPolicyAssertion assertion, CancellationToken cancellationToken)
+        {
+            TpmResult<PolicyCpHashResponse> result = await device.PolicyCpHashAsync(policySession, assertion.CpHashA, cancellationToken).ConfigureAwait(false);
+
+            return result.IsSuccess ? null : ToFailure(result);
+        }
+
+        /// <summary>Replays a TPM2_PolicyNameHash assertion; <see langword="null"/> on success.</summary>
+        static async ValueTask<TpmResult<uint>?> StepNameHashAsync(TpmDevice device, uint policySession, NameHashPolicyAssertion assertion, CancellationToken cancellationToken)
+        {
+            TpmResult<PolicyNameHashResponse> result = await device.PolicyNameHashAsync(policySession, assertion.NameHash, cancellationToken).ConfigureAwait(false);
+
+            return result.IsSuccess ? null : ToFailure(result);
+        }
+
+        /// <summary>Replays a TPM2_PolicyDuplicationSelect assertion; <see langword="null"/> on success.</summary>
+        static async ValueTask<TpmResult<uint>?> StepDuplicationSelectAsync(TpmDevice device, uint policySession, DuplicationSelectPolicyAssertion assertion, CancellationToken cancellationToken)
+        {
+            TpmResult<PolicyDuplicationSelectResponse> result = await device.PolicyDuplicationSelectAsync(
+                policySession, assertion.ObjectName, assertion.NewParentName, assertion.IsObjectIncluded, cancellationToken).ConfigureAwait(false);
+
+            return result.IsSuccess ? null : ToFailure(result);
+        }
+
+        /// <summary>Replays a TPM2_PolicyParameters assertion; <see langword="null"/> on success.</summary>
+        static async ValueTask<TpmResult<uint>?> StepParametersAsync(TpmDevice device, uint policySession, ParametersPolicyAssertion assertion, CancellationToken cancellationToken)
+        {
+            TpmResult<PolicyParametersResponse> result = await device.PolicyParametersAsync(policySession, assertion.ParametersHash, cancellationToken).ConfigureAwait(false);
+
+            return result.IsSuccess ? null : ToFailure(result);
+        }
+
+        /// <summary>Replays a TPM2_PolicyTemplate assertion; <see langword="null"/> on success.</summary>
+        static async ValueTask<TpmResult<uint>?> StepTemplateAsync(TpmDevice device, uint policySession, TemplatePolicyAssertion assertion, CancellationToken cancellationToken)
+        {
+            TpmResult<PolicyTemplateResponse> result = await device.PolicyTemplateAsync(policySession, assertion.TemplateHash, cancellationToken).ConfigureAwait(false);
+
+            return result.IsSuccess ? null : ToFailure(result);
+        }
+
+        /// <summary>Replays a TPM2_PolicyLocality assertion; <see langword="null"/> on success.</summary>
+        static async ValueTask<TpmResult<uint>?> StepLocalityAsync(TpmDevice device, uint policySession, LocalityPolicyAssertion assertion, CancellationToken cancellationToken)
+        {
+            TpmResult<PolicyLocalityResponse> result = await device.PolicyLocalityAsync(policySession, assertion.Locality, cancellationToken).ConfigureAwait(false);
+
+            return result.IsSuccess ? null : ToFailure(result);
+        }
+
+        /// <summary>Replays a TPM2_PolicyNvWritten assertion; <see langword="null"/> on success.</summary>
+        static async ValueTask<TpmResult<uint>?> StepNvWrittenAsync(TpmDevice device, uint policySession, NvWrittenPolicyAssertion assertion, CancellationToken cancellationToken)
+        {
+            TpmResult<PolicyNvWrittenResponse> result = await device.PolicyNvWrittenAsync(policySession, assertion.IsWrittenSet, cancellationToken).ConfigureAwait(false);
+
+            return result.IsSuccess ? null : ToFailure(result);
+        }
+
+        /// <summary>Replays a TPM2_PolicyAuthorizeNV assertion; <see langword="null"/> on success.</summary>
+        static async ValueTask<TpmResult<uint>?> StepAuthorizeNvAsync(TpmDevice device, uint policySession, AuthorizeNvPolicyAssertion assertion, CancellationToken cancellationToken)
+        {
+            TpmResult<PolicyAuthorizeNvResponse> result = await device.PolicyAuthorizeNvAsync(assertion.AuthHandle, assertion.NvIndex, policySession, cancellationToken).ConfigureAwait(false);
 
             return result.IsSuccess ? null : ToFailure(result);
         }

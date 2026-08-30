@@ -13,13 +13,13 @@ namespace Verifiable.Tpm.Spec.Algorithms;
 /// <c>TPMS_SCHEME_XOR</c> or the secret-sharing KDF of an asymmetric decrypt key.
 /// </para>
 /// <para>
-/// <b>Valid values:</b> the hash-based key and mask generation functions — <c>TPM_ALG_MGF1</c>,
-/// <c>TPM_ALG_KDF1_SP800_56A</c>, <c>TPM_ALG_KDF2</c>, <c>TPM_ALG_KDF1_SP800_108</c> — and, where the
-/// embedding structure admits it (the table's leading <c>+</c>), <c>TPM_ALG_NULL</c>. Unmarshaling any other
-/// value is <c>TPM_RC_KDF</c>.
+/// <b>Valid values (v185):</b> the hash-based key and mask generation functions — <c>TPM_ALG_MGF1</c>,
+/// <c>TPM_ALG_KDF1_SP800_56A</c>, <c>TPM_ALG_KDF2</c>, <c>TPM_ALG_KDF1_SP800_108</c>, <c>TPM_ALG_HKDF</c> —
+/// and, where the embedding structure admits it (the table's leading <c>+</c>), <c>TPM_ALG_NULL</c>.
+/// Unmarshaling any other value is <c>TPM_RC_KDF</c>.
 /// </para>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 9.36, Table 83.
+/// Specification reference: TPM 2.0 Library Part 2, Section 9.36, Table 82.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -55,7 +55,8 @@ public readonly record struct TpmiAlgKdf
         TpmAlgIdConstants.TPM_ALG_MGF1 or
         TpmAlgIdConstants.TPM_ALG_KDF1_SP800_56A or
         TpmAlgIdConstants.TPM_ALG_KDF2 or
-        TpmAlgIdConstants.TPM_ALG_KDF1_SP800_108 => true,
+        TpmAlgIdConstants.TPM_ALG_KDF1_SP800_108 or
+        TpmAlgIdConstants.TPM_ALG_HKDF => true,
         TpmAlgIdConstants.TPM_ALG_NULL => isNullAdmitted,
         _ => false
     };

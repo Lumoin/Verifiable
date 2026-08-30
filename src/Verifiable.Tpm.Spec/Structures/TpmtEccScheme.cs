@@ -26,7 +26,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// For most signing schemes, details contains only a hash algorithm.
 /// </para>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 11.2.5.6, Table 201.
+/// Specification reference: TPM 2.0 Library Part 2, Section 11.2.5.6, Table 203.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -82,7 +82,15 @@ public readonly record struct TpmtEccScheme
     /// <summary>
     /// Creates an ECDH scheme.
     /// </summary>
-    /// <param name="hashAlg">The KDF hash algorithm.</param>
+    /// <remarks>
+    /// On a raw key-agreement key (<c>TPM2_ECDH_ZGen</c>, <see cref="TpmsEccParms.ForKeyAgreement"/>),
+    /// <paramref name="hashAlg"/> is the scheme's own KDF hash. On a KEM key
+    /// (<see cref="TpmsEccParms.ForKeyEncapsulation"/>, <c>kdf</c> non-NULL), TPM 2.0 Library Part 2,
+    /// Table 229 states <c>scheme.details.ecdh.hashAlg</c> "is ignored, because kdf specifies all
+    /// parameters of the KDF" — <paramref name="hashAlg"/> still occupies its wire position but plays no
+    /// role in DHKEM's derivation.
+    /// </remarks>
+    /// <param name="hashAlg">The KDF hash algorithm; on a key whose <c>kdf</c> is non-NULL it is ignored in the context of <c>TPM2_Encapsulate()</c>/<c>TPM2_Decapsulate()</c> only — it remains live template data at object creation.</param>
     /// <returns>The ECC scheme.</returns>
     public static TpmtEccScheme Ecdh(TpmAlgIdConstants hashAlg) => new()
     {

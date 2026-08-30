@@ -27,7 +27,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// } TPML_PCR_SELECTION;
 /// </code>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, clause 10.9.7, Table 125.
+/// Specification reference: TPM 2.0 Library Part 2, clause 10.8.7, Table 128.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -35,9 +35,9 @@ public sealed class TpmlPcrSelection: ITpmWireType, IDisposable
 {
     /// <summary>
     /// The greatest number of <see cref="TpmsPcrSelection"/> entries this list admits — the <c>HASH_COUNT</c>
-    /// bound Table 125 places on <c>pcrSelections[count]</c>, whose violation the table names
+    /// bound Table 128 places on <c>pcrSelections[count]</c>, whose violation the table names
     /// <c>#TPM_RC_SIZE</c> ("response code when count is greater than the possible number of banks", TPM 2.0
-    /// Library Part 2, clause 10.9.7). This bounds the COUNT of banks a selection may name, never the octet
+    /// Library Part 2, clause 10.8.7). This bounds the COUNT of banks a selection may name, never the octet
     /// width of any one bank's bitmap (that is <see cref="PcrSelectMax"/>). The value is a widened
     /// implementation bound: <c>HASH_COUNT</c> is the number of hash algorithms a TPM implements, so sixteen
     /// admits every bank allocation this library models and any a device is likely to report.
@@ -46,9 +46,9 @@ public sealed class TpmlPcrSelection: ITpmWireType, IDisposable
 
     /// <summary>
     /// The least <c>sizeofSelect</c> a conformant <c>TPMS_PCR_SELECTION</c> may carry —
-    /// <c>PCR_SELECT_MIN ≔ (PLATFORM_PCR + 7)/8</c> (TPM 2.0 Library Part 2, clause 10.6.1, equation 1), with
+    /// <c>PCR_SELECT_MIN ≔ (PLATFORM_PCR + 7)/8</c> (TPM 2.0 Library Part 2, clause 10.5.1, equation 1), with
     /// <c>PLATFORM_PCR</c> the number of PCR the platform-specific specification requires. Every platform this
-    /// library targets requires 24 PCR, so the bitmap is at least three octets wide. Table 106 states the bound
+    /// library targets requires 24 PCR, so the bitmap is at least three octets wide. Table 107 states the bound
     /// as <c>sizeofSelect {PCR_SELECT_MIN:}</c> and names <c>#TPM_RC_VALUE</c> for a violation, which is what
     /// the reference unmarshaler answers for a width outside
     /// <see cref="PcrSelectMin"/>..<see cref="PcrSelectMax"/>.
@@ -57,14 +57,14 @@ public sealed class TpmlPcrSelection: ITpmWireType, IDisposable
 
     /// <summary>
     /// The greatest <c>sizeofSelect</c> this list admits — <c>PCR_SELECT_MAX ≔ (IMPLEMENTATION_PCR + 7)/8</c>
-    /// (TPM 2.0 Library Part 2, clause 10.6.1, equation 2), the octet width of a bitmap covering every PCR the
-    /// TPM implements; Table 106 states it as <c>pcrSelect[sizeofSelect] {:PCR_SELECT_MAX}</c> with
+    /// (TPM 2.0 Library Part 2, clause 10.5.1, equation 2), the octet width of a bitmap covering every PCR the
+    /// TPM implements; Table 107 states it as <c>pcrSelect[sizeofSelect] {:PCR_SELECT_MAX}</c> with
     /// <c>#TPM_RC_VALUE</c>. <c>IMPLEMENTATION_PCR</c> is implementation-dependent, so this is a documented
     /// widening — 32 octets, 256 PCR — in the same spirit as <see cref="TpmHandleRanges.PCR_LAST"/> spanning
     /// the type's full index space rather than one implementation's live PCR count: a selection from any device
     /// this library talks to parses, while an octet count no TPM could mean is still refused. A bitmap wider
     /// than the PCR a bank actually implements is not an error — "if the TPM implements more PCR than there are
-    /// bits in pcrSelect, the additional PCR are not selected" (clause 10.6.1), and the converse is settled by
+    /// bits in pcrSelect, the additional PCR are not selected" (clause 10.5.1), and the converse is settled by
     /// clearing the surplus bits where the selection is applied.
     /// </summary>
     public const int PcrSelectMax = 32;
@@ -150,7 +150,7 @@ public sealed class TpmlPcrSelection: ITpmWireType, IDisposable
     /// <remarks>
     /// Both wire bounds are checked BEFORE the octets they govern are rented, so a malformed list never leaves a
     /// pinned rental behind and never reaches the pool with a width the pool refuses. The two are distinguished
-    /// by the exception they raise because Table 125 and Table 106 name different response codes for them: a
+    /// by the exception they raise because Table 128 and Table 107 name different response codes for them: a
     /// <c>count</c> above <see cref="MaxSelections"/> is <c>#TPM_RC_SIZE</c> and raises
     /// <see cref="InvalidOperationException"/>, while a <c>sizeofSelect</c> outside
     /// <see cref="PcrSelectMin"/>..<see cref="PcrSelectMax"/> is <c>#TPM_RC_VALUE</c> and raises
@@ -188,7 +188,7 @@ public sealed class TpmlPcrSelection: ITpmWireType, IDisposable
                 byte sizeofSelect = reader.ReadByte();
 
                 //The width is settled before the rental it sizes: a zero sizeofSelect would otherwise reach the
-                //pool as a zero-length rent, and a width no PCR bitmap can have is TPM_RC_VALUE by Table 106's
+                //pool as a zero-length rent, and a width no PCR bitmap can have is TPM_RC_VALUE by Table 107's
                 //own bounds rather than an allocation failure.
                 if(sizeofSelect < PcrSelectMin || sizeofSelect > PcrSelectMax)
                 {
@@ -273,7 +273,7 @@ public sealed class TpmlPcrSelection: ITpmWireType, IDisposable
     /// <remarks>
     /// <para>
     /// "If the TPM implements more PCR than there are bits in pcrSelect, the additional PCR are not selected"
-    /// (TPM 2.0 Library Part 2, clause 10.6.1), and the converse — a bit naming a register the TPM does not have
+    /// (TPM 2.0 Library Part 2, clause 10.5.1), and the converse — a bit naming a register the TPM does not have
     /// — is settled the same way: the bit is cleared rather than refused. The reference does this in
     /// <c>FilterPcr</c>, called from <c>PCRComputeCurrentDigest</c> and <c>PCRRead</c>, whose contract is stated
     /// as "as a side-effect, 'selection' is modified so that only the implemented PCR will have their bits still

@@ -41,11 +41,11 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </code>
 /// <para>
 /// <b>NULL ticket:</b> A NULL Creation Ticket is the tuple
-/// (TPM_ST_CREATION, TPM_RH_NULL, empty digest) — clause 10.7.2's construct for "a command requires a ticket
+/// (TPM_ST_CREATION, TPM_RH_NULL, empty digest) — clause 10.6.2's construct for "a command requires a ticket
 /// and no ticket is available".
 /// </para>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 10.7.3, Table 109.
+/// Specification reference: TPM 2.0 Library Part 2, Section 10.6.3, Table 110.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -71,8 +71,8 @@ public sealed class TpmtTkCreation: IDisposable, ITpmWireType
     public TpmStConstants Tag { get; }
 
     /// <summary>
-    /// Gets the hierarchy containing the created object, typed <c>TPMI_RH_HIERARCHY+</c> as Table 109 names it
-    /// — the four hierarchy selectors of Part 2, clause 9.13, Table 60, the NULL hierarchy among them.
+    /// Gets the hierarchy containing the created object, typed <c>TPMI_RH_HIERARCHY+</c> as Table 110 names it
+    /// — the four hierarchy selectors of Part 2, clause 9.13, Table 59, the NULL hierarchy among them.
     /// </summary>
     public TpmiRhHierarchy Hierarchy { get; }
 
@@ -144,7 +144,7 @@ public sealed class TpmtTkCreation: IDisposable, ITpmWireType
     /// <param name="reader">The reader.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The parsed creation ticket.</returns>
-    /// <exception cref="InvalidOperationException">The tag is not <c>TPM_ST_CREATION</c> (<c>TPM_RC_TAG</c>, Table 109), or the hierarchy is not a <c>TPMI_RH_HIERARCHY</c> selector (<c>TPM_RC_VALUE</c>, Table 60).</exception>
+    /// <exception cref="InvalidOperationException">The tag is not <c>TPM_ST_CREATION</c> (<c>TPM_RC_TAG</c>, Table 110), or the hierarchy is not a <c>TPMI_RH_HIERARCHY</c> selector (<c>TPM_RC_VALUE</c>, Table 59).</exception>
     public static TpmtTkCreation Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
@@ -191,9 +191,9 @@ public sealed class TpmtTkCreation: IDisposable, ITpmWireType
     /// equation 4 into a buffer it rented itself and then frames the whole <c>TPMT_TK_CREATION</c> from it.
     /// </summary>
     /// <remarks>
-    /// The tag is always <c>TPM_ST_CREATION</c> (Table 109). A <paramref name="digestLength"/> of zero releases
+    /// The tag is always <c>TPM_ST_CREATION</c> (Table 110). A <paramref name="digestLength"/> of zero releases
     /// <paramref name="digest"/> here, since a ticket with no digest owns no storage: under <c>TPM_RH_NULL</c>
-    /// that tuple IS the NULL Creation Ticket of clause 10.7.2, so the shared <see cref="Null"/> sentinel stands
+    /// that tuple IS the NULL Creation Ticket of clause 10.6.2, so the shared <see cref="Null"/> sentinel stands
     /// for it; under any other hierarchy the tuple is a distinct, storage-less ticket that keeps the hierarchy it
     /// was handed, exactly as <see cref="Parse"/> reconstructs the same octets off the wire. An argument that
     /// does not describe a valid ticket likewise releases <paramref name="digest"/> before the exception leaves,

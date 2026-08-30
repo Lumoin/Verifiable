@@ -31,8 +31,8 @@ namespace Verifiable.Tpm.Extensions.Hierarchy;
 /// </para>
 /// <para>
 /// <b>Channel protection.</b> Every verb defaults to an HMAC session BOUND to the hierarchy it authorizes (Part
-/// 1, Section 17.6.10, equation 20): the hierarchy's current authorization value feeds the session key's KDFa
-/// derivation with its trailing zero octets already removed (Section 17.6.4.3), so a genuinely secret hierarchy
+/// 1, Section 16.6.10, equation 20): the hierarchy's current authorization value feeds the session key's KDFa
+/// derivation with its trailing zero octets already removed (Section 16.6.4.3), so a genuinely secret hierarchy
 /// authorization value never crosses the bus and the command carries a structured cpHash/nonce-bound authHMAC a
 /// password session cannot offer. Each default carries a <c>…WithPasswordAsync</c> opt-out with the identical
 /// arguments and the plaintext-<c>TPM_RS_PW</c> composition, for provisioning over a trusted bus and for
@@ -51,7 +51,7 @@ namespace Verifiable.Tpm.Extensions.Hierarchy;
 /// computing the response HMAC", Part 3, Section 24.8.1) and <c>TPM2_Clear</c> ("If this command is authorized
 /// using lockoutAuth, the HMAC in the response shall use the new lockoutAuth value (that is, the Empty Buffer)",
 /// Part 3, Section 24.6.1). That rule bites only when the authorization value is a term of the HMAC key at all.
-/// Under this group's bound default it is not: Part 1, Section 17.6.10's equations 21/22 drop the authValue term
+/// Under this group's bound default it is not: Part 1, Section 16.6.10's equations 21/22 drop the authValue term
 /// whenever the session authorizing an entity is the session bound to that same entity, because binding already
 /// folded the value into the session key, and the session key is fixed at <c>TPM2_StartAuthSession</c> and does
 /// not move when the command rewrites the entity's authorization value. Both the command HMAC and the response
@@ -65,20 +65,20 @@ namespace Verifiable.Tpm.Extensions.Hierarchy;
 /// <para>
 /// <b>Dictionary-attack asymmetry.</b> Owner, endorsement and platform authorization values are permanent-entity
 /// values and are not dictionary-attack protected; <c>lockoutAuth</c> is the documented exception (Part 1,
-/// Section 17.8.1), so every verb here that authorizes with <c>lockoutAuth</c> -
+/// Section 16.8.1), so every verb here that authorizes with <c>lockoutAuth</c> -
 /// <see cref="ClearAsync"/> and the lockout arms of
 /// <see cref="ClearControlAsync(TpmRh, ReadOnlyMemory{byte}, bool, CancellationToken)"/> and
 /// <see cref="ChangeHierarchyAuthAsync(TpmRh, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, CancellationToken)"/> -
 /// gets exactly one strike: a wrong value disables further use of <c>lockoutAuth</c> until the configured
 /// <c>lockoutRecovery</c> interval elapses, a <c>TPM2_Startup</c> runs, or <c>lockoutPolicy</c> is satisfied
-/// (Part 1, Section 17.8.5), and a call made while that state is already engaged is refused with
+/// (Part 1, Section 16.8.5), and a call made while that state is already engaged is refused with
 /// <c>TPM_RC_LOCKOUT</c> before the value is compared. Platform-hierarchy authorizations are categorically
 /// exempt from all of it (Part 3, Section 25.1), which is what makes the platform arms the recovery path when
 /// the lockout arms have locked themselves out.
 /// </para>
 /// <para>
 /// <b>Enables gate their own authorizations.</b> When a hierarchy's enable is CLEAR, neither its authorization
-/// value nor its policy can authorize anything at all (Part 1, Section 11.2, Table 5) - so
+/// value nor its policy can authorize anything at all (Part 1, Section 10.2, Table 8) - so
 /// <see cref="DisableHierarchyAsync"/> is the one verb here that can make the other four unusable for the
 /// hierarchy it names, and re-enabling storage or endorsement afterwards is exclusively Platform Authorization's
 /// privilege (<see cref="EnableHierarchyAsync"/>). The platform hierarchy's own enable is the sharpest case: it
@@ -124,10 +124,10 @@ public static class TpmDeviceExtensions
         /// <para>
         /// <b>The replacement value is a command parameter, and rides its own session.</b>
         /// <paramref name="newAuth"/> is <c>newAuth</c>, the command's sole and therefore first sized parameter,
-        /// which Part 1, Section 19.1 makes eligible for session-based parameter encryption. It is carried by a
+        /// which Part 1, Section 18.1 makes eligible for session-based parameter encryption. It is carried by a
         /// SECOND session that holds the decrypt attribute and authorizes nothing, never by the authorizing one:
         /// a session that both authorizes an entity and encrypts folds that entity's authorization value into
-        /// its <c>sessionValue</c> (Section 19.1's note), which would key the encryption of the NEW value on the
+        /// its <c>sessionValue</c> (Section 18.1's note), which would key the encryption of the NEW value on the
         /// OLD one. That companion is itself bound to <paramref name="hierarchyHandle"/>, so its session key -
         /// and therefore the keystream protecting <paramref name="newAuth"/> - is derived from
         /// <paramref name="currentAuth"/> and is genuinely secret against a bus observer whenever the hierarchy
@@ -138,14 +138,14 @@ public static class TpmDeviceExtensions
         /// <para>
         /// <b>The value the TPM stores is the stripped value.</b> The TPM removes trailing zero octets from
         /// <paramref name="newAuth"/> and then refuses anything still longer than the digest produced by the
-        /// hash algorithm used for context integrity with <c>TPM_RC_SIZE</c> (Part 1, Section 17.6.4.2: a
+        /// hash algorithm used for context integrity with <c>TPM_RC_SIZE</c> (Part 1, Section 16.6.4.2: a
         /// hierarchy has no Name algorithm to bound its authorization value, so the context-integrity hash is
         /// what bounds it, and Section 24.8.1's own worked example - "If SHA384 is used ... then the largest
         /// authorization value is 48 octets"). Hashing an over-long secret down to that size first is a
-        /// caller-side convention the TPM does not perform (Section 17.6.4.3: "The TPM does not enforce this
+        /// caller-side convention the TPM does not perform (Section 16.6.4.3: "The TPM does not enforce this
         /// transformation"). An empty <paramref name="newAuth"/> is legitimate and returns the hierarchy to its
         /// factory-state authorization value; it does not disable authorization, since the Empty Buffer is a
-        /// knowable, usable authorization value (Part 1, Section 11.2, Table 5) - making a hierarchy's value
+        /// knowable, usable authorization value (Part 1, Section 10.2, Table 8) - making a hierarchy's value
         /// genuinely unusable means installing a large random value and discarding it.
         /// </para>
         /// <para>
@@ -161,7 +161,7 @@ public static class TpmDeviceExtensions
         /// lockoutAuth-failure state described in this group's own remarks, so a mistyped current value costs
         /// the whole lockout administration path until it recovers. A disabled hierarchy refuses the change
         /// outright with <c>TPM_RC_HIERARCHY</c>, since a CLEAR enable bars both the authorization value and the
-        /// policy from authorizing anything (Part 1, Section 11.2).
+        /// policy from authorizing anything (Part 1, Section 10.2).
         /// </para>
         /// </remarks>
         /// <param name="hierarchyHandle">
@@ -198,10 +198,10 @@ public static class TpmDeviceExtensions
         /// strike. What changes is the channel, on BOTH sessions. Each is bound AND salted
         /// (<see cref="Infrastructure.Commands.StartAuthSessionInputExtensions.CreateBoundAndSaltedHmacSession(uint, uint, ReadOnlyMemory{byte}, uint, TpmAlgIdConstants, TpmAlgIdConstants, TpmRsaOaepEncryptDelegate, BaseMemoryPool, CancellationToken, TpmtSymDef?)"/>),
         /// and each draws its OWN salt: two independent secrets, never one reused across the pair. Every salt is
-        /// RSA-OAEP-encrypted (TPM 2.0 Library Part 1, Annex B.10.2) to
+        /// RSA-OAEP-encrypted (TPM 2.0 Library Part 1, clause 16.6.13) to
         /// <paramref name="tpmKeyModulus"/>/<paramref name="tpmKeyExponent"/>, so only the TPM holding
         /// <paramref name="tpmKey"/>'s matching private key can recover it, and each recovered salt keys its own
-        /// session's derived session key (Part 1, Section 17.6.12, equation 25).
+        /// session's derived session key (Part 1, Section 16.6.12, equation 25).
         /// </para>
         /// <para>
         /// <b>What each salt buys.</b> The authorizing session's key is otherwise a KDFa over
@@ -288,7 +288,7 @@ public static class TpmDeviceExtensions
         ///   all.</description></item>
         ///   <item><description>The storage primary seed is replaced from the TPM's random number generator, and
         ///   <c>shProof</c> and <c>ehProof</c> change with it. Nothing walks a list of outstanding tickets or
-        ///   saved contexts: because a ticket is an HMAC keyed on the hierarchy proof (Part 1, Section 12.5), a
+        ///   saved contexts: because a ticket is an HMAC keyed on the hierarchy proof (Part 1, Section 11.5), a
         ///   proof rotation silently stops every owner-hierarchy and endorsement-hierarchy ticket and saved
         ///   context from verifying, and a <c>TPM2_PolicyTicket</c> replay of one minted before the clear simply
         ///   no longer authorizes. The platform proof survives, so platform-hierarchy tickets do
@@ -298,10 +298,10 @@ public static class TpmDeviceExtensions
         ///   <item><description><c>ownerAuth</c>, <c>endorsementAuth</c> and <c>lockoutAuth</c> are all set to
         ///   the Empty Buffer, and <c>ownerPolicy</c>, <c>endorsementPolicy</c> and <c>lockoutPolicy</c> with
         ///   them - so every policy installed by <see cref="SetPrimaryPolicyAsync"/> on those three is gone and,
-        ///   an empty policy matching no policy digest (Part 1, Section 11.2, Table 5), policy-session
+        ///   an empty policy matching no policy digest (Part 1, Section 10.2, Table 8), policy-session
         ///   authorization against them is disabled again. <c>platformAuth</c> and <c>platformPolicy</c> are NOT
         ///   touched.</description></item>
-        ///   <item><description>The dictionary-attack failure counter is reset to zero (Part 1, Section 17.8.2:
+        ///   <item><description>The dictionary-attack failure counter is reset to zero (Part 1, Section 16.8.2:
         ///   "TPM2_Clear() will reset this counter to zero").</description></item>
         ///   <item><description><c>Clock</c>, <c>resetCount</c> and <c>restartCount</c> go to zero and
         ///   <c>Safe</c> to YES, so every clock-bound policy assertion measures against a restarted
@@ -459,7 +459,7 @@ public static class TpmDeviceExtensions
         /// <para>
         /// <b>Why disabling and enabling are separate verbs.</b> They do not take the same authorizations. A
         /// hierarchy may be disabled by its own authorization OR by Platform Authorization, but re-enabled by
-        /// Platform Authorization alone (TPM 2.0 Library Part 1, Sections 11.4 and 11.5), and the platform's own
+        /// Platform Authorization alone (TPM 2.0 Library Part 1, Sections 10.4 and 10.5), and the platform's own
         /// enable cannot be re-SET by this command at any authorization. One verb taking a direction flag would
         /// silently change which authorization the caller must hold depending on the flag's value, which is
         /// precisely the mistake this split makes impossible: <see cref="EnableHierarchyAsync"/> takes the
@@ -475,7 +475,7 @@ public static class TpmDeviceExtensions
         /// </para>
         /// <para>
         /// <b>What CLEARing an enable does.</b> Neither the authorization value nor the policy of a disabled
-        /// hierarchy can authorize anything while the enable stays CLEAR (Part 1, Section 11.2, Table 5), so a
+        /// hierarchy can authorize anything while the enable stays CLEAR (Part 1, Section 10.2, Table 8), so a
         /// disabled hierarchy also loses the ability to re-enable itself. The TPM additionally disables use of
         /// every persistent entity associated with that hierarchy and flushes its transient objects; CLEARing
         /// <see cref="TpmRh.TPM_RH_OWNER"/> also bars access to every NV Index with
@@ -486,7 +486,7 @@ public static class TpmDeviceExtensions
         /// <para>
         /// <b>The platform enable is a one-way door.</b> <c>phEnable</c> may be CLEARed here and can be re-SET
         /// by nothing in this command surface - only <c>_TPM_Init</c> and the <c>TPM2_Startup</c> that follows
-        /// it SET it again (Part 1, Section 11.3), and every <c>TPM2_Startup</c> form does so unconditionally.
+        /// it SET it again (Part 1, Section 10.3), and every <c>TPM2_Startup</c> form does so unconditionally.
         /// Disabling the platform hierarchy therefore hands control of the platform domain to whoever controls
         /// the next platform reset. <c>shEnable</c> and <c>ehEnable</c> also come back on a TPM Reset or TPM
         /// Restart, and on <see cref="ClearAsync"/>; a TPM Resume preserves whatever this verb last set.
@@ -547,8 +547,8 @@ public static class TpmDeviceExtensions
         /// <para>
         /// <b>There is no authorization handle to choose.</b> SETting <c>shEnable</c> or <c>ehEnable</c>
         /// requires Platform Authorization specifically, even though CLEARing either is open to the hierarchy's
-        /// own authorization as well (TPM 2.0 Library Part 1, Sections 11.4 and 11.5) - a disabled hierarchy
-        /// cannot authorize anything at all, including its own re-enablement (Section 11.2, Table 5), so the
+        /// own authorization as well (TPM 2.0 Library Part 1, Sections 10.4 and 10.5) - a disabled hierarchy
+        /// cannot authorize anything at all, including its own re-enablement (Section 10.2, Table 8), so the
         /// platform is the only party that can bring one back. This verb therefore takes
         /// <paramref name="platformAuth"/> and no handle: the only value that could be passed is the one it
         /// takes. An attempt made with any other authorization is refused with <c>TPM_RC_AUTH_TYPE</c>.
@@ -616,7 +616,7 @@ public static class TpmDeviceExtensions
         /// <b>This is what makes policy authorization of a hierarchy possible at all.</b> A hierarchy has two
         /// authorization paths - its authorization value and its policy - and the policy path starts out
         /// disabled: an empty policy digest cannot match any policy session's digest, so "the use of authPolicy
-        /// is disabled" (TPM 2.0 Library Part 1, Section 11.2, Table 5). Until this command installs a real
+        /// is disabled" (TPM 2.0 Library Part 1, Section 10.2, Table 8). Until this command installs a real
         /// digest, a policy session presented as the authorizer for a hierarchy is answered with
         /// <c>TPM_RC_AUTH_UNAVAILABLE</c> rather than evaluated - which is exactly what
         /// <c>Extensions/Policy</c>'s <c>PolicySecretAsync</c> meets when it names a policy-less hierarchy as
@@ -741,7 +741,7 @@ public static class TpmDeviceExtensions
         {
             //A SECOND session carries the decrypt attribute: the authorizing session may not, because a session
             //used both to authorize an entity and to encrypt folds that entity's authorization value into its
-            //sessionValue (TPM 2.0 Library Part 1, Section 19.1's note), keying the encryption of the NEW value
+            //sessionValue (TPM 2.0 Library Part 1, Section 18.1's note), keying the encryption of the NEW value
             //on the OLD one. This companion authorizes nothing, so its sessionValue is its session key alone -
             //and binding it to the same hierarchy makes that key a KDFa over currentAuth, so the keystream is
             //secret whenever the hierarchy already carries a real authorization value.
@@ -794,7 +794,7 @@ public static class TpmDeviceExtensions
     /// <paramref name="tpmKey"/> - the authorizing one, so neither leg of its HMAC can be reproduced from a
     /// captured transcript plus a guess at <paramref name="currentAuth"/>, and the companion, so the keystream
     /// protecting <paramref name="newAuth"/> derives from a secret only the TPM holding
-    /// <paramref name="tpmKey"/> can recover (TPM 2.0 Library Part 1, Section 17.6.12, equation 25).
+    /// <paramref name="tpmKey"/> can recover (TPM 2.0 Library Part 1, Section 16.6.12, equation 25).
     /// </summary>
     /// <remarks>
     /// The two sessions draw their salts from two independent <c>TPM2_StartAuthSession</c> exchanges, so each
@@ -897,13 +897,13 @@ public static class TpmDeviceExtensions
     /// <remarks>
     /// <para>
     /// The command's single handle is a permanent handle, whose Name is its own four octets (TPM 2.0 Library
-    /// Part 1, Section 14, Table 6), so the executor derives the cpHash Name area itself and no caller-supplied
+    /// Part 1, Section 13, Table 9), so the executor derives the cpHash Name area itself and no caller-supplied
     /// Name is needed - unlike the NV family, whose hash-based Names must be read back.
     /// </para>
     /// <para>
     /// <b>No response-key swap is composed.</b> Part 3, Section 24.8.1 keys the response HMAC on the value the
     /// command just installed, but the authorizing session here is bound to the very entity it authorizes, and
-    /// Part 1, Section 17.6.10's equations 21/22 drop the authValue term from the HMAC key in exactly that case:
+    /// Part 1, Section 16.6.10's equations 21/22 drop the authValue term from the HMAC key in exactly that case:
     /// the value the rule points at is not part of either key, so there is nothing to move between the command
     /// leg and the response leg. The session key that IS the key was fixed at <c>TPM2_StartAuthSession</c> from
     /// the pre-rotation value and does not change when the command commits. This is where an unbound
@@ -1208,9 +1208,9 @@ public static class TpmDeviceExtensions
     /// </summary>
     /// <remarks>
     /// Each of these four commands carries exactly one handle, and that handle is a permanent handle whose Name
-    /// is its own four octets (TPM 2.0 Library Part 1, Section 14, Table 6), so the executor derives the cpHash
+    /// is its own four octets (TPM 2.0 Library Part 1, Section 13, Table 9), so the executor derives the cpHash
     /// Name area itself and no caller-supplied Name is threaded through. The authorizing session is bound to the
-    /// entity it authorizes, so its HMAC key is the session key alone (Part 1, Section 17.6.10, equations
+    /// entity it authorizes, so its HMAC key is the session key alone (Part 1, Section 16.6.10, equations
     /// 21/22).
     /// </remarks>
     /// <typeparam name="TResponse">The command's response type.</typeparam>
@@ -1294,7 +1294,7 @@ public static class TpmDeviceExtensions
     /// </summary>
     /// <remarks>
     /// The hierarchy generalization of <c>Extensions/Pin</c>'s owner-only equivalent and of
-    /// <c>Extensions/Policy</c>'s authorization-session helper (TPM 2.0 Library Part 1, Section 17.6.10,
+    /// <c>Extensions/Policy</c>'s authorization-session helper (TPM 2.0 Library Part 1, Section 16.6.10,
     /// equation 20): binding folds <paramref name="hierarchyAuth"/> into the session key via KDFa, so the
     /// per-command authHMAC's key genuinely incorporates the hierarchy's authorization value rather than sending
     /// it in the clear the way a <c>…WithPasswordAsync</c> opt-out does. Those files are disjoint from this one,
@@ -1341,8 +1341,8 @@ public static class TpmDeviceExtensions
         try
         {
             //The bind authValue enters the session-key KDFa with its trailing zeros already removed (TPM 2.0
-            //Library Part 1, Section 17.6.4.3, and CreateBoundAsync's own documented precondition): the TPM keys
-            //equation 20 (Part 1, clause 17.6.10) on the stripped form, so a hierarchy authorization value ending in zero octets would
+            //Library Part 1, Section 16.6.4.3, and CreateBoundAsync's own documented precondition): the TPM keys
+            //equation 20 (Part 1, clause 16.6.10) on the stripped form, so a hierarchy authorization value ending in zero octets would
             //otherwise derive a session key the TPM never agrees with.
             TpmSession session = await TpmSession.CreateBoundAsync(
                 new TpmHandle(sessionHandle), StripTrailingZeros(hierarchyAuth), startInput.NonceCaller, started.NonceTPM,
@@ -1373,10 +1373,10 @@ public static class TpmDeviceExtensions
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The session key becomes <c>KDFa(hierarchyAuth ‖ salt, …)</c> (TPM 2.0 Library Part 1, Section 17.6.12,
+    /// The session key becomes <c>KDFa(hierarchyAuth ‖ salt, …)</c> (TPM 2.0 Library Part 1, Section 16.6.12,
     /// equation 25) rather than a KDFa over the authorization value alone, so the term an observer would have to
-    /// guess is no longer the only unknown: the salt is RSA-OAEP-encrypted to <paramref name="tpmKey"/> (Annex
-    /// B.10.2) and only the TPM holding its private half can recover it.
+    /// guess is no longer the only unknown: the salt is RSA-OAEP-encrypted to <paramref name="tpmKey"/> (clause
+    /// 16.6.13) and only the TPM holding its private half can recover it.
     /// </para>
     /// <para>
     /// The salt is zeroized and returned to the pool as soon as <c>CreateBoundAsync</c> has folded it into the
@@ -1432,7 +1432,7 @@ public static class TpmDeviceExtensions
 
             try
             {
-                //Both terms of equation 25 (Part 1, clause 17.6.12) are present here: the stripped bind authValue and the recovered salt.
+                //Both terms of equation 25 (Part 1, clause 16.6.12) are present here: the stripped bind authValue and the recovered salt.
                 //The session takes ownership of started's nonceTPM, so the response is never disposed
                 //independently.
                 TpmSession session = await TpmSession.CreateBoundAsync(
@@ -1465,8 +1465,8 @@ public static class TpmDeviceExtensions
 
     /// <summary>
     /// Removes trailing zero octets from an authorization value before it is used in an authorization
-    /// computation (TPM 2.0 Library Part 1, Section 17.6.4.3: "Trailing octets of zero are to be removed from any
-    /// string before it is used as an authValue"; Section 17.6.5 states the same for the authValue term of the
+    /// computation (TPM 2.0 Library Part 1, Section 16.6.4.3: "Trailing octets of zero are to be removed from any
+    /// string before it is used as an authValue"; Section 16.6.5 states the same for the authValue term of the
     /// HMAC key).
     /// </summary>
     /// <remarks>

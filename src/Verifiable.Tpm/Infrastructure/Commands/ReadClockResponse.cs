@@ -10,7 +10,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// <remarks>
 /// <para>
 /// This type represents the complete response parameter area for the TPM2_ReadClock command: a single
-/// fixed-layout <c>TPMS_TIME_INFO</c> (TPM 2.0 Library Part 3, Section 29.1, Table 203).
+/// fixed-layout <c>TPMS_TIME_INFO</c> (TPM 2.0 Library Part 3, Section 29.1, Table 233).
 /// </para>
 /// <para>
 /// Unlike <see cref="GetTimeResponse"/>, this value is uncertified and unsigned — it carries no

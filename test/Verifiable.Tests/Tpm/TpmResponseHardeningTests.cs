@@ -112,7 +112,7 @@ internal sealed class TpmResponseHardeningTests
     {
         //A TPM_ST_SESSIONS response whose parameterSize field claims more bytes than the response contains must be
         //answered with TPM_RC_SIZE, not pre-allocate that many bytes nor, once cast to int, go negative and throw
-        //past the fail-closed TpmResult contract (Part 1, §16.10 parameter/auth split).
+        //past the fail-closed TpmResult contract (Part 1, §15.10 parameter/auth split).
         ValueTask<TpmResult<TpmResponse>> Handler(
             ReadOnlyMemory<byte> command,
             BaseMemoryPool pool,

@@ -22,7 +22,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// } TPMS_HASH_MLDSA_PARMS;
 /// </code>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 12.2.3.7, Table 229 (v1.85).
+/// Specification reference: TPM 2.0 Library Part 2, Section 12.2.3.7, Table 245 (v1.85).
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]

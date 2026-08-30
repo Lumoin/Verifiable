@@ -18,7 +18,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// nonce, and signs it with the key referenced by <see cref="SignHandle"/>.
 /// </para>
 /// <para>
-/// Command structure (TPM 2.0 Part 3, Section 18.3, Table 88):
+/// Command structure (TPM 2.0 Part 3, Section 18.3, Table 99):
 /// </para>
 /// <list type="bullet">
 ///   <item><description>signHandle (TPMI_DH_OBJECT+): The signing key. Requires authorization (USER role).</description></item>
@@ -48,8 +48,8 @@ public sealed class CertifyCreationInput: ITpmCommandInput, IDisposable
     /// <inheritdoc/>
     /// <remarks>
     /// <c>qualifyingData</c> (<c>TPM2B_DATA</c>) is the first entry of the parameter area, ordered ahead of
-    /// <c>creationHash</c>, and carries an explicit size field (TPM 2.0 Library Part 3, clause 18.3, Table 91),
-    /// which is what TPM 2.0 Library Part 1, clause 19.1 requires of an encryptable parameter and what clause
+    /// <c>creationHash</c>, and carries an explicit size field (TPM 2.0 Library Part 3, clause 18.3, Table 99),
+    /// which is what TPM 2.0 Library Part 1, clause 18.1 requires of an encryptable parameter and what clause
     /// 16.4 restates ("for a command or response parameter to be encrypted, it must be the first parameter and
     /// it must be a TPM2B type"). Only that first parameter is ever encrypted, so the creation hash and ticket
     /// travel in the clear. A session without the <c>decrypt</c> attribute is unaffected; the attribute is what

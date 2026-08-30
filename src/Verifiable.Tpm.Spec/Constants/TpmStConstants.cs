@@ -1,13 +1,13 @@
 namespace Verifiable.Tpm.Spec.Constants;
 
 /// <summary>
-/// TPM_ST constants (Table 23).
+/// TPM_ST constants (Table 21).
 /// </summary>
 /// <remarks>
 /// <para>
 /// Specification:
 /// <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>
-/// (Part 2: Structures, section "6 Constants", Table 23).
+/// (Part 2: Structures, section "6 Constants", Table 21).
 /// </para>
 /// </remarks>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1008:Enums should have zero value", Justification = "Specifica")]
@@ -92,6 +92,16 @@ public enum TpmStConstants: ushort
     /// tag for a ticket type
     /// </summary>
     TPM_ST_AUTH_SIGNED = 0x8025,
+
+    /// <summary>
+    /// tag for a TPMT_TK_VERIFIED produced by TPM2_VerifySequenceComplete()
+    /// </summary>
+    TPM_ST_MESSAGE_VERIFIED = 0x8026,
+
+    /// <summary>
+    /// tag for a TPMT_TK_VERIFIED produced by TPM2_VerifyDigestSignature()
+    /// </summary>
+    TPM_ST_DIGEST_VERIFIED = 0x8027,
 
     /// <summary>
     /// tag for a structure describing a Field Upgrade Policy

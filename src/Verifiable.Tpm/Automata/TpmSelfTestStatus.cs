@@ -2,7 +2,7 @@ namespace Verifiable.Tpm.Automata;
 
 /// <summary>
 /// The outcome of the TPM's self-test, as reported by <c>TPM2_GetTestResult()</c>
-/// (TPM 2.0 Library Part 1, clause 10.3).
+/// (TPM 2.0 Library Part 1, clause 9.3).
 /// </summary>
 public enum TpmSelfTestStatus
 {

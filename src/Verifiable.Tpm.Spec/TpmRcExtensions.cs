@@ -28,7 +28,7 @@ namespace Verifiable.Tpm.Spec;
 ///   </item>
 /// </list>
 /// <para>
-/// <b>Format-zero bit layout (Table 16):</b>
+/// <b>Format-zero bit layout (Table 14):</b>
 /// </para>
 /// <list type="bullet">
 ///   <item><description>Bits 6:0 (E): Error number.</description></item>
@@ -39,7 +39,7 @@ namespace Verifiable.Tpm.Spec;
 ///   <item><description>Bit 11 (S): Severity, set for warnings.</description></item>
 /// </list>
 /// <para>
-/// <b>Format-one bit layout (Table 18):</b>
+/// <b>Format-one bit layout (Table 16):</b>
 /// </para>
 /// <list type="bullet">
 ///   <item><description>Bits 5:0 (E): Error number.</description></item>
@@ -60,7 +60,7 @@ public static class TpmRcExtensions
     private const int NumberFieldShift = 8;
 
     //Error number masks differ by format (TPM 2.0 Library Specification Part 2, Tables 16 and 18).
-    [SuppressMessage("Performance", "CA1823:Avoid unused private fields", Justification = "Spec-defined mask for format-zero error extraction (TPM 2.0 Part 2, Table 16).")]
+    [SuppressMessage("Performance", "CA1823:Avoid unused private fields", Justification = "Spec-defined mask for format-zero error extraction (TPM 2.0 Part 2, Table 14).")]
     private const uint FormatZeroErrorMask = 0x07F;
     private const uint FormatOneErrorMask = 0x03F;
 

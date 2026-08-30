@@ -23,7 +23,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 ///   <item><description>TPM_ALG_ECC: TPMS_ECC_POINT (X, Y coordinates)</description></item>
 /// </list>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 12.2.3.2, Table 212.
+/// Specification reference: TPM 2.0 Library Part 2, Section 12.2.3.2, Table 226.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -154,6 +154,46 @@ public sealed class TpmuPublicId: IDisposable
         modulus.CopyTo(storage.Memory.Span);
 
         return new TpmuPublicId(TpmAlgIdConstants.TPM_ALG_RSA, storage, modulus.Length);
+    }
+
+    /// <summary>
+    /// Gets the keyed-hash <c>unique</c> value as a read-only span — <c>H_nameAlg(seedValue ‖ sensitive)</c>
+    /// per TPM 2.0 Library Part 2, clause 12.2.3.1, equation (8); Part 1, clause 24.5.3.2, equation (48), or empty for a creation template.
+    /// </summary>
+    /// <returns>The unique octets, or empty when the union is not KEYEDHASH or carries the template form.</returns>
+    public ReadOnlySpan<byte> GetKeyedHashUnique()
+    {
+        ObjectDisposedException.ThrowIf(disposed, this);
+
+        if(Type != TpmAlgIdConstants.TPM_ALG_KEYEDHASH || KeyedHashStorage is null)
+        {
+            return ReadOnlySpan<byte>.Empty;
+        }
+
+        return KeyedHashStorage.Memory.Span.Slice(0, KeyedHashLength);
+    }
+
+    /// <summary>
+    /// Creates a KEYEDHASH public ID carrying a concrete <c>unique</c> value —
+    /// <c>H_nameAlg(seedValue ‖ sensitive)</c> per TPM 2.0 Library Part 2, clause 12.2.3.1, equation (8); Part 1, clause 24.5.3.2, equation (48) —
+    /// the form a created object's public area carries, as opposed to <see cref="EmptyKeyedHash"/>'s template form.
+    /// </summary>
+    /// <param name="unique">The unique octets; copied into pooled storage the returned union owns.</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <returns>The public ID.</returns>
+    public static TpmuPublicId FromKeyedHashUnique(ReadOnlySpan<byte> unique, BaseMemoryPool pool)
+    {
+        ArgumentNullException.ThrowIfNull(pool);
+
+        if(unique.IsEmpty)
+        {
+            return EmptyKeyedHash();
+        }
+
+        IMemoryOwner<byte> storage = pool.Rent(unique.Length);
+        unique.CopyTo(storage.Memory.Span);
+
+        return new TpmuPublicId(storage, unique.Length);
     }
 
     /// <summary>

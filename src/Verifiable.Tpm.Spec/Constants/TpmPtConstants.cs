@@ -8,7 +8,7 @@ namespace Verifiable.Tpm.Spec.Constants;
 /// Used with <c>TPM2_GetCapability</c> when <c>capability == TPM_CAP_TPM_PROPERTIES</c>.
 /// </para>
 /// <para>
-/// Specification: TPM 2.0 Library Specification (Part 2: Structures), section "6 Constants", Table 29 (TPM_PT).
+/// Specification: TPM 2.0 Library Specification (Part 2: Structures), section "6 Constants", Table 28 (TPM_PT).
 /// </para>
 /// </remarks>
 public static class TpmPtConstants
@@ -96,17 +96,16 @@ public static class TpmPtConstants
     public const uint TPM_PT_REVISION = PT_FIXED + 2u;
 
     /// <summary>
-    /// TPM_PT_DAY_OF_YEAR.
+    /// TPM_PT_ERRATA.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Specification (Comments column):
-    /// the specification day of year using TCGcalendar Example: November 15, 2010, has a day ofyear
-    /// value of 319 (0 x 0000013 F). Note: Thespecification date is on the titlepage of the
-    /// specification or errata (see Clause 6. 1).
+    /// Specification (Comments column): the errata version implemented by the TPM. The errata version value
+    /// is on the title page of the errata document (see Clause 6.1). Prior to Version 185 this property was
+    /// called TPM_PT_DAY_OF_YEAR and reported a day-of-year date; the numeric slot is unchanged.
     /// </para>
     /// </remarks>
-    public const uint TPM_PT_DAY_OF_YEAR = PT_FIXED + 3u;
+    public const uint TPM_PT_ERRATA = PT_FIXED + 3u;
 
     /// <summary>
     /// TPM_PT_YEAR.
@@ -196,7 +195,7 @@ public static class TpmPtConstants
     /// <para>
     /// Specification (Comments column):
     /// the most-significant 32 bits of a TPM vendor-specificvalue indicating the version number of
-    /// the firmware. See Clause 10. 12. 2 a nd Clause 10. 12. 12.
+    /// the firmware. See Clause 10.11.2 and Clause 10.11.12.
     /// </para>
     /// </remarks>
     public const uint TPM_PT_FIRMWARE_VERSION_1 = PT_FIXED + 11u;
@@ -208,7 +207,7 @@ public static class TpmPtConstants
     /// <para>
     /// Specification (Comments column):
     /// the least-significant 32 bits of a TPM vendor-specificvalue indicating the version number of
-    /// the firmware. See Clause 10. 12. 2 a nd Clause 10. 12. 12.
+    /// the firmware. See Clause 10.11.2 and Clause 10.11.12.
     /// </para>
     /// </remarks>
     public const uint TPM_PT_FIRMWARE_VERSION_2 = PT_FIXED + 12u;

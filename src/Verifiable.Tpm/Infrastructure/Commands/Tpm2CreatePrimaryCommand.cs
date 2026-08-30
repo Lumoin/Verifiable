@@ -29,7 +29,7 @@ namespace Verifiable.Tpm.Infrastructure.Spec.Commands;
 /// TPML_PCR_SELECTION     creationPCR     PCRs to include in creation data
 /// </code>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 3, Section 24.1, Table 174.
+/// Specification reference: TPM 2.0 Library Part 3, Section 24.1, Table 191.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]

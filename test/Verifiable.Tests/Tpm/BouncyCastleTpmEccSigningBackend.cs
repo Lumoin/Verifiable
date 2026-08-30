@@ -105,7 +105,7 @@ internal static class BouncyCastleTpmEccSigningBackend
 
     /// <summary>
     /// Verifies an IEEE P1363 ECDSA signature over a pre-computed digest against a public point, modelling the
-    /// public-key operation <c>TPM2_VerifySignature()</c> performs (TPM 2.0 Library Part 3, clause 20.1). Never
+    /// public-key operation <c>TPM2_VerifySignature()</c> performs (TPM 2.0 Library Part 3, clause 20.2). Never
     /// re-hashes the digest, mirroring <see cref="SignDigestAsync"/>.
     /// </summary>
     /// <param name="publicPoint">The verifying key's public point, SEC1 uncompressed (<c>0x04 ‖ X ‖ Y</c>).</param>
@@ -145,7 +145,7 @@ internal static class BouncyCastleTpmEccSigningBackend
     /// <summary>
     /// Computes the ECDH shared value <c>Z</c> — the affine x-coordinate of <c>privateScalar · peerPublicPoint</c>,
     /// left-padded to the P-256 field width — modelling the seed exchange of the TPM's credential protection (TPM
-    /// 2.0 Library Part 1, clause 24). The modelled curve has cofactor one, so the plain multiplication yields the
+    /// 2.0 Library Part 1, clause 21). The modelled curve has cofactor one, so the plain multiplication yields the
     /// same shared point both the make and activate sides compute.
     /// </summary>
     /// <param name="privateScalar">The local party's private scalar, unsigned big-endian.</param>

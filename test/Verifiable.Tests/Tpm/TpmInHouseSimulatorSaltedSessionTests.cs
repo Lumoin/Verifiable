@@ -35,7 +35,7 @@ namespace Verifiable.Tests.Tpm;
 /// bind authValue, or hash selection surfaces as a command failure, never a silent pass.
 /// </para>
 /// <para>
-/// <see cref="MixedHashSaltedEccSessionUsesTpmKeysNameAlgorithmNotAuthHash"/> is the one test per Annex C.6
+/// <see cref="MixedHashSaltedEccSessionUsesTpmKeysNameAlgorithmNotAuthHash"/> is the one test per clause 44.7
 /// arm built from an INDEPENDENT transcription: raw BouncyCastle point arithmetic (never
 /// <c>TpmEccSigningBackend</c>) composes the ECDH shared value by hand, then the project's own <c>Kdfe</c>
 /// derives the salt from it, so a KDFe hash-selection leak (the session's <c>authHash</c> instead of
@@ -53,7 +53,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
     /// <summary>Every RSA/ECC storage-parent-shaped template this simulator builds fixes nameAlg to SHA-256.</summary>
     private const TpmAlgIdConstants TpmKeyNameAlg = TpmAlgIdConstants.TPM_ALG_SHA256;
 
-    /// <summary>The RSA public exponent the framework RSA key generator uses (the wire template's own "0" encodes this default, TPM 2.0 Library Part 2, Table 215).</summary>
+    /// <summary>The RSA public exponent the framework RSA key generator uses (the wire template's own "0" encodes this default, TPM 2.0 Library Part 2, Table 228).</summary>
     private const uint DefaultRsaExponent = 65537;
 
     /// <summary>The modulus width, in octets, of the 2048-bit RSA endorsement-key template <see cref="CreateRsaDecryptKeyAsync"/> builds.</summary>
@@ -74,7 +74,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
     /// <summary>
     /// Salted, unbound HMAC session against an RSA tpmKey: the response-encrypted <c>TPM2_GetRandom()</c> round
     /// trips through the production path, proving the host and the simulator derived the same session key from
-    /// the RSA-OAEP-recovered salt (TPM 2.0 Library Part 1, Annex B.10.1/B.10.2).
+    /// the RSA-OAEP-recovered salt (TPM 2.0 Library Part 1, clause 43.10.1/16.6.13).
     /// </summary>
     [TestMethod]
     public async Task RsaSaltedUnboundSessionRoundTripsEncryptedGetRandom()
@@ -111,7 +111,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
     /// <summary>
     /// Salted, unbound HMAC session against an ECC tpmKey: the response-encrypted <c>TPM2_GetRandom()</c> round
     /// trips through the production path, proving the host and the simulator derived the same session key from
-    /// the ECDH+KDFe-recovered salt (TPM 2.0 Library Part 1, Annex C.6.1/C.6.2).
+    /// the ECDH+KDFe-recovered salt (TPM 2.0 Library Part 1, clause 44.7.1/16.6.13.1).
     /// </summary>
     [TestMethod]
     public async Task EccSaltedUnboundSessionRoundTripsEncryptedGetRandom()
@@ -149,7 +149,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
     /// <summary>
     /// A salted ECC session whose session hash (<c>authHash</c>, SHA-384) differs from tpmKey's own Name
     /// algorithm (SHA-256, every ECC storage-parent template this simulator builds) — catching a KDFe
-    /// hash-selection leak (TPM 2.0 Library Part 1, Annex C.6.1: <c>hashAlg</c> is the recipient key's OWN
+    /// hash-selection leak (TPM 2.0 Library Part 1, clause 44.7.1: <c>hashAlg</c> is the recipient key's OWN
     /// nameAlg, never the session's <c>authHash</c>). Builds <c>encryptedSalt</c> and the expected salt from an
     /// INDEPENDENT transcription — raw BouncyCastle point arithmetic and a hand-rolled single-block KDFe over
     /// <see cref="SHA256"/>, never <see cref="Kdfe"/> or <see cref="TpmEccSigningBackend"/> — so the round trip
@@ -193,7 +193,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
             byte[] tpmKeyX = tpmKeyPoint.Span.Slice(1, 32).ToArray();
 
             //KDFe(SHA256, Z, "SECRET", partyU=ephemeralX, partyV=tpmKeyX, bits=256): a single SHA-256 block since
-            //the requested output exactly matches the digest width (TPM 2.0 Library Part 1, clause 9.4.10.3) —
+            //the requested output exactly matches the digest width (TPM 2.0 Library Part 1, clause 8.4.10.3) —
             //via the project's own Kdfe, over the hand-composed ECDH shared value.
             using IMemoryOwner<byte> saltOwner = await Kdfe.DeriveAsync(
                 HashAlgorithmName.SHA256, z, "SECRET", ephemeralX, tpmKeyX, Sha256DigestSize * 8, pool, TestContext.CancellationToken).ConfigureAwait(false);
@@ -227,7 +227,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
     /// <summary>
     /// A salted-and-bound session (RSA tpmKey) bound to a storage parent (empty auth) authorizing a DIFFERENT
     /// entity — a sealed item with a real, non-empty userAuth — over <c>TPM2_Unseal()</c>: the per-command
-    /// authValue is supplied (equation 21 (Part 1, clause 17.6.10)/25 (Part 1, clause 17.6.12), no bind-omission), proving salting composes with a genuine
+    /// authValue is supplied (equation 21 (Part 1, clause 16.6.10)/25 (Part 1, clause 16.6.12), no bind-omission), proving salting composes with a genuine
     /// non-empty authorization.
     /// </summary>
     [TestMethod]
@@ -297,7 +297,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
 
     /// <summary>
     /// A salted-and-bound session (ECC tpmKey) bound DIRECTLY to the sealed item it then authorizes over
-    /// <c>TPM2_Unseal()</c>, with NO per-command authValue supplied: only the eq. 26 (Part 1, clause 17.6.12) bind-omission (the bound
+    /// <c>TPM2_Unseal()</c>, with NO per-command authValue supplied: only the eq. 26 (Part 1, clause 16.6.12) bind-omission (the bound
     /// entity's real userAuth folded into the session key, then omitted from the per-command HMAC key because
     /// the entity being authorized now IS the bound entity) lets this succeed — proving bind resolution to a
     /// sealed object (with its real userAuth) composes correctly with salting.
@@ -345,7 +345,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
                 session.SessionAttributes = TpmaSession.CONTINUE_SESSION;
 
                 //Deliberately NOT calling session.SetAuthValue: the per-command authValue stays empty, relying
-                //entirely on the bind-omission (Part 1, clause 17.6.12, equation 26) to authorize the Unseal.
+                //entirely on the bind-omission (Part 1, clause 16.6.12, equation 26) to authorize the Unseal.
                 try
                 {
                     UnsealInput unsealInput = UnsealInput.ForItem(loaded.ObjectHandle);
@@ -723,7 +723,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
     /// <c>TPMT_SYM_DEF</c>'s <c>keyBits</c> selects <c>TPMI_AES_KEY_BITS</c> for an AES definition, an interface
     /// type whose admitted set is <c>$AES_KEY_SIZES_BITS</c> — 128, 192, and 256 in the reference — and whose
     /// violation the table names <c>#TPM_RC_VALUE</c>, "error when key size is not supported" (TPM 2.0 Library
-    /// Part 2, clause 11.1.2, Table 155, replicated for AES in clause 4.12.5, Table 1). The three codes divide
+    /// Part 2, clause 11.1.2, Table 158, replicated for AES in clause 11.1.2, Table 158). The three codes divide
     /// the definition cleanly and each names the field it is about: <c>TPM_RC_SYMMETRIC</c> for the algorithm,
     /// <c>TPM_RC_VALUE</c> for its key size, <c>TPM_RC_MODE</c> for its mode.
     /// </remarks>

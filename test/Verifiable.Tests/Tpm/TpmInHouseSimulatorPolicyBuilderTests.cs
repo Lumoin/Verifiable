@@ -16,7 +16,7 @@ namespace Verifiable.Tests.Tpm;
 /// <see cref="TpmSimulator"/> — entirely in-process, with no external assets. Each test builds a policy once, then
 /// confirms that <see cref="TpmPolicy.ComputeDigest"/> (the host prediction) and <see cref="TpmPolicy.ExecuteAsync"/>
 /// (the on-device replay, through the production command path) agree on a live session, so the two duals — predict
-/// and execute — cannot drift apart (TPM 2.0 Library Part 1, clause 17.7).
+/// and execute — cannot drift apart (TPM 2.0 Library Part 1, clause 16.7).
 /// </summary>
 /// <remarks>
 /// The simulator advances the session's policyDigest by calling the same <see cref="TpmPolicyDigest"/> methods the

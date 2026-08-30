@@ -26,7 +26,7 @@ namespace Verifiable.Tests.Tpm;
 /// </summary>
 /// <remarks>
 /// The Name is recomputed off-TPM from the wire-exported public area through the registered digest seam (TPM 2.0
-/// Library Part 1, clause 14, Table 6) — firewalled: the verifier never calls into the production <c>TpmObjectName</c>
+/// Library Part 1, clause 13, Table 9) — firewalled: the verifier never calls into the production <c>TpmObjectName</c>
 /// helper, only an independent recomputation, matching the sibling nameAlg/Certify/Sign/Quote tests' oracle style.
 /// A match proves the template's authPolicy is threaded end to end into both the exported public area and the Name.
 /// </remarks>

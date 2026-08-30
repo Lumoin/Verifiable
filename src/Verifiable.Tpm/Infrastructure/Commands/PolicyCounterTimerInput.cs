@@ -48,8 +48,8 @@ public readonly record struct PolicyCounterTimerInput(
 
     /// <summary>
     /// Refuses an operand the <c>TPM2B_OPERAND</c> wire type cannot carry, so the caller learns it at
-    /// construction rather than from the TPM's <c>TPM_RC_SIZE</c> after a round trip. Part 2, clause 10.4.6,
-    /// Table 96 bounds <c>TPM2B_OPERAND</c> by the digest structure's own <c>sizeof(TPMU_HA)</c>.
+    /// construction rather than from the TPM's <c>TPM_RC_SIZE</c> after a round trip. Part 2, clause 10.3.6,
+    /// Table 94 bounds <c>TPM2B_OPERAND</c> by the digest structure's own <c>sizeof(TPMU_HA)</c>.
     /// </summary>
     /// <param name="candidate">The operand offered by the caller.</param>
     /// <returns><paramref name="candidate"/> when it is within the bound.</returns>

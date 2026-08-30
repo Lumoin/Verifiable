@@ -26,7 +26,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// When algorithm is TPM_ALG_NULL, keyBits and mode are not present on the wire.
 /// </para>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 11.1.7, Table 160.
+/// Specification reference: TPM 2.0 Library Part 2, Section 11.1.7, Table 163.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]

@@ -12,16 +12,18 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// <remarks>
 /// <para>
 /// Validates that <see cref="Signature"/> is a valid signature over <see cref="Digest"/> made with the key
-/// referenced by <see cref="KeyHandle"/>. This is a public-key operation: <see cref="KeyHandle"/> requires no
-/// authorization at all, so the command carries no authorization area at all (TPM_ST_NO_SESSIONS).
+/// referenced by <see cref="KeyHandle"/>. <see cref="KeyHandle"/> requires no authorization at all, so the
+/// command carries no authorization area at all (TPM_ST_NO_SESSIONS): for an asymmetric key only the public
+/// portion is consulted, while for a KEYEDHASH HMAC key "both the public and private portions need to be
+/// loaded" — the TPM recomputes the HMAC under the key's sensitive bits (TPM 2.0 Library Part 3, clause 20.2.1).
 /// </para>
 /// <para>
-/// Command structure (TPM 2.0 Part 3, Section 20.1, Table 104):
+/// Command structure (TPM 2.0 Part 3, Section 20.2, Table 116):
 /// </para>
 /// <list type="bullet">
-///   <item><description>keyHandle (TPMI_DH_OBJECT): The key whose public part verifies the signature. Requires no authorization.</description></item>
+///   <item><description>keyHandle (TPMI_DH_OBJECT): The key that verifies the signature. Requires no authorization.</description></item>
 ///   <item><description>digest (TPM2B_DIGEST): The digest the signature is claimed to be over.</description></item>
-///   <item><description>signature (TPMT_SIGNATURE): sigAlg (TPMI_ALG_SIG_SCHEME) selects the ECDSA r/s pair or the single RSA signature buffer.</description></item>
+///   <item><description>signature (TPMT_SIGNATURE): sigAlg (TPMI_ALG_SIG_SCHEME) selects the ECDSA r/s pair, the single RSA signature buffer, or the HMAC member's unsized TPMT_HA digest (TPM 2.0 Library Part 2, clause 10.2.2, Table 89).</description></item>
 /// </list>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -47,7 +49,7 @@ public sealed class VerifySignatureInput: ITpmCommandInput, IDisposable
     public ReadOnlyMemory<byte> Digest { get; }
 
     /// <summary>
-    /// Gets the signing algorithm (TPMI_ALG_SIG_SCHEME): TPM_ALG_ECDSA, TPM_ALG_RSASSA, or TPM_ALG_RSAPSS.
+    /// Gets the signing algorithm (TPMI_ALG_SIG_SCHEME): TPM_ALG_ECDSA, TPM_ALG_RSASSA, TPM_ALG_RSAPSS, or TPM_ALG_HMAC.
     /// </summary>
     public TpmAlgIdConstants SignatureScheme { get; }
 
@@ -57,7 +59,8 @@ public sealed class VerifySignatureInput: ITpmCommandInput, IDisposable
     public TpmAlgIdConstants SchemeHashAlg { get; }
 
     /// <summary>
-    /// Gets the signature octets: IEEE P1363 r ‖ s for ECDSA, or the raw RSA signature for RSASSA/RSAPSS.
+    /// Gets the signature octets: IEEE P1363 r ‖ s for ECDSA, the raw RSA signature for RSASSA/RSAPSS, or the
+    /// raw HMAC digest (the TPMT_HA member's unsized value) for TPM_ALG_HMAC.
     /// </summary>
     public ReadOnlyMemory<byte> Signature { get; }
 
@@ -123,8 +126,8 @@ public sealed class VerifySignatureInput: ITpmCommandInput, IDisposable
     /// </summary>
     /// <param name="keyHandle">The handle of the key whose public part verifies the signature.</param>
     /// <param name="digest">The digest the signature is claimed to be over.</param>
-    /// <param name="signature">The signature octets: IEEE P1363 r ‖ s for ECDSA, or the raw RSA signature for RSASSA/RSAPSS.</param>
-    /// <param name="signatureScheme">The signing scheme algorithm (TPM_ALG_ECDSA, TPM_ALG_RSASSA, or TPM_ALG_RSAPSS).</param>
+    /// <param name="signature">The signature octets: IEEE P1363 r ‖ s for ECDSA, the raw RSA signature for RSASSA/RSAPSS, or the raw HMAC digest (the TPMT_HA member's unsized value) for TPM_ALG_HMAC.</param>
+    /// <param name="signatureScheme">The signing scheme algorithm (TPM_ALG_ECDSA, TPM_ALG_RSASSA, TPM_ALG_RSAPSS, or TPM_ALG_HMAC).</param>
     /// <param name="schemeHashAlg">The hash algorithm carried inside the signature.</param>
     /// <param name="pool">The memory pool for the digest and signature buffers.</param>
     /// <returns>A new <see cref="VerifySignatureInput"/>.</returns>
@@ -175,15 +178,9 @@ public sealed class VerifySignatureInput: ITpmCommandInput, IDisposable
     /// <inheritdoc/>
     public int GetSerializedSize()
     {
-        //TPMT_SIGNATURE: sigAlg (UINT16) + hash (UINT16) + either the ECDSA r/s TPM2B pair (two size prefixes)
-        //or the single RSA TPM2B signature (one size prefix); the signature octets are Signature.Length either way.
-        int signatureFramingSize = SignatureScheme == TpmAlgIdConstants.TPM_ALG_ECDSA
-            ? (4 * sizeof(ushort))
-            : (3 * sizeof(ushort));
-
         return sizeof(uint) +                          //keyHandle (TPMI_DH_OBJECT).
                sizeof(ushort) + Digest.Length +         //digest (TPM2B_DIGEST): size prefix + bytes.
-               signatureFramingSize + Signature.Length; //signature (TPMT_SIGNATURE).
+               TpmtSignatureFraming.GetSerializedSize(SignatureScheme, Signature.Length); //signature (TPMT_SIGNATURE).
     }
 
     /// <inheritdoc/>
@@ -200,30 +197,7 @@ public sealed class VerifySignatureInput: ITpmCommandInput, IDisposable
         writer.WriteUInt16((ushort)Digest.Length);
         writer.WriteBytes(Digest.Span);
 
-        writer.WriteUInt16((ushort)SignatureScheme);  //sigAlg: the TPMU_SIGNATURE selector.
-        writer.WriteUInt16((ushort)SchemeHashAlg);    //hash inside the signature member.
-
-        ReadOnlySpan<byte> signatureBytes = Signature.Span;
-        if(SignatureScheme == TpmAlgIdConstants.TPM_ALG_ECDSA)
-        {
-            //TPMS_SIGNATURE_ECDSA: r and s are the equal-width halves of the IEEE P1363 signature — the same
-            //framing the simulator's response serializer uses for TPM2_Sign()/TPM2_Certify() and the other
-            //attest-producing commands.
-            if((signatureBytes.Length & 1) != 0)
-            {
-                throw new InvalidOperationException(
-                    $"An ECDSA signature must be IEEE P1363 r ‖ s of even length so r and s are equal width; got {signatureBytes.Length} octets.");
-            }
-
-            int fieldWidth = signatureBytes.Length / 2;
-            writer.WriteTpm2b(signatureBytes[..fieldWidth]);   //signatureR (TPM2B_ECC_PARAMETER).
-            writer.WriteTpm2b(signatureBytes[fieldWidth..]);   //signatureS (TPM2B_ECC_PARAMETER).
-        }
-        else
-        {
-            //TPMS_SIGNATURE_RSA: the whole signature as one TPM2B_PUBLIC_KEY_RSA.
-            writer.WriteTpm2b(signatureBytes);
-        }
+        TpmtSignatureFraming.Write(ref writer, SignatureScheme, SchemeHashAlg, Signature.Span);
     }
 
     /// <inheritdoc/>

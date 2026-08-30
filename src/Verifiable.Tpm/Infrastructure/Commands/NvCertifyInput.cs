@@ -18,7 +18,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// TPMS_NV_DIGEST_CERTIFY_INFO form.
 /// </para>
 /// <para>
-/// Command structure (TPM 2.0 Part 3, Section 31.16, Table 238):
+/// Command structure (TPM 2.0 Part 3, Section 31.16, Table 271):
 /// </para>
 /// <list type="bullet">
 ///   <item><description>signHandle (TPMI_DH_OBJECT+): The signing key. Requires authorization (USER role).</description></item>
@@ -48,8 +48,8 @@ public sealed class NvCertifyInput: ITpmCommandInput, IDisposable
     /// <remarks>
     /// <c>qualifyingData</c> (<c>TPM2B_DATA</c>) is the first entry of the parameter area, ordered ahead of
     /// <c>inScheme</c>, <c>size</c> and <c>offset</c>, and carries an explicit size field (TPM 2.0 Library Part
-    /// 3, clause 31.16, Table 254), which is what TPM 2.0 Library Part 1, clause 19.1 requires of an encryptable
-    /// parameter and what clause 16.4 restates ("for a command or response parameter to be encrypted, it must be
+    /// 3, clause 31.16, Table 271), which is what TPM 2.0 Library Part 1, clause 18.1 requires of an encryptable
+    /// parameter and what clause 15.4 restates ("for a command or response parameter to be encrypted, it must be
     /// the first parameter and it must be a TPM2B type"). A session without the <c>decrypt</c> attribute is
     /// unaffected; the attribute is what asks the TPM to decrypt the parameter after the command HMACs verify, so
     /// the caller nonce this command echoes into the attestation's <c>extraData</c> never crosses the bus in the

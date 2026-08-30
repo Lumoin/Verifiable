@@ -37,7 +37,7 @@ internal sealed class TpmPinExtensionsTests
 
     /// <summary>
     /// A wrong owner authorization value; the simulator's owner authValue is empty throughout this suite (no
-    /// command in this slice changes it from empty, TPM 2.0 Library Part 1, Section 37.2.6.6's owner-arm
+    /// command in this slice changes it from empty, TPM 2.0 Library Part 1, Section 34.2.6.6's owner-arm
     /// verbs are the only owner-authorized path exercised here), so any non-empty value is wrong.
     /// </summary>
     private static byte[] WrongOwnerAuth { get; } = [0x55, 0x55, 0x55, 0x55];
@@ -48,7 +48,7 @@ internal sealed class TpmPinExtensionsTests
     /// <summary>
     /// Verifies the define-then-verify happy path through the verbs alone: a fresh PIN Fail Index accepts the
     /// correct PIN and the successful authorization resets <c>pinCount</c> to zero (TPM 2.0 Library Part 1,
-    /// Section 37.2.6.6), leaving <c>pinLimit</c> unchanged.
+    /// Section 34.2.6.6), leaving <c>pinLimit</c> unchanged.
     /// </summary>
     [TestMethod]
     public async Task DefinePinFailIndexThenVerifyWithCorrectPinAsyncSucceedsAndReportsPinCountZero()
@@ -140,7 +140,8 @@ internal sealed class TpmPinExtensionsTests
     /// <summary>
     /// Pins the CTAP-relevant blocked rung: once <c>pinCount</c> reaches <c>pinLimit</c>,
     /// <see cref="TpmDeviceExtensions.VerifyPinAsync"/> refuses even the CORRECT PIN with
-    /// <c>TPM_RC_AUTH_UNAVAILABLE</c> (TPM 2.0 Library Part 1, Section 37.2.6.6) - the TPM-side equivalent of
+    /// <c>TPM_RC_AUTH_UNAVAILABLE</c> (TPM 2.0 Library Part 1, clause 34.2.6.6, for the pinCount &gt;= pinLimit
+    /// refusal; Part 3, clause 5.6, Authorization Checks, for the response code) - the TPM-side equivalent of
     /// CTAP's <c>PIN_BLOCKED</c>.
     /// </summary>
     [TestMethod]
@@ -171,7 +172,7 @@ internal sealed class TpmPinExtensionsTests
     /// <summary>
     /// Pins the CTAP-relevant recovery rung: <see cref="TpmDeviceExtensions.ResetPinCountAsync"/> restores an
     /// at-limit PIN Fail Index for further PIN-auth use, mirroring CTAP's owner-equivalent "set new PIN" reset
-    /// path (TPM 2.0 Library Part 1, Section 37.2.8.1's recovery note: no automatic self-heal exists until the
+    /// path (TPM 2.0 Library Part 1, Section 34.2.8.1's recovery note: no automatic self-heal exists until the
     /// owner rewrites the counter parameters).
     /// </summary>
     [TestMethod]
@@ -206,7 +207,7 @@ internal sealed class TpmPinExtensionsTests
     /// Pins the no-oracle "how many tries remain" query: <see cref="TpmDeviceExtensions.ReadPinCountersAsync"/>
     /// reports the current counter parameters WITHOUT ever moving <c>pinCount</c> itself, whether below the
     /// limit or already at it - repeated reads observe the identical value each time (TPM 2.0 Library Part 3,
-    /// Section 31.13's owner-authorized arm; Part 1, Section 37.2.6.6's pinCount update is scoped to the
+    /// Section 31.13's owner-authorized arm; Part 1, Section 34.2.6.6's pinCount update is scoped to the
     /// Index's OWN authValue resolving authorization, never the owner arm).
     /// </summary>
     [TestMethod]

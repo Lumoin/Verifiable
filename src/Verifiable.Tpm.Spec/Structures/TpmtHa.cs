@@ -26,7 +26,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// } TPMT_HA;
 /// </code>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 10.3.2, Table 91.
+/// Specification reference: TPM 2.0 Library Part 2, Section 10.2.2, Table 89.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -133,6 +133,7 @@ public sealed class TpmtHa: IDisposable, ITpmWireType
     /// <param name="isNullAdmitted">Whether <c>hashAlg</c> may be <c>TPM_ALG_NULL</c>.</param>
     /// <returns>The parsed structure.</returns>
     /// <exception cref="InvalidOperationException"><c>hashAlg</c> is not an admitted hash algorithm (<c>TPM_RC_HASH</c>).</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The digest <see cref="HashAlg"/> implies is wider than the octets remaining in <paramref name="reader"/>.</exception>
     public static TpmtHa Parse(ref TpmReader reader, BaseMemoryPool pool, bool isNullAdmitted = false)
     {
         ArgumentNullException.ThrowIfNull(pool);
@@ -144,6 +145,11 @@ public sealed class TpmtHa: IDisposable, ITpmWireType
         }
 
         int size = hashAlg.DigestSize!.Value;
+        if(size > reader.Remaining)
+        {
+            throw new ArgumentOutOfRangeException(nameof(reader), size, $"Digest size {size} exceeds the {reader.Remaining} octets remaining in the reader.");
+        }
+
         IMemoryOwner<byte> storage = pool.Rent(size);
         ReadOnlySpan<byte> source = reader.ReadBytes(size);
         source.CopyTo(storage.Memory.Span.Slice(0, size));
@@ -207,5 +213,6 @@ public sealed class TpmtHa: IDisposable, ITpmWireType
         }
     }
 
+    /// <summary>The debugger display string.</summary>
     private string DebuggerDisplay => IsNull ? "TPMT_HA(NULL)" : $"TPMT_HA({HashAlg.Value}, {Size} bytes)";
 }

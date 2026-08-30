@@ -33,9 +33,9 @@ namespace Verifiable.Tests.Tpm;
 /// </para>
 /// <para>
 /// The simulator runs both sides, so its credential-protection crypto is self-consistent by construction: the
-/// seed is transported by RSA-OAEP to the EK's public modulus (TPM 2.0 Library Part 1, Annex B.4, B.10.3,
-/// B.10.4), and the credential blob is the real AK-Name-bound outer wrap (<c>KDFa</c>-derived AES-CFB
-/// encryption and an outer HMAC over the ciphertext and the AK's Name, Part 1, clause 24) — identical to the
+/// seed is transported by RSA-OAEP to the EK's public modulus (TPM 2.0 Library Part 1, clause 43.4, 20.3.2.3,
+/// 21.3), and the credential blob is the real AK-Name-bound outer wrap (<c>KDFa</c>-derived AES-CFB
+/// encryption and an outer HMAC over the ciphertext and the AK's Name, Part 1, clause 21) — identical to the
 /// ECC arm. The negative test confirms the binding is to the AK's <i>Name</i>: a credential bound to one AK
 /// cannot be activated against a different object, even with the same EK.
 /// </para>
@@ -98,7 +98,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialActivationTests
                     //Device side: the AK is the activate object (ADMIN role, password), the EK recovers the seed
                     //(USER role) — but the EK's userWithAuth is CLEAR, so its session must be the satisfied policy
                     //session rather than a password. Both handles are transient objects, so the executor needs their
-                    //Names to compute cpHash for the policy session (Part 1, clause 16.7, equation 15).
+                    //Names to compute cpHash for the policy session (Part 1, clause 15.7, equation 15).
                     using ActivateCredentialInput activateInput = ActivateCredentialInput.Create(
                         ak.ObjectHandle, ek.ObjectHandle, made.CredentialBlob.Span, made.Secret.Span, pool);
                     using TpmPasswordSession activateAuth = TpmPasswordSession.CreateEmpty(pool);
@@ -132,7 +132,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialActivationTests
 
     /// <summary>
     /// Verifies that a credential wrapped to one AK's Name cannot be activated against a different AK, even
-    /// through the same RSA EK: the outer HMAC is re-keyed on the activate object's Name (Part 1, clause 24), so
+    /// through the same RSA EK: the outer HMAC is re-keyed on the activate object's Name (Part 1, clause 21), so
     /// a mismatched object fails the integrity check regardless of the seed-transport algorithm.
     /// </summary>
     [TestMethod]

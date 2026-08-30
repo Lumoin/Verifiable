@@ -63,6 +63,80 @@ internal sealed class TpmCommandExecutorTests
         return frame;
     }
 
+    /// <summary>
+    /// Frames a <c>TPM_ST_SESSIONS</c> response: the header, the <c>parameterSize</c>, the parameters, then the
+    /// authorization area exactly as given — so a test can hand the executor a malformed authorization area.
+    /// </summary>
+    /// <param name="responseCode">The response code.</param>
+    /// <param name="parameters">The response parameters.</param>
+    /// <param name="authArea">The response authorization area octets, verbatim.</param>
+    /// <returns>The framed response.</returns>
+    private static byte[] BuildSessionsFrame(uint responseCode, ReadOnlySpan<byte> parameters, ReadOnlySpan<byte> authArea)
+    {
+        const ushort TpmStSessions = 0x8002;
+        int total = HeaderSize + sizeof(uint) + parameters.Length + authArea.Length;
+        byte[] frame = new byte[total];
+
+        frame[0] = (byte)(TpmStSessions >> 8);
+        frame[1] = (byte)(TpmStSessions & 0xFF);
+        frame[2] = (byte)(total >> 24);
+        frame[3] = (byte)(total >> 16);
+        frame[4] = (byte)(total >> 8);
+        frame[5] = (byte)(total & 0xFF);
+        frame[6] = (byte)(responseCode >> 24);
+        frame[7] = (byte)(responseCode >> 16);
+        frame[8] = (byte)(responseCode >> 8);
+        frame[9] = (byte)(responseCode & 0xFF);
+        frame[10] = (byte)(parameters.Length >> 24);
+        frame[11] = (byte)(parameters.Length >> 16);
+        frame[12] = (byte)(parameters.Length >> 8);
+        frame[13] = (byte)(parameters.Length & 0xFF);
+        parameters.CopyTo(frame.AsSpan(HeaderSize + sizeof(uint)));
+        authArea.CopyTo(frame.AsSpan(HeaderSize + sizeof(uint) + parameters.Length));
+
+        return frame;
+    }
+
+    /// <summary>
+    /// A response whose authorization area declares more octets than it carries is a size fault the executor
+    /// answers inside the <see cref="TpmResult{T}"/> contract as <c>TPM_RC_SIZE</c> — never an exception escaping
+    /// <see cref="TpmCommandExecutor.ExecuteAsync"/> — the posture the parameter parse takes.
+    /// <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Part 2, clause 6.6.3, Table 18; Part 1, clause 18.7.3</see>.
+    /// </summary>
+    [TestMethod]
+    public async Task ExecutorAnswersATruncatedResponseAuthorizationAreaWithSize()
+    {
+        const int RequestedBytes = 16;
+
+        ValueTask<TpmResult<TpmResponse>> Handler(
+            ReadOnlyMemory<byte> command,
+            BaseMemoryPool pool,
+            CancellationToken cancellationToken)
+        {
+            //A well-formed TPM2B_DIGEST of the requested width, then a TPMS_AUTH_RESPONSE whose nonceTPM declares
+            //64 octets but carries two, with nothing after.
+            byte[] parameters = new byte[sizeof(ushort) + RequestedBytes];
+            parameters[1] = RequestedBytes;
+            byte[] authArea = [0x00, 0x40, 0xAA, 0xBB];
+            byte[] frame = BuildSessionsFrame(0u, parameters, authArea);
+
+            return ValueTask.FromResult(SuccessFrame(frame, pool));
+        }
+
+        using var device = TpmDevice.Create(Handler);
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        var registry = new TpmResponseRegistry();
+        _ = registry.Register(TpmCcConstants.TPM_CC_GetRandom, TpmResponseCodec.GetRandom);
+        using TpmPasswordSession session = TpmPasswordSession.CreateEmpty(pool);
+        var input = new GetRandomInput(RequestedBytes);
+
+        TpmResult<GetRandomResponse> result = await TpmCommandExecutor.ExecuteAsync<GetRandomResponse>(
+            device, input, [session], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsTpmError, "A truncated response authorization area must surface as a TPM error result.");
+        Assert.AreEqual(TpmRcConstants.TPM_RC_SIZE, result.ResponseCode, "A truncated response authorization area is a size fault.");
+    }
+
     [TestMethod]
     public async Task ExecutorBuildsGetRandomCommandAndParsesResponse()
     {

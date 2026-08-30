@@ -22,7 +22,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 ///   <item><description>Bytes 2+: buffer - the coordinate value (big-endian integer).</description></item>
 /// </list>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 10.2.5, Table 177.
+/// Specification reference: TPM 2.0 Library Part 2, Section 11.2.5.1, Table 197.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -78,9 +78,16 @@ public sealed class Tpm2bEccParameter: SensitiveMemory, ITpmWireType
     /// <summary>
     /// Parses an ECC parameter from a TPM reader.
     /// </summary>
+    /// <remarks>
+    /// The declared size is checked against <see cref="MaxSize"/> and then <see cref="TpmReader.Remaining"/>
+    /// before any pooled buffer is rented, so a truncated or oversized frame throws without ever orphaning a
+    /// rental — the same ordering <see cref="Tpm2bDigest.Parse(ref TpmReader, BaseMemoryPool)"/> and
+    /// <see cref="Tpm2bPrivate.Parse(ref TpmReader, BaseMemoryPool)"/> use.
+    /// </remarks>
     /// <param name="reader">The reader.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The parsed ECC parameter.</returns>
+    /// <exception cref="InvalidOperationException">The declared size exceeds <see cref="MaxSize"/>, or exceeds the octets remaining in <paramref name="reader"/>.</exception>
     public static Tpm2bEccParameter Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
@@ -94,6 +101,11 @@ public sealed class Tpm2bEccParameter: SensitiveMemory, ITpmWireType
         if(size > MaxSize)
         {
             throw new InvalidOperationException($"ECC parameter size {size} exceeds maximum {MaxSize}.");
+        }
+
+        if(size > reader.Remaining)
+        {
+            throw new InvalidOperationException($"ECC parameter size {size} exceeds the {reader.Remaining} octets remaining in the reader.");
         }
 
         IMemoryOwner<byte> storage = pool.Rent(size);

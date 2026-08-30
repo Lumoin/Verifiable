@@ -4,6 +4,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Cryptography;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Extensions.DictionaryAttack;
@@ -59,6 +60,13 @@ internal sealed class TpmInHouseSimulatorSealTests
 
     /// <summary>A wrong guess at the parent's password, distinct from <see cref="ParentPasswordBytes"/>.</summary>
     private static byte[] WrongParentPasswordBytes { get; } = [0x9A, 0x9B, 0x9C, 0x9D];
+
+    /// <summary>
+    /// A transient handle value naming no loaded object in a freshly-brought-operational simulator — stands in
+    /// for <c>@parentHandle</c> in tests whose refusal fires before (or independent of) the handle actually
+    /// resolving.
+    /// </summary>
+    private const uint ArbitraryParentHandle = 0x8000_0001;
 
     /// <summary>Gets or sets the per-test context (supplies the cancellation token).</summary>
     public TestContext TestContext { get; set; } = null!;
@@ -123,6 +131,253 @@ internal sealed class TpmInHouseSimulatorSealTests
         Assert.IsTrue(
             unsealed.OutData.AsReadOnlySpan().SequenceEqual(SecretBytes),
             "The unsealed data must equal the sealed secret, byte for byte, recovered from the wire blob alone.");
+    }
+
+    /// <summary>
+    /// The seal round-trip under an RSA storage parent: the wrap's KDFa/HMAC/CFB derivations key off the RSA
+    /// parent's own protection seed exactly as the elliptic-curve parent's do (TPM 2.0 Library Part 1, Clause
+    /// 20 is parent-algorithm-agnostic — the seed, not the parent's key type, drives every derivation), so a
+    /// secret sealed under an ordinary RSA storage parent loads and unseals byte for byte.
+    /// </summary>
+    [TestMethod]
+    public async Task SealedSecretUnsealsUnderAnRsaStorageParent()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        var simulator = new TpmSimulator(
+            "tpm-in-house-seal-rsa", signingBackend: BouncyCastleTpmEccSigningBackend.Create(), rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create());
+        await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        await BringOperationalAsync(simulator, pool).ConfigureAwait(false);
+        using TpmSimulator ownedSimulator = simulator;
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryInput parentInput = CreatePrimaryInput.ForRsaStorageParent(TpmRh.TPM_RH_OWNER, null, 2048, pool, noDa: true);
+        using TpmPasswordSession ownerAuth = TpmPasswordSession.CreateEmpty(pool);
+        TpmResult<CreatePrimaryResponse> parentResult = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
+            tpm, parentInput, [ownerAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(parentResult.IsSuccess, $"CreatePrimary (RSA storage parent) failed: '{parentResult.ResponseCode}'.");
+
+        using CreatePrimaryResponse parent = parentResult.Value;
+        uint parentHandle = parent.ObjectHandle.Value;
+
+        using Tpm2bSensitiveCreate inSensitive = Tpm2bSensitiveCreate.ForSealedData(SecretBytes, pool);
+        using Tpm2bPublic sealTemplate = Tpm2bPublic.CreateSealedDataTemplate(SessionAlg, pool, noDa: true);
+        using CreateInput createInput = new(parentHandle, inSensitive, sealTemplate, Tpm2bData.Empty, TpmlPcrSelection.Empty);
+        using TpmPasswordSession createParentAuth = TpmPasswordSession.CreateEmpty(pool);
+
+        TpmResult<CreateResponse> createResult = await TpmCommandExecutor.ExecuteAsync<CreateResponse>(
+            tpm, createInput, [createParentAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(createResult.IsSuccess, $"Create (seal under RSA parent) failed: '{createResult.ResponseCode}'.");
+
+        using CreateResponse sealedObject = createResult.Value;
+        using Tpm2bPrivate inPrivate = Tpm2bPrivate.Create(sealedObject.OutPrivate.Span, pool);
+        using Tpm2bPublic inPublic = ClonePublic(sealedObject.OutPublic, pool);
+        using LoadInput loadInput = new(parentHandle, inPrivate, inPublic);
+        using TpmPasswordSession loadParentAuth = TpmPasswordSession.CreateEmpty(pool);
+
+        TpmResult<LoadResponse> loadResult = await TpmCommandExecutor.ExecuteAsync<LoadResponse>(
+            tpm, loadInput, [loadParentAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(loadResult.IsSuccess, $"Load (sealed under RSA parent) failed: '{loadResult.ResponseCode}'.");
+
+        using LoadResponse loaded = loadResult.Value;
+        using TpmPasswordSession itemAuth = TpmPasswordSession.CreateEmpty(pool);
+        UnsealInput unsealInput = UnsealInput.ForItem(loaded.ObjectHandle);
+
+        TpmResult<UnsealResponse> unsealResult = await TpmCommandExecutor.ExecuteAsync<UnsealResponse>(
+            tpm, unsealInput, [itemAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(unsealResult.IsSuccess, $"Unseal (sealed under RSA parent) failed: '{unsealResult.ResponseCode}'.");
+
+        using UnsealResponse unsealed = unsealResult.Value;
+        Assert.IsTrue(
+            unsealed.OutData.AsReadOnlySpan().SequenceEqual(SecretBytes),
+            "The secret sealed under an RSA storage parent must unseal byte for byte.");
+    }
+
+    /// <summary>
+    /// A creation template violating Part 2, clause 8.3.3.2's creation column — <c>fixedTPM</c> SET while
+    /// <c>fixedParent</c> is CLEAR, under a storage parent whose own <c>fixedTPM</c> is SET — is refused with
+    /// <c>TPM_RC_ATTRIBUTES</c> before any object is built (TPM 2.0 Library Part 3, clause 12.1, Table 20:
+    /// "objectAttributes are inconsistent" is <c>#TPM_RC_ATTRIBUTES</c> on <c>inPublic</c>). The inconsistent
+    /// pair is produced by clearing the marshaled <c>fixedParent</c> bit, since no factory emits it.
+    /// </summary>
+    [TestMethod]
+    public async Task CreateTemplateWithFixedTpmSetAndFixedParentClearIsRefusedWithAttributes()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, registry, pool).ConfigureAwait(false);
+        uint parentHandle = parent.ObjectHandle.Value;
+
+        //TPM2B size(2) ‖ type(2) ‖ nameAlg(2) ‖ TPMA_OBJECT(4, big-endian): fixedParent (0x10) lives in the
+        //attribute word's lowest-order octet at offset 9; clearing it leaves fixedTPM SET — the pair clause
+        //8.3.3.2 forbids under a fixedTPM-SET parent.
+        using Tpm2bPublic canonicalTemplate = Tpm2bPublic.CreateSealedDataTemplate(SessionAlg, pool, noDa: true);
+        byte[] marshaledTemplate = new byte[canonicalTemplate.GetSerializedSize()];
+        var templateWriter = new TpmWriter(marshaledTemplate);
+        canonicalTemplate.WriteTo(ref templateWriter);
+        marshaledTemplate[9] &= unchecked((byte)~0x10);
+
+        var templateReader = new TpmReader(marshaledTemplate);
+        using Tpm2bPublic inconsistentTemplate = Tpm2bPublic.Parse(ref templateReader, pool);
+
+        using Tpm2bSensitiveCreate inSensitive = Tpm2bSensitiveCreate.ForSealedData(SecretBytes, pool);
+        using CreateInput createInput = new(parentHandle, inSensitive, inconsistentTemplate, Tpm2bData.Empty, TpmlPcrSelection.Empty);
+        using TpmPasswordSession createParentAuth = TpmPasswordSession.CreateEmpty(pool);
+
+        TpmResult<CreateResponse> createResult = await TpmCommandExecutor.ExecuteAsync<CreateResponse>(
+            tpm, createInput, [createParentAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(
+            TpmRcConstants.TPM_RC_ATTRIBUTES, createResult.ResponseCode,
+            "A template holding fixedTPM SET with fixedParent CLEAR under a fixedTPM-SET parent is inconsistent (Part 2, clause 8.3.3.2).");
+    }
+
+    /// <summary>
+    /// A DUPLICABLE sealed object — <c>fixedTPM</c> and <c>fixedParent</c> both CLEAR, the equal pair Part 2,
+    /// clause 8.3.3.2 admits under a fixedTPM-SET parent — creates, exports a public area carrying the caller's
+    /// attribute choice, loads, and unseals exactly as the bound shape does: duplicability decides who may move
+    /// the object (<c>TPM2_Duplicate()</c>, Part 2, clause 8.3.2, Table 37), never how it seals.
+    /// </summary>
+    [TestMethod]
+    public async Task DuplicableSealedObjectRoundTripsAndExportsItsAttributeChoice()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, registry, pool).ConfigureAwait(false);
+        uint parentHandle = parent.ObjectHandle.Value;
+
+        using Tpm2bSensitiveCreate inSensitive = Tpm2bSensitiveCreate.ForSealedData(SecretBytes, pool);
+        using Tpm2bPublic duplicableTemplate = Tpm2bPublic.CreateSealedDataTemplate(SessionAlg, pool, noDa: true, isDuplicable: true);
+        using CreateInput createInput = new(parentHandle, inSensitive, duplicableTemplate, Tpm2bData.Empty, TpmlPcrSelection.Empty);
+        using TpmPasswordSession createParentAuth = TpmPasswordSession.CreateEmpty(pool);
+
+        TpmResult<CreateResponse> createResult = await TpmCommandExecutor.ExecuteAsync<CreateResponse>(
+            tpm, createInput, [createParentAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(createResult.IsSuccess, $"Create (duplicable seal) failed: '{createResult.ResponseCode}'.");
+
+        using CreateResponse sealedObject = createResult.Value;
+        Assert.AreEqual(
+            default,
+            sealedObject.OutPublic.PublicArea.ObjectAttributes & (TpmaObject.FIXED_TPM | TpmaObject.FIXED_PARENT),
+            "The exported public area must reproduce the caller's duplicability choice: fixedTPM and fixedParent CLEAR.");
+
+        using Tpm2bPrivate inPrivate = Tpm2bPrivate.Create(sealedObject.OutPrivate.Span, pool);
+        using Tpm2bPublic inPublic = ClonePublic(sealedObject.OutPublic, pool);
+        using LoadInput loadInput = new(parentHandle, inPrivate, inPublic);
+        using TpmPasswordSession loadParentAuth = TpmPasswordSession.CreateEmpty(pool);
+
+        TpmResult<LoadResponse> loadResult = await TpmCommandExecutor.ExecuteAsync<LoadResponse>(
+            tpm, loadInput, [loadParentAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(loadResult.IsSuccess, $"Load (duplicable sealed object) failed: '{loadResult.ResponseCode}'.");
+
+        using LoadResponse loaded = loadResult.Value;
+        using TpmPasswordSession itemAuth = TpmPasswordSession.CreateEmpty(pool);
+        UnsealInput unsealInput = UnsealInput.ForItem(loaded.ObjectHandle);
+
+        TpmResult<UnsealResponse> unsealResult = await TpmCommandExecutor.ExecuteAsync<UnsealResponse>(
+            tpm, unsealInput, [itemAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(unsealResult.IsSuccess, $"Unseal (duplicable sealed object) failed: '{unsealResult.ResponseCode}'.");
+
+        using UnsealResponse unsealed = unsealResult.Value;
+        Assert.IsTrue(
+            unsealed.OutData.AsReadOnlySpan().SequenceEqual(SecretBytes),
+            "A duplicable sealed object's secret must round-trip exactly as a bound one's does.");
+    }
+
+    /// <summary>
+    /// <c>TPM2_Load()</c>'s <c>inPrivate</c> (<c>TPM2B_PRIVATE</c>) declaring a size the command frame does not
+    /// actually carry is refused with <c>TPM_RC_INSUFFICIENT</c>. <c>TPM2B_PRIVATE</c> carries no small fixed
+    /// maximum — its bound is implementation storage alone (TPM 2.0 Library Part 2, clause 12.3.7, Table 243) —
+    /// so truncation, not a width bound, is the only refusal the wire parser can answer here
+    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
+    /// Specification</see>, Part 3: Commands, clause 5.8.2, Table 2). The parse fails before <c>@parentHandle</c> is ever
+    /// resolved, so an arbitrary handle value stands in for a real parent.
+    /// </summary>
+    [TestMethod]
+    public async Task LoadWithTruncatedPrivateBlobReturnsInsufficient()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+
+        TpmRcConstants code = await SubmitLoadCommandAsync(
+            simulator, pool, ArbitraryParentHandle, declaredPrivateBlobSize: 32, actualPrivateBlobBytesProvided: 4).ConfigureAwait(false);
+
+        Assert.AreEqual(TpmRcConstants.TPM_RC_INSUFFICIENT, code, "A declared inPrivate size past the frame's own end is TPM_RC_INSUFFICIENT.");
+    }
+
+    /// <summary>
+    /// A zero-size <c>inPrivate</c> is spec-legal at the wire (an empty <c>TPM2B_PRIVATE</c> parses cleanly),
+    /// but <c>TPM2_Load()</c> must still refuse it: "If inPrivate.size is zero, the load will fail"
+    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
+    /// Specification</see>, Part 3: Commands, clause 12.2). The clause names no code of its own, so the
+    /// size-parameter fallback answers (Part 3, clause 5.8.2, Table 2): the load fails closed with
+    /// <c>TPM_RC_SIZE</c> once the parent, object type and Name algorithm gates ahead of it have all passed —
+    /// an empty blob cannot even carry the wrap's integrity field.
+    /// </summary>
+    [TestMethod]
+    public async Task LoadWithZeroSizePrivateBlobFails()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, registry, pool).ConfigureAwait(false);
+
+        using Tpm2bPublic inPublic = Tpm2bPublic.CreateSealedDataTemplate(SessionAlg, pool, noDa: true);
+        using LoadInput loadInput = new(parent.ObjectHandle.Value, Tpm2bPrivate.Empty, inPublic);
+        using TpmPasswordSession loadParentAuth = TpmPasswordSession.CreateEmpty(pool);
+
+        TpmResult<LoadResponse> loadResult = await TpmCommandExecutor.ExecuteAsync<LoadResponse>(
+            tpm, loadInput, [loadParentAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(loadResult.IsSuccess, "TPM 2.0 Library Part 3, clause 12.2: \"If inPrivate.size is zero, the load will fail.\"");
+        Assert.AreEqual(TpmRcConstants.TPM_RC_SIZE, loadResult.ResponseCode, "A zero-size inPrivate cannot supply the simulator's own userAuth-length prefix.");
+    }
+
+    /// <summary>
+    /// Proves the pooled ownership of <see cref="Automata.TpmLoadObjectRequested.PrivateBlob"/> across a
+    /// refusal that happens AFTER the parse has fully rented it: a genuinely non-empty <c>inPrivate</c>
+    /// against an unknown <c>@parentHandle</c> parses cleanly (the private blob carrier is rented as the
+    /// parse's last act), then <c>OnLoadObject</c> refuses with <c>TPM_RC_HANDLE</c> and releases the request's
+    /// carriers — including the new <c>PrivateBlob</c> field — through <see cref="IDisposable.Dispose"/>
+    /// rather than leaking the pinned rental.
+    /// </summary>
+    [TestMethod]
+    public async Task LoadWithUnknownParentHandleReleasesTheParsedPrivateBlob()
+    {
+        using var trackingPool = new MeteredHousePool();
+        using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRegistry();
+
+        long baseline = trackingPool.OutstandingCount;
+
+        //Scoped so the CLIENT-side inPrivate/inPublic/loadAuth locals are disposed before the balance assertion
+        //below reads the pool — otherwise their own still-live rentals, not the simulator's parse-rented
+        //carriers, would be what the assertion is really observing.
+        {
+            byte[] privateBlobBytes = new byte[48];
+            Array.Fill(privateBlobBytes, (byte)0xD1);
+
+            using Tpm2bPrivate inPrivate = Tpm2bPrivate.Create(privateBlobBytes, trackingPool.Pool);
+            using Tpm2bPublic inPublic = Tpm2bPublic.CreateSealedDataTemplate(SessionAlg, trackingPool.Pool, noDa: true);
+            using LoadInput loadInput = new(ArbitraryParentHandle, inPrivate, inPublic);
+            using TpmPasswordSession loadAuth = TpmPasswordSession.CreateEmpty(trackingPool.Pool);
+
+            TpmResult<LoadResponse> result = await TpmCommandExecutor.ExecuteAsync<LoadResponse>(
+                tpm, loadInput, [loadAuth], null, trackingPool.Pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.IsFalse(result.IsSuccess, "An unknown parent handle must be refused.");
+            Assert.AreEqual(TpmRcConstants.TPM_RC_HANDLE, result.ResponseCode);
+        }
+
+        Assert.AreEqual(baseline, trackingPool.OutstandingCount, "The refusal must release the parse-rented, non-empty inPrivate carrier along with the rest of the request.");
     }
 
     /// <summary>
@@ -250,12 +505,12 @@ internal sealed class TpmInHouseSimulatorSealTests
     /// <summary>
     /// F3 regression, plain single-password form (adversarial review, MINOR wrong RC — reviewer's "ALSO CHECK"
     /// note on the same clause): a locked-out TPM must reject the PLAIN, single-<c>TPM_RS_PW</c>
-    /// <c>TPM2_Create()</c> (<c>OnCreateSealedObject</c>) with <c>TPM_RC_LOCKOUT</c> when the parent is
+    /// <c>TPM2_Create()</c> (<c>OnCreateKeyedHash</c>) with <c>TPM_RC_LOCKOUT</c> when the parent is
     /// DA-protected, exactly like every other DA-protected surface. Before the fix this function ran NO
     /// DA/Lockout check at all (TPM 2.0 Library Part 3, clause 5.6, check 3), so a locked-out TPM performed the
     /// Create unconditionally. This pairs with
     /// <see cref="TpmInHouseSimulatorParameterDecryptionTests.LockedOutTpmRejectsCreateOverPasswordAuthorizedDaProtectedParent"/>,
-    /// which covers the same gate in the two-session (<c>OnCreateSealedObjectOverSessions</c>) form.
+    /// which covers the same gate in the two-session (<c>OnCreateKeyedHashOverSessions</c>) form.
     /// </summary>
     [TestMethod]
     public async Task LockedOutTpmRejectsPlainPasswordCreateOverDaProtectedParent()
@@ -286,7 +541,7 @@ internal sealed class TpmInHouseSimulatorSealTests
             Assert.IsTrue(lowerResult.IsSuccess, $"Lowering maxTries failed: '{lowerResult.ResponseCode}'.");
 
             //2. Seal+load a THROWAWAY DA-protected object under the same parent and fail its Unseal password
-            //LockoutTestMaxTries times, engaging the ONE shared lockout counter (Part 1, clause 17.8).
+            //LockoutTestMaxTries times, engaging the ONE shared lockout counter (Part 1, clause 16.8).
             byte[] correctAuth = [0x71, 0x72, 0x73, 0x74];
             using Tpm2bSensitiveCreate bruteForceSensitive = Tpm2bSensitiveCreate.ForSealedData(SecretBytes, correctAuth, pool);
             using Tpm2bPublic bruteForceTemplate = Tpm2bPublic.CreateSealedDataTemplate(SessionAlg, pool, noDa: false);
@@ -326,7 +581,7 @@ internal sealed class TpmInHouseSimulatorSealTests
             Assert.IsTrue(lockoutState.Value.IsLockedOut, "The TPM must be in Lockout mode before the Create exploit runs.");
 
             //3. THE EXPLOIT: TPM2_Create() with a SINGLE plain TPM_RS_PW session against the (now globally
-            //locked-out) DA-protected parent — the single-session form OnCreateSealedObject handles directly.
+            //locked-out) DA-protected parent — the single-session form OnCreateKeyedHash handles directly.
             using Tpm2bSensitiveCreate exploitSensitive = Tpm2bSensitiveCreate.ForSealedData(SecretBytes, pool);
             using Tpm2bPublic exploitTemplate = Tpm2bPublic.CreateSealedDataTemplate(SessionAlg, pool, noDa: false);
             using CreateInput exploitCreateInput = new(parentHandle, exploitSensitive, exploitTemplate, Tpm2bData.Empty, TpmlPcrSelection.Empty);
@@ -357,7 +612,7 @@ internal sealed class TpmInHouseSimulatorSealTests
     /// storage parent created with a real password admits a seal authorized by the CORRECT password and moves
     /// no dictionary-attack counter, while a WRONG password is refused with the session-index-encoded
     /// <c>TPM_RC_AUTH_FAIL</c> (Part 2, clause 6.6.2) and charges <c>failedTries</c> exactly once (Part 1,
-    /// clause 17.8.7).
+    /// clause 16.8.7).
     /// </summary>
     [TestMethod]
     public async Task PlainCreateVerifiesTheParentsAuthValue()
@@ -402,7 +657,7 @@ internal sealed class TpmInHouseSimulatorSealTests
         TpmResult<TpmDictionaryAttackParameters> afterWrong = await tpm.GetDictionaryAttackParametersAsync(pool, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(
             afterCorrect.Value.LockoutCounter + 1, afterWrong.Value.LockoutCounter,
-            "A wrong parent password against a DA-protected parent must charge failedTries exactly once (TPM 2.0 Library Part 1, clause 17.8.7).");
+            "A wrong parent password against a DA-protected parent must charge failedTries exactly once (TPM 2.0 Library Part 1, clause 16.8.7).");
     }
 
     /// <summary>
@@ -410,7 +665,7 @@ internal sealed class TpmInHouseSimulatorSealTests
     /// parent created with a real password but <c>TPMA_OBJECT.NO_DA</c> SET rejects a wrong plain-password seal
     /// with a plain session-index-encoded <c>TPM_RC_BAD_AUTH</c> instead of <c>TPM_RC_AUTH_FAIL</c>, and moves
     /// no dictionary-attack counter — only a DA-protected authValue's failure is ever charged to
-    /// <c>failedTries</c> (TPM 2.0 Library Part 1, clause 17.8.1).
+    /// <c>failedTries</c> (TPM 2.0 Library Part 1, clause 16.8.1).
     /// </summary>
     [TestMethod]
     public async Task PlainCreateWithWrongAuthOverNoDaParentReturnsBadAuth()
@@ -448,7 +703,7 @@ internal sealed class TpmInHouseSimulatorSealTests
     /// <summary>
     /// TPM2_Create()'s parent slot is verified against the parent's retained authValue over an UNBOUND,
     /// unsalted HMAC session that explicitly folds it as the command HMAC's entity term (TPM 2.0 Library Part
-    /// 1, clause 17.6.9, equation 19; Part 3, clause 12.1): a session folding the CORRECT password succeeds and
+    /// 1, clause 16.6.9, equation 19; Part 3, clause 12.1): a session folding the CORRECT password succeeds and
     /// moves no dictionary-attack counter, while one folding a WRONG password fails command-HMAC verification
     /// with the session-index-encoded <c>TPM_RC_AUTH_FAIL</c> and charges <c>failedTries</c> exactly once.
     /// </summary>
@@ -492,7 +747,7 @@ internal sealed class TpmInHouseSimulatorSealTests
     /// A session BOUND TO THE PARENT ITSELF attests with no authValue folded into the command HMAC: binding
     /// already incorporated the parent's authValue into the session key (TPM 2.0 Library Part 1, clause
     /// 17.6.10, equation 20), so the command HMAC omits it (equations 21/22) — the bind-omission
-    /// <c>OnCreateSealedObjectOverSessions</c> applies to the parent slot exactly as
+    /// <c>OnCreateKeyedHashOverSessions</c> applies to the parent slot exactly as
     /// <c>OnNvCertifyOverSession</c> applies it to a signing key's own sign slot. Proves TPM2_Create()'s
     /// parent-slot bind-omission path.
     /// </summary>
@@ -546,8 +801,8 @@ internal sealed class TpmInHouseSimulatorSealTests
     /// <summary>
     /// TPM2_Create()'s parent slot is verified against the parent's retained authValue when the session area
     /// pairs a plain <c>TPM_RS_PW</c> parent-auth slot (slot 0) with a SEPARATE decrypt-attributed HMAC
-    /// companion (slot 1) that protects <c>inSensitive</c> (TPM 2.0 Library Part 1, clauses 19 and 21; Part 3,
-    /// clause 12.1) — the inline-compare discipline <c>OnCreateSealedObjectOverSessions</c> applies identically
+    /// companion (slot 1) that protects <c>inSensitive</c> (TPM 2.0 Library Part 1, clauses 18 and 20; Part 3,
+    /// clause 12.1) — the inline-compare discipline <c>OnCreateKeyedHashOverSessions</c> applies identically
     /// to the single-session plain form: a session pair carrying the CORRECT password succeeds and moves no
     /// dictionary-attack counter, while one carrying a WRONG password is refused with the session-index-encoded
     /// <c>TPM_RC_AUTH_FAIL</c> and charges <c>failedTries</c> exactly once, before the companion session's own
@@ -594,7 +849,7 @@ internal sealed class TpmInHouseSimulatorSealTests
     /// DA-protected storage parent created with a real password admits a Load authorized by the
     /// CORRECT password and moves no dictionary-attack counter, while a WRONG password is refused with
     /// the session-index-encoded <c>TPM_RC_AUTH_FAIL</c> (Part 2, clause 6.6.2) and charges
-    /// <c>failedTries</c> exactly once (Part 1, clause 17.8.7).
+    /// <c>failedTries</c> exactly once (Part 1, clause 16.8.7).
     /// </summary>
     [TestMethod]
     public async Task LoadVerifiesTheParentsAuthValue()
@@ -654,7 +909,7 @@ internal sealed class TpmInHouseSimulatorSealTests
             TpmResult<TpmDictionaryAttackParameters> afterWrong = await tpm.GetDictionaryAttackParametersAsync(pool, TestContext.CancellationToken).ConfigureAwait(false);
             Assert.AreEqual(
                 afterCorrect.Value.LockoutCounter + 1, afterWrong.Value.LockoutCounter,
-                "A wrong parent password against a DA-protected parent must charge failedTries exactly once (TPM 2.0 Library Part 1, clause 17.8.7).");
+                "A wrong parent password against a DA-protected parent must charge failedTries exactly once (TPM 2.0 Library Part 1, clause 16.8.7).");
         }
         finally
         {
@@ -666,9 +921,9 @@ internal sealed class TpmInHouseSimulatorSealTests
     /// The non-DA-protected counterpart of <see cref="LoadVerifiesTheParentsAuthValue"/>: a storage
     /// parent created with a real password but <c>TPMA_OBJECT.NO_DA</c> SET rejects a wrong
     /// plain-password Load with a plain session-index-encoded <c>TPM_RC_BAD_AUTH</c> instead of
-    /// <c>TPM_RC_AUTH_FAIL</c> (TPM 2.0 Library Part 1, clause 17.8.7's DA-exempt downgrade), and moves
+    /// <c>TPM_RC_AUTH_FAIL</c> (TPM 2.0 Library Part 1, clause 16.8.7's DA-exempt downgrade), and moves
     /// no dictionary-attack counter — only a DA-protected authValue's failure is ever charged to
-    /// <c>failedTries</c> (Part 1, clause 17.8.1).
+    /// <c>failedTries</c> (Part 1, clause 16.8.1).
     /// </summary>
     [TestMethod]
     public async Task LoadWithWrongAuthOverNoDaParentReturnsBadAuth()
@@ -716,12 +971,12 @@ internal sealed class TpmInHouseSimulatorSealTests
 
     /// <summary>
     /// A locked-out TPM must reject even a Load carrying the parent's CORRECT password with the bare,
-    /// non-session-encoded <c>TPM_RC_LOCKOUT</c> (TPM 2.0 Library Part 1, clause 17.8.3: "While in
+    /// non-session-encoded <c>TPM_RC_LOCKOUT</c> (TPM 2.0 Library Part 1, clause 16.8.3: "While in
     /// Lockout mode, any use of a DA-protected authValue will return TPM_RC_LOCKOUT") whenever the
     /// parent is DA-protected: the Lockout gate precedes the authValue compare entirely, so the correct
     /// password is never evaluated and <c>failedTries</c> moves no further. <c>maxTries</c> is lowered
     /// first so a handful of wrong-password Load attempts against the same DA-protected parent reaches
-    /// Lockout mode quickly (Part 1, clause 17.8.7's charge rule).
+    /// Lockout mode quickly (Part 1, clause 16.8.7's charge rule).
     /// </summary>
     [TestMethod]
     public async Task LoadWhileInLockoutReturnsLockout()
@@ -785,7 +1040,7 @@ internal sealed class TpmInHouseSimulatorSealTests
             Assert.AreEqual(
                 TpmRcConstants.TPM_RC_LOCKOUT, lockedOutResult.ResponseCode,
                 "A locked-out TPM must reject even a CORRECT-password Load over a DA-protected parent " +
-                $"with the bare TPM_RC_LOCKOUT (TPM 2.0 Library Part 1, clause 17.8.3), got '{lockedOutResult.ResponseCode}'.");
+                $"with the bare TPM_RC_LOCKOUT (TPM 2.0 Library Part 1, clause 16.8.3), got '{lockedOutResult.ResponseCode}'.");
 
             TpmResult<TpmDictionaryAttackParameters> afterLockedOutAttempt = await tpm.GetDictionaryAttackParametersAsync(pool, TestContext.CancellationToken).ConfigureAwait(false);
             Assert.AreEqual(
@@ -847,10 +1102,10 @@ internal sealed class TpmInHouseSimulatorSealTests
 
     /// <summary>
     /// TPM2_Create()'s parent slot, over an UNBOUND unsalted HMAC session (the two-session
-    /// <c>OnCreateSealedObjectOverSessions</c> path), applies check 7.1 of clause 5.6 BEFORE the queued command
+    /// <c>OnCreateKeyedHashOverSessions</c> path), applies check 7.1 of clause 5.6 BEFORE the queued command
     /// HMAC verification (checks 9/10): a userWithAuth-CLEAR parent refuses with the bare
     /// <c>TPM_RC_POLICY_FAIL</c> even when the session folds a WRONG authValue guess as its entity term (TPM
-    /// 2.0 Library Part 1, clause 17.6.9, equation 19) — never the session-index-encoded
+    /// 2.0 Library Part 1, clause 16.6.9, equation 19) — never the session-index-encoded
     /// <c>TPM_RC_AUTH_FAIL</c> a completed HMAC comparison would produce against this DA-protected parent — and
     /// <c>failedTries</c> does not move, proving the guess is never evaluated.
     /// </summary>
@@ -892,7 +1147,7 @@ internal sealed class TpmInHouseSimulatorSealTests
     /// <summary>
     /// TPM2_Create()'s parent slot, authorized by a plain <c>TPM_RS_PW</c> session (slot 0) paired with a
     /// separate decrypt-attributed HMAC companion (slot 1) protecting <c>inSensitive</c> — the inline-compare
-    /// arm of <c>OnCreateSealedObjectOverSessions</c> — applies check 7.1 of clause 5.6 identically to the
+    /// arm of <c>OnCreateKeyedHashOverSessions</c> — applies check 7.1 of clause 5.6 identically to the
     /// single-session plain form: a userWithAuth-CLEAR parent refuses with the bare <c>TPM_RC_POLICY_FAIL</c>
     /// even when the TPM_RS_PW slot carries the parent's genuine password, before the companion session's own
     /// HMAC (checks 9/10) is ever evaluated.
@@ -1102,6 +1357,73 @@ internal sealed class TpmInHouseSimulatorSealTests
     }
 
     /// <summary>
+    /// Hand-frames a <c>TPM2_Load()</c> command whose <c>inPrivate</c> (<c>TPM2B_PRIVATE</c>) declares
+    /// <paramref name="declaredPrivateBlobSize"/> octets while the frame itself supplies only
+    /// <paramref name="actualPrivateBlobBytesProvided"/> and ends there — no <c>inPublic</c> follows at all,
+    /// since <c>inPrivate</c> is <c>TryParseLoad</c>'s first parameter and a truncated declaration refuses
+    /// before <c>inPublic</c> is ever reached. The handle area carries a single password-authorized
+    /// <c>@parentHandle</c> slot with an empty supplied password, mirroring
+    /// <c>TpmInHouseSimulatorCreationParameterTests.FrameCreateFamilyCommandWithTruncatedOutsideInfo</c>'s
+    /// technique for the same shape of refusal.
+    /// </summary>
+    private static IMemoryOwner<byte> FrameLoadCommand(
+        BaseMemoryPool pool, uint parentHandle, ushort declaredPrivateBlobSize, int actualPrivateBlobBytesProvided, out int length)
+    {
+        const int PasswordSlotSize = sizeof(uint) + sizeof(ushort) + sizeof(byte) + sizeof(ushort);
+        length =
+            TpmHeader.HeaderSize
+            + sizeof(uint)                                //Handle area: @parentHandle.
+            + sizeof(uint) + PasswordSlotSize             //authorizationSize + the TPM_RS_PW slot.
+            + sizeof(ushort) + actualPrivateBlobBytesProvided;
+
+        IMemoryOwner<byte> owner = pool.Rent(length);
+        try
+        {
+            var writer = new TpmWriter(owner.Memory.Span[..length]);
+            var header = new TpmHeader((ushort)TpmStConstants.TPM_ST_SESSIONS, (uint)length, (uint)TpmCcConstants.TPM_CC_Load);
+            header.WriteTo(ref writer);
+            writer.WriteUInt32(parentHandle);
+            writer.WriteUInt32(PasswordSlotSize);
+            writer.WriteUInt32((uint)TpmRh.TPM_RH_PW);
+            writer.WriteTpm2b(ReadOnlySpan<byte>.Empty);
+            writer.WriteByte((byte)TpmaSession.CONTINUE_SESSION);
+            writer.WriteTpm2b(ReadOnlySpan<byte>.Empty);
+            writer.WriteUInt16(declaredPrivateBlobSize);
+            if(actualPrivateBlobBytesProvided > 0)
+            {
+                writer.WriteBytes(new byte[actualPrivateBlobBytesProvided]);
+            }
+
+            return owner;
+        }
+        catch
+        {
+            owner.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Submits a hand-framed <c>TPM2_Load()</c> built by <see cref="FrameLoadCommand"/> straight to the
+    /// simulator (bypassing <see cref="TpmCommandExecutor"/>, whose typed <see cref="LoadInput"/> cannot
+    /// express a declared/actual size mismatch) and yields the response code.
+    /// </summary>
+    private async Task<TpmRcConstants> SubmitLoadCommandAsync(
+        TpmSimulator simulator, BaseMemoryPool pool, uint parentHandle, ushort declaredPrivateBlobSize, int actualPrivateBlobBytesProvided)
+    {
+        using IMemoryOwner<byte> commandOwner = FrameLoadCommand(pool, parentHandle, declaredPrivateBlobSize, actualPrivateBlobBytesProvided, out int length);
+
+        TpmResult<TpmResponse> submitResult = await simulator.SubmitAsync(commandOwner.Memory[..length], pool, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(submitResult.IsSuccess, "The hand-framed command must reach the simulator.");
+
+        using TpmResponse response = submitResult.Value;
+        var reader = new TpmReader(response.AsReadOnlySpan());
+        TpmHeader responseHeader = TpmHeader.Parse(ref reader);
+
+        return (TpmRcConstants)responseHeader.Code;
+    }
+
+    /// <summary>
     /// Creates an ECC storage parent under the owner hierarchy with a real, non-empty password — the fixture
     /// the parent-authValue verification proofs need to exercise TPM2_Create()'s Auth Index 1, Auth Role USER
     /// slot (TPM 2.0 Library Part 3, clause 12.1) against a genuine retained authValue rather than the empty
@@ -1173,7 +1495,7 @@ internal sealed class TpmInHouseSimulatorSealTests
     /// <summary>
     /// Seals <see cref="SecretBytes"/> under <paramref name="parentHandle"/> over a fresh, UNBOUND, unsalted
     /// HMAC session at the parent slot carrying <paramref name="suppliedParentAuth"/> as its folded entity term
-    /// (TPM 2.0 Library Part 1, clause 17.6.9, equation 19). The session is flushed before return; on success
+    /// (TPM 2.0 Library Part 1, clause 16.6.9, equation 19). The session is flushed before return; on success
     /// the wrapped object's response is left for the caller to dispose.
     /// </summary>
     /// <param name="tpm">The TPM device.</param>
@@ -1220,7 +1542,7 @@ internal sealed class TpmInHouseSimulatorSealTests
     /// <c>TPM_RS_PW</c> session carrying <paramref name="suppliedParentPassword"/> at slot 0, paired with a
     /// fresh, UNBOUND, unsalted HMAC companion at slot 1 carrying the DECRYPT attribute over
     /// <c>inSensitive</c> — the two-session shape <c>TryParseCreate</c> routes to
-    /// <c>OnCreateSealedObjectOverSessions</c>'s password-slot arm. The companion session is flushed before
+    /// <c>OnCreateKeyedHashOverSessions</c>'s password-slot arm. The companion session is flushed before
     /// return.
     /// </summary>
     /// <param name="tpm">The TPM device.</param>

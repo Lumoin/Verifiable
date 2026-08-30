@@ -24,7 +24,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// } TPML_CC;
 /// </code>
 /// <para>
-/// Part 2, Table 119 bounds an input <c>count</c> by the implementation-dependent <c>MAX_CAP_CC</c> ("The
+/// Part 2, Table 122 bounds an input <c>count</c> by the implementation-dependent <c>MAX_CAP_CC</c> ("The
 /// maximum only applies to a command code list in a command. The response size is limited only by the size of
 /// the parameter buffer") and names <c>TPM_RC_SIZE</c> as the response when it is exceeded. This carrier holds
 /// no pooled memory — each element is a 4-octet value type — so the bound enforced here is the buffer-capacity
@@ -32,7 +32,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// not possibly fit in the remaining wire bytes is refused before it can size an allocation.
 /// </para>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, clause 10.9.1, Table 119.
+/// Specification reference: TPM 2.0 Library Part 2, clause 10.8.1, Table 122.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -111,7 +111,7 @@ public sealed class TpmlCc: ITpmWireType
         }
 
         //Each command code occupies 4 octets on the wire, so a count larger than the remaining buffer can hold
-        //is a malformed length and must not size the backing array (Part 2, §10.9.1).
+        //is a malformed length and must not size the backing array (Part 2, §10.8.1).
         reader.EnsureCount(count, sizeof(uint));
 
         var builder = ImmutableArray.CreateBuilder<TpmCcConstants>((int)count);

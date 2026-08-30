@@ -1,6 +1,7 @@
 using System;
 using System.Buffers;
 using Verifiable.Cryptography;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Spec.Structures;
 
@@ -93,7 +94,7 @@ internal class Tpm2bStructureTests
 
     /// <summary>
     /// A <c>TPM2B_DIGEST</c> buffer is bounded by <c>sizeof(TPMU_HA)</c> — the widest member of the hash union,
-    /// 64 octets for SHA-512 (TPM 2.0 Library Part 2, clause 10.4.2, Table 92's
+    /// 64 octets for SHA-512 (TPM 2.0 Library Part 2, clause 10.3.2, Table 90's
     /// <c>buffer[size]{:sizeof(TPMU_HA)}</c>). The bound itself is admitted; one octet past it is a structure
     /// no hash algorithm can fill, and the factory refuses it rather than renting for it.
     /// </summary>
@@ -114,7 +115,7 @@ internal class Tpm2bStructureTests
 
     /// <summary>
     /// The same <c>sizeof(TPMU_HA)</c> bound governs the wire form: a declared size past it is a malformed
-    /// <c>TPM2B_DIGEST</c> (TPM 2.0 Library Part 2, clause 10.4.2, Table 92), refused before any storage is
+    /// <c>TPM2B_DIGEST</c> (TPM 2.0 Library Part 2, clause 10.3.2, Table 90), refused before any storage is
     /// rented for the octets it claims.
     /// </summary>
     [TestMethod]
@@ -132,8 +133,8 @@ internal class Tpm2bStructureTests
 
     /// <summary>
     /// <c>TPM2B_NONCE</c> is a <c>TPM2B_DIGEST</c> whose "size limited to the same as the digest structure"
-    /// (TPM 2.0 Library Part 2, clause 10.4.4, Table 94, page 134), so it carries that structure's own
-    /// <c>sizeof(TPMU_HA)</c> buffer bound (clause 10.4.2, Table 92, page 134). The bound itself is admitted;
+    /// (TPM 2.0 Library Part 2, clause 10.3.4, Table 92, page 134), so it carries that structure's own
+    /// <c>sizeof(TPMU_HA)</c> buffer bound (clause 10.3.2, Table 90, page 134). The bound itself is admitted;
     /// one octet past it is refused rather than rented for.
     /// </summary>
     [TestMethod]
@@ -153,7 +154,7 @@ internal class Tpm2bStructureTests
 
     /// <summary>
     /// The same bound governs <c>TPM2B_NONCE</c>'s wire form: a declared size past <c>sizeof(TPMU_HA)</c> is
-    /// malformed (TPM 2.0 Library Part 2, clause 10.4.2, Table 92: "As with all sized buffers, the size is
+    /// malformed (TPM 2.0 Library Part 2, clause 10.3.2, Table 90: "As with all sized buffers, the size is
     /// checked to see if it is within the prescribed range. If not, the response code is TPM_RC_SIZE"), refused
     /// before any storage is rented for the octets it claims.
     /// </summary>
@@ -172,8 +173,8 @@ internal class Tpm2bStructureTests
 
     /// <summary>
     /// The generated form takes the bound too: <see cref="Tpm2bNonce.CreateRandom"/> can only produce a value a
-    /// <c>TPM2B_NONCE</c> could carry on the wire (TPM 2.0 Library Part 2, clause 10.4.4, Table 94 over clause
-    /// 10.4.2, Table 92).
+    /// <c>TPM2B_NONCE</c> could carry on the wire (TPM 2.0 Library Part 2, clause 10.3.4, Table 92 over clause
+    /// 10.4.2, Table 90).
     /// </summary>
     [TestMethod]
     public void Tpm2bNonceCreateRandomRefusesALengthPastTheUnionBound()
@@ -186,9 +187,121 @@ internal class Tpm2bStructureTests
     }
 
     /// <summary>
+    /// <c>TPM2B_SENSITIVE_DATA</c> is bounded by <c>sizeof(TPMU_SENSITIVE_CREATE)</c>, whose one member is
+    /// <c>MAX_SYM_DATA</c> octets — "For interoperability, MAX_SYM_DATA should be 128" (TPM 2.0 Library Part 2,
+    /// clause 11.1.13, Table 169; clause 11.1.14, Table 170's <c>buffer[size]{:sizeof(TPMU_SENSITIVE_CREATE)}</c>).
+    /// The bound itself is admitted; one octet past it is refused rather than rented for.
+    /// <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Part 2, clauses 11.1.13 and 11.1.14, Tables 169 and 170</see>.
+    /// </summary>
+    [TestMethod]
+    public void Tpm2bSensitiveDataCreateAdmitsMaxSymDataAndRefusesPastIt()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+
+        using(Tpm2bSensitiveData atBound = Tpm2bSensitiveData.Create(new byte[Tpm2bSensitiveData.MaxSize], pool))
+        {
+            Assert.AreEqual(128, atBound.Length, "TPM2B_SENSITIVE_DATA's buffer bound is MAX_SYM_DATA, 128 octets.");
+        }
+
+        _ = Assert.ThrowsExactly<ArgumentException>(
+            () => Tpm2bSensitiveData.Create(new byte[Tpm2bSensitiveData.MaxSize + 1], pool),
+            "A sensitive value wider than MAX_SYM_DATA is not a TPM2B_SENSITIVE_DATA and must be refused.");
+    }
+
+    /// <summary>
+    /// The same bound governs the wire form: a declared size past <c>MAX_SYM_DATA</c> is a malformed
+    /// <c>TPM2B_SENSITIVE_DATA</c> a TPM answers with <c>TPM_RC_SIZE</c> (TPM 2.0 Library Part 2, clause 11.1.14,
+    /// Table 170), refused before any storage is rented for the octets it claims.
+    /// <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Part 2, clause 11.1.14, Table 170</see>.
+    /// </summary>
+    [TestMethod]
+    public void Tpm2bSensitiveDataParseRefusesADeclaredSizePastMaxSymData()
+    {
+        byte[] wire = new byte[sizeof(ushort) + Tpm2bSensitiveData.MaxSize + 1];
+        wire[0] = 0x00;
+        wire[1] = (byte)(Tpm2bSensitiveData.MaxSize + 1);
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+
+        _ = Assert.ThrowsExactly<InvalidOperationException>(
+            () => ParseSensitiveData(wire, pool),
+            "A declared TPM2B_SENSITIVE_DATA size wider than MAX_SYM_DATA is malformed.");
+    }
+
+    /// <summary>
+    /// A <c>TPM2B_SENSITIVE_DATA</c> whose declared size is within <c>MAX_SYM_DATA</c> but past the octets the
+    /// frame actually carries is refused before its pinned storage is rented, so a truncated frame leaves the pool
+    /// balanced rather than orphaning a sensitive-tier rental.
+    /// <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Part 2, clause 11.1.14, Table 170</see>.
+    /// </summary>
+    [TestMethod]
+    public void Tpm2bSensitiveDataParseTruncatedPayloadLeavesPoolBalanced()
+    {
+        //Declares 10 octets (within MaxSize = 128) but only 2 follow the size prefix.
+        byte[] wire = [0x00, 0x0A, 0x01, 0x02];
+        using var trackingPool = new MeteredHousePool();
+        long baseline = trackingPool.OutstandingCount;
+
+        try
+        {
+            ParseSensitiveData(wire, trackingPool.Pool);
+            Assert.Fail("Expected ArgumentOutOfRangeException.");
+        }
+        catch(ArgumentOutOfRangeException)
+        {
+        }
+
+        Assert.AreEqual(baseline, trackingPool.OutstandingCount, "The remaining-octet check runs before the rental it would otherwise size, so a truncated frame never orphans a rental.");
+    }
+
+    /// <summary>
+    /// <see cref="Tpm2bSensitiveCreate.ForSealedData"/> refuses a secret wider than <c>MAX_SYM_DATA</c> after the
+    /// authorization carrier is already rented; the refusal releases that carrier, so a refused factory call leaves
+    /// the pool balanced rather than orphaning a pinned rental.
+    /// <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Part 2, clauses 11.1.14 and 11.1.15, Tables 170 and 171</see>.
+    /// </summary>
+    [TestMethod]
+    public void Tpm2bSensitiveCreateForSealedDataRefusingAWideSecretLeavesPoolBalanced()
+    {
+        using var trackingPool = new MeteredHousePool();
+        long baseline = trackingPool.OutstandingCount;
+
+        _ = Assert.ThrowsExactly<ArgumentException>(
+            () => Tpm2bSensitiveCreate.ForSealedData(new byte[Tpm2bSensitiveData.MaxSize + 1], "auth"u8, trackingPool.Pool),
+            "A secret wider than MAX_SYM_DATA is not a TPM2B_SENSITIVE_DATA and must be refused.");
+
+        Assert.AreEqual(baseline, trackingPool.OutstandingCount, "The refusal must release the authorization carrier rented before it.");
+    }
+
+    /// <summary>
+    /// A <c>TPM2B_AUTH</c> whose declared size is within <c>sizeof(TPMU_HA)</c> but past the octets the frame
+    /// actually carries is refused before its pinned storage is rented, so a truncated frame leaves the pool
+    /// balanced rather than orphaning a sensitive-tier rental.
+    /// <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Part 2, clause 10.3.5, Table 93</see>.
+    /// </summary>
+    [TestMethod]
+    public void Tpm2bAuthParseTruncatedPayloadLeavesPoolBalanced()
+    {
+        //Declares 10 octets (within MaxSize = 64) but only 2 follow the size prefix.
+        byte[] wire = [0x00, 0x0A, 0x01, 0x02];
+        using var trackingPool = new MeteredHousePool();
+        long baseline = trackingPool.OutstandingCount;
+
+        try
+        {
+            ParseAuth(wire, trackingPool.Pool);
+            Assert.Fail("Expected ArgumentOutOfRangeException.");
+        }
+        catch(ArgumentOutOfRangeException)
+        {
+        }
+
+        Assert.AreEqual(baseline, trackingPool.OutstandingCount, "The remaining-octet check runs before the rental it would otherwise size, so a truncated frame never orphans a rental.");
+    }
+
+    /// <summary>
     /// <c>TPM2B_AUTH</c> is a <c>TPM2B_DIGEST</c> that "limits an authValue to being no larger than the largest
-    /// digest produced by a TPM" (TPM 2.0 Library Part 2, clause 10.4.5, Table 95, page 135), so it carries the
-    /// same <c>sizeof(TPMU_HA)</c> buffer bound (clause 10.4.2, Table 92, page 134). The bound itself is
+    /// digest produced by a TPM" (TPM 2.0 Library Part 2, clause 10.3.5, Table 93, page 135), so it carries the
+    /// same <c>sizeof(TPMU_HA)</c> buffer bound (clause 10.3.2, Table 90, page 134). The bound itself is
     /// admitted; one octet past it is refused rather than rented for.
     /// </summary>
     [TestMethod]
@@ -208,7 +321,7 @@ internal class Tpm2bStructureTests
 
     /// <summary>
     /// The same bound governs <c>TPM2B_AUTH</c>'s wire form: a declared size past <c>sizeof(TPMU_HA)</c> is
-    /// malformed (TPM 2.0 Library Part 2, clause 10.4.2, Table 92), refused before any storage is rented for the
+    /// malformed (TPM 2.0 Library Part 2, clause 10.3.2, Table 90), refused before any storage is rented for the
     /// octets it claims.
     /// </summary>
     [TestMethod]
@@ -225,7 +338,7 @@ internal class Tpm2bStructureTests
     }
 
     /// <summary>
-    /// The password overload inherits the bound, measured after the trailing-zero trim clause 17.6.4.3 of TPM
+    /// The password overload inherits the bound, measured after the trailing-zero trim clause 16.6.4.3 of TPM
     /// 2.0 Library Part 1 requires: a configuration password whose UTF-8 encoding cannot fit a
     /// <c>TPM2B_AUTH</c> is refused rather than silently shortened into a value no TPM would hold.
     /// </summary>
@@ -278,6 +391,18 @@ internal class Tpm2bStructureTests
     {
         var reader = new TpmReader(wire);
         using Tpm2bDigest digest = Tpm2bDigest.Parse(ref reader, pool);
+    }
+
+    /// <summary>
+    /// Parses a <c>TPM2B_SENSITIVE_DATA</c> from a complete wire fragment and releases it, so a refusal can be
+    /// asserted as a single expression.
+    /// </summary>
+    /// <param name="wire">The wire fragment beginning at the size field.</param>
+    /// <param name="pool">The memory pool for allocating storage.</param>
+    private static void ParseSensitiveData(byte[] wire, BaseMemoryPool pool)
+    {
+        var reader = new TpmReader(wire);
+        using Tpm2bSensitiveData sensitiveData = Tpm2bSensitiveData.Parse(ref reader, pool);
     }
 
     [TestMethod]

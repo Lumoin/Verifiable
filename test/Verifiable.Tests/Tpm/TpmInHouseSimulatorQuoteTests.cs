@@ -108,7 +108,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
         Assert.IsNotNull(attest.Attested.Quote);
 
         //2. Qualified Name realism: qualifiedSigner must equal the AK's independent off-TPM recomputation
-        //nameAlg || H(hierarchyHandle || Name) (TPM 2.0 Library Part 1, clause 14, Table 6) — and must NOT equal the plain
+        //nameAlg || H(hierarchyHandle || Name) (TPM 2.0 Library Part 1, clause 13, Table 9) — and must NOT equal the plain
         //Name (the regression a Name/QN collapse would otherwise pass).
         byte[] expectedSignerQn = await ComputeQualifiedNameAsync(
             (uint)TpmRh.TPM_RH_OWNER, ak.Name.Span.ToArray(), pool, TestContext.CancellationToken).ConfigureAwait(false);
@@ -155,11 +155,11 @@ internal sealed class TpmInHouseSimulatorQuoteTests
 
     /// <summary>
     /// Verifies that <c>TPM2_Quote()</c> checks the signing key's own retained authValue at the sign slot
-    /// rather than accepting any <c>TPM_RS_PW</c> password unchecked (TPM 2.0 Library Part 1, clause 17.6.4.3;
+    /// rather than accepting any <c>TPM_RS_PW</c> password unchecked (TPM 2.0 Library Part 1, clause 16.6.4.3;
     /// Part 3, clause 18.1): a DA-protected AK created with a non-empty authValue quotes when the CORRECT
     /// password authorizes slot 0, leaving the dictionary-attack lockout counter unmoved, and is refused with
     /// the session-encoded <c>TPM_RC_AUTH_FAIL</c> at the same slot (Part 2, clause 6.6.2) — charging the
-    /// lockout counter by exactly one (clause 17.8.7) — when the supplied password is WRONG.
+    /// lockout counter by exactly one (clause 16.8.7) — when the supplied password is WRONG.
     /// </summary>
     [TestMethod]
     public async Task QuoteVerifiesTheSigningKeysAuthValue()
@@ -193,7 +193,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
         TpmResult<TpmDictionaryAttackParameters> afterWrong = await tpm.GetDictionaryAttackParametersAsync(pool, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(
             afterCorrect.Value.LockoutCounter + 1, afterWrong.Value.LockoutCounter,
-            "A wrong authValue against the DA-protected AK's sign slot must charge the lockout counter exactly once (TPM 2.0 Library Part 1, clause 17.8.7).");
+            "A wrong authValue against the DA-protected AK's sign slot must charge the lockout counter exactly once (TPM 2.0 Library Part 1, clause 16.8.7).");
     }
 
     /// <summary>
@@ -405,7 +405,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     }
 
     /// <summary>
-    /// Verifies the TPM2B_DATA qualifyingData size bound (TPM 2.0 Library Part 2, clause 10.4.3: bounded by the
+    /// Verifies the TPM2B_DATA qualifyingData size bound (TPM 2.0 Library Part 2, clause 10.3.3: bounded by the
     /// size of a marshaled TPMT_HA, 66 octets for the largest supported digest): a 66-octet qualifyingData
     /// succeeds, and a 67-octet qualifyingData is rejected with <c>TPM_RC_SIZE</c>.
     /// </summary>
@@ -901,7 +901,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
 
     /// <summary>
     /// Recomputes an object's Qualified Name independently: <c>nameAlg || H(hierarchyHandle || Name)</c> (TPM 2.0
-    /// Library Part 1, clause 14, Table 6), through the registered digest seam. Every object this simulator quotes with is
+    /// Library Part 1, clause 13, Table 9), through the registered digest seam. Every object this simulator quotes with is
     /// a primary created directly under a permanent hierarchy, so the hierarchy's own Qualified Name is its
     /// 4-octet big-endian handle value — this test never calls the production <c>TpmObjectName</c> helper,
     /// matching the file's firewalled, off-TPM oracle style.
@@ -967,8 +967,8 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     /// A real, unbound/unsalted HMAC session at <c>TPM2_Quote()</c>'s single authorization slot, carrying the
     /// AK's CORRECT retained authValue, attests — and a SECOND command over the SAME session likewise attests,
     /// each adopting a genuinely rolled <c>nonceTPM</c> from its own response entry: a session's nonceTPM
-    /// changes on every use, command and response alike (TPM 2.0 Library Part 1, clause 17.6.3.1), and the HMAC
-    /// that authenticates a response entry (clause 17.6.5, equation 17) verifies — and only then lets the
+    /// changes on every use, command and response alike (TPM 2.0 Library Part 1, clause 16.6.3.1), and the HMAC
+    /// that authenticates a response entry (clause 16.6.5, equation 17) verifies — and only then lets the
     /// session adopt the new value — solely when that entry is genuine (TPM 2.0 Library Part 3, clause 18.4).
     /// </summary>
     [TestMethod]
@@ -1029,7 +1029,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
 
     /// <summary>
     /// A real, unbound/unsalted HMAC session genuinely verifies the AK's OWN authValue (TPM 2.0 Library Part 1,
-    /// clause 17.6.5, equation 17): a WRONG guess against a DA-protected AK fails the sign slot's command HMAC
+    /// clause 16.6.5, equation 17): a WRONG guess against a DA-protected AK fails the sign slot's command HMAC
     /// with the session-encoded <c>TPM_RC_AUTH_FAIL</c> and charges the lockout counter exactly once (clause
     /// 17.8.7), the session form of the same check <c>TPM2_Quote()</c>'s password arm already applies (TPM 2.0
     /// Library Part 3, clause 18.4).
@@ -1059,7 +1059,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
         TpmResult<TpmDictionaryAttackParameters> after = await tpm.GetDictionaryAttackParametersAsync(pool, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(
             before.Value.LockoutCounter + 1, after.Value.LockoutCounter,
-            "A wrong authValue against the DA-protected AK's sign slot must charge the lockout counter exactly once (TPM 2.0 Library Part 1, clause 17.8.7).");
+            "A wrong authValue against the DA-protected AK's sign slot must charge the lockout counter exactly once (TPM 2.0 Library Part 1, clause 16.8.7).");
     }
 
     /// <summary>
@@ -1093,12 +1093,12 @@ internal sealed class TpmInHouseSimulatorQuoteTests
         TpmResult<TpmDictionaryAttackParameters> after = await tpm.GetDictionaryAttackParametersAsync(pool, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(
             before.Value.LockoutCounter, after.Value.LockoutCounter,
-            "A noDA signer's mismatch must move no counter (TPM 2.0 Library Part 1, clause 17.8.1).");
+            "A noDA signer's mismatch must move no counter (TPM 2.0 Library Part 1, clause 16.8.1).");
     }
 
     /// <summary>
     /// A sign session BOUND TO THE SIGNING KEY ITSELF attests with no per-command authValue: binding already
-    /// incorporates the key's authValue into the session key (TPM 2.0 Library Part 1, clause 17.6.10, equation
+    /// incorporates the key's authValue into the session key (TPM 2.0 Library Part 1, clause 16.6.10, equation
     /// 20), so the command HMAC omits it (equations 21/22) — the bind-omission path for <c>TPM2_Quote()</c>'s
     /// single authorized slot (Part 3, clause 18.4).
     /// </summary>
@@ -1147,7 +1147,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
 
     /// <summary>
     /// A SALTED and BOUND sign session — bound to the signing key itself — attests: the salt folds in after the
-    /// bind authValue in the session-key KDFa (TPM 2.0 Library Part 1, clause 17.6.12, equation 25), so salting
+    /// bind authValue in the session-key KDFa (TPM 2.0 Library Part 1, clause 16.6.12, equation 25), so salting
     /// composes with the same bind-omission path <see cref="QuoteOverSignSessionBoundToTheSigningKeyItselfAttestsWithoutAPerCommandAuthValue"/>
     /// proves unsalted (TPM 2.0 Library Part 3, clause 18.4).
     /// </summary>
@@ -1213,7 +1213,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     /// A session claiming the <c>AUDIT</c> attribute at <c>TPM2_Quote()</c>'s sign slot is refused with the
     /// session-encoded <c>TPM_RC_ATTRIBUTES</c>: this arm models no command audit
     /// (<c>ValidateSessionArea(auditIsSupported: false)</c>), so a session claiming audit is refused rather than
-    /// accepted and echoed back auditing nothing (TPM 2.0 Library Part 2, clause 8.4, Table 40), encoded to the
+    /// accepted and echoed back auditing nothing (TPM 2.0 Library Part 2, clause 8.4, Table 38), encoded to the
     /// offending slot's index (clause 6.6.2). Audit is the attribute this gate refuses categorically, which is
     /// what makes it the one this test pins: the decrypt and encrypt attributes name the command's parameter-
     /// encryption gates and are admitted on their own terms.
@@ -1706,7 +1706,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     /// Quotes the fixed PCR selection with <paramref name="ak"/> over a fresh, real, unbound/unsalted HMAC sign
     /// session carrying <paramref name="sessionAuthValue"/>, flushing the session on the way out — the
     /// single-slot mirror of the multi-slot HMAC-arm helpers the NV-certify suite composes, sized for
-    /// <c>TPM2_Quote()</c>'s ONE authorized handle (TPM 2.0 Library Part 3, clause 18.4, Table 78).
+    /// <c>TPM2_Quote()</c>'s ONE authorized handle (TPM 2.0 Library Part 3, clause 18.4, Table 101).
     /// </summary>
     /// <param name="tpm">The TPM device.</param>
     /// <param name="registry">The response codec registry.</param>

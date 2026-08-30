@@ -20,7 +20,7 @@ namespace Verifiable.Tpm.Spec.Algorithms;
 /// <c>TPM_RC_SYMMETRIC</c>.
 /// </para>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 9.33, Table 80.
+/// Specification reference: TPM 2.0 Library Part 2, Section 9.33, Table 79.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]

@@ -28,13 +28,13 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// } TPMT_PUBLIC;
 /// </code>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 12.2.4, Table 219.
+/// Specification reference: TPM 2.0 Library Part 2, Section 12.2.4, Table 235.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 public sealed class TpmtPublic: IDisposable
 {
-    private bool disposed;
+    private bool Disposed { get; set; }
 
     /// <summary>
     /// Gets the algorithm type (RSA, ECC, KEYEDHASH, SYMCIPHER).
@@ -94,7 +94,7 @@ public sealed class TpmtPublic: IDisposable
     /// </summary>
     public int GetSerializedSize()
     {
-        ObjectDisposedException.ThrowIf(disposed, this);
+        ObjectDisposedException.ThrowIf(Disposed, this);
 
         return sizeof(ushort) +                 //Type.
                sizeof(ushort) +                 //NameAlg.
@@ -110,7 +110,7 @@ public sealed class TpmtPublic: IDisposable
     /// <param name="writer">The writer.</param>
     public void WriteTo(ref TpmWriter writer)
     {
-        ObjectDisposedException.ThrowIf(disposed, this);
+        ObjectDisposedException.ThrowIf(Disposed, this);
 
         writer.WriteUInt16((ushort)Type);
         writer.WriteUInt16((ushort)NameAlg);
@@ -313,6 +313,90 @@ public sealed class TpmtPublic: IDisposable
     }
 
     /// <summary>
+    /// Creates a public area template for an unrestricted ECC decryption key usable with
+    /// <c>TPM2_Encapsulate()</c> and <c>TPM2_Decapsulate()</c> — the KEM key admission gate of TPM 2.0
+    /// Library Part 2, Table 229 (see <see cref="TpmsEccParms.ForKeyEncapsulation"/>).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Unlike <see cref="CreateEccKeyAgreementTemplate"/> and <see cref="CreateEccStorageParentTemplate"/>,
+    /// this factory takes <paramref name="objectAttributes"/> as a parameter rather than fixing it — the
+    /// same shape <see cref="CreateEccSigningTemplate"/> uses — so a caller can add
+    /// <see cref="TpmaObject.NO_DA"/> without a second factory. The attributes a KEM key needs are:
+    /// </para>
+    /// <list type="bullet">
+    ///   <item><description><see cref="TpmaObject.FIXED_TPM"/> / <see cref="TpmaObject.FIXED_PARENT"/>: the key is non-duplicable.</description></item>
+    ///   <item><description><see cref="TpmaObject.SENSITIVE_DATA_ORIGIN"/>: the TPM generates the sensitive data.</description></item>
+    ///   <item><description><see cref="TpmaObject.USER_WITH_AUTH"/>: USER-role actions may be authorized with the authValue.</description></item>
+    ///   <item><description><see cref="TpmaObject.DECRYPT"/> alone — <b>not</b> <see cref="TpmaObject.RESTRICTED"/> and <b>not</b> <see cref="TpmaObject.SIGN_ENCRYPT"/>: Table 229's <c>kdf</c> field is admitted "if the key is an unrestricted decryption TPM_ALG_ECDH key" and refused with <c>TPM_RC_KDF</c> "in all other cases" — a restricted key is the clause 14.11 anti-oracle boundary TPM2_Decapsulate() itself enforces, so the template must not carry it.</description></item>
+    /// </list>
+    /// </remarks>
+    /// <param name="nameAlg">The hash algorithm for Name computation.</param>
+    /// <param name="objectAttributes">The object attributes (an unrestricted decryption key: DECRYPT set, RESTRICTED and SIGN_ENCRYPT clear).</param>
+    /// <param name="curve">The ECC curve — the DHKEM's <c>curveID</c>.</param>
+    /// <param name="kdfHashAlg">
+    /// The HKDF hash algorithm — the DHKEM's KDF hash. A caller-built <c>inPublic</c> template has no other
+    /// input for <c>scheme.details.ecdh.hashAlg</c>, so this factory passes <paramref name="kdfHashAlg"/> for
+    /// both — the field is inert on the KEM path (Table 229) regardless of which value it carries.
+    /// </param>
+    /// <returns>The public area template.</returns>
+    public static TpmtPublic CreateEccKemKeyTemplate(
+        TpmAlgIdConstants nameAlg,
+        TpmaObject objectAttributes,
+        TpmEccCurveConstants curve,
+        TpmAlgIdConstants kdfHashAlg)
+    {
+        TpmuPublicParms parameters = TpmuPublicParms.Ecc(TpmsEccParms.ForKeyEncapsulation(curve, kdfHashAlg, kdfHashAlg));
+
+        return new TpmtPublic(
+            TpmAlgIdConstants.TPM_ALG_ECC,
+            nameAlg,
+            objectAttributes,
+            Tpm2bDigest.Empty,
+            parameters,
+            TpmuPublicId.EmptyEcc());
+    }
+
+    /// <summary>
+    /// Creates a public area for a generated ECC KEM key, carrying the key's actual public point — the form
+    /// a TPM returns in <c>outPublic</c> for a primary usable with <c>TPM2_Encapsulate()</c> and
+    /// <c>TPM2_Decapsulate()</c>, as opposed to the empty-unique template a caller supplies in
+    /// <c>inPublic</c> (<see cref="CreateEccKemKeyTemplate"/>).
+    /// </summary>
+    /// <param name="nameAlg">Hash algorithm for Name computation.</param>
+    /// <param name="objectAttributes">The object attributes (an unrestricted decryption key: DECRYPT set, RESTRICTED and SIGN_ENCRYPT clear).</param>
+    /// <param name="curve">The ECC curve — the DHKEM's <c>curveID</c>.</param>
+    /// <param name="schemeHashAlg">The <c>scheme.details.ecdh.hashAlg</c> the creating template carried — echoed unchanged (Part 3, clause 24.1.1), independently of <paramref name="kdfHashAlg"/>.</param>
+    /// <param name="kdfHashAlg">The HKDF hash algorithm — the DHKEM's KDF hash.</param>
+    /// <param name="unique">The generated public point; ownership transfers to the returned public area.</param>
+    /// <param name="pool">The memory pool backing the authPolicy digest (used only when one is supplied).</param>
+    /// <param name="authPolicy">The authorization policy digest to re-emit into the exported public area, or empty (default) for none.</param>
+    /// <returns>The public area.</returns>
+    public static TpmtPublic CreateEccKemKey(
+        TpmAlgIdConstants nameAlg,
+        TpmaObject objectAttributes,
+        TpmEccCurveConstants curve,
+        TpmAlgIdConstants schemeHashAlg,
+        TpmAlgIdConstants kdfHashAlg,
+        TpmsEccPoint unique,
+        BaseMemoryPool pool,
+        ReadOnlySpan<byte> authPolicy = default)
+    {
+        ArgumentNullException.ThrowIfNull(unique);
+        ArgumentNullException.ThrowIfNull(pool);
+
+        TpmuPublicParms parameters = TpmuPublicParms.Ecc(TpmsEccParms.ForKeyEncapsulation(curve, schemeHashAlg, kdfHashAlg));
+
+        return new TpmtPublic(
+            TpmAlgIdConstants.TPM_ALG_ECC,
+            nameAlg,
+            objectAttributes,
+            Tpm2bDigest.Create(authPolicy, pool),
+            parameters,
+            TpmuPublicId.FromEccPoint(unique));
+    }
+
+    /// <summary>
     /// Creates a public area template for an ECC restricted storage key, the kind of key that can act as
     /// a parent for <c>TPM2_Create()</c>.
     /// </summary>
@@ -325,7 +409,7 @@ public sealed class TpmtPublic: IDisposable
     ///   <item><description><see cref="TpmaObject.FIXED_TPM"/> / <see cref="TpmaObject.FIXED_PARENT"/>: the key is non-duplicable.</description></item>
     ///   <item><description><see cref="TpmaObject.SENSITIVE_DATA_ORIGIN"/>: the TPM generates the sensitive data.</description></item>
     ///   <item><description><see cref="TpmaObject.USER_WITH_AUTH"/>: USER-role actions may be authorized with the authValue.</description></item>
-    ///   <item><description><see cref="TpmaObject.RESTRICTED"/> + <see cref="TpmaObject.DECRYPT"/>: a storage parent (TPM 2.0 Part 1, Section 25.2).</description></item>
+    ///   <item><description><see cref="TpmaObject.RESTRICTED"/> + <see cref="TpmaObject.DECRYPT"/>: a storage parent (TPM 2.0 Part 1, clause 22.1.4 (Decrypt Attribute) and Table 33 in clause 22.1.5 (Uses)).</description></item>
     /// </list>
     /// </remarks>
     /// <param name="nameAlg">The hash algorithm for Name computation.</param>
@@ -360,6 +444,46 @@ public sealed class TpmtPublic: IDisposable
             Tpm2bDigest.Empty,
             parameters,
             TpmuPublicId.EmptyEcc());
+    }
+
+    /// <summary>
+    /// Creates a public area template for an RSA restricted storage key — the empty-unique <c>inPublic</c> a
+    /// caller supplies to mint an ordinary (password-authorizable) RSA storage parent, the RSA counterpart of
+    /// <see cref="CreateEccStorageParentTemplate"/> and the non-endorsement sibling of
+    /// <see cref="CreateRsaEndorsementKeyTemplate"/>.
+    /// </summary>
+    /// <param name="nameAlg">Hash algorithm for Name computation.</param>
+    /// <param name="keyBits">The RSA modulus size in bits.</param>
+    /// <param name="noDa">When <see langword="true"/>, sets TPMA_OBJECT.noDA so authorization failures against the parent do not advance the dictionary-attack lockout counter.</param>
+    /// <returns>The public area template.</returns>
+    public static TpmtPublic CreateRsaStorageParentTemplate(
+        TpmAlgIdConstants nameAlg,
+        ushort keyBits,
+        bool noDa = false)
+    {
+        TpmaObject objectAttributes =
+            TpmaObject.FIXED_TPM |
+            TpmaObject.FIXED_PARENT |
+            TpmaObject.SENSITIVE_DATA_ORIGIN |
+            TpmaObject.USER_WITH_AUTH |
+            TpmaObject.RESTRICTED |
+            TpmaObject.DECRYPT;
+
+        if(noDa)
+        {
+            objectAttributes |= TpmaObject.NO_DA;
+        }
+
+        TpmuPublicParms parameters = TpmuPublicParms.Rsa(
+            TpmsRsaParms.ForStorage(keyBits, TpmtSymDefObject.Aes(128, TpmAlgIdConstants.TPM_ALG_CFB)));
+
+        return new TpmtPublic(
+            TpmAlgIdConstants.TPM_ALG_RSA,
+            nameAlg,
+            objectAttributes,
+            Tpm2bDigest.Empty,
+            parameters,
+            TpmuPublicId.EmptyRsa());
     }
 
     /// <summary>
@@ -418,7 +542,7 @@ public sealed class TpmtPublic: IDisposable
     /// </para>
     /// <para>
     /// The symmetric definition is AES-128-CFB with a NULL scheme, the same combination
-    /// <see cref="CreateEccStorageParentTemplate"/> uses (TCG EK Credential Profile, Annex B.3.4, Table 3).
+    /// <see cref="CreateEccStorageParentTemplate"/> uses (TCG EK Credential Profile, Annex B.3.4, Table 1).
     /// </para>
     /// <para>
     /// <paramref name="authPolicy"/> is the caller-computed "PolicyA" digest (TCG EK Credential Profile, Annex
@@ -489,7 +613,7 @@ public sealed class TpmtPublic: IDisposable
     /// <para>
     /// The symmetric definition is AES-128-CFB with a NULL scheme (TCG EK Credential Profile, Annex B.3.3, Table
     /// 2) — RSA-OAEP has no separate KDF-scheme field the way an ECC key agreement scheme does; the "KDF" is
-    /// implicit in OAEP's own MGF1. The exponent is the wire literal <c>0</c> (TPM 2.0 Library Part 2, Table 215),
+    /// implicit in OAEP's own MGF1. The exponent is the wire literal <c>0</c> (TPM 2.0 Library Part 2, Table 228),
     /// meaning the TPM default 2^16+1 — never write <c>65537</c> into the template.
     /// </para>
     /// <para>
@@ -610,7 +734,7 @@ public sealed class TpmtPublic: IDisposable
     /// DA-protected entity incurs on its first authorization after a TPM reset.
     /// </para>
     /// <para>
-    /// Specification reference: TPM 2.0 Library Part 1, Section 24 (Sealed Data); Part 3, Section 12.1 / 12.7.
+    /// Specification reference: TPM 2.0 Library Part 1, clause 8.6.3 (the Sealed Data Object note); Part 3, Section 12.1 / 12.7.
     /// </para>
     /// </remarks>
     /// <param name="nameAlg">Hash algorithm for Name computation.</param>
@@ -623,19 +747,28 @@ public sealed class TpmtPublic: IDisposable
     /// <see langword="false"/>, only a policy session may authorize it (TPM 2.0 Library Part 2, clause 8.3.3;
     /// Part 3, clause 5.6, check 7.1).
     /// </param>
+    /// <param name="isDuplicable">
+    /// When <see langword="true"/>, leaves TPMA_OBJECT.fixedTPM and fixedParent CLEAR so the created object may
+    /// later leave its parent through <c>TPM2_Duplicate()</c>; when <see langword="false"/> (the default), both
+    /// are SET and the object is bound to its parent and TPM for life (TPM 2.0 Library Part 2, clause 8.3.2,
+    /// Table 37; Part 1, Clause 20).
+    /// </param>
     /// <returns>The public area template.</returns>
     public static TpmtPublic CreateSealedDataTemplate(
         TpmAlgIdConstants nameAlg,
         BaseMemoryPool pool,
         ReadOnlySpan<byte> authPolicy = default,
         bool noDa = false,
-        bool userWithAuth = true)
+        bool userWithAuth = true,
+        bool isDuplicable = false)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
-        TpmaObject objectAttributes =
-            TpmaObject.FIXED_TPM |
-            TpmaObject.FIXED_PARENT;
+        //A duplicable object carries fixedTPM and fixedParent CLEAR — the pair moves together, since a creation
+        //template under a fixedTPM-SET parent must hold them equal (TPM 2.0 Library Part 2, clause 8.3.3.2).
+        TpmaObject objectAttributes = isDuplicable
+            ? default
+            : TpmaObject.FIXED_TPM | TpmaObject.FIXED_PARENT;
 
         if(userWithAuth)
         {
@@ -659,15 +792,163 @@ public sealed class TpmtPublic: IDisposable
     }
 
     /// <summary>
+    /// Creates a public area template for an HMAC key: a KEYEDHASH object whose sensitive area is the caller's
+    /// (or the TPM's own generated) key rather than sealed opaque data. Part 2, clause 8.3.3.14 identifies this
+    /// shape — <c>TPM_ALG_KEYEDHASH</c> with the <c>sign</c> attribute SET — as an HMAC key, consumed by
+    /// <c>TPM2_HMAC_Start()</c>/<c>TPM2_HMAC()</c> (an unrestricted key) or, restricted, by <c>TPM2_Sign()</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The attributes always carry <see cref="TpmaObject.SIGN_ENCRYPT"/> (the HMAC key's <c>sign</c> attribute)
+    /// with <see cref="TpmaObject.DECRYPT"/> CLEAR — an HMAC key never decrypts. <paramref name="isRestricted"/>
+    /// gates <see cref="TpmaObject.RESTRICTED"/>: CLEAR (the default) yields an ordinary key usable with
+    /// <c>TPM2_HMAC_Start()</c> and <c>TPM2_HMAC()</c> (TPM 2.0 Library Part 3, clauses 17.2 and 15.5, both of
+    /// which reject a restricted key with <c>TPM_RC_ATTRIBUTES</c>); SET yields a restricted signing key whose
+    /// HMAC may only be produced over data <c>TPM2_Sign()</c> itself certifies as safe.
+    /// </para>
+    /// <para>
+    /// <paramref name="isSensitiveDataOrigin"/> gates <see cref="TpmaObject.SENSITIVE_DATA_ORIGIN"/>: SET (the
+    /// default) for a TPM-generated key, so the caller's <c>TPM2B_SENSITIVE_CREATE.data</c> must be empty;
+    /// CLEAR when the caller supplies the key octets themselves (<see cref="Tpm2bSensitiveCreate.ForHmacKey"/>).
+    /// </para>
+    /// <para>
+    /// <paramref name="authPolicy"/>, <paramref name="noDa"/>, <paramref name="userWithAuth"/>, and
+    /// <paramref name="isDuplicable"/> carry the same meaning as <see cref="CreateSealedDataTemplate"/>'s
+    /// identically-named parameters (Part 2, clause 8.3.2, Table 37; clause 8.3.3).
+    /// </para>
+    /// <para>
+    /// Specification reference: TPM 2.0 Library Part 2, clause 8.3.3.14; clause 12.2.3.3, Table 227 (the
+    /// deprecation of TPM_ALG_NULL for a signing HMAC key); Part 3, clauses 15.5 and 17.2.
+    /// </para>
+    /// </remarks>
+    /// <param name="nameAlg">Hash algorithm for Name computation.</param>
+    /// <param name="hashAlg">The HMAC hash algorithm (TPMS_SCHEME_HMAC's <c>hashAlg</c>).</param>
+    /// <param name="pool">The memory pool backing the authPolicy digest (used only when one is supplied).</param>
+    /// <param name="authPolicy">The authorization policy digest to bind the object to, or empty (default) for none.</param>
+    /// <param name="noDa">When <see langword="true"/>, sets TPMA_OBJECT.noDA so authorization failures against the key do not advance the dictionary-attack lockout counter.</param>
+    /// <param name="userWithAuth">
+    /// When <see langword="true"/> (the default), sets TPMA_OBJECT.userWithAuth so a USER-role action (such as
+    /// <c>TPM2_HMAC()</c>) may be authorized by an HMAC session or password as well as a policy session; when
+    /// <see langword="false"/>, only a policy session may authorize it (TPM 2.0 Library Part 2, clause 8.3.3;
+    /// Part 3, clause 5.6, check 7.1).
+    /// </param>
+    /// <param name="isDuplicable">
+    /// When <see langword="true"/>, leaves TPMA_OBJECT.fixedTPM and fixedParent CLEAR so the created key may
+    /// later leave its parent through <c>TPM2_Duplicate()</c>; when <see langword="false"/> (the default), both
+    /// are SET and the key is bound to its parent and TPM for life (TPM 2.0 Library Part 2, clause 8.3.2,
+    /// Table 37; Part 1, Clause 20).
+    /// </param>
+    /// <param name="isRestricted">
+    /// When <see langword="true"/>, sets TPMA_OBJECT.restricted, producing a restricted signing key rather than
+    /// an ordinary HMAC key usable with <c>TPM2_HMAC_Start()</c>/<c>TPM2_HMAC()</c>; <see langword="false"/> is
+    /// the default.
+    /// </param>
+    /// <param name="isSensitiveDataOrigin">
+    /// When <see langword="true"/> (the default), sets TPMA_OBJECT.sensitiveDataOrigin for a TPM-generated key;
+    /// set <see langword="false"/> when the caller supplies the key octets in <c>TPM2B_SENSITIVE_CREATE.data</c>.
+    /// </param>
+    /// <returns>The public area template.</returns>
+    public static TpmtPublic CreateHmacKeyTemplate(
+        TpmAlgIdConstants nameAlg,
+        TpmAlgIdConstants hashAlg,
+        BaseMemoryPool pool,
+        ReadOnlySpan<byte> authPolicy = default,
+        bool noDa = false,
+        bool userWithAuth = true,
+        bool isDuplicable = false,
+        bool isRestricted = false,
+        bool isSensitiveDataOrigin = true)
+    {
+        ArgumentNullException.ThrowIfNull(pool);
+
+        //A duplicable object carries fixedTPM and fixedParent CLEAR — the pair moves together, since a creation
+        //template under a fixedTPM-SET parent must hold them equal (TPM 2.0 Library Part 2, clause 8.3.3.2).
+        TpmaObject objectAttributes = isDuplicable
+            ? default
+            : TpmaObject.FIXED_TPM | TpmaObject.FIXED_PARENT;
+
+        objectAttributes |= TpmaObject.SIGN_ENCRYPT;
+
+        if(isRestricted)
+        {
+            objectAttributes |= TpmaObject.RESTRICTED;
+        }
+
+        if(isSensitiveDataOrigin)
+        {
+            objectAttributes |= TpmaObject.SENSITIVE_DATA_ORIGIN;
+        }
+
+        if(userWithAuth)
+        {
+            objectAttributes |= TpmaObject.USER_WITH_AUTH;
+        }
+
+        if(noDa)
+        {
+            objectAttributes |= TpmaObject.NO_DA;
+        }
+
+        TpmuPublicParms parameters = TpmuPublicParms.KeyedHash(TpmsKeyedHashParms.Hmac(hashAlg));
+
+        return new TpmtPublic(
+            TpmAlgIdConstants.TPM_ALG_KEYEDHASH,
+            nameAlg,
+            objectAttributes,
+            Tpm2bDigest.Create(authPolicy, pool),
+            parameters,
+            TpmuPublicId.EmptyKeyedHash());
+    }
+
+    /// <summary>
+    /// Creates a KEYEDHASH public area that echoes an exact attribute word and keyed-hash scheme, the form the
+    /// simulator returns as <c>outPublic</c> from <c>TPM2_Create()</c> (TPM 2.0 Library Part 3, clause 12.1: the
+    /// created object's public area is the input template with its <c>unique</c> filled in). Unlike
+    /// <see cref="CreateHmacKeyTemplate"/> and <see cref="CreateSealedDataTemplate"/>, which compose the
+    /// attribute word from boolean options, this preserves whatever attributes and scheme the caller supplied —
+    /// so a sealed data object (scheme <c>TPM_ALG_NULL</c>) and an HMAC key (scheme <c>TPM_ALG_HMAC</c>, sign
+    /// SET) each round-trip faithfully. The <c>unique</c> argument selects the form: empty yields the template a
+    /// caller sends in <c>inPublic</c>, and a supplied digest yields the <c>outPublic</c> form — one factory
+    /// serves both because a KEYEDHASH public area is otherwise byte-identical in the two, unlike ECC and RSA,
+    /// whose key forms carry a structurally different <c>unique</c> and so have separate factories such as
+    /// <see cref="CreateEccSigningKey"/>.
+    /// </summary>
+    /// <param name="nameAlg">The object's name algorithm.</param>
+    /// <param name="objectAttributes">The exact <c>TPMA_OBJECT</c> attribute word.</param>
+    /// <param name="scheme">The keyed-hash scheme (NULL for a data object, HMAC for a signing key).</param>
+    /// <param name="authPolicy">The authorization policy digest.</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <param name="unique">The <c>unique</c> value to carry — <c>H_nameAlg(seedValue ‖ sensitive)</c> per Part 2, clause 12.2.3.1, equation (8); Part 1, clause 24.5.3.2, equation (48) — or empty for the template form a caller sends.</param>
+    /// <returns>The KEYEDHASH public area.</returns>
+    public static TpmtPublic CreateKeyedHashTemplate(
+        TpmAlgIdConstants nameAlg,
+        TpmaObject objectAttributes,
+        TpmsKeyedHashParms scheme,
+        ReadOnlySpan<byte> authPolicy,
+        BaseMemoryPool pool,
+        ReadOnlySpan<byte> unique = default)
+    {
+        ArgumentNullException.ThrowIfNull(pool);
+
+        return new TpmtPublic(
+            TpmAlgIdConstants.TPM_ALG_KEYEDHASH,
+            nameAlg,
+            objectAttributes,
+            Tpm2bDigest.Create(authPolicy, pool),
+            TpmuPublicParms.KeyedHash(scheme),
+            TpmuPublicId.FromKeyedHashUnique(unique, pool));
+    }
+
+    /// <summary>
     /// Releases the memory owned by this structure.
     /// </summary>
     public void Dispose()
     {
-        if(!disposed)
+        if(!Disposed)
         {
             AuthPolicy.Dispose();
             Unique.Dispose();
-            disposed = true;
+            Disposed = true;
         }
     }
 

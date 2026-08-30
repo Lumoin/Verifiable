@@ -12,7 +12,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// <para>
 /// Every attestation begins with <see cref="Magic"/> == <see cref="TpmConstants32.TPM_GENERATED_VALUE"/>, which
 /// a verifier MUST check: it is the marker the TPM stamps on data it generated, so a signature over a structure
-/// lacking it cannot be a genuine TPM attestation (TPM 2.0 Library Part 2, Section 10.12.12). <see cref="Type"/>
+/// lacking it cannot be a genuine TPM attestation (TPM 2.0 Library Part 2, Section 10.11.12). <see cref="Type"/>
 /// then selects the <see cref="Attested"/> body.
 /// </para>
 /// <para>
@@ -30,7 +30,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// } TPMS_ATTEST;
 /// </code>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 10.12.12, Table 178.
+/// Specification reference: TPM 2.0 Library Part 2, Section 10.11.12, Table 154.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]

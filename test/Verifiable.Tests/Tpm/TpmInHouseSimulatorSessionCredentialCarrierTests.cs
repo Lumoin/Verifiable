@@ -23,7 +23,7 @@ namespace Verifiable.Tests.Tpm;
 /// <summary>
 /// The <c>sizeof(TPMU_HA)</c> width rule that every <c>TPM2B_AUTH</c> and <c>TPM2B_NONCE</c> on the wire carries,
 /// and the pool accounting of the credential carriers a command authorization slot's <c>nonce</c> and <c>hmac</c>
-/// are read into — the two fields of <c>TPMS_AUTH_COMMAND</c> (TPM 2.0 Library Part 2, clause 10.13.2, Table
+/// are read into — the two fields of <c>TPMS_AUTH_COMMAND</c> (TPM 2.0 Library Part 2, clause 10.12.2, Table
 /// 153), held in the pooled <see cref="Tpm2bNonce"/> and <see cref="Tpm2bAuth"/> carriers the parse rents and the
 /// request owns. Every proof drives the real wire through the production command path and reads real pool
 /// telemetry (<see cref="MeteredHousePool"/>), never an internal hook.
@@ -100,7 +100,7 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierTests
     /// <summary>
     /// A well-formed but wrong session credential, wide enough that no proof relying on it can fall into the
     /// No-HMAC-Authorization case. Every octet is non-zero: trailing zeros are removed from any value used as an
-    /// authorization secret (TPM 2.0 Library Part 1, clause 17.6.4.3), so an all-zero credential of this width
+    /// authorization secret (TPM 2.0 Library Part 1, clause 16.6.4.3), so an all-zero credential of this width
     /// strips to nothing and would stand in for the Empty Buffer rather than for a wrong value.
     /// </summary>
     private static byte[] WrongCredential { get; } = [
@@ -110,14 +110,14 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierTests
     /// <summary>
     /// An authorization value one octet past <c>sizeof(TPMU_HA)</c> — the smallest value no <c>TPM2B_AUTH</c> can
     /// carry at all, whatever entity it is offered to. Every octet is non-zero so that no trailing-zero removal
-    /// (TPM 2.0 Library Part 1, clause 17.6.4.3) could shorten it.
+    /// (TPM 2.0 Library Part 1, clause 16.6.4.3) could shorten it.
     /// </summary>
     private static byte[] PastBoundAuthValue { get; } = FilledNonZero(Tpm2bAuth.MaxSize + 1);
 
     /// <summary>
     /// An authorization value the structural bound admits and every entity in these proofs admits too: exactly the
     /// SHA-256 digest width, which is both the Name algorithm's digest for every Index defined here and the
-    /// context integrity digest a hierarchy's authorization value is bounded by (Part 1, clause 17.6.4.2).
+    /// context integrity digest a hierarchy's authorization value is bounded by (Part 1, clause 16.6.4.2).
     /// </summary>
     private static byte[] AdmissibleAuthValue { get; } = FilledNonZero(32);
 
@@ -148,7 +148,7 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierTests
 
     /// <summary>
     /// The <c>hmac</c> field of a command authorization slot is a <c>TPM2B_AUTH</c> (TPM 2.0 Library Part 2,
-    /// clause 10.13.2, Table 153), which Table 95 types as a <c>TPM2B_DIGEST</c> and clause 10.4.2, Table 92
+    /// clause 10.12.2, Table 156), which Table 93 types as a <c>TPM2B_DIGEST</c> and clause 10.3.2, Table 90
     /// bounds at <c>sizeof(TPMU_HA)</c> with the response code stated in the clause itself: "As with all sized
     /// buffers, the size is checked to see if it is within the prescribed range. If not, the response code is
     /// TPM_RC_SIZE". Three rungs prove both the bound and its ORDER against the body-length check: the bound
@@ -185,7 +185,7 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierTests
             pool, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(
             before.Value.LockoutCounter + 1, afterCompare.Value.LockoutCounter,
-            "A well-formed but wrong credential against a dictionary-attack-protected Index charges the counter once (Part 1, clause 17.8.1).");
+            "A well-formed but wrong credential against a dictionary-attack-protected Index charges the counter once (Part 1, clause 16.8.1).");
 
         //Rung 2: one octet past the bound, with every declared octet actually present.
         TpmRcConstants pastBound = await SubmitNvReadWithSlotAsync(
@@ -214,8 +214,8 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierTests
     }
 
     /// <summary>
-    /// The <c>nonce</c> field of the same slot is a <c>TPM2B_NONCE</c> (TPM 2.0 Library Part 2, clause 10.13.2,
-    /// Table 153), which Table 94 types as a <c>TPM2B_DIGEST</c> and clause 10.4.2, Table 92 bounds at
+    /// The <c>nonce</c> field of the same slot is a <c>TPM2B_NONCE</c> (TPM 2.0 Library Part 2, clause 10.12.2,
+    /// Table 156), which Table 92 types as a <c>TPM2B_DIGEST</c> and clause 10.3.2, Table 90 bounds at
     /// <c>sizeof(TPMU_HA)</c>, so it takes the identical three-rung rule and the identical session-index-encoded
     /// <c>TPM_RC_SIZE</c>.
     /// </summary>
@@ -232,7 +232,7 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierTests
         session.Dispose();
 
         //The credential is deliberately non-empty: an empty session key, an empty entity authValue and an empty
-        //credential together are the No-HMAC-Authorization case (TPM 2.0 Library Part 1, clause 17.6.6), which
+        //credential together are the No-HMAC-Authorization case (TPM 2.0 Library Part 1, clause 16.6.16), which
         //authorizes rather than failing, and would prove nothing about the nonce's own width rule.
         TpmRcConstants atBound = await SubmitNvReadWithSlotAsync(
             simulator, pool, sessionHandle, DaProtectedIndexHandle,
@@ -407,7 +407,7 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierTests
                 "The accepted increment releases the hmac at its continuation and the caller nonce through the response framing.");
 
             //The first increment SETs TPMA_NV_WRITTEN, which is part of the public area the Name digests (Part 1,
-            //clause 35.2.6.3), so cpHash's Name2 term for the undefine is the POST-increment Name.
+            //clause 34.2.6.3), so cpHash's Name2 term for the undefine is the POST-increment Name.
             counterName = await ReadNameAsync(tpm, registry, pool, CounterIndexHandle).ConfigureAwait(false);
 
             {
@@ -529,8 +529,8 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierTests
 
             {
                 //A hierarchy has no Name algorithm, so its authValue is bounded by the context-integrity digest
-                //size (clause 17.6.4.2), and a longer one is refused after the HMAC has verified. The bound is
-                //measured on the trailing-zero-STRIPPED value (clause 17.6.4.3), so the replacement carries no
+                //size (clause 16.6.4.2), and a longer one is refused after the HMAC has verified. The bound is
+                //measured on the trailing-zero-STRIPPED value (clause 16.6.4.3), so the replacement carries no
                 //trailing zeros: a padded one would strip back under the bound and be accepted.
                 using Tpm2bAuth tooLong = Tpm2bAuth.Create(OverWideHierarchyAuth, pool);
                 using var input = new HierarchyChangeAuthInput(TpmRh.TPM_RH_ENDORSEMENT, tooLong);
@@ -567,7 +567,7 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierTests
     /// <summary>
     /// A <c>TPM_RS_PW</c> slot carries its plaintext authorization value in the SAME <c>hmac</c> field a real
     /// session carries an HMAC in — "either an HMAC, a password, or an EmptyAuth" (TPM 2.0 Library Part 2,
-    /// clause 10.13.2, Table 153) — so the password form rents the same kind of carrier and returns it on both
+    /// clause 10.12.2, Table 156) — so the password form rents the same kind of carrier and returns it on both
     /// a refused and an accepted round trip.
     /// </summary>
     [TestMethod]
@@ -592,7 +592,7 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierTests
                 tpm, input, [wrong], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
             Assert.AreEqual(
                 TpmRcConstants.TPM_RC_BAD_AUTH, refused.ResponseCode,
-                "A wrong authValue against a dictionary-attack-EXEMPT Index is a plain bad-authorization (Part 1, clause 17.8.1).");
+                "A wrong authValue against a dictionary-attack-EXEMPT Index is a plain bad-authorization (Part 1, clause 16.8.1).");
         }
 
         Assert.AreEqual(
@@ -615,7 +615,7 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierTests
 
     /// <summary>
     /// <c>TPM2_NV_DefineSpace()</c>'s <c>auth</c> parameter is a <c>TPM2B_AUTH</c> (TPM 2.0 Library Part 3, clause
-    /// 31.3.2, Table 235), which Table 95 types as a <c>TPM2B_DIGEST</c> and clause 10.4.2, Table 92 bounds at
+    /// 31.3.2, Table 252), which Table 103 types as a <c>TPM2B_DIGEST</c> and clause 10.4.2, Table 100 bounds at
     /// <c>sizeof(TPMU_HA)</c> with the response code the clause itself names: "As with all sized buffers, the size
     /// is checked to see if it is within the prescribed range. If not, the response code is TPM_RC_SIZE". One
     /// octet past the bound is that refusal, answered BARE because the octets belong to a command parameter rather
@@ -650,10 +650,10 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierTests
 
     /// <summary>
     /// <c>TPM2_HierarchyChangeAuth()</c>'s <c>newAuth</c> parameter is a <c>TPM2B_AUTH</c> (TPM 2.0 Library Part 3,
-    /// clause 24.8.2, Table 188) and carries the identical <c>sizeof(TPMU_HA)</c> bound and the identical bare
-    /// <c>TPM_RC_SIZE</c> (Part 2, clause 10.4.5, Table 95 over clause 10.4.2, Table 92) on the plain password
+    /// clause 24.8.2, Table 205) and carries the identical <c>sizeof(TPMU_HA)</c> bound and the identical bare
+    /// <c>TPM_RC_SIZE</c> (Part 2, clause 10.3.5, Table 93 over clause 10.3.2, Table 90) on the plain password
     /// form. The admissible rung sends exactly the context integrity digest width the command's own per-entity
-    /// rule allows a hierarchy (clause 24.8.1; Part 1, clause 17.6.4.2), which rotates — so the two refusals are
+    /// rule allows a hierarchy (clause 24.8.1; Part 1, clause 16.6.4.2), which rotates — so the two refusals are
     /// separable: one is the structure's, one is the command's, and this proves the structure's own.
     /// </summary>
     [TestMethod]
@@ -686,7 +686,7 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierTests
     /// a structure no <c>TPM2B_AUTH</c> could hold. The reference bounds the declared size while unmarshalling the
     /// structure (<c>TPM2B_DIGEST_Unmarshal</c> compares the declared size against <c>sizeof(TPMU_HA)</c>) and
     /// removes trailing octets of zero only far later, in <c>MemoryRemoveTrailingZeros</c>, where the value is
-    /// USED as an authorization secret (TPM 2.0 Library Part 1, clause 17.6.4.3). The probe makes the two orders
+    /// USED as an authorization secret (TPM 2.0 Library Part 1, clause 16.6.4.3). The probe makes the two orders
     /// answer differently: 70 declared octets
     /// whose trailing 46 are zero strip back to an admissible 24, so a TPM that stripped first would accept them —
     /// and the admissible rung sends exactly those 24 octets and IS accepted, so the refusal above is the declared
@@ -719,7 +719,7 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierTests
 
     /// <summary>
     /// <c>TPM2_PolicySecret()</c>'s <c>policyRef</c> parameter is a <c>TPM2B_NONCE</c> (TPM 2.0 Library Part 3,
-    /// clause 23.4.2, Table 149), which Table 94 types as a <c>TPM2B_DIGEST</c> and clause 10.4.2, Table 92 bounds
+    /// clause 23.4.2, Table 166), which Table 102 types as a <c>TPM2B_DIGEST</c> and clause 10.4.2, Table 100 bounds
     /// at <c>sizeof(TPMU_HA)</c>, so a declared size past the bound is the same bare <c>TPM_RC_SIZE</c> the
     /// authorization-value parameters answer. The assertion is driven over a TRIAL policy session, which computes
     /// the policy digest without authorizing anything, so the admissible rung folds a real assertion and returns
@@ -758,7 +758,7 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierTests
 
     /// <summary>
     /// <c>TPMS_SENSITIVE_CREATE.userAuth</c> is a <c>TPM2B_AUTH</c> nested inside <c>TPM2_Create()</c>'s
-    /// <c>inSensitive</c> parameter (TPM 2.0 Library Part 2, clause 11.1.15, Table 168, page 166), so it carries
+    /// <c>inSensitive</c> parameter (TPM 2.0 Library Part 2, clause 11.1.15, Table 171, page 166), so it carries
     /// the same <c>sizeof(TPMU_HA)</c> bound and the same bare <c>TPM_RC_SIZE</c> — answered by the structure
     /// parser itself, whose only refusal channel is a throw the parse converts, since an unmarshalling error means
     /// no command processing occurs (Part 3, clause 5.8.2). The admissible rung sends the Name algorithm's own
@@ -797,7 +797,7 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierTests
         await FlushAsync(tpm, registry, pool, parentHandle).ConfigureAwait(false);
     }
 
-    /// <summary>Renders a permanent entity's Name: its 4-octet big-endian handle value (Part 1, clause 14, Table 6).</summary>
+    /// <summary>Renders a permanent entity's Name: its 4-octet big-endian handle value (Part 1, clause 13, Table 9).</summary>
     /// <param name="handle">The entity's handle.</param>
     /// <returns>The handle-form Name.</returns>
     private static byte[] HandleFormName(uint handle)
@@ -837,8 +837,8 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierTests
 
     /// <summary>
     /// Appends a one-session authorization area whose <c>nonce</c> and <c>hmac</c> fields are written exactly as
-    /// given, so a proof can declare a size the octets do not match (TPM 2.0 Library Part 2, clause 10.13.2,
-    /// Table 153).
+    /// given, so a proof can declare a size the octets do not match (TPM 2.0 Library Part 2, clause 10.12.2,
+    /// Table 156).
     /// </summary>
     /// <param name="body">The body being built.</param>
     /// <param name="sessionHandle">The session handle to name.</param>
@@ -1047,7 +1047,7 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierTests
     /// <summary>
     /// Appends an authorization area of exactly one <c>TPM_RS_PW</c> slot carrying the given plaintext
     /// authorization value in the <c>hmac</c> field, with the empty nonce and the <c>continueSession</c>
-    /// attribute a password slot owes (TPM 2.0 Library Part 1, clause 16.6.4, Table 12).
+    /// attribute a password slot owes (TPM 2.0 Library Part 1, clause 15.6.4, Table 15).
     /// </summary>
     /// <param name="body">The body being built.</param>
     /// <param name="suppliedAuth">The authorization value the slot presents.</param>
@@ -1058,7 +1058,7 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierTests
 
     /// <summary>
     /// Appends a <c>TPM2B_NV_PUBLIC</c> wrapping a <c>TPMS_NV_PUBLIC</c> for an Index of
-    /// <see cref="IndexDataSize"/> octets with no access policy (TPM 2.0 Library Part 2, clause 13.5, Table 234).
+    /// <see cref="IndexDataSize"/> octets with no access policy (TPM 2.0 Library Part 2, clause 13.5, Table 250).
     /// </summary>
     /// <param name="body">The body being built.</param>
     /// <param name="nvIndex">The Index handle the public area names.</param>
@@ -1182,7 +1182,7 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierTests
         return await SubmitFramedAsync(simulator, pool, TpmStConstants.TPM_ST_SESSIONS, TpmCcConstants.TPM_CC_Create, [.. body]).ConfigureAwait(false);
     }
 
-    /// <summary>Starts a trial policy session, which computes a policy digest without authorizing anything (TPM 2.0 Library Part 1, clause 17.7).</summary>
+    /// <summary>Starts a trial policy session, which computes a policy digest without authorizing anything (TPM 2.0 Library Part 1, clause 16.7).</summary>
     /// <param name="tpm">The TPM device.</param>
     /// <param name="registry">The response codec registry.</param>
     /// <param name="pool">The memory pool.</param>
@@ -1218,7 +1218,7 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierTests
 
     /// <summary>
     /// Builds a value of the given width whose every octet is non-zero, so no trailing-zero removal (TPM 2.0
-    /// Library Part 1, clause 17.6.4.3) can shorten it: the octets ascend from <c>0x11</c>, which stays clear of
+    /// Library Part 1, clause 16.6.4.3) can shorten it: the octets ascend from <c>0x11</c>, which stays clear of
     /// zero for every width these proofs use.
     /// </summary>
     /// <param name="length">The width in octets.</param>

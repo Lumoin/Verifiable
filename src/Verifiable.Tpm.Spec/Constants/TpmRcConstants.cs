@@ -415,6 +415,29 @@ public enum TpmRcConstants: uint
     TPM_RC_SVN_LIMITED = RC_FMT1 + 0x029,
 
     /// <summary>
+    /// Parameter set not supported (TPM 2.0 Library Part 2, clause 6.6.3, Table 17).
+    /// </summary>
+    TPM_RC_PARMS = RC_FMT1 + 0x02A,
+
+    /// <summary>
+    /// External-Mu is not supported (TPM 2.0 Library Part 2, clause 6.6.3, Table 17).
+    /// </summary>
+    TPM_RC_EXT_MU = RC_FMT1 + 0x02B,
+
+    /// <summary>
+    /// The TPM does not support signing arbitrarily long messages using this key. The entire message needs
+    /// to be provided in the buffer parameter of TPM2_SignSequenceComplete() (TPM 2.0 Library Part 2,
+    /// clause 6.6.3, Table 17).
+    /// </summary>
+    TPM_RC_ONE_SHOT_SIGNATURE = RC_FMT1 + 0x02C,
+
+    /// <summary>
+    /// The key being used to finish the signature context is not the same as the one that was used to
+    /// start it (TPM 2.0 Library Part 2, clause 6.6.3, Table 17).
+    /// </summary>
+    TPM_RC_SIGN_CONTEXT_KEY = RC_FMT1 + 0x02D,
+
+    /// <summary>
     /// Command requires secure channel protection.
     /// </summary>
     TPM_RC_CHANNEL = RC_FMT1 + 0x030,

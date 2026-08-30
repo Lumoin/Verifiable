@@ -16,7 +16,7 @@ namespace Verifiable.Tests.Tpm;
 /// monotonic advance of the deterministic per-command quantum, the Time-resets-but-Clock-does-not behaviour
 /// across a TPM Restart, the resetCount/restartCount transitions across the three startup classifications
 /// (TPM Reset, Restart, Resume — TPM 2.0 Library Part 3, clause 9.3), and the ClockSafe transition on an
-/// unorderly reset (TPM 2.0 Library Part 1, clause 36.3).
+/// unorderly reset (TPM 2.0 Library Part 1, clause 33.3).
 /// </summary>
 [TestClass]
 internal sealed class TpmInHouseSimulatorReadClockTests
@@ -28,7 +28,7 @@ internal sealed class TpmInHouseSimulatorReadClockTests
     /// Verifies that <c>Clock</c> and <c>Time</c> advance by exactly the default one-millisecond quantum per
     /// dispatched command, strictly increasing across two sequential <c>TPM2_ReadClock()</c> calls, while
     /// <c>resetCount</c>/<c>restartCount</c> stay stable within the one power cycle (TPM 2.0 Library Part 1,
-    /// clause 36.1).
+    /// clause 33.1).
     /// </summary>
     [TestMethod]
     public async Task ReadClockAdvancesByTheDeterministicQuantumAcrossCommands()
@@ -63,7 +63,7 @@ internal sealed class TpmInHouseSimulatorReadClockTests
     /// Verifies that <c>Time</c> resets to a small value across a Shutdown(STATE) + Startup(CLEAR) cycle — a
     /// TPM Restart, since Startup(CLEAR) preceded by Shutdown(STATE) is Restart, not Reset (TPM 2.0 Library
     /// Part 3, clause 9.3) — while <c>Clock</c> keeps accumulating across the same boundary and never resets
-    /// (TPM 2.0 Library Part 1, clause 36.3), and <c>restartCount</c> increments while <c>resetCount</c> stays
+    /// (TPM 2.0 Library Part 1, clause 33.3), and <c>restartCount</c> increments while <c>resetCount</c> stays
     /// fixed.
     /// </summary>
     [TestMethod]
@@ -148,7 +148,7 @@ internal sealed class TpmInHouseSimulatorReadClockTests
     /// Verifies that <c>Safe</c> is YES after a fresh simulator's very first TPM Reset (no prior Clock value
     /// could ever have been reported), then becomes NO after a second Reset that followed no orderly
     /// <c>TPM2_Shutdown()</c> — the disorderly-restart case this simulator can distinguish once
-    /// <c>resetCount</c> is no longer zero (TPM 2.0 Library Part 1, clause 36.3).
+    /// <c>resetCount</c> is no longer zero (TPM 2.0 Library Part 1, clause 33.3).
     /// </summary>
     [TestMethod]
     public async Task ClockSafeIsNoAfterAnUnorderlyResetFollowingPriorOperation()

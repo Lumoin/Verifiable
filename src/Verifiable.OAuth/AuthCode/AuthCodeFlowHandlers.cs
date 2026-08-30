@@ -217,6 +217,13 @@ public static class AuthCodeFlowHandlers
         //indicators joined by a space into one occurrence.
         AddResourceOccurrences(formFields, resource);
 
+        //RFC 9126 section 2: the pushed request carries the whole authorization request, so fields
+        //this handler does not own - OID4VCI's authorization_details and issuer_state among them -
+        //ride verbatim, exactly as the JAR path already carries them. The flow-owned parameters
+        //above always win: an additional field cannot override the client identity, PKCE material,
+        //or state this handler just minted, and scope was already folded in.
+        AddAdditionalParFields(formFields, fields);
+
         HttpResponseData parHttpResponse;
         try
         {
@@ -1125,6 +1132,37 @@ public static class AuthCodeFlowHandlers
     /// occurrence. A <see langword="null"/>, empty, or all-whitespace entry is skipped rather
     /// than emitted as a blank occurrence.
     /// </summary>
+    /// <summary>
+    /// The parameter names <c>HandleParAsync</c> composes itself. An additional field arriving under
+    /// one of these names is dropped rather than allowed to override what the flow minted - the
+    /// caller extends the request, never the flow's own identity, PKCE, or state.
+    /// </summary>
+    private static ImmutableHashSet<string> ParFlowOwnedFieldNames { get; } = ImmutableHashSet.Create(
+        StringComparer.Ordinal,
+        OAuthRequestParameterNames.ClientId,
+        OAuthRequestParameterNames.ResponseType,
+        OAuthRequestParameterNames.RedirectUri,
+        OAuthRequestParameterNames.Scope,
+        OAuthRequestParameterNames.State,
+        OAuthRequestParameterNames.CodeChallenge,
+        OAuthRequestParameterNames.CodeChallengeMethod,
+        OAuthRequestParameterNames.Resource);
+
+
+    //Appends the caller's additional fields to the pushed request body, each under its own name,
+    //skipping the flow-owned names so the composed request stays the flow's.
+    private static void AddAdditionalParFields(OutgoingFormFields formFields, IReadOnlyDictionary<string, string> fields)
+    {
+        foreach((string key, string value) in fields)
+        {
+            if(!ParFlowOwnedFieldNames.Contains(key))
+            {
+                formFields.Add(key, value);
+            }
+        }
+    }
+
+
     private static void AddResourceOccurrences(OutgoingFormFields fields, IReadOnlyList<string>? resource)
     {
         if(resource is null)

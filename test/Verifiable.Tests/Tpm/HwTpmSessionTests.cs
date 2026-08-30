@@ -386,7 +386,7 @@ internal class HwTpmSessionTests
         //Step 1: Create a transient bind object whose authValue is known to this test. The object is marked
         //noDA so that even a regression (host-derived session key diverging from the TPM's) yields
         //TPM_RC_BAD_AUTH rather than advancing this hardware TPM's dictionary-attack counter: binding to a
-        //DA-protected object would make an auth failure tick the box toward lockout (Part 1 §17.6 / DA rules).
+        //DA-protected object would make an auth failure tick the box toward lockout (Part 1 §16.6 / DA rules).
         using CreatePrimaryInput primaryInput = CreatePrimaryInput.ForEccSigningKey(
             TpmRh.TPM_RH_OWNER,
             bindPassword,

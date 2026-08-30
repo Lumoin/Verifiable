@@ -42,7 +42,7 @@ internal sealed class TpmInHouseSimulatorInterfaceTypeSlotTests
     /// A <c>TPM2_Quote()</c> whose <c>signHandle</c> names the permanent handle <c>TPM_RH_OWNER</c> — a value
     /// <c>TPMI_DH_OBJECT</c> does not admit, since that type is constrained to transient and persistent object
     /// handles (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0
-    /// Library Specification</see>, Part 2, Section 9.3, Table 50) — is answered with <c>TPM_RC_HANDLE</c>, the
+    /// Library Specification</see>, Part 2, Section 9.3, Table 49) — is answered with <c>TPM_RC_HANDLE</c>, the
     /// code Part 3, Section 18.4's handle resolution names, and never with an exception leaving the command
     /// path.
     /// </summary>
@@ -76,7 +76,7 @@ internal sealed class TpmInHouseSimulatorInterfaceTypeSlotTests
     /// A <c>TPM2_NV_DefineSpace()</c> whose <c>publicInfo.nvIndex</c> carries a handle whose most-significant
     /// octet is not <c>TPM_HT_NV_INDEX</c> — a value <c>TPMI_RH_NV_INDEX</c> does not admit (<see
     /// href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 2, Section 9.25, Table 72, over the handle ranges of Section 7.2) — is answered
+    /// Specification</see>, Part 2, Section 9.25, Table 71, over the handle ranges of Section 7.2) — is answered
     /// with <c>TPM_RC_HANDLE</c> rather than an exception leaving the command path.
     /// </summary>
     [TestMethod]
@@ -113,7 +113,7 @@ internal sealed class TpmInHouseSimulatorInterfaceTypeSlotTests
     /// A <c>TPM2_StartAuthSession()</c> whose <c>authHash</c> names <c>TPM_ALG_RSA</c> — an asymmetric algorithm
     /// that <c>TPMI_ALG_HASH</c> does not admit, since that type is constrained to the hash algorithms the TPM
     /// implements (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0
-    /// Library Specification</see>, Part 2, Section 9.31, Table 78) — is answered with <c>TPM_RC_HASH</c>, the
+    /// Library Specification</see>, Part 2, Section 9.31, Table 77) — is answered with <c>TPM_RC_HASH</c>, the
     /// code that table names, rather than an exception leaving the command path.
     /// </summary>
     [TestMethod]
@@ -142,7 +142,7 @@ internal sealed class TpmInHouseSimulatorInterfaceTypeSlotTests
         Assert.IsTrue(result.IsTpmError, "A non-hash authHash must be refused with a response code.");
         Assert.AreEqual(
             TpmRcConstants.TPM_RC_HASH, result.ResponseCode,
-            "An algorithm outside TPMI_ALG_HASH's admitted set is TPM_RC_HASH (TPM 2.0 Library Part 2, clause 9.31, Table 78).");
+            "An algorithm outside TPMI_ALG_HASH's admitted set is TPM_RC_HASH (TPM 2.0 Library Part 2, clause 9.31, Table 77).");
     }
 
     /// <summary>

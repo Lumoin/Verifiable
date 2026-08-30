@@ -126,12 +126,48 @@ internal sealed class TpmInHouseSimulatorSignTests
     }
 
     /// <summary>
-    /// <c>TPM2_Sign()</c>'s key slot (Auth Index 1, Auth Role USER; TPM 2.0 Library Part 3, clause 20.2) is
+    /// "If the sign attribute is not SET in the key referenced by handle, then the TPM shall return TPM_RC_KEY"
+    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
+    /// Specification</see>, Part 3: Commands, clause 20.5.1): a storage parent's <c>sign</c> (SIGN_ENCRYPT)
+    /// attribute is CLEAR, so <c>TPM2_Sign()</c> refuses its handle before the scheme gate — the custody root's
+    /// private scalar never serves as a signing oracle, and unlike <c>TPM2_SignDigest()</c> no validation ticket
+    /// stands in the way of reaching it.
+    /// </summary>
+    [TestMethod]
+    public async Task SignAgainstAnEccStorageParentHandleReturnsKey()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryInput parentInput = CreatePrimaryInput.ForEccStorageParent(
+            TpmRh.TPM_RH_OWNER, null, TpmEccCurveConstants.TPM_ECC_NIST_P256, pool, noDa: true);
+        using TpmPasswordSession parentAuth = TpmPasswordSession.CreateEmpty(pool);
+        TpmResult<CreatePrimaryResponse> parentResult = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
+            tpm, parentInput, [parentAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(parentResult.IsSuccess, $"CreatePrimary storage parent failed: '{parentResult.ResponseCode}'.");
+
+        using CreatePrimaryResponse parent = parentResult.Value;
+        byte[] digest = await ComputeSha256Async(MessageBytes, pool, TestContext.CancellationToken).ConfigureAwait(false);
+
+        using TpmPasswordSession keyAuth = TpmPasswordSession.CreateEmpty(pool);
+        using SignInput signInput = SignInput.ForEcdsa(parent.ObjectHandle, digest, TpmAlgIdConstants.TPM_ALG_SHA256, pool);
+        TpmResult<SignResponse> signResult = await TpmCommandExecutor.ExecuteAsync<SignResponse>(
+            tpm, signInput, [keyAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(
+            TpmRcConstants.TPM_RC_KEY, signResult.ResponseCode,
+            "A storage parent's sign attribute is CLEAR; TPM2_Sign() must refuse it with TPM_RC_KEY, not sign with it.");
+    }
+
+    /// <summary>
+    /// <c>TPM2_Sign()</c>'s key slot (Auth Index 1, Auth Role USER; TPM 2.0 Library Part 3, clause 20.5) is
     /// verified against the signing key's own retained authValue over a plain <c>TPM_RS_PW</c> session: a
     /// DA-protected ECC signing key (<c>TPMA_OBJECT.NO_DA</c> clear) created with a real password signs when the
     /// CORRECT password authorizes it and moves no dictionary-attack counter, while a WRONG password is refused
     /// with the session-index-encoded <c>TPM_RC_AUTH_FAIL</c> (Part 2, clause 6.6.2) and charges
-    /// <c>failedTries</c> exactly once (Part 1, clause 17.8.7).
+    /// <c>failedTries</c> exactly once (Part 1, clause 16.8.7).
     /// </summary>
     [TestMethod]
     public async Task SignVerifiesTheSigningKeysOwnAuthValue()
@@ -182,7 +218,7 @@ internal sealed class TpmInHouseSimulatorSignTests
         TpmResult<TpmDictionaryAttackParameters> afterWrong = await tpm.GetDictionaryAttackParametersAsync(pool, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(
             afterCorrect.Value.LockoutCounter + 1, afterWrong.Value.LockoutCounter,
-            "A wrong key password against a DA-protected signing key must charge failedTries exactly once (TPM 2.0 Library Part 1, clause 17.8.7).");
+            "A wrong key password against a DA-protected signing key must charge failedTries exactly once (TPM 2.0 Library Part 1, clause 16.8.7).");
     }
 
     /// <summary>
@@ -194,7 +230,7 @@ internal sealed class TpmInHouseSimulatorSignTests
     /// clause 8.3.3). Check 7.1 precedes checks 9/10 in clause 5.6's mandatory order, so the correct password is
     /// never even compared, and the refusal is uncharged: <c>TPM_RC_POLICY_FAIL</c> is not <c>TPM_RC_AUTH_FAIL</c>,
     /// and clause 5.6's closing rule bars a non-<c>AUTH_FAIL</c> error from altering any TPM state, so
-    /// <c>failedTries</c> does not move (TPM 2.0 Library Part 1, clause 17.8.7).
+    /// <c>failedTries</c> does not move (TPM 2.0 Library Part 1, clause 16.8.7).
     /// </summary>
     [TestMethod]
     public async Task SignWithUserWithAuthClearKeyIsRefusedWithoutComparingThePassword()
@@ -246,7 +282,7 @@ internal sealed class TpmInHouseSimulatorSignTests
     /// Part 2, clause 6.6.2) — because check 7.1 rejects the session's shape before checks 9/10 (the authValue
     /// compare that would distinguish a wrong password from a correct one) ever run. The key is created without
     /// <c>TPMA_OBJECT.noDA</c>, so had check 7.1 been skipped and the compare reached, a rejected wrong password
-    /// would have charged <c>failedTries</c> (TPM 2.0 Library Part 1, clause 17.8.7); it does not.
+    /// would have charged <c>failedTries</c> (TPM 2.0 Library Part 1, clause 16.8.7); it does not.
     /// </summary>
     [TestMethod]
     public async Task SignWithUserWithAuthClearKeyRefusesWrongPasswordWithoutChargingFailedTries()
@@ -323,6 +359,63 @@ internal sealed class TpmInHouseSimulatorSignTests
         await SignAndVerifyRsaAsync(tpm, registry, pool, primary.ObjectHandle, digest, rsaParameters, usePss: true).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// An RSA key's <c>inScheme</c> is gated to the schemes the key's type admits: an ECDSA scheme against an
+    /// RSA key fails closed with <c>TPM_RC_SCHEME</c> rather than reaching <see cref="TpmuSignature.Create"/>,
+    /// which does not carry an RSA-keyed ECDSA member and would otherwise throw
+    /// <see cref="NotSupportedException"/> out of the effect loop (TPM 2.0 Library Part 3, clause 20.5: "If
+    /// inScheme is not a valid signing scheme for the type of keyHandle (or TPM_ALG_NULL), then the TPM shall
+    /// return TPM_RC_SCHEME"). A NULL <c>inScheme</c> against the same key instead succeeds, resolving to the
+    /// model's RSASSA default exactly as a NULL <c>inScheme</c> against an ECC key resolves to ECDSA.
+    /// </summary>
+    [TestMethod]
+    public async Task SignWithASchemeIncompatibleWithAnRsaKeyFailsClosedWhileNullResolvesToRsassa()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryInput primaryInput = CreatePrimaryInput.ForRsaSigningKey(
+            TpmRh.TPM_RH_OWNER, password: null, keyBits: Rsa2048KeyBits, TpmtRsaScheme.Null, pool, noDa: true);
+        using TpmPasswordSession ownerAuth = TpmPasswordSession.CreateEmpty(pool);
+        TpmResult<CreatePrimaryResponse> primaryResult = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
+            tpm, primaryInput, [ownerAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(primaryResult.IsSuccess, $"CreatePrimary (RSA 2048) failed: '{primaryResult.ResponseCode}'.");
+
+        using CreatePrimaryResponse primary = primaryResult.Value;
+        byte[] digest = await ComputeSha256Async(MessageBytes, pool, TestContext.CancellationToken).ConfigureAwait(false);
+
+        using TpmPasswordSession ecdsaAuth = TpmPasswordSession.CreateEmpty(pool);
+        using SignInput ecdsaInput = SignInput.ForEcdsa(primary.ObjectHandle, digest, TpmAlgIdConstants.TPM_ALG_SHA256, pool);
+        TpmResult<SignResponse> ecdsaResult = await TpmCommandExecutor.ExecuteAsync<SignResponse>(
+            tpm, ecdsaInput, [ecdsaAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+        if(ecdsaResult.IsSuccess)
+        {
+            ecdsaResult.Value.Dispose();
+        }
+
+        Assert.AreEqual(
+            TpmRcConstants.TPM_RC_SCHEME, ecdsaResult.ResponseCode,
+            $"An ECDSA inScheme against an RSA key must fail closed with TPM_RC_SCHEME, not escape as an " +
+            $"unhandled exception (got '{ecdsaResult.ResponseCode}').");
+
+        using TpmPasswordSession nullAuth = TpmPasswordSession.CreateEmpty(pool);
+        using SignInput nullInput = SignInput.Create(primary.ObjectHandle, digest, TpmAlgIdConstants.TPM_ALG_NULL, TpmAlgIdConstants.TPM_ALG_NULL, pool);
+        TpmResult<SignResponse> nullResult = await TpmCommandExecutor.ExecuteAsync<SignResponse>(
+            tpm, nullInput, [nullAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(nullResult.IsSuccess, $"A NULL inScheme against an RSA key must succeed: '{nullResult.ResponseCode}'.");
+
+        using SignResponse nullResponse = nullResult.Value;
+        Assert.AreEqual(
+            TpmAlgIdConstants.TPM_ALG_RSASSA, nullResponse.SignatureAlgorithm,
+            "A NULL scheme against an RSA key resolves to the model's fixed default, TPM_ALG_RSASSA.");
+        Assert.AreNotEqual(
+            TpmAlgIdConstants.TPM_ALG_NULL, nullResponse.HashAlgorithm,
+            "TPMS_SIGNATURE_RSA.hash must never be TPM_ALG_NULL (Table 212), even when the request's inScheme was NULL.");
+    }
+
     [TestMethod]
     [SuppressMessage("Microsoft.Reliability", "CA2000:Dispose objects before losing scope", Justification = "The PrivateKey takes ownership of the handle memory and is disposed by its using declaration.")]
     public async Task TpmBackedPrivateKeySignsAndVerifiesThroughTheVerifiableAbstraction()
@@ -382,7 +475,7 @@ internal sealed class TpmInHouseSimulatorSignTests
 
         using CreatePrimaryResponse primary = primaryResult.Value;
 
-        //The object Name is nameAlg || H_nameAlg(TPMT_PUBLIC) (TPM 2.0 Part 1, clause 14, Table 6). Recompute the digest
+        //The object Name is nameAlg || H_nameAlg(TPMT_PUBLIC) (TPM 2.0 Part 1, clause 13, Table 9). Recompute the digest
         //independently from the exported public area and confirm the response carries the real Name.
         byte[] marshaledPublic = MarshalPublicArea(primary.OutPublic, pool);
         byte[] expectedNameDigest = await ComputeSha256Async(marshaledPublic, pool, TestContext.CancellationToken).ConfigureAwait(false);
@@ -401,7 +494,7 @@ internal sealed class TpmInHouseSimulatorSignTests
         Assert.AreEqual((uint)TpmRh.TPM_RH_OWNER, creationData.ParentName.Handle, "parentName is the owner-hierarchy handle.");
         Assert.AreEqual((uint)TpmRh.TPM_RH_OWNER, creationData.ParentQualifiedName.Handle, "parentQualifiedName is the owner-hierarchy handle.");
 
-        //The creation ticket is a real HMAC bound to the owner hierarchy (TPM 2.0 Library Part 2, clause 10.7),
+        //The creation ticket is a real HMAC bound to the owner hierarchy (TPM 2.0 Library Part 2, clause 10.6),
         //not a NULL ticket.
         Assert.AreEqual(TpmStConstants.TPM_ST_CREATION, primary.CreationTicket.Tag, "The ticket tag must be TPM_ST_CREATION.");
         Assert.AreEqual(TpmiRhHierarchy.Owner, primary.CreationTicket.Hierarchy, "The ticket hierarchy must be the owner hierarchy.");
@@ -454,7 +547,7 @@ internal sealed class TpmInHouseSimulatorSignTests
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
-        //No key was created, so the transient handle does not resolve (TPM 2.0 Part 3, clause 20.2).
+        //No key was created, so the transient handle does not resolve (TPM 2.0 Part 3, clause 20.5).
         byte[] digest = await ComputeSha256Async(MessageBytes, pool, TestContext.CancellationToken).ConfigureAwait(false);
         using TpmPasswordSession keyAuth = TpmPasswordSession.CreateEmpty(pool);
         using SignInput signInput = SignInput.ForEcdsa(
@@ -464,6 +557,109 @@ internal sealed class TpmInHouseSimulatorSignTests
             tpm, signInput, [keyAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(TpmRcConstants.TPM_RC_HANDLE, signResult.ResponseCode);
+    }
+
+    /// <summary>
+    /// <c>inScheme</c>'s leading <c>+</c> admits <c>TPM_ALG_NULL</c> (<c>isNullAdmitted: true</c>, unlike
+    /// <c>TPM2_VerifySignature()</c>'s/<c>TPM2_PolicySigned()</c>'s signature) — it means "use the key's default
+    /// scheme": this simulator's ECC signing effect ignores the scheme selector entirely and always signs ECDSA,
+    /// so a NULL <c>inScheme</c> against an ECC key still succeeds (TPM 2.0 Library Part 2, clause 11.2.1.5,
+    /// Table 183). The response's <c>TPMS_SIGNATURE_ECC.hash</c> must still be a genuine hash algorithm, never
+    /// <c>TPM_ALG_NULL</c> (clause 11.3.2, Table 214: "<c>TPM_ALG_NULL</c> is not allowed"), so a NULL scheme
+    /// hash resolves to <c>TPM_ALG_SHA256</c> — the fixed default this model substitutes in place of a per-key
+    /// default scheme it does not retain. Hand-framed, bypassing <see cref="TpmCommandExecutor"/>: the true
+    /// Table 183 wire shape for a NULL scheme is two octets with no trailing detail pair at all.
+    /// </summary>
+    [TestMethod]
+    public async Task SignWithNullInSchemeAgainstAnEccKeySucceedsUnderTheKeysDefaultEcdsaBehavior()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryInput primaryInput = CreatePrimaryInput.ForEccSigningKey(
+            TpmRh.TPM_RH_OWNER, password: null, TpmEccCurveConstants.TPM_ECC_NIST_P256, TpmtEccScheme.Ecdsa(TpmAlgIdConstants.TPM_ALG_SHA256), pool, noDa: true);
+        using TpmPasswordSession ownerAuth = TpmPasswordSession.CreateEmpty(pool);
+        TpmResult<CreatePrimaryResponse> primaryResult = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
+            tpm, primaryInput, [ownerAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(primaryResult.IsSuccess, $"CreatePrimary (ECC P-256) failed: '{primaryResult.ResponseCode}'.");
+
+        using CreatePrimaryResponse primary = primaryResult.Value;
+        byte[] digest = await ComputeSha256Async(MessageBytes, pool, TestContext.CancellationToken).ConfigureAwait(false);
+
+        byte[] nullInScheme = BuildInSchemeBody(TpmAlgIdConstants.TPM_ALG_NULL, includeHashAlg: false);
+        (TpmRcConstants code, TpmAlgIdConstants? hashAlgorithm) = await SubmitSignCommandForHashAlgAsync(
+            simulator, pool, primary.ObjectHandle.Value, digest, nullInScheme).ConfigureAwait(false);
+
+        Assert.AreEqual(
+            TpmRcConstants.TPM_RC_SUCCESS, code,
+            "A NULL inScheme against an ECC key must still succeed: the ECC signing effect ignores the scheme selector and always signs ECDSA.");
+        Assert.AreNotEqual(
+            TpmAlgIdConstants.TPM_ALG_NULL, hashAlgorithm,
+            "TPMS_SIGNATURE_ECC.hash must never be TPM_ALG_NULL (Table 214), even when the request's inScheme was NULL.");
+        Assert.AreEqual(
+            TpmAlgIdConstants.TPM_ALG_SHA256, hashAlgorithm,
+            "A NULL scheme hash resolves to the model's fixed default, TPM_ALG_SHA256.");
+    }
+
+    /// <summary>
+    /// <see cref="SignInput"/> frames a NULL <c>inScheme</c> as the true Table 183 two-octet shape (the scheme
+    /// selector alone, no trailing <c>hashAlg</c> detail pair), so a NULL-scheme <c>TPM2_Sign()</c> issued
+    /// through the shipped public command path — not hand-framed — still succeeds against an ECC key (TPM 2.0
+    /// Library Part 2, clause 11.2.1.5, Table 183).
+    /// </summary>
+    [TestMethod]
+    public async Task SignInputWithNullSchemeAgainstAnEccKeySucceedsThroughTheProductionCommandPath()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryInput primaryInput = CreatePrimaryInput.ForEccSigningKey(
+            TpmRh.TPM_RH_OWNER, password: null, TpmEccCurveConstants.TPM_ECC_NIST_P256, TpmtEccScheme.Ecdsa(TpmAlgIdConstants.TPM_ALG_SHA256), pool, noDa: true);
+        using TpmPasswordSession ownerAuth = TpmPasswordSession.CreateEmpty(pool);
+        TpmResult<CreatePrimaryResponse> primaryResult = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
+            tpm, primaryInput, [ownerAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(primaryResult.IsSuccess, $"CreatePrimary (ECC P-256) failed: '{primaryResult.ResponseCode}'.");
+
+        using CreatePrimaryResponse primary = primaryResult.Value;
+        byte[] digest = await ComputeSha256Async(MessageBytes, pool, TestContext.CancellationToken).ConfigureAwait(false);
+
+        using TpmPasswordSession keyAuth = TpmPasswordSession.CreateEmpty(pool);
+        using SignInput signInput = SignInput.Create(primary.ObjectHandle, digest, TpmAlgIdConstants.TPM_ALG_NULL, TpmAlgIdConstants.TPM_ALG_NULL, pool);
+
+        TpmResult<SignResponse> signResult = await TpmCommandExecutor.ExecuteAsync<SignResponse>(
+            tpm, signInput, [keyAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(signResult.IsSuccess, $"Sign with a NULL inScheme via SignInput must succeed: '{signResult.ResponseCode}'.");
+
+        using SignResponse signResponse = signResult.Value;
+        Assert.AreNotEqual(
+            TpmAlgIdConstants.TPM_ALG_NULL, signResponse.HashAlgorithm,
+            "TPMS_SIGNATURE_ECC.hash must never be TPM_ALG_NULL (Table 214), even when SignInput's own SignatureScheme was NULL.");
+    }
+
+    /// <summary>
+    /// An <c>inScheme.scheme</c> naming an algorithm that is not an admitted signing scheme at all (a hash
+    /// algorithm ID) is refused with <c>TPM_RC_SCHEME</c>
+    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
+    /// Specification</see>, Part 2: Structures, clause 11.2.1.5, Table 183; clause 9.37, Table 83). Hand-framed
+    /// with an arbitrary key handle: the refusal fires in the parser, before <c>keyHandle</c> ever resolves.
+    /// </summary>
+    [TestMethod]
+    public async Task SignWithUnsupportedInSchemeAlgorithmReturnsScheme()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+
+        byte[] digest = new byte[P256ComponentSize];
+        byte[] body = BuildInSchemeBody(TpmAlgIdConstants.TPM_ALG_SHA256, includeHashAlg: true, hashAlg: TpmAlgIdConstants.TPM_ALG_SHA256);
+
+        TpmRcConstants code = await SubmitSignCommandAsync(simulator, pool, TpmSimulatorState.TransientHandleBase, digest, body).ConfigureAwait(false);
+
+        Assert.AreEqual(TpmRcConstants.TPM_RC_SCHEME, code, "An inScheme.scheme naming no signing scheme at all must be refused (Table 183).");
     }
 
     [TestMethod]
@@ -714,6 +910,143 @@ internal sealed class TpmInHouseSimulatorSignTests
         writer.WriteBytes(creationHash);
 
         return owner.Memory.Span[..length].ToArray();
+    }
+
+    /// <summary>
+    /// Hand-frames a <c>TPM2_Sign()</c> command whose <c>inScheme</c> body is supplied verbatim, bypassing
+    /// <see cref="TpmCommandExecutor"/> and <see cref="SignInput"/> entirely — letting a caller submit an
+    /// arbitrary, possibly non-Table-180-shaped <c>inScheme</c> directly against the simulator (for example an
+    /// unadmitted scheme selector) without going through <see cref="SignInput"/>'s own admitted-shape framing. A
+    /// single empty <c>TPM_RS_PW</c> password slot authorizes <c>@keyHandle</c>; a NULL <c>validation</c> ticket
+    /// follows <c>inScheme</c>, mirroring <see cref="SignInput.WriteParameters"/>'s own NULL-ticket convention.
+    /// </summary>
+    /// <param name="pool">The memory pool.</param>
+    /// <param name="keyHandle">The <c>@keyHandle</c> handle value.</param>
+    /// <param name="digest">The <c>digest</c> parameter's octets.</param>
+    /// <param name="inSchemeBody">The already-marshaled <c>TPMT_SIG_SCHEME</c> body, verbatim.</param>
+    /// <param name="length">The framed command's total length.</param>
+    /// <returns>The rented, framed command buffer.</returns>
+    private static IMemoryOwner<byte> FrameSignCommand(
+        BaseMemoryPool pool, uint keyHandle, ReadOnlySpan<byte> digest, ReadOnlySpan<byte> inSchemeBody, out int length)
+    {
+        const int PasswordSlotSize = sizeof(uint) + sizeof(ushort) + sizeof(byte) + sizeof(ushort);
+        const int NullValidationTicketSize = sizeof(ushort) + sizeof(uint) + sizeof(ushort);
+
+        length =
+            TpmHeader.HeaderSize
+            + sizeof(uint)                              //Handle area: @keyHandle.
+            + sizeof(uint) + PasswordSlotSize            //authorizationSize + one TPM_RS_PW slot.
+            + sizeof(ushort) + digest.Length             //TPM2B_DIGEST.
+            + inSchemeBody.Length
+            + NullValidationTicketSize;
+
+        IMemoryOwner<byte> owner = pool.Rent(length);
+        try
+        {
+            var writer = new TpmWriter(owner.Memory.Span[..length]);
+            var header = new TpmHeader((ushort)TpmStConstants.TPM_ST_SESSIONS, (uint)length, (uint)TpmCcConstants.TPM_CC_Sign);
+            header.WriteTo(ref writer);
+            writer.WriteUInt32(keyHandle);
+            writer.WriteUInt32((uint)PasswordSlotSize);
+            writer.WriteUInt32((uint)TpmRh.TPM_RH_PW);
+            writer.WriteTpm2b(ReadOnlySpan<byte>.Empty);
+            writer.WriteByte((byte)TpmaSession.CONTINUE_SESSION);
+            writer.WriteTpm2b(ReadOnlySpan<byte>.Empty);
+            writer.WriteTpm2b(digest);
+            writer.WriteBytes(inSchemeBody);
+
+            //NULL ticket: tag = TPM_ST_HASHCHECK, hierarchy = TPM_RH_NULL, digest size = 0 (SignInput.WriteParameters's own convention).
+            writer.WriteUInt16((ushort)TpmStConstants.TPM_ST_HASHCHECK);
+            writer.WriteUInt32((uint)TpmRh.TPM_RH_NULL);
+            writer.WriteUInt16(0);
+
+            return owner;
+        }
+        catch
+        {
+            owner.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Submits a hand-framed <c>TPM2_Sign()</c> built by <see cref="FrameSignCommand"/> straight to the simulator
+    /// (bypassing <see cref="TpmCommandExecutor"/>) and yields the response code.
+    /// </summary>
+    /// <param name="simulator">The simulator to submit against.</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <param name="keyHandle">The <c>@keyHandle</c> handle value.</param>
+    /// <param name="digest">The <c>digest</c> parameter's octets.</param>
+    /// <param name="inSchemeBody">The already-marshaled <c>TPMT_SIG_SCHEME</c> body, verbatim.</param>
+    /// <returns>The response code.</returns>
+    private async Task<TpmRcConstants> SubmitSignCommandAsync(
+        TpmSimulator simulator, BaseMemoryPool pool, uint keyHandle, byte[] digest, byte[] inSchemeBody)
+    {
+        using IMemoryOwner<byte> commandOwner = FrameSignCommand(pool, keyHandle, digest, inSchemeBody, out int length);
+
+        TpmResult<TpmResponse> submitResult = await simulator.SubmitAsync(commandOwner.Memory[..length], pool, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(submitResult.IsSuccess, "The hand-framed command must reach the simulator.");
+
+        using TpmResponse response = submitResult.Value;
+        var reader = new TpmReader(response.AsReadOnlySpan());
+        TpmHeader responseHeader = TpmHeader.Parse(ref reader);
+
+        return (TpmRcConstants)responseHeader.Code;
+    }
+
+    /// <summary>
+    /// The counterpart of <see cref="SubmitSignCommandAsync"/> that also parses a successful response's
+    /// <c>TPMT_SIGNATURE</c> to expose the hash algorithm it frames, so a caller can inspect
+    /// <c>TPMS_SIGNATURE_ECC.hash</c> directly rather than trusting the response code alone.
+    /// </summary>
+    /// <param name="simulator">The simulator to submit against.</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <param name="keyHandle">The <c>@keyHandle</c> handle value.</param>
+    /// <param name="digest">The <c>digest</c> parameter's octets.</param>
+    /// <param name="inSchemeBody">The already-marshaled <c>TPMT_SIG_SCHEME</c> body, verbatim.</param>
+    /// <returns>The response code, and the framed signature's hash algorithm on success (<see langword="null"/> otherwise).</returns>
+    private async Task<(TpmRcConstants Code, TpmAlgIdConstants? HashAlgorithm)> SubmitSignCommandForHashAlgAsync(
+        TpmSimulator simulator, BaseMemoryPool pool, uint keyHandle, byte[] digest, byte[] inSchemeBody)
+    {
+        using IMemoryOwner<byte> commandOwner = FrameSignCommand(pool, keyHandle, digest, inSchemeBody, out int length);
+
+        TpmResult<TpmResponse> submitResult = await simulator.SubmitAsync(commandOwner.Memory[..length], pool, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(submitResult.IsSuccess, "The hand-framed command must reach the simulator.");
+
+        using TpmResponse response = submitResult.Value;
+        var reader = new TpmReader(response.AsReadOnlySpan());
+        TpmHeader responseHeader = TpmHeader.Parse(ref reader);
+        var code = (TpmRcConstants)responseHeader.Code;
+        if(code != TpmRcConstants.TPM_RC_SUCCESS)
+        {
+            return (code, null);
+        }
+
+        using SignResponse signResponse = SignResponse.Parse(ref reader, pool);
+
+        return (code, signResponse.HashAlgorithm);
+    }
+
+    /// <summary>
+    /// Builds a <c>TPMT_SIG_SCHEME</c> body: the <c>scheme</c> selector, followed by a hash-only
+    /// <c>TPMU_SIG_SCHEME</c> detail pair when <paramref name="includeHashAlg"/> is <see langword="true"/> — the
+    /// true Table 183 wire shape omits the detail entirely for <c>TPM_ALG_NULL</c>.
+    /// </summary>
+    /// <param name="scheme">The scheme selector to write.</param>
+    /// <param name="includeHashAlg">Whether to also write a hash-only detail pair.</param>
+    /// <param name="hashAlg">The hash algorithm to write when <paramref name="includeHashAlg"/> is <see langword="true"/>.</param>
+    /// <returns>The marshaled body.</returns>
+    private static byte[] BuildInSchemeBody(TpmAlgIdConstants scheme, bool includeHashAlg, TpmAlgIdConstants hashAlg = TpmAlgIdConstants.TPM_ALG_SHA256)
+    {
+        byte[] body = new byte[includeHashAlg ? 2 * sizeof(ushort) : sizeof(ushort)];
+        var writer = new TpmWriter(body);
+        writer.WriteUInt16((ushort)scheme);
+        if(includeHashAlg)
+        {
+            writer.WriteUInt16((ushort)hashAlg);
+        }
+
+        return body;
     }
 
     /// <summary>

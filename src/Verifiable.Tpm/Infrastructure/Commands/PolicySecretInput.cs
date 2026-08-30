@@ -27,7 +27,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// command's own nonceTPM/expiration/cpHashA checks and ticket minting.
 /// </para>
 /// <para>
-/// Command structure (TPM 2.0 Part 3, Section 23.4, Table 129):
+/// Command structure (TPM 2.0 Part 3, Section 23.4, Table 146):
 /// </para>
 /// <list type="bullet">
 ///   <item><description>authHandle (TPMI_DH_ENTITY): The entity whose authorization is required. Requires authorization at USER role.</description></item>

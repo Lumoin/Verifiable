@@ -3,13 +3,13 @@ using System.Diagnostics.CodeAnalysis;
 namespace Verifiable.Tpm.Spec.Constants;
 
 /// <summary>
-/// TPM_ALG_ID constants (Table 11).
+/// TPM_ALG_ID constants (Table 8).
 /// </summary>
 /// <remarks>
 /// <para>
 /// Specification:
 /// <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>
-/// (Part 2: Structures, section "6 Constants", Table 11).
+/// (Part 2: Structures, section "6 Constants", Table 8).
 /// </para>
 /// </remarks>
 [SuppressMessage("Design", "CA1069:Enums values should not be duplicated", Justification = "TPM 2.0 specification allows duplicate values for compatibility and other reasons.")]
@@ -149,6 +149,11 @@ public enum TpmAlgIdConstants: ushort
     /// two-phase elliptic-curve 800-56A key exchange – C(2, 2, ECC MQV) clause
     /// </summary>
     TPM_ALG_ECMQV = 0x001D,
+
+    /// <summary>
+    /// HMAC-based Extract-and-Expand Key Derivation Function IETF RFC 5869
+    /// </summary>
+    TPM_ALG_HKDF = 0x001F,
 
     /// <summary>
     /// concatenation key 800-56A derivation function (approved alternative 1) clause 5.8.1

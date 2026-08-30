@@ -26,12 +26,12 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// } TPMT_TK_HASHCHECK;
 /// </code>
 /// <para>
-/// <b>NULL ticket:</b> the tuple (TPM_ST_HASHCHECK, TPM_RH_NULL, empty digest) — clause 10.7.2's construct for
+/// <b>NULL ticket:</b> the tuple (TPM_ST_HASHCHECK, TPM_RH_NULL, empty digest) — clause 10.6.2's construct for
 /// "a command requires a ticket and no ticket is available", which is what <c>TPM2_Sign()</c> frames for a
 /// digest the caller produced outside the TPM.
 /// </para>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, section 10.7.6, Table 112.
+/// Specification reference: TPM 2.0 Library Part 2, section 10.6.7, Table 115.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -58,9 +58,9 @@ public sealed class TpmtTkHashcheck: IDisposable, ITpmWireType
     private int DigestLength { get; }
 
     /// <summary>
-    /// Whether <see cref="Dispose"/> has already released <see cref="Storage"/>.
+    /// Gets or sets whether <see cref="Dispose"/> has already released <see cref="Storage"/>.
     /// </summary>
-    private bool disposed;
+    private bool Disposed { get; set; }
 
     /// <summary>
     /// Gets the ticket structure tag (must be TPM_ST_HASHCHECK).
@@ -68,8 +68,8 @@ public sealed class TpmtTkHashcheck: IDisposable, ITpmWireType
     public TpmStConstants Tag { get; }
 
     /// <summary>
-    /// Gets the hierarchy whose proof keyed the ticket HMAC, typed <c>TPMI_RH_HIERARCHY+</c> as Table 112 names
-    /// it — the four hierarchy selectors of Part 2, clause 9.13, Table 60, the NULL hierarchy among them.
+    /// Gets the hierarchy whose proof keyed the ticket HMAC, typed <c>TPMI_RH_HIERARCHY+</c> as Table 115 names
+    /// it — the four hierarchy selectors of Part 2, clause 9.13, Table 59, the NULL hierarchy among them.
     /// </summary>
     public TpmiRhHierarchy Hierarchy { get; }
 
@@ -90,7 +90,7 @@ public sealed class TpmtTkHashcheck: IDisposable, ITpmWireType
     public static TpmtTkHashcheck Null => NullInstance;
 
     /// <summary>
-    /// Gets whether this is a NULL ticket: the NULL hierarchy with an Empty Buffer digest (clause 10.7.2).
+    /// Gets whether this is a NULL ticket: the NULL hierarchy with an Empty Buffer digest (clause 10.6.2).
     /// </summary>
     public bool IsNull => Hierarchy.IsNull && DigestLength == 0;
 
@@ -101,7 +101,7 @@ public sealed class TpmtTkHashcheck: IDisposable, ITpmWireType
     {
         get
         {
-            ObjectDisposedException.ThrowIf(disposed, this);
+            ObjectDisposedException.ThrowIf(Disposed, this);
 
             if(Storage is null)
             {
@@ -123,7 +123,7 @@ public sealed class TpmtTkHashcheck: IDisposable, ITpmWireType
     /// <param name="writer">The writer.</param>
     public void WriteTo(ref TpmWriter writer)
     {
-        ObjectDisposedException.ThrowIf(disposed, this);
+        ObjectDisposedException.ThrowIf(Disposed, this);
 
         writer.WriteUInt16((ushort)Tag);
         Hierarchy.WriteTo(ref writer);
@@ -142,7 +142,7 @@ public sealed class TpmtTkHashcheck: IDisposable, ITpmWireType
     /// <param name="reader">The reader.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The parsed hash-check ticket.</returns>
-    /// <exception cref="InvalidOperationException">The tag is not <c>TPM_ST_HASHCHECK</c> (<c>TPM_RC_TAG</c>, Table 112), or the hierarchy is not a <c>TPMI_RH_HIERARCHY</c> selector (<c>TPM_RC_VALUE</c>, Table 60).</exception>
+    /// <exception cref="InvalidOperationException">The tag is not <c>TPM_ST_HASHCHECK</c> (<c>TPM_RC_TAG</c>, Table 115), or the hierarchy is not a <c>TPMI_RH_HIERARCHY</c> selector (<c>TPM_RC_VALUE</c>, Table 59).</exception>
     public static TpmtTkHashcheck Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
@@ -223,10 +223,10 @@ public sealed class TpmtTkHashcheck: IDisposable, ITpmWireType
     /// </summary>
     public void Dispose()
     {
-        if(!disposed && this != NullInstance)
+        if(!Disposed && this != NullInstance)
         {
             Storage?.Dispose();
-            disposed = true;
+            Disposed = true;
         }
     }
 

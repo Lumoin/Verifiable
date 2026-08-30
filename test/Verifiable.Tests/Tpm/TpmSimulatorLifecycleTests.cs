@@ -420,7 +420,7 @@ internal sealed class TpmSimulatorLifecycleTests
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
 
         //A GetRandom command framed without its UINT16 bytesRequested parameter cannot be unmarshalled,
-        //which the TPM reports as TPM_RC_INSUFFICIENT (Part 2, Table 4), not TPM_RC_SIZE.
+        //which the TPM reports as TPM_RC_INSUFFICIENT (Part 2, Table 2), not TPM_RC_SIZE.
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using IMemoryOwner<byte> owner = pool.Rent(TpmHeader.HeaderSize);
         Memory<byte> command = owner.Memory[..TpmHeader.HeaderSize];
@@ -494,7 +494,7 @@ internal sealed class TpmSimulatorLifecycleTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmResponseRegistry registry = CreateCapabilityRegistry();
 
-        //Clause 10.4: Failure Mode admits TPM2_GetTestResult() and TPM2_GetCapability().
+        //Clause 9.4: Failure Mode admits TPM2_GetTestResult() and TPM2_GetCapability().
         TpmResult<GetCapabilityResponse> result = await TpmCommandExecutor.ExecuteAsync<GetCapabilityResponse>(
             device, GetCapabilityInput.ForTpmProperties(TpmPtConstants.TPM_PT_LOCKOUT_COUNTER), [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -581,11 +581,12 @@ internal sealed class TpmSimulatorLifecycleTests
             more = response.MoreData.IsYes;
         }
 
-        //Four fixed identity properties, TPM_PT_NV_BUFFER_MAX (this TPM's own MAX_NV_BUFFER_SIZE — "the maximum
-        //data size in one NV write, NV read, NV extend, or NV certify command", Part 2, clause 6.13, Table 30),
-        //TPM_PT_PERMANENT and TPM_PT_STARTUP_CLEAR (the two TPMA-valued rows that report hierarchy and
-        //provisioning state, Part 2, clauses 8.6 and 8.7), and the four lockout properties.
-        Assert.HasCount(11, collected);
+        //Four fixed identity properties, TPM_PT_HR_TRANSIENT_MIN (this TPM's own object-slot count) and
+        //TPM_PT_NV_BUFFER_MAX (this TPM's own MAX_NV_BUFFER_SIZE — "the maximum data size in one NV write, NV
+        //read, NV extend, or NV certify command", Part 2, clause 6.13, Table 28), TPM_PT_PERMANENT and
+        //TPM_PT_STARTUP_CLEAR (the two TPMA-valued rows that report hierarchy and provisioning state, Part 2,
+        //clauses 8.6 and 8.7), TPM_PT_HR_TRANSIENT_AVAIL (the free object slots), and the four lockout properties.
+        Assert.HasCount(13, collected);
         for(int i = 1; i < collected.Count; i++)
         {
             Assert.IsGreaterThan(collected[i - 1], collected[i], "Paged properties must be strictly ascending across rounds.");

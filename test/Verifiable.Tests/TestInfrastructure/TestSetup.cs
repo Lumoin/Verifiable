@@ -496,6 +496,9 @@ internal static class TestSetup
                             BouncyCastleKeyAgreementFunctions.XChaCha20Poly1305EncryptAsync,
                     (Purpose p, _) when p.Equals(Purpose.Exchange) =>
                             BouncyCastleKeyAgreementFunctions.AesGcmEncryptAsync,
+                    //The TPM seal envelope resolves its content AEAD as (Aes256, Encryption): AES-256-GCM.
+                    (Purpose p, _) when p.Equals(Purpose.Encryption) =>
+                            BouncyCastleKeyAgreementFunctions.AesGcmEncryptAsync,
                     _ => throw new ArgumentException(
                         $"No AEAD encrypt function for algorithm '{algorithm}' purpose '{purpose}' (enc '{qualifier}').")
                 },
@@ -507,6 +510,9 @@ internal static class TestSetup
                     (Purpose p, string q) when p.Equals(Purpose.Exchange) && WellKnownJweEncryptionAlgorithms.IsXC20P(q) =>
                             BouncyCastleKeyAgreementFunctions.XChaCha20Poly1305DecryptAsync,
                     (Purpose p, _) when p.Equals(Purpose.Exchange) =>
+                            BouncyCastleKeyAgreementFunctions.AesGcmDecryptAsync,
+                    //The TPM seal envelope resolves its content AEAD as (Aes256, Encryption): AES-256-GCM.
+                    (Purpose p, _) when p.Equals(Purpose.Encryption) =>
                             BouncyCastleKeyAgreementFunctions.AesGcmDecryptAsync,
                     _ => throw new ArgumentException(
                         $"No AEAD decrypt function for algorithm '{algorithm}' purpose '{purpose}' (enc '{qualifier}').")

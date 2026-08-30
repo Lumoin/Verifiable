@@ -18,14 +18,14 @@ namespace Verifiable.Tpm.Spec.Handles;
 /// outside that set is <c>TPM_RC_VALUE</c>.
 /// </para>
 /// <para>
-/// Table 60 additionally lists the firmware-limited hierarchies (<c>TPM_RH_FW_OWNER</c>,
+/// Table 59 additionally lists the firmware-limited hierarchies (<c>TPM_RH_FW_OWNER</c>,
 /// <c>TPM_RH_FW_PLATFORM</c>, <c>TPM_RH_FW_ENDORSEMENT</c>, <c>TPM_RH_FW_NULL</c>) and the SVN-limited
 /// hierarchy ranges. This library models neither — no such handle constant exists, no command accepts one, and
 /// no hierarchy proof is derived for one — so <see cref="IsHierarchy"/> admits the four base selectors alone
 /// and this type's admitted set is narrower than the table's by exactly those variants.
 /// </para>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 9.13, Table 60.
+/// Specification reference: TPM 2.0 Library Part 2, Section 9.13, Table 59.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -65,7 +65,7 @@ public readonly record struct TpmiRhHierarchy
 
     /// <summary>
     /// Whether a raw handle value is one of the four base hierarchy selectors this type admits
-    /// (<c>TPM_RH_OWNER</c>, <c>TPM_RH_PLATFORM</c>, <c>TPM_RH_ENDORSEMENT</c>, <c>TPM_RH_NULL</c>) — Table 60's
+    /// (<c>TPM_RH_OWNER</c>, <c>TPM_RH_PLATFORM</c>, <c>TPM_RH_ENDORSEMENT</c>, <c>TPM_RH_NULL</c>) — Table 59's
     /// firmware-limited and SVN-limited variants are not modelled by this library and are not admitted.
     /// </summary>
     /// <param name="value">The raw handle value.</param>

@@ -21,7 +21,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// (those gates apply only to commands that access the Index's data area; this command reads only
 /// the public area and computes the Name). See
 /// <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0
-/// Library Specification</see>, Part 3, Section 31.6 (Table 234).
+/// Library Specification</see>, Part 3, Section 31.6 (Table 251).
 /// </para>
 /// </remarks>
 /// <param name="NvIndex">The handle of the NV Index whose public area and Name are read.</param>

@@ -3,13 +3,13 @@ using System;
 namespace Verifiable.Tpm.Spec.Constants;
 
 /// <summary>
-/// TPM_SU constants (Table 24).
+/// TPM_SU constants (Table 22).
 /// </summary>
 /// <remarks>
 /// <para>
 /// Specification:
 /// <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>
-/// (Part 2: Structures, section "6 Constants", Table 24).
+/// (Part 2: Structures, section "6 Constants", Table 22).
 /// </para>
 /// </remarks>
 public enum TpmSuConstants : ushort

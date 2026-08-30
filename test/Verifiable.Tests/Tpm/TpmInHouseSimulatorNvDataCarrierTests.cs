@@ -22,10 +22,10 @@ namespace Verifiable.Tests.Tpm;
 /// <summary>
 /// The pool-accounting, borrow-lifetime, and buffer-bound proofs for a defined NV Index's data area — the
 /// pooled <see cref="TpmNvIndexData"/> carrier reserved at the Index's declared <c>dataSize</c>
-/// (<c>TPMS_NV_PUBLIC.dataSize</c>, TPM 2.0 Library Part 2, clause 13.6, Table 235) and merged into by every
+/// (<c>TPMS_NV_PUBLIC.dataSize</c>, TPM 2.0 Library Part 2, clause 13.6, Table 251) and merged into by every
 /// store (Part 3, clause 31.7.1) — together with the <c>MAX_NV_BUFFER_SIZE</c> bound the NV data parameters
-/// carry (Part 2, clause 10.4.9, Table 99) and the capability property that reports it (Part 2, clause 6.13,
-/// Table 30). Every proof drives the real wire through the production command path and reads real pool
+/// carry (Part 2, clause 10.3.9, Table 97) and the capability property that reports it (Part 2, clause 6.13,
+/// Table 28). Every proof drives the real wire through the production command path and reads real pool
 /// telemetry (<see cref="MeteredHousePool"/>), never an internal hook.
 /// </summary>
 /// <remarks>
@@ -298,7 +298,7 @@ internal sealed class TpmInHouseSimulatorNvDataCarrierTests
     /// <summary>
     /// A session-authorized <c>TPM2_NV_Read()</c> builds its <c>TPM2B_MAX_NV_BUFFER</c> response parameter area
     /// inside the framing effect — the step that holds a memory pool — and the response intent adopts that
-    /// rental, which the serializer releases after framing (TPM 2.0 Library Part 1, clause 16.6.1). The command
+    /// rental, which the serializer releases after framing (TPM 2.0 Library Part 1, clause 15.6.1). The command
     /// therefore leaves the pool exactly where it found it while still answering the stored octets.
     /// </summary>
     [TestMethod]
@@ -343,8 +343,8 @@ internal sealed class TpmInHouseSimulatorNvDataCarrierTests
     /// with <c>TPM_RC_VALUE</c>, and refused there BEFORE the within-the-Index range check: the reference's own
     /// <c>TPM2_NV_Read</c> orders "Make sure the data will fit the return buffer" (<c>in-&gt;size &gt;
     /// MAX_NV_BUFFER_SIZE</c>) ahead of both the offset check and the range check, and clause 31.13.1 names no
-    /// buffer rule of its own — the bound is Table 249's response parameter being a <c>TPM2B_MAX_NV_BUFFER</c>,
-    /// which TPM 2.0 Library Part 2, clause 10.4.9, Table 99 limits to <c>MAX_NV_BUFFER_SIZE</c>. The request
+    /// buffer rule of its own — the bound is Table 264's response parameter being a <c>TPM2B_MAX_NV_BUFFER</c>,
+    /// which TPM 2.0 Library Part 2, clause 10.3.9, Table 97 limits to <c>MAX_NV_BUFFER_SIZE</c>. The request
     /// here is BOTH over the bound and past the Index's 8 written octets, so the code proves the order and not
     /// merely the check.
     /// </summary>
@@ -433,7 +433,7 @@ internal sealed class TpmInHouseSimulatorNvDataCarrierTests
     /// <summary>
     /// A <c>TPM2_NV_Write()</c> whose <c>data</c> parameter declares more octets than a
     /// <c>TPM2B_MAX_NV_BUFFER</c> can hold is refused at the wire read with <c>TPM_RC_SIZE</c> — the
-    /// marshalling refusal Part 2, clause 10.4.9, Table 99's <c>buffer[size]{:MAX_NV_BUFFER_SIZE}</c> bound
+    /// marshalling refusal Part 2, clause 10.3.9, Table 97's <c>buffer[size]{:MAX_NV_BUFFER_SIZE}</c> bound
     /// produces, and the one the reference's own <c>TPM2B_MAX_NV_BUFFER</c> unmarshal answers. Clause 31.7.1
     /// states no size rule of its own precisely because such a parameter never reaches the command body. The
     /// frame is built by hand: the typed input's carrier refuses the same bound client-side, so no production
@@ -547,7 +547,7 @@ internal sealed class TpmInHouseSimulatorNvDataCarrierTests
     /// <summary>
     /// The bound the NV data parameters enforce is the one the TPM reports: <c>TPM_PT_NV_BUFFER_MAX</c> is "the
     /// maximum data size in one NV write, NV read, NV extend, or NV certify command" (TPM 2.0 Library Part 2,
-    /// clause 6.13, Table 30), so a caller that reads the property and sizes its transfers by it is never
+    /// clause 6.13, Table 28), so a caller that reads the property and sizes its transfers by it is never
     /// refused for exceeding it — one fact, reported and enforced from the same value.
     /// </summary>
     [TestMethod]
@@ -573,7 +573,7 @@ internal sealed class TpmInHouseSimulatorNvDataCarrierTests
             "The reported maximum must be the very bound the NV read, write, and certify parameters refuse above.");
     }
 
-    /// <summary>Renders a permanent entity's Name: its 4-octet big-endian handle value (Part 1, clause 14, Table 6).</summary>
+    /// <summary>Renders a permanent entity's Name: its 4-octet big-endian handle value (Part 1, clause 13, Table 9).</summary>
     /// <param name="handle">The entity's handle.</param>
     /// <returns>The handle-form Name.</returns>
     private static byte[] HandleFormName(uint handle)
@@ -606,7 +606,7 @@ internal sealed class TpmInHouseSimulatorNvDataCarrierTests
 
     /// <summary>
     /// Appends a one-slot authorization area naming <c>TPM_RS_PW</c> with an empty nonce and an empty password —
-    /// the password form of <c>TPMS_AUTH_COMMAND</c> (TPM 2.0 Library Part 1, clause 17.6.4.1) — which is enough
+    /// the password form of <c>TPMS_AUTH_COMMAND</c> (TPM 2.0 Library Part 1, clause 16.6.4.1) — which is enough
     /// for a parse-time proof, since the parse never evaluates the credential.
     /// </summary>
     /// <param name="body">The body being built.</param>
@@ -744,7 +744,7 @@ internal sealed class TpmInHouseSimulatorNvDataCarrierTests
     /// <summary>
     /// Reads an Index's Name back from the TPM, which is where a session-authorized command's cpHash Name2 term
     /// comes from — <c>TPMA_NV_WRITTEN</c> is part of the public area the Name digests, so a Name taken before
-    /// the first write would no longer name the Index (TPM 2.0 Library Part 1, clause 14, Table 6).
+    /// the first write would no longer name the Index (TPM 2.0 Library Part 1, clause 13, Table 9).
     /// </summary>
     /// <param name="tpm">The TPM device.</param>
     /// <param name="registry">The response codec registry.</param>

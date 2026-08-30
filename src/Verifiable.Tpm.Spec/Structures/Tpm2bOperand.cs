@@ -10,8 +10,8 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// <remarks>
 /// <para>
 /// Carries the operand for <c>TPM2_PolicyNV()</c> and <c>TPM2_NV_SetBits()</c>-adjacent comparisons against an
-/// NV Index location. Part 2, Table 96 defines <c>TPM2B_OPERAND</c> as "size limited to the same as the digest
-/// structure" — Table 92's <c>TPM2B_DIGEST</c> bound, <c>buffer[size]{{:sizeof(TPMU_HA)}}</c>, the largest
+/// NV Index location. Part 2, Table 94 defines <c>TPM2B_OPERAND</c> as "size limited to the same as the digest
+/// structure" — Table 90's <c>TPM2B_DIGEST</c> bound, <c>buffer[size]{{:sizeof(TPMU_HA)}}</c>, the largest
 /// digest this library's <c>TPMU_HA</c> union can hold. That largest digest is 64 octets (SHA-512;
 /// <see cref="Verifiable.Tpm.Spec.Constants.TpmAlgIdExtensions.GetDigestSize"/>), so <see cref="MaxSize"/> is 64.
 /// The docs name <c>TPM2B_OPERAND</c> a distinct type rather than an alias of <c>TPM2B_DIGEST</c>, so this
@@ -32,7 +32,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// } TPM2B_OPERAND;
 /// </code>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, clause 10.4.6, Table 96.
+/// Specification reference: TPM 2.0 Library Part 2, clause 10.3.6, Table 94.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -40,7 +40,7 @@ public sealed class Tpm2bOperand: IDisposable
 {
     /// <summary>
     /// Maximum size of the operand: the largest digest this library supports (64 octets, SHA-512), matching
-    /// <c>TPM2B_DIGEST</c>'s bound per Part 2, Table 96's "size limited to the same as the digest structure".
+    /// <c>TPM2B_DIGEST</c>'s bound per Part 2, Table 94's "size limited to the same as the digest structure".
     /// </summary>
     public const int MaxSize = 64;
 

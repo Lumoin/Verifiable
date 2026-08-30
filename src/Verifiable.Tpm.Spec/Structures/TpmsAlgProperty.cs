@@ -23,7 +23,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// } TPMS_ALG_PROPERTY;
 /// </code>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 10.6.1, Table 108.
+/// Specification reference: TPM 2.0 Library Part 2, Section 10.7.1, Table 116 (Definition of TPMS_ALG_PROPERTY Structure).
 /// </para>
 /// </remarks>
 /// <param name="Algorithm">The algorithm identifier.</param>

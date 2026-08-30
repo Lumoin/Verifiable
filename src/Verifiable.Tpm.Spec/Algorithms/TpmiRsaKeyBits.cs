@@ -12,11 +12,11 @@ namespace Verifiable.Tpm.Spec.Algorithms;
 /// </para>
 /// <para>
 /// <b>Valid values:</b> the sizes named in the TCG reference implementation's <c>RSA_KEY_SIZES_BITS</c> set —
-/// 1024, 2048, 3072, and 4096 bits. Table 194 carries no leading <c>+</c>, so there is no NULL-admitting form.
+/// 1024, 2048, 3072, and 4096 bits. Table 195 carries no leading <c>+</c>, so there is no NULL-admitting form.
 /// Unmarshaling any other value is <c>TPM_RC_VALUE</c>.
 /// </para>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 11.2.4.6, Table 194.
+/// Specification reference: TPM 2.0 Library Part 2, Section 11.2.4.7, Table 195.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]

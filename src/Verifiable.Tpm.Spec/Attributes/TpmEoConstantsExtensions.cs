@@ -9,7 +9,7 @@ public static class TpmEoConstantsExtensions
 {
     /// <summary>
     /// Gets a value indicating whether <paramref name="operation"/> is one of the 12 values <see cref="TpmEoConstants"/>
-    /// defines (TPM 2.0 Library Specification, Part 2: Structures, Section 6.8, Table 22). An undefined <c>TPM_EO</c>
+    /// defines (TPM 2.0 Library Specification, Part 2: Structures, Section 6.8, Table 20). An undefined <c>TPM_EO</c>
     /// must be rejected at unmarshal (Part 3, clause 5.1), so this is checked at PARSE time by both
     /// <c>TpmSimulator.TryParsePolicyNv</c> and <c>TpmSimulator.TryParsePolicyCounterTimer</c> — before a
     /// <c>TpmPolicyNvRequested</c>/<c>TpmPolicyCounterTimerRequested</c> carrying the value is ever built, so a real

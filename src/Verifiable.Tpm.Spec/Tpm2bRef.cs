@@ -39,7 +39,7 @@ namespace Verifiable.Tpm.Spec;
 /// nonceRef.WriteTo(ref writer);
 /// </code>
 /// <para>
-/// See TPM 2.0 Part 2, Section 10.4 for TPM2B structure definitions.
+/// See TPM 2.0 Part 2, Section 10.3 for TPM2B structure definitions.
 /// </para>
 /// </remarks>
 /// <seealso cref="BufferRef"/>

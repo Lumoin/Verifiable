@@ -20,7 +20,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// } TPMS_TIME_ATTEST_INFO;
 /// </code>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 10.12.2, Table 122.
+/// Specification reference: TPM 2.0 Library Part 2, Section 10.11.2, Table 144.
 /// </para>
 /// </remarks>
 /// <param name="Time">The current TPM time and clock/reset state.</param>

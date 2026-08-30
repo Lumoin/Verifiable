@@ -23,7 +23,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// } TPM2B_DATA;
 /// </code>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 10.4.3.
+/// Specification reference: TPM 2.0 Library Part 2, Section 10.3.3.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -31,7 +31,7 @@ public sealed class Tpm2bData: IDisposable
 {
     /// <summary>
     /// Maximum size of the data buffer: <c>sizeof(TPMT_HA)</c> — the 2-octet algorithm identifier plus the
-    /// largest supported digest (64 octets for SHA-512) (TPM 2.0 Library Part 2, clause 10.4.3).
+    /// largest supported digest (64 octets for SHA-512) (TPM 2.0 Library Part 2, clause 10.3.3).
     /// </summary>
     public const int MaxSize = sizeof(ushort) + 64;
 
@@ -134,9 +134,17 @@ public sealed class Tpm2bData: IDisposable
     /// <summary>
     /// Parses a data buffer from a TPM reader.
     /// </summary>
+    /// <remarks>
+    /// The declared size is checked against <see cref="TpmReader.Remaining"/> before any pooled buffer is
+    /// rented, so a truncated buffer throws the same <see cref="ArgumentOutOfRangeException"/>
+    /// <see cref="TpmReader.ReadBytes(int)"/> would have thrown for the same input, but without renting first —
+    /// a rent-then-read ordering would otherwise orphan the rental on that throw.
+    /// </remarks>
     /// <param name="reader">The reader.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The parsed data buffer.</returns>
+    /// <exception cref="InvalidOperationException">The declared size exceeds <see cref="MaxSize"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The declared size exceeds the octets remaining in <paramref name="reader"/>.</exception>
     public static Tpm2bData Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
@@ -150,6 +158,11 @@ public sealed class Tpm2bData: IDisposable
         if(size > MaxSize)
         {
             throw new InvalidOperationException($"Data size {size} exceeds maximum {MaxSize}.");
+        }
+
+        if(size > reader.Remaining)
+        {
+            throw new ArgumentOutOfRangeException(nameof(reader), size, $"Data size {size} exceeds the {reader.Remaining} octets remaining in the reader.");
         }
 
         IMemoryOwner<byte> storage = pool.Rent(size);

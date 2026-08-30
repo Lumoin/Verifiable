@@ -24,7 +24,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// } TPMS_QUOTE_INFO;
 /// </code>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 10.12.1, Table 167.
+/// Specification reference: TPM 2.0 Library Part 2, Section 10.11.4, Table 146 (Definition of TPMS_QUOTE_INFO Structure).
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]

@@ -5,7 +5,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// parameters, so the response is the 10-byte header alone.
 /// </summary>
 /// <remarks>
-/// See TPM 2.0 Library Part 3, Section 25.2 (Table 181).
+/// See TPM 2.0 Library Part 3, Section 25.2 (Table 211).
 /// </remarks>
 public sealed class DictionaryAttackLockResetResponse: ITpmWireType
 {

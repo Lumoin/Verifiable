@@ -15,7 +15,7 @@ namespace Verifiable.Tpm.Spec.Handles;
 /// <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">
 /// TPM 2.0 Library Specification
 /// </see>
-/// (Part 2: Structures, section "TPM_HC", Table 37).
+/// (Part 2: Structures, section "TPM_HC", Table 35).
 /// </para>
 /// <para>
 /// Notes:

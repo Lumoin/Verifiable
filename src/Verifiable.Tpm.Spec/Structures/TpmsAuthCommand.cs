@@ -45,7 +45,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// //nonceCaller still owned by session for response verification.
 /// </code>
 /// <para>
-/// See TPM 2.0 Library Specification, Part 2: Structures, Section 10.10.1.
+/// See TPM 2.0 Library Specification, Part 2: Structures, Section 10.12.2, Table 156 (Definition of TPMS_AUTH_COMMAND Structure).
 /// </para>
 /// </remarks>
 /// <seealso cref="TpmsAuthResponse"/>

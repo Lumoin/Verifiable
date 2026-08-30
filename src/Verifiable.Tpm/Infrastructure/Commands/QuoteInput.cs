@@ -42,8 +42,8 @@ public sealed class QuoteInput: ITpmCommandInput, IDisposable
     /// <inheritdoc/>
     /// <remarks>
     /// <c>qualifyingData</c> (<c>TPM2B_DATA</c>) is the first entry of the parameter area and carries an
-    /// explicit size field (TPM 2.0 Library Part 3, clause 18.4, Table 93), which is what TPM 2.0 Library Part 1,
-    /// clause 19.1 requires of an encryptable parameter and what clause 16.4 restates ("for a command or response
+    /// explicit size field (TPM 2.0 Library Part 3, clause 18.4, Table 101), which is what TPM 2.0 Library Part 1,
+    /// clause 18.1 requires of an encryptable parameter and what clause 15.4 restates ("for a command or response
     /// parameter to be encrypted, it must be the first parameter and it must be a TPM2B type"). A session without
     /// the <c>decrypt</c> attribute is unaffected; the attribute is what asks the TPM to decrypt the parameter
     /// after the command HMACs verify, so the caller nonce this command echoes into the attestation's

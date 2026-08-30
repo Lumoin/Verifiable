@@ -36,7 +36,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
 
     /// <summary>
     /// PIN Fail attributes with the spec-mandated <c>TPMA_NV_NO_DA</c> set (TPM 2.0 Library Part 2, clause 13.4)
-    /// and <c>TPMA_NV_AUTHWRITE</c> CLEAR (Part 1, clause 37.2.6.1): a PIN Index's own authValue authorizes reads
+    /// and <c>TPMA_NV_AUTHWRITE</c> CLEAR (Part 1, clause 34.2.6.1): a PIN Index's own authValue authorizes reads
     /// only, so provisioning/recovery goes through the owner-authorized <c>TPM2_NV_Write()</c> arm.
     /// </summary>
     private const TpmaNv PinFailAttributes =
@@ -70,7 +70,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
 
     /// <summary>
     /// PIN Pass attributes, opted out of the global dictionary-attack mechanism for test isolation, with
-    /// <c>TPMA_NV_AUTHWRITE</c> CLEAR (Part 1, clause 37.2.6.1) — see <see cref="PinFailAttributes"/>.
+    /// <c>TPMA_NV_AUTHWRITE</c> CLEAR (Part 1, clause 34.2.6.1) — see <see cref="PinFailAttributes"/>.
     /// </summary>
     private const TpmaNv PinPassAttributes =
         TpmaNv.TPMA_NV_AUTHREAD | TpmaNv.TPMA_NV_OWNERWRITE | TpmaNv.TPMA_NV_NO_DA
@@ -111,8 +111,8 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
     /// Verifies the PIN Fail brute-force throttle: wrong-PIN reads increment pinCount without touching the
     /// global dictionary-attack counter (a PIN Fail Index is spec-mandated <c>TPMA_NV_NO_DA</c>), at pinLimit
     /// even the CORRECT PIN is rejected, and the Index only accepts the correct PIN again once it has been
-    /// rewritten via an OWNER-authorized <c>TPM2_NV_Write()</c> (TPM 2.0 Library Part 1, clause 37.2.6.6; clause
-    /// 37.2.8.1's "no automatic self-heal" note; clause 37.2.6.1 forbids the PIN's own authValue from
+    /// rewritten via an OWNER-authorized <c>TPM2_NV_Write()</c> (TPM 2.0 Library Part 1, clause 34.2.6.6; clause
+    /// 37.2.8.1's "no automatic self-heal" note; clause 34.2.6.1 forbids the PIN's own authValue from
     /// authorizing that rewrite at all).
     /// </summary>
     [TestMethod]
@@ -152,7 +152,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
 
     /// <summary>
     /// Verifies a successful PIN Fail authorization below pinLimit resets pinCount to zero (TPM 2.0 Library
-    /// Part 1, clause 37.2.6.6), observed directly in the read's own returned octets — the pinCount update is
+    /// Part 1, clause 34.2.6.6), observed directly in the read's own returned octets — the pinCount update is
     /// resolved as part of authorization, ahead of the command body that returns the data.
     /// </summary>
     [TestMethod]
@@ -198,7 +198,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
 
     /// <summary>
     /// Verifies a PIN Pass Index's pinCount increments on every successful authorization and, once it reaches
-    /// pinLimit, rejects even the CORRECT PIN (TPM 2.0 Library Part 1, clause 37.2.6.6) — the same throttle
+    /// pinLimit, rejects even the CORRECT PIN (TPM 2.0 Library Part 1, clause 34.2.6.6) — the same throttle
     /// shape as PIN Fail, driven by successes rather than failures.
     /// </summary>
     [TestMethod]
@@ -270,7 +270,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
     /// <summary>
     /// Verifies an unwritten PIN Index rejects auth use with <c>TPM_RC_AUTH_UNAVAILABLE</c>, even with the
     /// eventual-correct PIN: the authValue of a PIN Index is not accessible until the Index is written (TPM
-    /// 2.0 Library Part 1, clause 37.2.6.6), distinct from the generic <c>TPM_RC_NV_UNINITIALIZED</c> an
+    /// 2.0 Library Part 1, clause 34.2.6.6), distinct from the generic <c>TPM_RC_NV_UNINITIALIZED</c> an
     /// ordinary unwritten Index answers with.
     /// </summary>
     [TestMethod]
@@ -290,7 +290,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
 
     /// <summary>
     /// Verifies <c>TPM2_NV_DefineSpace()</c> rejects a PIN Fail Index defined with the forbidden
-    /// <c>TPMA_NV_AUTHWRITE</c> SET (TPM 2.0 Library Part 1, clause 37.2.6.1): a PIN Index's own authValue may
+    /// <c>TPMA_NV_AUTHWRITE</c> SET (TPM 2.0 Library Part 1, clause 34.2.6.1): a PIN Index's own authValue may
     /// authorize reads only, so an attribute combination that would let it authorize writes too is rejected at
     /// definition rather than trusted to caller discipline.
     /// </summary>
@@ -313,7 +313,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
     /// <c>TPM2_NV_Write()</c> against a PIN Index rejects a WRONG and the RIGHT PIN with the IDENTICAL
     /// <c>TPM_RC_AUTH_UNAVAILABLE</c> — proving the AUTHWRITE-clear availability gate (TPM 2.0 Library Part 3,
     /// clause 5.6 check 7.2.2) refuses before ever comparing the supplied value, so no correct/incorrect
-    /// distinction leaks (Part 1, clause 37.2.6.1) — and that neither attempt moves pinCount: a PIN Pass Index
+    /// distinction leaks (Part 1, clause 34.2.6.1) — and that neither attempt moves pinCount: a PIN Pass Index
     /// only increments pinCount on a successful AUTHORIZED use, so a single PIN-auth read afterward reporting
     /// pinCount == 1 (not 2 or more) proves the two rejected writes above never touched it.
     /// </summary>
@@ -355,7 +355,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
     /// Proves the pre-compare <c>TPMA_NV_AUTHREAD</c> availability gate on the Index-authorized
     /// <c>TPM2_NV_Read()</c> arm stops ALL pinCount movement, not merely the read itself: TPM 2.0 Library Part
     /// 3, clause 5.6 check 7.2.2 orders the <c>TPMA_NV_AUTHREAD</c> availability refusal
-    /// (<c>TPM_RC_AUTH_UNAVAILABLE</c>) ahead of the check 9/10 comparison, and Part 1, clause 35.2.6.6 moves
+    /// (<c>TPM_RC_AUTH_UNAVAILABLE</c>) ahead of the check 9/10 comparison, and Part 1, clause 34.2.6.6 moves
     /// pinCount only on an actual comparison outcome — so an unavailable-auth attempt moves nothing. Against a
     /// PIN Pass Index with <c>TPMA_NV_AUTHREAD</c> CLEAR, even the CORRECT PIN is refused before any comparison
     /// runs, and the owner-authorized arm afterward reports pinCount still at zero, proving the refused attempt
@@ -392,7 +392,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
     /// Verifies the owner-authorized <c>TPM2_NV_Write()</c> arm is a genuine provisioning-and-recovery path for
     /// a PIN Index: it provisions the Index for PIN-auth reads to use, and — once pinCount has reached
     /// pinLimit — recovers it for further PIN-auth use, all without the PIN's own authValue ever authorizing a
-    /// write (TPM 2.0 Library Part 1, clause 37.2.6.1; clause 37.2.8.1's recovery note).
+    /// write (TPM 2.0 Library Part 1, clause 34.2.6.1; clause 34.2.8.1's recovery note).
     /// </summary>
     [TestMethod]
     public async Task OwnerAuthNvWriteProvisionsAndRecoversAPinIndexForPinAuthReadsToUse()
@@ -460,7 +460,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
     /// Verifies the owner-authorized <c>TPM2_NV_Read()</c> arm (TPM 2.0 Library Part 3, clause 31.13) reports
     /// the current counter parameters WITHOUT ever moving <c>pinCount</c> itself - proven below the limit and
     /// again once it has actually been reached, with several repeated reads at each stage never advancing it
-    /// further (Part 1, clause 37.2.6.6 ties the pinCount update to the INDEX's own authValue resolving
+    /// further (Part 1, clause 34.2.6.6 ties the pinCount update to the INDEX's own authValue resolving
     /// authorization, never the owner arm's).
     /// </summary>
     [TestMethod]
@@ -508,7 +508,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
 
     /// <summary>
     /// Verifies the owner-authorized <c>TPM2_NV_Read()</c> arm honors a wrong owner authorization value with a
-    /// plain <c>TPM_RC_BAD_AUTH</c> (TPM 2.0 Library Part 1, clause 17.8.1: owner authorization is never
+    /// plain <c>TPM_RC_BAD_AUTH</c> (TPM 2.0 Library Part 1, clause 16.8.1: owner authorization is never
     /// dictionary-attack protected), mirroring the owner-write arm's own wrong-owner-auth behavior.
     /// </summary>
     [TestMethod]
@@ -818,7 +818,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
     /// Issues an OWNER-authorized <c>TPM2_NV_Write()</c> against <paramref name="nvIndex"/>, storing
     /// <paramref name="pinCount"/> and <paramref name="pinLimit"/> as the 8-octet
     /// <c>TPMS_NV_PIN_COUNTER_PARAMETERS</c> blob (TPM 2.0 Library Part 2, clause 13.3). A PIN Index forbids
-    /// <c>TPMA_NV_AUTHWRITE</c> (Part 1, clause 37.2.6.1), so the owner-authorized arm is the sole provisioning
+    /// <c>TPMA_NV_AUTHWRITE</c> (Part 1, clause 34.2.6.1), so the owner-authorized arm is the sole provisioning
     /// and recovery path — the (empty) owner authValue authorizes it, never the PIN.
     /// </summary>
     /// <param name="device">The TPM device.</param>

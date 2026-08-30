@@ -28,7 +28,7 @@ namespace Verifiable.Tests.Tpm;
 /// <para>
 /// A simulator gap this package surfaced was fixed alongside this coverage: <c>TpmLifecycleTransitions.OnFlushContext</c>
 /// checked <c>PolicySessions</c>, <c>HmacSessions</c>, and <c>TransientObjects</c> for the flushed handle but never
-/// <c>LoadedSealedObjects</c> — the dictionary a loaded sealed KEYEDHASH object actually lives in
+/// <c>LoadedKeyedHashObjects</c> — the dictionary a loaded sealed KEYEDHASH object actually lives in
 /// (<c>OnObjectLoaded</c>) — so <c>TPM2_FlushContext</c> against a loaded sealed object's handle always rejected
 /// with <c>TPM_RC_HANDLE</c> (every pre-existing seal flow test discarded the flush's result, masking it).
 /// <c>OnFlushContext</c> now removes the sealed-object entry;
@@ -49,7 +49,8 @@ internal sealed class TpmSealExtensionsTests
 
     /// <summary>
     /// The PCR(s) the policy-gated arm binds to. PCR 23 is the application/debug register, reset to the
-    /// all-zero image (TPM 2.0 Library Part 1, clause 17.5.3), keeping the test off the boot-measured registers.
+    /// all-zero image (TPM 2.0 Library Part 1, clause 14.1 (Initializing PCR)), keeping the test off the
+    /// boot-measured registers.
     /// </summary>
     private static int[] PcrIndices { get; } = [23];
 
@@ -224,7 +225,7 @@ internal sealed class TpmSealExtensionsTests
     /// (session index 0, the only session that command carries) with the session-index-encoded
     /// <c>TPM_RC_AUTH_FAIL</c> the simulator returns for a DA-protected parent's authValue mismatch (Part 2,
     /// clause 6.6.2), and charges the shared dictionary-attack <c>LockoutCounter</c> exactly once (Part 1,
-    /// clause 17.8.7). A follow-up <c>UnsealAsync</c> call with the CORRECT parentAuth against the same
+    /// clause 16.8.7). A follow-up <c>UnsealAsync</c> call with the CORRECT parentAuth against the same
     /// <see cref="TpmSealedBlob"/> and parent handle still recovers the secret, showing the failed Load
     /// attempt left nothing behind that blocks a subsequent legitimate cycle.
     /// </summary>
@@ -263,7 +264,7 @@ internal sealed class TpmSealExtensionsTests
             Assert.IsTrue(afterWrong.IsSuccess, $"GetDictionaryAttackParameters (after wrong) failed: '{afterWrong.ResponseCode}'.");
             Assert.AreEqual(
                 before.Value.LockoutCounter + 1, afterWrong.Value.LockoutCounter,
-                "A wrong parentAuth against a DA-protected storage parent must charge failedTries exactly once (TPM 2.0 Library Part 1, clause 17.8.7).");
+                "A wrong parentAuth against a DA-protected storage parent must charge failedTries exactly once (TPM 2.0 Library Part 1, clause 16.8.7).");
 
             TpmResult<UnsealResponse> correctResult = await tpm.UnsealAsync(
                 parentHandle, ParentAuthPasswordBytes, sealedBlob, SealAuthBytes,
@@ -458,7 +459,7 @@ internal sealed class TpmSealExtensionsTests
     /// Regression proof for the <c>OnFlushContext</c> sealed-object arm (TPM 2.0 Library Part 3, clause 28.4):
     /// a sealed object loaded with <c>TPM2_Load</c> is flushable — the first <c>TPM2_FlushContext</c> against its
     /// handle succeeds (pre-fix it rejected with <c>TPM_RC_HANDLE</c>, because the transition never consulted the
-    /// <c>LoadedSealedObjects</c> table), and a second flush of the same handle rejects with <c>TPM_RC_HANDLE</c>,
+    /// <c>LoadedKeyedHashObjects</c> table), and a second flush of the same handle rejects with <c>TPM_RC_HANDLE</c>,
     /// proving the entry was actually removed rather than merely acknowledged.
     /// </summary>
     [TestMethod]

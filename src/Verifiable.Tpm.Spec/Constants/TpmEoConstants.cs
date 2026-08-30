@@ -3,13 +3,13 @@ using System;
 namespace Verifiable.Tpm.Spec.Constants;
 
 /// <summary>
-/// TPM_EO constants (Table 22).
+/// TPM_EO constants (Table 20).
 /// </summary>
 /// <remarks>
 /// <para>
 /// Specification:
 /// <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>
-/// (Part 2: Structures, section "6 Constants", Table 22).
+/// (Part 2: Structures, section "6 Constants", Table 20).
 /// </para>
 /// </remarks>
 public enum TpmEoConstants : ushort

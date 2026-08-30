@@ -5,7 +5,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// response is the 10-byte header alone.
 /// </summary>
 /// <remarks>
-/// See TPM 2.0 Library Part 3, Section 31.15 (Table 252/253).
+/// See TPM 2.0 Library Part 3, Section 31.15 (Table 269/270).
 /// </remarks>
 public sealed class NvChangeAuthResponse: ITpmWireType
 {

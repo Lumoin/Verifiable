@@ -20,7 +20,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </para>
 /// <para>
 /// This command is authorized, so it is sent with <c>TPM_ST_SESSIONS</c>. See TPM 2.0 Library Part 3,
-/// Section 29.2 (Table 204).
+/// Section 29.2 (Table 221).
 /// </para>
 /// </remarks>
 /// <param name="AuthHandle">The provisioning hierarchy authorizing the set.</param>

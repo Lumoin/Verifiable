@@ -39,10 +39,10 @@ public static class TpmHandleRanges
 
     /// <summary>
     /// First value of the PCR range (<c>PCR_FIRST</c>). PCR 0 is architecturally defined to have a handle value
-    /// of zero, so this equals zero (Part 2, clause 7.5, Table 37: <c>HR_PCR = TPM_HT_PCR « HR_SHIFT</c>).
+    /// of zero, so this equals zero (Part 2, clause 7.5, Table 35: <c>HR_PCR = TPM_HT_PCR « HR_SHIFT</c>).
     /// </summary>
     /// <remarks>
-    /// Part 2, clause 7.5, Table 37 defines <c>PCR_LAST</c> as <c>PCR_FIRST + IMPLEMENTATION_PCR - 1</c>, an
+    /// Part 2, clause 7.5, Table 35 defines <c>PCR_LAST</c> as <c>PCR_FIRST + IMPLEMENTATION_PCR - 1</c>, an
     /// implementation-dependent bound (see <see cref="TpmHcConstants.GetPcrLast"/> for that formula). This pair
     /// instead spans the type's full 24-bit index space, mirroring how <see cref="TRANSIENT_FIRST"/> and
     /// <see cref="TRANSIENT_LAST"/> already model their range here — for classifying a handle's interface type
@@ -62,7 +62,7 @@ public static class TpmHandleRanges
     /// First value of the HMAC session range (<c>HMAC_SESSION_FIRST</c>).
     /// </summary>
     /// <remarks>
-    /// Part 2, clause 7.5, Table 37 defines <c>HMAC_SESSION_LAST</c> as <c>HMAC_SESSION_FIRST +
+    /// Part 2, clause 7.5, Table 35 defines <c>HMAC_SESSION_LAST</c> as <c>HMAC_SESSION_FIRST +
     /// MAX_ACTIVE_SESSIONS - 1</c>, an implementation-dependent bound (see
     /// <see cref="TpmHcConstants.GetHmacSessionLast"/> for that formula). This pair instead spans the type's
     /// full 24-bit index space, mirroring <see cref="TRANSIENT_FIRST"/>/<see cref="TRANSIENT_LAST"/> — for
@@ -81,7 +81,7 @@ public static class TpmHandleRanges
     /// First value of the policy session range (<c>POLICY_SESSION_FIRST</c>).
     /// </summary>
     /// <remarks>
-    /// Part 2, clause 7.5, Table 37 defines <c>POLICY_SESSION_LAST</c> as <c>POLICY_SESSION_FIRST +
+    /// Part 2, clause 7.5, Table 35 defines <c>POLICY_SESSION_LAST</c> as <c>POLICY_SESSION_FIRST +
     /// MAX_ACTIVE_SESSIONS - 1</c>, an implementation-dependent bound (see
     /// <see cref="TpmHcConstants.GetPolicySessionLast"/> for that formula). This pair instead spans the type's
     /// full 24-bit index space, mirroring <see cref="TRANSIENT_FIRST"/>/<see cref="TRANSIENT_LAST"/> — for
@@ -127,7 +127,7 @@ public static class TpmHandleRanges
     public const uint NV_INDEX_LAST = 0x01FF_FFFF;
 
     /// <summary>
-    /// First value of the external NV Index handle range (Part 2, clause 7.2, Table 35: <c>TPM_HT_EXTERNAL_NV = 0x11</c>; clause 7.5, Table 37).
+    /// First value of the external NV Index handle range (Part 2, clause 7.2, Table 33: <c>TPM_HT_EXTERNAL_NV = 0x11</c>; clause 7.5, Table 35).
     /// </summary>
     public const uint EXTERNAL_NV_FIRST = 0x1100_0000;
 
@@ -137,7 +137,7 @@ public static class TpmHandleRanges
     public const uint EXTERNAL_NV_LAST = 0x11FF_FFFF;
 
     /// <summary>
-    /// First value of the permanent NV Index handle range (Part 2, clause 7.2, Table 35: <c>TPM_HT_PERMANENT_NV = 0x12</c>; clause 7.5, Table 37).
+    /// First value of the permanent NV Index handle range (Part 2, clause 7.2, Table 33: <c>TPM_HT_PERMANENT_NV = 0x12</c>; clause 7.5, Table 35).
     /// </summary>
     public const uint PERMANENT_NV_FIRST = 0x1200_0000;
 

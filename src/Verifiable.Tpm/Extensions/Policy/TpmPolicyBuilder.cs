@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Verifiable.Tpm.Spec.Attributes;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Structures;
 
@@ -103,6 +104,117 @@ public sealed class TpmPolicyBuilder
     public TpmPolicyBuilder WithCounterTimer(ReadOnlyMemory<byte> operandB, ushort offset, TpmEoConstants operation)
     {
         Assertions.Add(new CounterTimerPolicyAssertion(operandB, offset, operation));
+
+        return this;
+    }
+
+    /// <summary>
+    /// Appends a TPM2_PolicyPassword assertion.
+    /// </summary>
+    /// <returns>This builder.</returns>
+    public TpmPolicyBuilder WithPassword()
+    {
+        Assertions.Add(new PasswordPolicyAssertion());
+
+        return this;
+    }
+
+    /// <summary>
+    /// Appends a TPM2_PolicyCpHash assertion.
+    /// </summary>
+    /// <param name="cpHashA">The command parameter digest the policy binds to.</param>
+    /// <returns>This builder.</returns>
+    public TpmPolicyBuilder WithCpHash(ReadOnlyMemory<byte> cpHashA)
+    {
+        Assertions.Add(new CpHashPolicyAssertion(cpHashA));
+
+        return this;
+    }
+
+    /// <summary>
+    /// Appends a TPM2_PolicyNameHash assertion.
+    /// </summary>
+    /// <param name="nameHash">The digest of the concatenated target Names the policy binds to.</param>
+    /// <returns>This builder.</returns>
+    public TpmPolicyBuilder WithNameHash(ReadOnlyMemory<byte> nameHash)
+    {
+        Assertions.Add(new NameHashPolicyAssertion(nameHash));
+
+        return this;
+    }
+
+    /// <summary>
+    /// Appends a TPM2_PolicyDuplicationSelect assertion.
+    /// </summary>
+    /// <param name="objectName">The Name of the object to be duplicated.</param>
+    /// <param name="newParentName">The Name of the new parent.</param>
+    /// <param name="isObjectIncluded">Whether the object Name is folded into the policyDigest, binding the pair rather than the new parent alone.</param>
+    /// <returns>This builder.</returns>
+    public TpmPolicyBuilder WithDuplicationSelect(ReadOnlyMemory<byte> objectName, ReadOnlyMemory<byte> newParentName, bool isObjectIncluded)
+    {
+        Assertions.Add(new DuplicationSelectPolicyAssertion(objectName, newParentName, isObjectIncluded));
+
+        return this;
+    }
+
+    /// <summary>
+    /// Appends a TPM2_PolicyParameters assertion.
+    /// </summary>
+    /// <param name="parametersHash">The digest of the command code and parameters the policy binds to.</param>
+    /// <returns>This builder.</returns>
+    public TpmPolicyBuilder WithParameters(ReadOnlyMemory<byte> parametersHash)
+    {
+        Assertions.Add(new ParametersPolicyAssertion(parametersHash));
+
+        return this;
+    }
+
+    /// <summary>
+    /// Appends a TPM2_PolicyTemplate assertion.
+    /// </summary>
+    /// <param name="templateHash">The digest of the bound object template.</param>
+    /// <returns>This builder.</returns>
+    public TpmPolicyBuilder WithTemplate(ReadOnlyMemory<byte> templateHash)
+    {
+        Assertions.Add(new TemplatePolicyAssertion(templateHash));
+
+        return this;
+    }
+
+    /// <summary>
+    /// Appends a TPM2_PolicyLocality assertion.
+    /// </summary>
+    /// <param name="locality">The set of localities the policy admits.</param>
+    /// <returns>This builder.</returns>
+    public TpmPolicyBuilder WithLocality(TpmaLocality locality)
+    {
+        Assertions.Add(new LocalityPolicyAssertion(locality));
+
+        return this;
+    }
+
+    /// <summary>
+    /// Appends a TPM2_PolicyNvWritten assertion.
+    /// </summary>
+    /// <param name="isWrittenSet"><see langword="true"/> to require TPMA_NV_WRITTEN SET (YES); <see langword="false"/> to require it CLEAR (NO).</param>
+    /// <returns>This builder.</returns>
+    public TpmPolicyBuilder WithNvWritten(bool isWrittenSet)
+    {
+        Assertions.Add(new NvWrittenPolicyAssertion(isWrittenSet));
+
+        return this;
+    }
+
+    /// <summary>
+    /// Appends a TPM2_PolicyAuthorizeNV assertion.
+    /// </summary>
+    /// <param name="authHandle">The authorization handle for reading the Index.</param>
+    /// <param name="nvIndex">The NV Index whose held authPolicy authorizes the session.</param>
+    /// <param name="nvName">The NV Index's Name (<c>nameAlg || H(TPMS_NV_PUBLIC)</c>).</param>
+    /// <returns>This builder.</returns>
+    public TpmPolicyBuilder WithAuthorizeNv(uint authHandle, uint nvIndex, ReadOnlyMemory<byte> nvName)
+    {
+        Assertions.Add(new AuthorizeNvPolicyAssertion(authHandle, nvIndex, nvName));
 
         return this;
     }

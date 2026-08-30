@@ -9,7 +9,7 @@ namespace Verifiable.Tests.Tpm;
 
 /// <summary>
 /// Known-answer tests for <see cref="TpmParameterEncryption.XorAsync"/> (TPM 2.0 Library Part 1,
-/// Section 9.4.7.3, equation (4): <c>mask := KDFa(hashAlg, key, "XOR", contextU, contextV, data.size·8)</c>,
+/// Section 8.4.7.3, equation (4): <c>mask := KDFa(hashAlg, key, "XOR", contextU, contextV, data.size·8)</c>,
 /// then XOR over the data).
 /// </summary>
 /// <remarks>

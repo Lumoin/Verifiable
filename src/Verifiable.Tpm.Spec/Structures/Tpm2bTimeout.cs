@@ -23,7 +23,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// } TPM2B_TIMEOUT;
 /// </code>
 /// <para>
-/// Part 2, Table 100's Reference Code note: "the MSb is used as a flag to indicate whether a ticket expires
+/// Part 2, Table 98's Reference Code note: "the MSb is used as a flag to indicate whether a ticket expires
 /// on TPM Reset or TPM Restart" — the most-significant bit of the full 8-octet form, exposed here as
 /// <see cref="ExpiresOnReset"/>, alongside the bits it shares with <see cref="Value"/> itself.
 /// </para>
@@ -33,20 +33,20 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// <see cref="Tpm2bName"/> and <see cref="Tpm2bData"/>.
 /// </para>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, clause 10.4.10, Table 100.
+/// Specification reference: TPM 2.0 Library Part 2, clause 10.3.10, Table 98.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 public sealed class Tpm2bTimeout: IDisposable
 {
     /// <summary>
-    /// Maximum size of the timeout value in octets (<c>sizeof(UINT64)</c>, Part 2, Table 100).
+    /// Maximum size of the timeout value in octets (<c>sizeof(UINT64)</c>, Part 2, Table 98).
     /// </summary>
     public const int MaxSize = sizeof(ulong);
 
     /// <summary>
     /// The most-significant bit of the full 8-octet form, repurposed by the Reference Code as the
-    /// expires-on-reset flag (Part 2, Table 100 note).
+    /// expires-on-reset flag (Part 2, Table 98 note).
     /// </summary>
     private const ulong ExpiresOnResetFlag = 0x8000_0000_0000_0000UL;
 
@@ -144,7 +144,7 @@ public sealed class Tpm2bTimeout: IDisposable
 
     /// <summary>
     /// Gets whether bit 63 of the 8-octet form is set — the Reference Code's flag for whether the ticket this
-    /// timeout accompanies expires on TPM Reset or TPM Restart (Part 2, Table 100 note).
+    /// timeout accompanies expires on TPM Reset or TPM Restart (Part 2, Table 98 note).
     /// </summary>
     public bool ExpiresOnReset => (Value & ExpiresOnResetFlag) != 0;
 
@@ -233,7 +233,7 @@ public sealed class Tpm2bTimeout: IDisposable
 
     /// <summary>
     /// Creates a timeout from a 64-bit value and the Reference Code's expires-on-reset flag, packing both
-    /// into the full 8-octet wire form. Bit 63 is that flag (Part 2, Table 100's Reference Code note), so
+    /// into the full 8-octet wire form. Bit 63 is that flag (Part 2, Table 98's Reference Code note), so
     /// <paramref name="expiresOnReset"/> sets it and every octet of <paramref name="value"/> otherwise reaches
     /// the wire as supplied — a caller that already carries the flag inside <paramref name="value"/> keeps it.
     /// </summary>

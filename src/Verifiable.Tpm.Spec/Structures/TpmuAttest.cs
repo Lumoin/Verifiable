@@ -27,7 +27,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 ///   <item><description>TPM_ST_ATTEST_NV: TPMS_NV_CERTIFY_INFO (see <see cref="Nv"/>).</description></item>
 /// </list>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 10.12.11, Table 177 (TPMU_ATTEST).
+/// Specification reference: TPM 2.0 Library Part 2, Section 10.11.11, Table 153 (TPMU_ATTEST).
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]

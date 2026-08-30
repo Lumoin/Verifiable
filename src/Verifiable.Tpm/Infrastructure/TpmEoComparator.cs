@@ -4,7 +4,7 @@ using Verifiable.Tpm.Spec.Constants;
 namespace Verifiable.Tpm.Infrastructure;
 
 /// <summary>
-/// Evaluates a <c>TPM_EO</c> comparison (TPM 2.0 Library Part 2, Section 6.8, Table 22) between two equal-length,
+/// Evaluates a <c>TPM_EO</c> comparison (TPM 2.0 Library Part 2, Section 6.8, Table 20) between two equal-length,
 /// big-endian operand spans, shared by every enhanced-authorization assertion that compares a live or stored value
 /// against a caller-supplied operand (<c>TPM2_PolicyCounterTimer</c>, Part 3, Section 23.10; <c>TPM2_PolicyNV</c>,
 /// Part 3, Section 23.9).

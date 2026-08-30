@@ -8,6 +8,7 @@ using Verifiable.Cryptography;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
+using Verifiable.Tpm.Spec.Attributes;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
@@ -158,6 +159,151 @@ public static class TpmDeviceExtensions
         }
 
         /// <summary>
+        /// Runs <c>TPM2_PolicyPassword</c>, binding the policy to the authorized object's authorization value
+        /// presented as a cleartext password at use time (TPM 2.0 Library Part 3, Section 23.18).
+        /// </summary>
+        /// <param name="policySession">The policy session handle.</param>
+        /// <param name="cancellationToken">A token observed across the exchange.</param>
+        /// <returns>A result indicating success or an error.</returns>
+        public ValueTask<TpmResult<PolicyPasswordResponse>> PolicyPasswordAsync(
+            uint policySession, CancellationToken cancellationToken = default)
+        {
+            return PolicyPasswordCoreAsync(device, policySession, cancellationToken);
+        }
+
+        /// <summary>
+        /// Runs <c>TPM2_PolicyCpHash</c>, restricting the policy session to the command whose parameters hash to
+        /// <paramref name="cpHashA"/>.
+        /// </summary>
+        /// <param name="policySession">The policy session handle.</param>
+        /// <param name="cpHashA">The command parameter digest the policy binds to.</param>
+        /// <param name="cancellationToken">A token observed across the exchange.</param>
+        /// <returns>A result indicating success or an error.</returns>
+        public ValueTask<TpmResult<PolicyCpHashResponse>> PolicyCpHashAsync(
+            uint policySession, ReadOnlyMemory<byte> cpHashA, CancellationToken cancellationToken = default)
+        {
+            return PolicyCpHashCoreAsync(device, policySession, cpHashA, cancellationToken);
+        }
+
+        /// <summary>
+        /// Runs <c>TPM2_PolicyNameHash</c>, restricting the policy session to the command whose target entity's
+        /// Name(s) hash to <paramref name="nameHash"/>.
+        /// </summary>
+        /// <param name="policySession">The policy session handle.</param>
+        /// <param name="nameHash">The digest of the concatenated target Names the policy binds to.</param>
+        /// <param name="cancellationToken">A token observed across the exchange.</param>
+        /// <returns>A result indicating success or an error.</returns>
+        public ValueTask<TpmResult<PolicyNameHashResponse>> PolicyNameHashAsync(
+            uint policySession, ReadOnlyMemory<byte> nameHash, CancellationToken cancellationToken = default)
+        {
+            return PolicyNameHashCoreAsync(device, policySession, nameHash, cancellationToken);
+        }
+
+        /// <summary>
+        /// Runs <c>TPM2_PolicyDuplicationSelect</c>, qualifying the policy session to duplicate to the new parent
+        /// named by <paramref name="newParentName"/> — and, with <paramref name="isObjectIncluded"/> SET, to
+        /// duplicate only the object named by <paramref name="objectName"/> to it.
+        /// </summary>
+        /// <param name="policySession">The policy session handle.</param>
+        /// <param name="objectName">The Name of the object to be duplicated.</param>
+        /// <param name="newParentName">The Name of the new parent.</param>
+        /// <param name="isObjectIncluded">Whether the object Name is folded into the policyDigest.</param>
+        /// <param name="cancellationToken">A token observed across the exchange.</param>
+        /// <returns>A result indicating success or an error.</returns>
+        public ValueTask<TpmResult<PolicyDuplicationSelectResponse>> PolicyDuplicationSelectAsync(
+            uint policySession, ReadOnlyMemory<byte> objectName, ReadOnlyMemory<byte> newParentName, bool isObjectIncluded, CancellationToken cancellationToken = default)
+        {
+            return PolicyDuplicationSelectCoreAsync(device, policySession, objectName, newParentName, isObjectIncluded, cancellationToken);
+        }
+
+        /// <summary>
+        /// Runs <c>TPM2_PolicyParameters</c>, restricting the policy session to the command whose command code
+        /// and parameters hash to <paramref name="parametersHash"/>.
+        /// </summary>
+        /// <param name="policySession">The policy session handle.</param>
+        /// <param name="parametersHash">The digest of the command code and parameters the policy binds to.</param>
+        /// <param name="cancellationToken">A token observed across the exchange.</param>
+        /// <returns>A result indicating success or an error.</returns>
+        public ValueTask<TpmResult<PolicyParametersResponse>> PolicyParametersAsync(
+            uint policySession, ReadOnlyMemory<byte> parametersHash, CancellationToken cancellationToken = default)
+        {
+            return PolicyParametersCoreAsync(device, policySession, parametersHash, cancellationToken);
+        }
+
+        /// <summary>
+        /// Runs <c>TPM2_PolicyTemplate</c>, restricting object creation under the session to the template whose
+        /// digest is <paramref name="templateHash"/>.
+        /// </summary>
+        /// <param name="policySession">The policy session handle.</param>
+        /// <param name="templateHash">The digest of the bound object template.</param>
+        /// <param name="cancellationToken">A token observed across the exchange.</param>
+        /// <returns>A result indicating success or an error.</returns>
+        public ValueTask<TpmResult<PolicyTemplateResponse>> PolicyTemplateAsync(
+            uint policySession, ReadOnlyMemory<byte> templateHash, CancellationToken cancellationToken = default)
+        {
+            return PolicyTemplateCoreAsync(device, policySession, templateHash, cancellationToken);
+        }
+
+        /// <summary>
+        /// Runs <c>TPM2_PolicyLocality</c>, restricting the policy session to commands issued from one of the
+        /// localities in <paramref name="locality"/>.
+        /// </summary>
+        /// <param name="policySession">The policy session handle.</param>
+        /// <param name="locality">The set of localities the policy admits.</param>
+        /// <param name="cancellationToken">A token observed across the exchange.</param>
+        /// <returns>A result indicating success or an error.</returns>
+        public ValueTask<TpmResult<PolicyLocalityResponse>> PolicyLocalityAsync(
+            uint policySession, TpmaLocality locality, CancellationToken cancellationToken = default)
+        {
+            return PolicyLocalityCoreAsync(device, policySession, locality, cancellationToken);
+        }
+
+        /// <summary>
+        /// Runs <c>TPM2_PolicyRestart</c>, resetting <paramref name="sessionHandle"/>'s policyDigest to a Zero
+        /// Digest and clearing its pending expiration and isPasswordNeeded/isAuthValueNeeded flags (TPM 2.0
+        /// Library Part 3, Section 11.2, Table 16).
+        /// </summary>
+        /// <param name="sessionHandle">The policy (or HMAC) session handle to restart.</param>
+        /// <param name="cancellationToken">A token observed across the exchange.</param>
+        /// <returns>A result indicating success or an error.</returns>
+        public ValueTask<TpmResult<PolicyRestartResponse>> PolicyRestartAsync(
+            uint sessionHandle, CancellationToken cancellationToken = default)
+        {
+            return PolicyRestartCoreAsync(device, sessionHandle, cancellationToken);
+        }
+
+        /// <summary>
+        /// Runs <c>TPM2_PolicyNvWritten</c>, restricting the policy session to a target NV Index whose
+        /// TPMA_NV_WRITTEN attribute matches <paramref name="isWrittenSet"/>.
+        /// </summary>
+        /// <param name="policySession">The policy session handle.</param>
+        /// <param name="isWrittenSet"><see langword="true"/> to require TPMA_NV_WRITTEN SET (YES); <see langword="false"/> to require it CLEAR (NO).</param>
+        /// <param name="cancellationToken">A token observed across the exchange.</param>
+        /// <returns>A result indicating success or an error.</returns>
+        public ValueTask<TpmResult<PolicyNvWrittenResponse>> PolicyNvWrittenAsync(
+            uint policySession, bool isWrittenSet, CancellationToken cancellationToken = default)
+        {
+            return PolicyNvWrittenCoreAsync(device, policySession, isWrittenSet, cancellationToken);
+        }
+
+        /// <summary>
+        /// Runs <c>TPM2_PolicyAuthorizeNV</c>, replacing the policy session's digest with the fold over
+        /// <paramref name="nvIndex"/>'s Name, so the Index's own held authPolicy authorizes the session. The
+        /// read of the Index is authorized with an empty-auth password session (the common case: an Index or
+        /// hierarchy whose authorization value has not been set).
+        /// </summary>
+        /// <param name="authHandle">The authorization for reading the Index (the Index itself, or a hierarchy with the matching read attribute).</param>
+        /// <param name="nvIndex">The NV Index whose held authPolicy authorizes the session.</param>
+        /// <param name="policySession">The policy session handle.</param>
+        /// <param name="cancellationToken">A token observed across the exchange.</param>
+        /// <returns>A result indicating success or an error.</returns>
+        public ValueTask<TpmResult<PolicyAuthorizeNvResponse>> PolicyAuthorizeNvAsync(
+            uint authHandle, uint nvIndex, uint policySession, CancellationToken cancellationToken = default)
+        {
+            return PolicyAuthorizeNvCoreAsync(device, authHandle, nvIndex, policySession, cancellationToken);
+        }
+
+        /// <summary>
         /// Runs <c>TPM2_PolicySecret</c> (immediate form: <c>expiration = 0</c>, no ticket produced), binding the
         /// policy to the authorization of the entity at <paramref name="authHandle"/>. Binding to
         /// <c>TPM_RH_ENDORSEMENT</c> yields the well-known endorsement-key authorization policy. For the
@@ -169,7 +315,7 @@ public static class TpmDeviceExtensions
         /// its secure default — except for <c>TPM_RH_NULL</c>, the one handle that cannot bind (bind = TPM_RH_NULL
         /// means no bind entity on the wire), where the composed session is unbound and unsalted with the Empty
         /// Buffer session key. For every other handle the composition is
-        /// its secure default (TPM 2.0 Library Part 1, Section 17.6.10, equation 20): the command carries a real
+        /// its secure default (TPM 2.0 Library Part 1, Section 16.6.10, equation 20): the command carries a real
         /// structured cpHash/nonce/attribute-bound authHMAC rather than a plaintext password body, so a mismatch
         /// (wrong parameters, replayed bytes, a stale nonce) is always detected. When <paramref name="authHandle"/>'s
         /// own authorization value is empty — the common case this overload targets, e.g. the endorsement-key
@@ -183,7 +329,7 @@ public static class TpmDeviceExtensions
         /// <see cref="PolicySecretInput"/> and <see cref="TpmCommandExecutor"/> instead of this verb — the
         /// composed session presumes an empty value, so a nonempty one fails the HMAC. Salting is not the default:
         /// it needs a loaded decrypt key this verb group cannot generically assume is available (TPM 2.0 Library
-        /// Part 1, Section 17.6.11/17.6.12) — salting is what would make the key secret even with an empty
+        /// Part 1, Section 16.6.11/16.6.12) — salting is what would make the key secret even with an empty
         /// authValue; a caller holding a decrypt key composes a session with
         /// <see cref="StartAuthSessionInputExtensions.CreateSaltedHmacSession(uint, ReadOnlyMemory{byte}, uint, TpmAlgIdConstants, TpmAlgIdConstants, TpmRsaOaepEncryptDelegate, BaseMemoryPool, CancellationToken, TpmtSymDef?)"/> or its bound-and-salted sibling directly. Against the SAME threat
         /// model (an observer of the StartAuthSession exchange), the explicit low-protection opt-out
@@ -212,7 +358,7 @@ public static class TpmDeviceExtensions
         /// its secure default — except for <c>TPM_RH_NULL</c>, the one handle that cannot bind (bind = TPM_RH_NULL
         /// means no bind entity on the wire), where the composed session is unbound and unsalted with the Empty
         /// Buffer session key. For every other handle the composition is
-        /// its secure default (TPM 2.0 Library Part 1, Section 17.6.10, equation 20): the command carries a real
+        /// its secure default (TPM 2.0 Library Part 1, Section 16.6.10, equation 20): the command carries a real
         /// structured cpHash/nonce/attribute-bound authHMAC rather than a plaintext password body, so a mismatch
         /// (wrong parameters, replayed bytes, a stale nonce) is always detected. When <paramref name="authHandle"/>'s
         /// own authorization value is empty — the common case this overload targets, a hierarchy whose
@@ -226,7 +372,7 @@ public static class TpmDeviceExtensions
         /// session built directly against <see cref="PolicySecretInput"/> and <see cref="TpmCommandExecutor"/>
         /// instead of this verb — the composed session presumes an empty value, so a nonempty one fails the HMAC.
         /// Salting is not the default: it needs a loaded decrypt key this verb group cannot generically assume is
-        /// available (TPM 2.0 Library Part 1, Section 17.6.11/17.6.12) — salting is what would make the key secret
+        /// available (TPM 2.0 Library Part 1, Section 16.6.11/16.6.12) — salting is what would make the key secret
         /// even with an empty authValue; a caller holding a decrypt key composes a session with
         /// <see cref="StartAuthSessionInputExtensions.CreateSaltedHmacSession(uint, ReadOnlyMemory{byte}, uint, TpmAlgIdConstants, TpmAlgIdConstants, TpmRsaOaepEncryptDelegate, BaseMemoryPool, CancellationToken, TpmtSymDef?)"/> or its bound-and-salted sibling directly. Against the SAME threat
         /// model (an observer of the StartAuthSession exchange), the explicit low-protection opt-out
@@ -402,7 +548,7 @@ public static class TpmDeviceExtensions
         /// <param name="approvedPolicy">The policy digest being approved; must equal the session's current policyDigest.</param>
         /// <param name="policyRef">The opaque policy qualifier, or empty for none.</param>
         /// <param name="keySign">The Name of the key that signed the approval.</param>
-        /// <param name="checkTicket">The verification ticket (a genuine <c>TPM2_VerifySignature()</c> ticket, or <see cref="TpmtTkVerified.Null"/> for a trial session); a borrow the call does not retain.</param>
+        /// <param name="checkTicket">The verification ticket (a genuine ticket from <c>TPM2_VerifySignature()</c>, <c>TPM2_VerifySequenceComplete()</c>, or <c>TPM2_VerifyDigestSignature()</c>, or <see cref="TpmtTkVerified.Null"/> for a trial session); a borrow the call does not retain.</param>
         /// <param name="cancellationToken">A token observed across the exchange.</param>
         /// <returns>A result indicating success or an error.</returns>
         public ValueTask<TpmResult<PolicyAuthorizeResponse>> PolicyAuthorizeAsync(
@@ -542,6 +688,159 @@ public static class TpmDeviceExtensions
             device, input, [], null, pool, registry, cancellationToken).ConfigureAwait(false);
     }
 
+    private static async ValueTask<TpmResult<PolicyPasswordResponse>> PolicyPasswordCoreAsync(
+        TpmDevice device, uint policySession, CancellationToken cancellationToken)
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        var registry = new TpmResponseRegistry();
+        _ = registry.Register(TpmCcConstants.TPM_CC_PolicyPassword, TpmResponseCodec.PolicyPassword);
+
+        PolicyPasswordInput input = PolicyPasswordInput.ForSession(policySession);
+
+        return await TpmCommandExecutor.ExecuteAsync<PolicyPasswordResponse>(
+            device, input, [], null, pool, registry, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async ValueTask<TpmResult<PolicyCpHashResponse>> PolicyCpHashCoreAsync(
+        TpmDevice device, uint policySession, ReadOnlyMemory<byte> cpHashA, CancellationToken cancellationToken)
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        var registry = new TpmResponseRegistry();
+        _ = registry.Register(TpmCcConstants.TPM_CC_PolicyCpHash, TpmResponseCodec.PolicyCpHash);
+
+        var input = new PolicyCpHashInput(policySession, cpHashA);
+
+        return await TpmCommandExecutor.ExecuteAsync<PolicyCpHashResponse>(
+            device, input, [], null, pool, registry, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async ValueTask<TpmResult<PolicyNameHashResponse>> PolicyNameHashCoreAsync(
+        TpmDevice device, uint policySession, ReadOnlyMemory<byte> nameHash, CancellationToken cancellationToken)
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        var registry = new TpmResponseRegistry();
+        _ = registry.Register(TpmCcConstants.TPM_CC_PolicyNameHash, TpmResponseCodec.PolicyNameHash);
+
+        var input = new PolicyNameHashInput(policySession, nameHash);
+
+        return await TpmCommandExecutor.ExecuteAsync<PolicyNameHashResponse>(
+            device, input, [], null, pool, registry, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Executes <c>TPM2_PolicyDuplicationSelect</c> against <paramref name="device"/> with a registry holding
+    /// its codec alone.
+    /// </summary>
+    /// <param name="device">The TPM device.</param>
+    /// <param name="policySession">The policy session handle.</param>
+    /// <param name="objectName">The Name of the object to be duplicated.</param>
+    /// <param name="newParentName">The Name of the new parent.</param>
+    /// <param name="isObjectIncluded">Whether the object Name is folded into the policyDigest.</param>
+    /// <param name="cancellationToken">A token observed across the exchange.</param>
+    /// <returns>A result indicating success or an error.</returns>
+    private static async ValueTask<TpmResult<PolicyDuplicationSelectResponse>> PolicyDuplicationSelectCoreAsync(
+        TpmDevice device, uint policySession, ReadOnlyMemory<byte> objectName, ReadOnlyMemory<byte> newParentName, bool isObjectIncluded, CancellationToken cancellationToken)
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        var registry = new TpmResponseRegistry();
+        _ = registry.Register(TpmCcConstants.TPM_CC_PolicyDuplicationSelect, TpmResponseCodec.PolicyDuplicationSelect);
+
+        var input = new PolicyDuplicationSelectInput(policySession, objectName, newParentName, isObjectIncluded);
+
+        return await TpmCommandExecutor.ExecuteAsync<PolicyDuplicationSelectResponse>(
+            device, input, [], null, pool, registry, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Executes <c>TPM2_PolicyParameters</c> against <paramref name="device"/> with a registry holding its codec
+    /// alone.
+    /// </summary>
+    /// <param name="device">The TPM device.</param>
+    /// <param name="policySession">The policy session handle.</param>
+    /// <param name="parametersHash">The digest of the command code and parameters the policy binds to.</param>
+    /// <param name="cancellationToken">A token observed across the exchange.</param>
+    /// <returns>A result indicating success or an error.</returns>
+    private static async ValueTask<TpmResult<PolicyParametersResponse>> PolicyParametersCoreAsync(
+        TpmDevice device, uint policySession, ReadOnlyMemory<byte> parametersHash, CancellationToken cancellationToken)
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        var registry = new TpmResponseRegistry();
+        _ = registry.Register(TpmCcConstants.TPM_CC_PolicyParameters, TpmResponseCodec.PolicyParameters);
+
+        var input = new PolicyParametersInput(policySession, parametersHash);
+
+        return await TpmCommandExecutor.ExecuteAsync<PolicyParametersResponse>(
+            device, input, [], null, pool, registry, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async ValueTask<TpmResult<PolicyTemplateResponse>> PolicyTemplateCoreAsync(
+        TpmDevice device, uint policySession, ReadOnlyMemory<byte> templateHash, CancellationToken cancellationToken)
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        var registry = new TpmResponseRegistry();
+        _ = registry.Register(TpmCcConstants.TPM_CC_PolicyTemplate, TpmResponseCodec.PolicyTemplate);
+
+        var input = new PolicyTemplateInput(policySession, templateHash);
+
+        return await TpmCommandExecutor.ExecuteAsync<PolicyTemplateResponse>(
+            device, input, [], null, pool, registry, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async ValueTask<TpmResult<PolicyLocalityResponse>> PolicyLocalityCoreAsync(
+        TpmDevice device, uint policySession, TpmaLocality locality, CancellationToken cancellationToken)
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        var registry = new TpmResponseRegistry();
+        _ = registry.Register(TpmCcConstants.TPM_CC_PolicyLocality, TpmResponseCodec.PolicyLocality);
+
+        var input = new PolicyLocalityInput(policySession, locality);
+
+        return await TpmCommandExecutor.ExecuteAsync<PolicyLocalityResponse>(
+            device, input, [], null, pool, registry, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async ValueTask<TpmResult<PolicyRestartResponse>> PolicyRestartCoreAsync(
+        TpmDevice device, uint sessionHandle, CancellationToken cancellationToken)
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        var registry = new TpmResponseRegistry();
+        _ = registry.Register(TpmCcConstants.TPM_CC_PolicyRestart, TpmResponseCodec.PolicyRestart);
+
+        var input = new PolicyRestartInput(sessionHandle);
+
+        return await TpmCommandExecutor.ExecuteAsync<PolicyRestartResponse>(
+            device, input, [], null, pool, registry, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async ValueTask<TpmResult<PolicyNvWrittenResponse>> PolicyNvWrittenCoreAsync(
+        TpmDevice device, uint policySession, bool isWrittenSet, CancellationToken cancellationToken)
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        var registry = new TpmResponseRegistry();
+        _ = registry.Register(TpmCcConstants.TPM_CC_PolicyNvWritten, TpmResponseCodec.PolicyNvWritten);
+
+        var input = new PolicyNvWrittenInput(policySession, isWrittenSet);
+
+        return await TpmCommandExecutor.ExecuteAsync<PolicyNvWrittenResponse>(
+            device, input, [], null, pool, registry, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async ValueTask<TpmResult<PolicyAuthorizeNvResponse>> PolicyAuthorizeNvCoreAsync(
+        TpmDevice device, uint authHandle, uint nvIndex, uint policySession, CancellationToken cancellationToken)
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        var registry = new TpmResponseRegistry();
+        _ = registry.Register(TpmCcConstants.TPM_CC_PolicyAuthorizeNV, TpmResponseCodec.PolicyAuthorizeNv);
+
+        //PolicyAuthorizeNV reads the Index, authorized at USER role; an empty-auth password session covers an
+        //Index or hierarchy whose authorization value has not been set.
+        using TpmPasswordSession authSession = TpmPasswordSession.CreateEmpty(pool);
+        var input = new PolicyAuthorizeNvInput(authHandle, nvIndex, policySession);
+
+        return await TpmCommandExecutor.ExecuteAsync<PolicyAuthorizeNvResponse>(
+            device, input, [authSession], null, pool, registry, cancellationToken).ConfigureAwait(false);
+    }
+
     private static ValueTask<TpmResult<PolicySecretResponse>> PolicySecretCoreAsync(
         TpmDevice device, uint authHandle, uint policySession, CancellationToken cancellationToken)
     {
@@ -578,7 +877,7 @@ public static class TpmDeviceExtensions
         //observed that exchange (see PolicySecretAsync's own remarks). Salting, not binding, is what would make
         //this key secret with an empty authValue; this verb group cannot generically assume a loaded decrypt key.
         //TPM_RH_NULL is the exception to the bound shape entirely: bind = TPM_RH_NULL means "no bind entity" on
-        //the wire, so its session is unbound and unsalted with the Empty Buffer session key (clause 17.6.9) —
+        //the wire, so its session is unbound and unsalted with the Empty Buffer session key (clause 16.6.9) —
         //see CreateAuthorizationSessionAsync.
         StartAuthSessionInput startInput = StartAuthSessionInput.CreateBoundUnsaltedHmacSession(authHandle, PolicySecretSessionHash);
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
@@ -606,7 +905,7 @@ public static class TpmDeviceExtensions
             //so 'started' is never disposed independently — the same ownership-transfer shape
             //TpmInHouseSimulatorSessionAuthTests' bound-session helper follows. TPM_RH_NULL is the one authHandle
             //that cannot bind: on the wire, bind = TPM_RH_NULL MEANS "no bind entity" (TPM 2.0 Library Part 1,
-            //clause 17.6.9 — the session key derivation is gated on the bind HANDLE), so the session is
+            //clause 16.6.9 — the session key derivation is gated on the bind HANDLE), so the session is
             //unbound+unsalted with the Empty Buffer session key, and the plain constructor models exactly that
             //(same nonceTPM ownership transfer).
             using TpmSession authSession = await CreateAuthorizationSessionAsync(
@@ -638,7 +937,7 @@ public static class TpmDeviceExtensions
     /// <summary>
     /// Builds the host-side session object for the internally composed authorization session, taking ownership of
     /// <paramref name="started"/>'s nonceTPM. <c>TPM_RH_NULL</c> is the one authHandle that cannot bind: on the
-    /// wire, bind = <c>TPM_RH_NULL</c> means "no bind entity" (TPM 2.0 Library Part 1, clause 17.6.9 — the
+    /// wire, bind = <c>TPM_RH_NULL</c> means "no bind entity" (TPM 2.0 Library Part 1, clause 16.6.9 — the
     /// session-key derivation is gated on the bind handle), so the session is unbound and unsalted with the Empty
     /// Buffer session key; every other permanent handle binds and derives the KDFa session key.
     /// </summary>
@@ -761,11 +1060,14 @@ public static class TpmDeviceExtensions
         _ = registry.Register(TpmCcConstants.TPM_CC_PolicyAuthorize, TpmResponseCodec.PolicyAuthorize);
 
         //PolicyAuthorize carries no authorization at all: policySession needs none (Part 3, Section 23.16), so
-        //the executor is given no sessions and frames TPM_ST_NO_SESSIONS. The ticket type itself guarantees the
-        //TPM_ST_VERIFIED tag a genuine TPM2_VerifySignature() ticket (real or NULL) always carries.
+        //the executor is given no sessions and frames TPM_ST_NO_SESSIONS. checkTicket carries whichever of
+        //Table 112's three tags produced it — TPM_ST_VERIFIED (TPM2_VerifySignature()), TPM_ST_MESSAGE_VERIFIED
+        //(TPM2_VerifySequenceComplete()), or TPM_ST_DIGEST_VERIFIED (TPM2_VerifyDigestSignature(), Part 3 clause
+        //23.16.2's preferred producer) — with its Table 111 [tag]metadata threaded alongside; PolicyAuthorizeInput
+        //frames that metadata slot only when the tag calls for it.
         using PolicyAuthorizeInput input = PolicyAuthorizeInput.Create(
             policySession, approvedPolicy.Span, policyRef.Span, keySign.Span,
-            (ushort)checkTicket.Tag, checkTicket.Hierarchy.Value, checkTicket.Digest, pool);
+            (ushort)checkTicket.Tag, checkTicket.Hierarchy.Value, checkTicket.Metadata, checkTicket.Hmac, pool);
 
         return await TpmCommandExecutor.ExecuteAsync<PolicyAuthorizeResponse>(
             device, input, [], null, pool, registry, cancellationToken).ConfigureAwait(false);

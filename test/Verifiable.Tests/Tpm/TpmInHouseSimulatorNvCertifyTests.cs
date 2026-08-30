@@ -39,7 +39,7 @@ namespace Verifiable.Tests.Tpm;
 /// TPMS_NV_DIGEST_CERTIFY_INFO form is fail-closed rejected.
 /// </para>
 /// <para>
-/// Both <c>@signHandle</c> and <c>@authHandle</c> require authorization (Table 238), so the executor is given two
+/// Both <c>@signHandle</c> and <c>@authHandle</c> require authorization (Table 255), so the executor is given two
 /// password sessions in handle order: the AK's empty-auth session first, the Index's real authValue session
 /// second.
 /// </para>
@@ -121,7 +121,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
     /// Index attributes for <see cref="AuthReadClearNvIndexHandle"/>: <c>TPMA_NV_AUTHWRITE</c> (so this
     /// test's own <see cref="DefineAndWriteNvIndexAsync(TpmDevice, TpmResponseRegistry, BaseMemoryPool, uint, TpmAlgIdConstants, TpmaNv, ReadOnlyMemory{byte})"/>
     /// can provision it with the Index's own authValue) and <c>TPMA_NV_OWNERREAD</c>, deliberately WITHOUT
-    /// <c>TPMA_NV_AUTHREAD</c> (TPM 2.0 Library Part 1, clause 35.2.5) and WITHOUT <c>TPMA_NV_NO_DA</c>, so
+    /// <c>TPMA_NV_AUTHREAD</c> (TPM 2.0 Library Part 1, clause 34.2.5) and WITHOUT <c>TPMA_NV_NO_DA</c>, so
     /// the Index stays dictionary-attack protected.
     /// </summary>
     private const TpmaNv AuthReadClearAttributes = TpmaNv.TPMA_NV_AUTHWRITE | TpmaNv.TPMA_NV_OWNERREAD;
@@ -148,7 +148,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
     /// PIN Pass attributes for <see cref="PinPassNvIndexHandle"/>: readable by its own authValue (the PIN),
     /// writable only by the owner hierarchy — a PIN Index's own pinCount/pinLimit throttle is its localized
     /// defense, distinct from the TPM-wide dictionary-attack mechanism this opts out of (TPM 2.0 Library Part
-    /// 1, clause 35.2.6.6).
+    /// 1, clause 34.2.6.6).
     /// </summary>
     private const TpmaNv PinPassCertifyAttributes =
         TpmaNv.TPMA_NV_AUTHREAD | TpmaNv.TPMA_NV_OWNERWRITE | TpmaNv.TPMA_NV_NO_DA
@@ -277,7 +277,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
 
     /// <summary>
     /// Verifies that certifying a partial window (a non-zero offset) attests exactly that window, independently
-    /// cross-checked against the written bytes at that offset (TPM 2.0 Library Part 2, clause 10.12.8).
+    /// cross-checked against the written bytes at that offset (TPM 2.0 Library Part 2, clause 10.11.8).
     /// </summary>
     [TestMethod]
     public async Task NvCertifyOfPartialWindowAttestsRequestedOffsetAndSize()
@@ -336,7 +336,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
 
     /// <summary>
     /// Verifies that a wrong Index authorization value against a dictionary-attack-protected Index is an
-    /// auth-failure, mirroring TPM2_NV_Read()'s equivalent negative (TPM 2.0 Library Part 1, clause 17.8.3).
+    /// auth-failure, mirroring TPM2_NV_Read()'s equivalent negative (TPM 2.0 Library Part 1, clause 16.8.3).
     /// </summary>
     [TestMethod]
     public async Task NvCertifyWithWrongIndexAuthReturnsAuthFail()
@@ -364,7 +364,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
     /// A real session at the SIGN slot BOUND to a dictionary-attack-protected entity, carrying the CORRECT bind
     /// authValue, now VERIFIES and attests — the sign slot's command HMAC is checked against the signing key's
     /// own (empty) authValue over the same session key both sides derived from the correct bind, so it matches
-    /// and the command executes (TPM 2.0 Library Part 1, clause 17.6.5, equation 17): binding to a
+    /// and the command executes (TPM 2.0 Library Part 1, clause 16.6.5, equation 17): binding to a
     /// DA-protected entity is now admitted and evaluated, no longer refused up front, because a wrong
     /// bind guess now fails verification and is throttled (its companion test proves the charge). A correct
     /// guess never was an attack, so it attests and moves no counter.
@@ -400,7 +400,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
     /// The DA-charge companion: a real session at the SIGN slot bound to a dictionary-attack-protected entity
     /// with a WRONG bind authValue derives a session key the TPM's own does not match, so the sign slot's
     /// command HMAC fails verification and is charged to <c>failedTries</c> — the throttle that closes the
-    /// dictionary-attack oracle. The bound entity is DA-protected (clause 17.8.7's OR folds the bound entity's DA state into the
+    /// dictionary-attack oracle. The bound entity is DA-protected (clause 16.8.7's OR folds the bound entity's DA state into the
     /// sign-slot decision), so the refusal is the session-encoded <c>TPM_RC_AUTH_FAIL</c> at slot 0, and one
     /// wrong guess advances the lockout counter by exactly one. An unthrottled oracle would have moved nothing.
     /// </summary>
@@ -434,9 +434,9 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
 
     /// <summary>
     /// An UNBOUND sign session genuinely verifies the signing key's OWN authValue (TPM 2.0 Library Part 1,
-    /// clause 17.6.5, equation 17): a key created with a non-empty authValue attests when the session folds the
+    /// clause 16.6.5, equation 17): a key created with a non-empty authValue attests when the session folds the
     /// CORRECT value into its command HMAC, and is refused — session-encoded <c>TPM_RC_AUTH_FAIL</c> at slot 0,
-    /// charging <c>failedTries</c> because the key is DA-protected (clause 17.8.1) — when the value is wrong.
+    /// charging <c>failedTries</c> because the key is DA-protected (clause 16.8.1) — when the value is wrong.
     /// This proves the signing key's authValue is retained (<see cref="TransientKeyState.AuthValue"/>) and
     /// evaluated, not accepted unchecked, independent of any bind entity.
     /// </summary>
@@ -625,7 +625,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
     /// its own <c>authPolicy</c> — not over a fixed algorithm and an Empty Policy. "It also includes the NV
     /// index Name" (TPM 2.0 Library Part 3, clause 31.16.1), and a Name is
     /// <c>nameAlg || H_nameAlg(handle || TPMS_NV_PUBLIC)</c> over the WHOLE marshaled public area, whose fields
-    /// include both of them (Part 1, clause 14, Table 6; Part 2, clause 13.6, Table 235). The Index here is
+    /// include both of them (Part 1, clause 13, Table 9; Part 2, clause 13.6, Table 251). The Index here is
     /// defined with a SHA-384 <c>nameAlg</c> and a non-empty access policy, so both fields differ from the
     /// defaults: the attested Name must equal this test's independent transcription and must NOT equal the one
     /// a fixed-SHA-256/Empty-Policy computation would produce.
@@ -674,7 +674,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
     /// <summary>
     /// An NV Index's Name does not move when its authorization value is rotated: <c>authValue</c> lives outside
     /// <c>TPMS_NV_PUBLIC</c>, which is the only thing the Name is computed over (TPM 2.0 Library Part 1, clause
-    /// 14, Table 6; Part 2, clause 13.6, Table 235), and <c>TPM2_NV_ChangeAuth</c> changes nothing else (Part 3,
+    /// 14, Table 4; Part 2, clause 13.6, Table 251), and <c>TPM2_NV_ChangeAuth</c> changes nothing else (Part 3,
     /// clause 31.15.1). A verifier holding an attestation of the Index's identity therefore does not need a
     /// fresh one merely because the authorization value changed — this certifies the same Index before and
     /// after a real <c>TPM2_NV_ChangeAuth</c> under its own ADMIN-role policy and requires both attestations to
@@ -714,7 +714,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
     /// <c>TPM2_NV_Certify()</c> over MIXED sessions - a password session authorizing the
     /// signing key's slot, an HMAC session authorizing the Index's own slot - succeeds and attests the Index's
     /// REAL Name, exactly as the all-password composition does (TPM 2.0 Library Part 3, clause 31.16.2, Tables
-    /// 254-255; Part 1, clause 14, Table 6's Name recipe). Both slots require authorization at USER role (Table 254),
+    /// 254-255; Part 1, clause 13, Table 9's Name recipe). Both slots require authorization at USER role (Table 271),
     /// and neither slot's session shape constrains the other's.
     /// </summary>
     [TestMethod]
@@ -751,7 +751,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
                 (ushort)WrittenData.Length, pool, TestContext.CancellationToken).ConfigureAwait(false);
 
             //cpHash covers every command handle regardless of which session authorizes which slot (Part 1,
-            //clause 16.7, equation 15), so the signing key's own Name is supplied even though a PASSWORD
+            //clause 15.7, equation 15), so the signing key's own Name is supplied even though a PASSWORD
             //session authorizes that slot - only an all-password authorization area skips cpHash entirely.
             ReadOnlyMemory<byte>[] handleNames = [ak.Name.Span.ToArray(), indexName, indexName];
 
@@ -778,7 +778,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
     /// The HMAC-arm companion (DA half) to <see cref="NvCertifyWithWrongIndexAuthReturnsAuthFail"/>.
     /// A wrong Index authorization value PROVEN OVER AN HMAC SESSION against a dictionary-attack-protected
     /// Index answers the identical <c>TPM_RC_AUTH_FAIL</c> - the read-role DA gate (TPM 2.0 Library Part 1,
-    /// clause 35.2.5, p.237-238) binds the Index, not the mechanism the wrong value was presented with (clause
+    /// clause 34.2.5, p.237-238) binds the Index, not the mechanism the wrong value was presented with (clause
     /// 17.8.1/17.8.3). The mismatch is asserted against <c>BaseError</c> rather than the raw
     /// <c>ResponseCode</c>: a genuine command-HMAC mismatch names the offending session (the Index's own slot),
     /// so the wire code is the format-one session-encoded form - base error + <c>TPM_RC_S</c> + <c>0x100</c> for
@@ -807,7 +807,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
     }
 
     /// <summary>
-    /// The NO_DA-half contrast to the test above (TPM 2.0 Library Part 2, Table 233, bit
+    /// The NO_DA-half contrast to the test above (TPM 2.0 Library Part 2, Table 249, bit
     /// 25). A wrong Index authorization value proven over an HMAC session against a <c>TPMA_NV_NO_DA</c> Index
     /// answers a plain <c>TPM_RC_BAD_AUTH</c> rather than the DA-counted <c>TPM_RC_AUTH_FAIL</c>, mirroring the
     /// NV_Increment Index-arm's own NO_DA contrast test. The mismatch is asserted against
@@ -839,8 +839,8 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
     /// <summary>
     /// Two REAL, unbound/unsalted HMAC sessions — one at NV_Certify's SIGN slot, one at its INDEX slot — both
     /// succeed and both adopt a genuinely rolled nonceTPM from their own response entry: a session's nonceTPM
-    /// changes on every use, command and response alike (TPM 2.0 Library Part 1, clause 17.6.3.1), and the
-    /// HMAC that authenticates a response entry (clause 17.6.5, equation 17) verifies — and only then lets the
+    /// changes on every use, command and response alike (TPM 2.0 Library Part 1, clause 16.6.3.1), and the
+    /// HMAC that authenticates a response entry (clause 16.6.5, equation 17) verifies — and only then lets the
     /// session adopt the new value — solely when that entry is genuine. The sign slot's own command HMAC is
     /// never verified server-side (the shipped Certify()/Quote()/GetTime() family posture), but its RESPONSE
     /// entry still owes this session a real, verifiable one; no test before this one puts a real session at
@@ -920,7 +920,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
     /// A real, unbound/unsalted HMAC session at NV_Certify's SIGN slot, paired with a password-authorized
     /// Index slot, succeeds and attests the Index's real Name when the sign session's own authValue MATCHES the
     /// signing key's — here both empty, so its command HMAC verifies against the key's retained (empty)
-    /// authValue and its response entry is keyed on the same term (TPM 2.0 Library Part 1, clause 17.6.5,
+    /// authValue and its response entry is keyed on the same term (TPM 2.0 Library Part 1, clause 16.6.5,
     /// equation 17). The SAME composition with a NON-EMPTY authValue folded into that session
     /// (<see cref="TpmSession.SetAuthValue"/>) now makes the client's COMMAND HMAC key disagree with the key's
     /// real authValue, so the sign slot's command HMAC fails verification SERVER-SIDE, before any signing, and
@@ -975,8 +975,8 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
     /// <summary>
     /// The all-password arm's read-role availability gate for an AUTHREAD-CLEAR Index now runs BEFORE any
     /// credential is compared, mirroring <c>OnNvCertifyOverSession</c>'s own early gate (arm parity):
-    /// access control precedes authorization (TPM 2.0 Library Part 1, clause 14), and
-    /// clause 35.2.5's TPMA_NV_AUTHREAD requirement is checked by Part 3, clause 5.6's check 7.2.2, which is
+    /// access control precedes authorization (TPM 2.0 Library Part 1, clause 13), and
+    /// clause 34.2.5's TPMA_NV_AUTHREAD requirement is checked by Part 3, clause 5.6's check 7.2.2, which is
     /// ordered ahead of its checks 9/10 (the HMAC/password credential compare) and governs the password and
     /// HMAC mechanisms identically. So a CORRECT Index authValue answers <c>TPM_RC_AUTH_UNAVAILABLE</c> exactly
     /// like a WRONG one — the pre-fix all-password arm compared the credential first and would either sign an
@@ -1054,7 +1054,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
     /// The session arm's read-role availability gate for an AUTHREAD-CLEAR Index runs BEFORE any credential is
     /// compared: a WRONG Index authValue proven over an HMAC session answers the availability
     /// code <c>TPM_RC_AUTH_UNAVAILABLE</c> (TPM 2.0 Library Part 3, clause 5.6, check 7.2.2) rather than an
-    /// auth-failure, and — because access control precedes authorization (Part 1, clause 14) — the shared
+    /// auth-failure, and — because access control precedes authorization (Part 1, clause 13) — the shared
     /// dictionary-attack <c>failedTries</c> counter is never charged for it: with <c>maxTries</c> lowered to
     /// one, a SEPARATE, genuinely-AUTHREAD Index answers a plain auth-failure rather than
     /// <c>TPM_RC_LOCKOUT</c> to a wrong password right afterward, proving the AUTHREAD-clear attempt above
@@ -1104,7 +1104,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
     /// <summary>
     /// A single successful <c>TPM2_NV_Certify()</c> over the mixed real-sign-session + password-Index area
     /// advances a <c>TPM_NT_PIN_PASS</c> Index's pinCount by exactly ONE, not two: the pinCount
-    /// update (TPM 2.0 Library Part 1, clause 35.2.6.6) happens before the attested window is sliced, so the
+    /// update (TPM 2.0 Library Part 1, clause 34.2.6.6) happens before the attested window is sliced, so the
     /// attestation's own <c>nvContents</c> IS the read of the post-update value — no separate read is needed.
     /// Run to pinLimit to prove the allowance the fix restores is the FULL spec'd count, not half of it: a
     /// pre-fix double update would exhaust a pinLimit-3 Index in two certifies, not three.
@@ -1145,8 +1145,8 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
     /// <summary>
     /// A single real HMAC session named in BOTH authorization slots is refused: "a specific HMAC or policy
     /// session handle can occur only once in the Authorization Area; TPM_RS_PW may repeat" (TPM 2.0 Library
-    /// Part 1, clause 16.6.3). <c>TPM2_NV_Certify()</c> is the first two-real-session command this simulator
-    /// models (Table 254), so this is the first case in which the rule has anything to compare — composing
+    /// Part 1, clause 15.6.3). <c>TPM2_NV_Certify()</c> is the first two-real-session command this simulator
+    /// models (Table 271), so this is the first case in which the rule has anything to compare — composing
     /// the SAME live <see cref="TpmSession"/> into both slots through the production
     /// <see cref="TpmCommandExecutor"/> already produces the identical wire scenario the rule forbids (two
     /// <c>TPMS_AUTH_COMMAND</c> entries naming the same real sessionHandle), through the same request-framing
@@ -1325,7 +1325,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
     /// <see cref="NvCertifyAllPasswordWithUserWithAuthClearSignerIsRefusedWithoutComparingThePassword"/>: the
     /// userWithAuth gate (TPM 2.0 Library Part 3, clause 5.6, check 7.1) for a <c>TPM_NT_PIN_PASS</c> Index's
     /// signer runs before the Index's own authValue is ever compared, so the Index's once-per-authorization
-    /// pinCount update (Part 1, clause 35.2.6.6) never runs for the refused attempt. A single SUBSEQUENT
+    /// pinCount update (Part 1, clause 34.2.6.6) never runs for the refused attempt. A single SUBSEQUENT
     /// successful certify by a userWithAuth-SET signer then reads pinCount back as exactly ONE, not two - a
     /// double count would prove the refused attempt had already moved it.
     /// </summary>
@@ -1587,7 +1587,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
     /// <summary>
     /// Certifies <paramref name="nvIndex"/> with <paramref name="ak"/>, authorizing the sign slot with an empty
     /// password session and the Index's own slot with an UNBOUND, unsalted HMAC session whose authValue is
-    /// <paramref name="suppliedIndexAuth"/> (TPM 2.0 Library Part 1, clause 17.6.9, equation 19) - the read-role
+    /// <paramref name="suppliedIndexAuth"/> (TPM 2.0 Library Part 1, clause 16.6.9, equation 19) - the read-role
     /// HMAC-arm composition the DA/NO_DA contrast tests above drive.
     /// </summary>
     /// <param name="tpm">The TPM device.</param>
@@ -1646,7 +1646,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
 
     /// <summary>
     /// Certifies <paramref name="nvIndex"/> with <paramref name="ak"/>, authorizing the SIGN slot with a
-    /// fresh, real, unbound/unsalted HMAC session (TPM 2.0 Library Part 1, clause 17.6.9, equation 19)
+    /// fresh, real, unbound/unsalted HMAC session (TPM 2.0 Library Part 1, clause 16.6.9, equation 19)
     /// carrying <paramref name="signSlotAuthValue"/>, and the Index's own slot with a password session
     /// carrying <see cref="IndexAuth"/> — the mirror composition to
     /// <see cref="CertifyOverHmacIndexSessionAsync"/>, which puts the real session at the Index slot instead.
@@ -1794,7 +1794,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
     /// Issues an OWNER-authorized <c>TPM2_NV_Write()</c> against <paramref name="nvIndex"/>, storing
     /// <paramref name="pinCount"/> and <paramref name="pinLimit"/> as the 8-octet
     /// <c>TPMS_NV_PIN_COUNTER_PARAMETERS</c> blob (TPM 2.0 Library Part 2, clause 13.3). A PIN Index forbids
-    /// <c>TPMA_NV_AUTHWRITE</c> (TPM 2.0 Library Part 1, clause 35.2.6.6), so the owner-authorized arm is the
+    /// <c>TPMA_NV_AUTHWRITE</c> (TPM 2.0 Library Part 1, clause 34.2.6.6), so the owner-authorized arm is the
     /// sole provisioning path — the (empty) owner authValue authorizes it, never the PIN.
     /// </summary>
     /// <param name="tpm">The TPM device.</param>
@@ -2001,7 +2001,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
         Assert.IsTrue(attest.ExtraData.Span.SequenceEqual(Nonce), "extraData must echo the caller's qualifyingData nonce.");
         Assert.IsNotNull(attest.Attested.Nv);
 
-        //The Index's Name is computed over its CURRENT attributes (TPM 2.0 Library Part 1, clause 14, Table 6): by the
+        //The Index's Name is computed over its CURRENT attributes (TPM 2.0 Library Part 1, clause 13, Table 9): by the
         //time NV_Certify() runs the Index has been written, so TPMA_NV_WRITTEN is folded in exactly as
         //TPM2_NV_Write() set it, distinct from the attributes this test originally defined the Index with.
         byte[] expectedIndexName = await ComputeNvIndexNameAsync(
@@ -2249,7 +2249,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
     /// <summary>
     /// Recomputes an NV Index's Name independently: <c>nameAlg || H_nameAlg(nvIndex || nameAlg || attributes ||
     /// authPolicy || dataSize)</c> — the whole marshaled TPMS_NV_PUBLIC this test itself defined the Index with
-    /// (TPM 2.0 Library Part 2, clause 13.6) hashed per Part 1, clause 14, Table 6 — through the registered
+    /// (TPM 2.0 Library Part 2, clause 13.6) hashed per Part 1, clause 13, Table 9 — through the registered
     /// digest seam. Every field the recipe reads is a parameter here, so an Index defined with a non-default
     /// Name algorithm or a non-empty access policy is transcribed as faithfully as the default shape. This test
     /// never calls the production <c>TpmsNvPublic</c>/<c>TpmObjectName</c> types, matching the firewalled,
@@ -2292,7 +2292,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
     /// <summary>
     /// Computes a digest under an Index's own Name algorithm through the registered digest seam (not a direct
     /// framework hash) — the <c>H_nameAlg</c> of the Name recipe, which is the Index's <c>nameAlg</c> rather
-    /// than any fixed algorithm (TPM 2.0 Library Part 1, clause 14, Table 6).
+    /// than any fixed algorithm (TPM 2.0 Library Part 1, clause 13, Table 9).
     /// </summary>
     /// <param name="nameAlg">The Name algorithm selecting the hash and its output width.</param>
     /// <param name="message">The message to hash.</param>
@@ -2326,7 +2326,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
 
     /// <summary>
     /// Recomputes an object's Qualified Name independently: <c>nameAlg || H(hierarchyHandle || Name)</c> (TPM 2.0
-    /// Library Part 1, clause 14, Table 6), through the registered digest seam. Every object this simulator certifies is a
+    /// Library Part 1, clause 13, Table 9), through the registered digest seam. Every object this simulator certifies is a
     /// primary created directly under a permanent hierarchy, so the hierarchy's own Qualified Name is its 4-octet
     /// big-endian handle value — this test never calls the production <c>TpmObjectName</c> helper, matching the
     /// firewalled, off-TPM oracle style the Certify test file uses.

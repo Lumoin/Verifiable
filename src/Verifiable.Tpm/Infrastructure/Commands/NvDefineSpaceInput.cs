@@ -23,7 +23,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </list>
 /// <para>
 /// This command is authorized, so it is sent with <c>TPM_ST_SESSIONS</c>. See TPM 2.0 Library Part 3,
-/// Section 31.3 (Table 228). The instance does not own <paramref name="auth"/> / <paramref name="publicInfo"/>
+/// Section 31.3 (Table 245). The instance does not own <paramref name="auth"/> / <paramref name="publicInfo"/>
 /// caller-supplied buffers beyond the disposal it performs.
 /// </para>
 /// </remarks>
@@ -62,9 +62,9 @@ public sealed class NvDefineSpaceInput: ITpmCommandInput, IDisposable
     /// <inheritdoc/>
     /// <remarks>
     /// <c>auth</c> (<c>TPM2B_AUTH</c>) is the first command parameter, ordered ahead of <c>publicInfo</c> (TPM
-    /// 2.0 Library Part 3, Section 31.3, Table 228), so a decrypt-attributed session encrypts the new Index's
+    /// 2.0 Library Part 3, Section 31.3, Table 245), so a decrypt-attributed session encrypts the new Index's
     /// authorization value on the bus before it is ever committed (Part 3, Section 5.7's first-sized-parameter
-    /// rule; Part 1, Section 21). The (non-sensitive) public-area template is never the encryption target.
+    /// rule; Part 1, Section 20). The (non-sensitive) public-area template is never the encryption target.
     /// </remarks>
     public bool FirstCommandParameterIsEncryptable => true;
 

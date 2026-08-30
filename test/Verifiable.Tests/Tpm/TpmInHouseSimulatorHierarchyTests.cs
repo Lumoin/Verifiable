@@ -51,7 +51,7 @@ namespace Verifiable.Tests.Tpm;
 /// <b>Two response codes are inferences, and are marked as such at their own tests.</b> Part 3, Section 24.8
 /// names no code for a <c>TPM2_HierarchyChangeAuth</c> against a disabled hierarchy, and Section 24.2.1 names
 /// none for a wrong-authority <c>TPM2_HierarchyControl</c>; the codes asserted here are read off the shared
-/// availability rule of Part 1, Section 11.2 and the sibling command's stated code in Section 24.3.1.
+/// availability rule of Part 1, Section 10.2 and the sibling command's stated code in Section 24.3.1.
 /// </para>
 /// </remarks>
 [TestClass]
@@ -74,7 +74,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// <summary>Every RSA storage-parent-shaped template this simulator builds fixes nameAlg to SHA-256.</summary>
     private const TpmAlgIdConstants TpmKeyNameAlg = TpmAlgIdConstants.TPM_ALG_SHA256;
 
-    /// <summary>The RSA public exponent the framework RSA key generator uses (TPM 2.0 Library Part 2, Table 215).</summary>
+    /// <summary>The RSA public exponent the framework RSA key generator uses (TPM 2.0 Library Part 2, Table 228).</summary>
     private const uint DefaultRsaExponent = 65537;
 
     /// <summary>The RSA modulus size this file's RSA CreatePrimary templates use.</summary>
@@ -105,7 +105,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
     /// Specification</see>, Part 3, Section 24.8.1), so after a rotation the replaced value must stop
     /// authorizing and the installed one must start. The Empty Buffer is a knowable, usable authorization value
-    /// rather than a disabled one (Part 1, Section 11.2, Table 5), so rotating back to it must also work - the
+    /// rather than a disabled one (Part 1, Section 10.2, Table 8), so rotating back to it must also work - the
     /// last leg pins exactly that, since a design that treated "empty" as "unset" would refuse it.
     /// </summary>
     /// <param name="hierarchy">The hierarchy handle whose authorization value is rotated.</param>
@@ -129,7 +129,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
         Assert.IsFalse(staleRotation.IsSuccess, "The replaced authorization value must no longer authorize the command.");
         Assert.AreEqual(
             TpmRcConstants.TPM_RC_BAD_AUTH, staleRotation.ResponseCode,
-            "Owner, endorsement and platform authorization values are dictionary-attack exempt permanent-entity values (Part 1, Section 17.8.1), so a mismatch is the plain TPM_RC_BAD_AUTH.");
+            "Owner, endorsement and platform authorization values are dictionary-attack exempt permanent-entity values (Part 1, Section 16.8.1), so a mismatch is the plain TPM_RC_BAD_AUTH.");
 
         TpmResult<HierarchyChangeAuthResponse> secondRotation = await device.ChangeHierarchyAuthWithPasswordAsync(
             hierarchyHandle, FirstAuth, SecondAuth, TestContext.CancellationToken).ConfigureAwait(false);
@@ -148,9 +148,9 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
 
     /// <summary>
     /// <c>lockoutAuth</c> is the one permanent entity inside dictionary-attack protection (TPM 2.0 Library Part
-    /// 1, Section 17.8.1), so a wrong current value on its rotation is not merely refused: it engages the
+    /// 1, Section 16.8.1), so a wrong current value on its rotation is not merely refused: it engages the
     /// special lockoutAuth-failure state that bars further use of the value "regardless of the setting of
-    /// failedTries and maxTries" (Section 17.8.5,
+    /// failedTries and maxTries" (Section 16.8.5,
     /// <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
     /// Specification</see>), so the very next attempt - the CORRECT one - answers <c>TPM_RC_LOCKOUT</c> before
     /// any value is compared. Platform Authorization is categorically exempt from all of it (Part 3, Section
@@ -168,7 +168,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
         Assert.IsFalse(wrongValue.IsSuccess, "A wrong lockoutAuth must not rotate the lockout entity's authorization value.");
         Assert.AreEqual(
             TpmRcConstants.TPM_RC_AUTH_FAIL, wrongValue.ResponseCode,
-            "A lockoutAuth mismatch is TPM_RC_AUTH_FAIL, the code Section 17.8.5's one-strike state hangs off, not the dictionary-attack-exempt TPM_RC_BAD_AUTH.");
+            "A lockoutAuth mismatch is TPM_RC_AUTH_FAIL, the code Section 16.8.5's one-strike state hangs off, not the dictionary-attack-exempt TPM_RC_BAD_AUTH.");
 
         TpmResult<HierarchyChangeAuthResponse> correctValue = await device.ChangeHierarchyAuthWithPasswordAsync(
             TpmRh.TPM_RH_LOCKOUT, ReadOnlyMemory<byte>.Empty, FirstAuth, TestContext.CancellationToken).ConfigureAwait(false);
@@ -188,7 +188,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// The size gate strips before it measures, and the order is normative rather than an optimization:
     /// "Trailing octets of zero are to be removed from any string before it is used as an authValue"
     /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 1, Section 17.6.4.3) and only the remainder is measured against the bound
+    /// Specification</see>, Part 1, Section 16.6.4.3) and only the remainder is measured against the bound
     /// Section 24.8.1 states for this command, "the digest produced by the hash algorithm used for context
     /// integrity". A genuine 33-octet value is therefore <c>TPM_RC_SIZE</c> while a 32-octet value padded out
     /// with trailing zeros is accepted - and the value actually installed is the STRIPPED one, proven by
@@ -242,7 +242,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// a SEPARATE decrypt session, so it never appears as wire content; the value being replaced never appears
     /// either, because it only ever enters as a term of the session keys
     /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 1, Sections 19.1 and 17.6.10). Every command octet the verb sends is captured
+    /// Specification</see>, Part 1, Sections 18.1 and 16.6.10). Every command octet the verb sends is captured
     /// and searched. The hierarchy already carries a real authorization value here, so a failure of this test
     /// would be a genuine secret on the bus rather than an artefact of a factory-state Empty Buffer.
     /// </summary>
@@ -280,12 +280,12 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// keystream derivation applied to three rotations. The decrypt companion is bound to the target hierarchy,
     /// so its session key is <c>KDFa(authValue, "ATH", nonceTPM, nonceCaller)</c>
     /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 1, Section 17.6.10, equation 20) and the XOR keystream over <c>newAuth</c>
-    /// (Section 19.2) derives from it alone. While the hierarchy's authorization value is still the Empty
+    /// Specification</see>, Part 1, Section 16.6.10, equation 20) and the XOR keystream over <c>newAuth</c>
+    /// (Section 18.2) derives from it alone. While the hierarchy's authorization value is still the Empty
     /// Buffer, that key is a function of the two public <c>TPM2_StartAuthSession</c> nonces and nothing else, so
     /// the first provisioning rotation's encryption is structural rather than confidential - and this test
     /// recovers the value to say so. Once a real authorization value is installed the SAME derivation stops
-    /// recovering it, and the salted overload folds a secret only the TPM can recover (Section 17.6.12, equation
+    /// recovering it, and the salted overload folds a secret only the TPM can recover (Section 16.6.12, equation
     /// 25) so it closes the factory-state case too.
     /// </summary>
     [TestMethod]
@@ -363,7 +363,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// the new authorization value when computing the response HMAC"
     /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
     /// Specification</see>) - which bites only for a session whose HMAC key carries the authorization value at
-    /// all, so this test composes the UNBOUND HMAC session where it does (Part 1, Section 17.6.10's equation 22
+    /// all, so this test composes the UNBOUND HMAC session where it does (Part 1, Section 16.6.10's equation 22
     /// drops that term for a session bound to the entity it authorizes, which is why the shipped verb binds).
     /// Both candidate response HMACs are recomputed off-wire from the captured exchange: the NEW-keyed one must
     /// equal what the TPM framed and the OLD-keyed one must not. The host session's own key was fixed at
@@ -440,8 +440,8 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
         byte[] hmacData = await BuildResponseHmacDataAsync(
             capturedResponse!, TpmCcConstants.TPM_CC_HierarchyChangeAuth, responseNonceTpm, commandNonceCaller, sessionAttributes, pool).ConfigureAwait(false);
 
-        //An unbound, unsalted session's sessionKey is the Empty Buffer (Part 1, Section 17.6.9), so the whole
-        //HMAC key is the authorization value term alone, trailing zeros already removed (Section 17.6.4.3).
+        //An unbound, unsalted session's sessionKey is the Empty Buffer (Part 1, Section 16.6.9), so the whole
+        //HMAC key is the authorization value term alone, trailing zeros already removed (Section 16.6.4.3).
         byte[] newKeyedHmac = await ComputeSessionHmacAsync(StripTrailingZeros(SecondAuth), hmacData, pool).ConfigureAwait(false);
         byte[] oldKeyedHmac = await ComputeSessionHmacAsync(StripTrailingZeros(FirstAuth), hmacData, pool).ConfigureAwait(false);
 
@@ -465,7 +465,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// <c>TPM_RC_AUTH_FAIL</c>, while the identical exchange left alone succeeds. This is what makes the
     /// group's "no key swap is needed here" reasoning non-vacuous - the response HMAC key is the session key,
     /// fixed at <c>TPM2_StartAuthSession</c> and unaffected by the value the command replaces (TPM 2.0 Library
-    /// Part 1, Section 17.6.10, equations 21/22,
+    /// Part 1, Section 16.6.10, equations 21/22,
     /// <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
     /// Specification</see>), and the host still checks it.
     /// </summary>
@@ -517,7 +517,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
 
     /// <summary>
     /// A decrypt or encrypt attribute on the AUTHORIZING session is refused with a session-encoded
-    /// <c>TPM_RC_ATTRIBUTES</c> rather than honoured. Part 1, Section 19.1's note is the reason: a session used
+    /// <c>TPM_RC_ATTRIBUTES</c> rather than honoured. Part 1, Section 18.1's note is the reason: a session used
     /// both to authorize an entity and to encrypt folds that entity's authorization value into its
     /// <c>sessionValue</c> (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM
     /// 2.0 Library Specification</see>), which would key the encryption of the NEW authorization value on the
@@ -568,7 +568,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// A hierarchy whose enable is CLEAR can authorize nothing at all - "When an enable is FALSE, the
     /// corresponding authValue and authPolicy cannot be used to authorize any TPM action"
     /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 1, Section 11.2, Table 5), which Section 11.2 restates for this command
+    /// Specification</see>, Part 1, Section 10.2, Table 8), which Section 10.2 restates for this command
     /// specifically: "TPM2_HierarchyChangeAuth() can change the authValue associated with a hierarchy but only
     /// if the hierarchy is enabled". Section 24.8 names no response code for the refusal; the code asserted here
     /// is read off the sibling command's stated one for the identical condition ("If the enable associated with
@@ -642,7 +642,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
             "The refusal reuses the generic authorization-failure code rather than the TPM_RC_AUTH_TYPE its sibling TPM2_HierarchyControl answers for a wrong-authority combination.");
 
         //Not a value failure: the same authorization still works in the direction it is allowed, so the refusal
-        //above spent no dictionary-attack strike (Part 1, Section 17.8.5's one-strike state would have barred this).
+        //above spent no dictionary-attack strike (Part 1, Section 16.8.5's one-strike state would have barred this).
         TpmResult<ClearControlResponse> lockoutStillUsable = await device.ClearControlAsync(
             TpmRh.TPM_RH_LOCKOUT, ReadOnlyMemory<byte>.Empty, isDisablingClear: true, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(
@@ -777,10 +777,10 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// <c>shEnable</c> CLEAR no primary object may be created under the storage hierarchy, because neither its
     /// authorization value nor its policy can authorize anything
     /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 1, Section 11.2, Table 5) and the handle names an unavailable hierarchy
+    /// Specification</see>, Part 1, Section 10.2, Table 8) and the handle names an unavailable hierarchy
     /// (<c>TPM_RC_HIERARCHY</c>, the code Part 3, Section 24.3.1 states for the same condition). Recovery is
     /// exclusively Platform Authorization's: "When shEnable is CLEAR, it can only be SET
-    /// (TPM2_HierarchyControl()) if Platform Authorization is provided" (Part 1, Section 11.4), and the storage
+    /// (TPM2_HierarchyControl()) if Platform Authorization is provided" (Part 1, Section 10.4), and the storage
     /// hierarchy's own attempt to re-enable itself cannot even reach that rule - the availability gate answers
     /// first, which is what makes the privilege asymmetry structural rather than a check that could be forgotten.
     /// </summary>
@@ -814,7 +814,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
         Assert.IsFalse(ownAttempt.IsSuccess, "A disabled hierarchy must not be able to re-enable itself.");
         Assert.AreEqual(
             TpmRcConstants.TPM_RC_HIERARCHY, ownAttempt.ResponseCode,
-            "The availability gate of Part 1, Section 11.2 answers before the command's own authority rule, so the refusal names the hierarchy rather than the authorization type.");
+            "The availability gate of Part 1, Section 10.2 answers before the command's own authority rule, so the refusal names the hierarchy rather than the authorization type.");
 
         TpmResult<HierarchyControlResponse> platformEnable = await device.EnableHierarchyWithPasswordAsync(
             ReadOnlyMemory<byte>.Empty, TpmRh.TPM_RH_OWNER, TestContext.CancellationToken).ConfigureAwait(false);
@@ -880,7 +880,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// CLEARing <c>phEnable</c> is a one-way door for the whole command surface: "phEnable may not be SET using
     /// this command" (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0
     /// Library Specification</see>, Part 3, Section 24.2.1) and "When phEnable is CLEAR, a _TPM_Init is required
-    /// to SET it. On any _TPM_Init, phEnable is SET" (Part 1, Section 11.3). Disabling the platform hierarchy
+    /// to SET it. On any _TPM_Init, phEnable is SET" (Part 1, Section 10.3). Disabling the platform hierarchy
     /// therefore also removes the only authorization that could re-enable the storage hierarchy, which the
     /// middle leg proves; a full <c>TPM2_Startup</c> reset then restores all four enables at once, "phEnable
     /// shall be SET" from the every-startup list plus "phEnableNV, shEnable and ehEnable shall be SET" from the
@@ -937,7 +937,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// platformAuth is a per-boot secret rather than a persistent one: "On TPM Reset or TPM Restart, platformAuth
     /// is set to an EmptyAuth, and platformPolicy is set to an Empty Policy"
     /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 1, Section 11.3), which Part 3, Section 9.3 states as a bullet of its own on the
+    /// Specification</see>, Part 1, Section 10.3), which Part 3, Section 9.3 states as a bullet of its own on the
     /// TPM Reset list, "platformAuth and platformPolicy shall be set to the Empty Buffer". A value platform
     /// firmware installs therefore stops authorizing at the next power cycle and the Empty Buffer authorizes
     /// again - the opposite of <c>ownerAuth</c> and <c>lockoutAuth</c>, which survive every reset and only
@@ -965,7 +965,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
         Assert.AreEqual(
             TpmRcConstants.TPM_RC_BAD_AUTH,
             emptyBeforeReset.IsTpmError ? emptyBeforeReset.ResponseCode : default,
-            "platformAuth is a dictionary-attack exempt permanent-entity value (Part 1, Section 17.8.1), so a mismatch is the plain TPM_RC_BAD_AUTH.");
+            "platformAuth is a dictionary-attack exempt permanent-entity value (Part 1, Section 16.8.1), so a mismatch is the plain TPM_RC_BAD_AUTH.");
 
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await IssueStartupClearAsync(simulator, pool).ConfigureAwait(false);
@@ -994,7 +994,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// the Empty Buffer", joined by the every-startup rule "On any TPM2_Startup(), phEnable shall be SET". Only a
     /// TPM Resume carries any of it forward. The counter readback pins that this sequence really took the Restart
     /// path: a Restart increments <c>restartCount</c> and leaves <c>resetCount</c> alone, where a Reset would do
-    /// the reverse (Part 1, Sections 36.4-36.5), so a TPM that answered a Reset here would fail that assertion
+    /// the reverse (Part 1, Sections 33.4-33.5), so a TPM that answered a Reset here would fail that assertion
     /// rather than pass the enable checks for the wrong reason.
     /// </summary>
     [TestMethod]
@@ -1134,7 +1134,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// The closure this command exists to provide, proven in both directions. A hierarchy's policy path starts
     /// disabled: "When the authPolicy is empty, it cannot match any policyDigest value so the use of authPolicy
     /// is disabled" (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0
-    /// Library Specification</see>, Part 1, Section 11.2, Table 5), so a policy session offered as the
+    /// Library Specification</see>, Part 1, Section 10.2, Table 8), so a policy session offered as the
     /// authorizer of <c>TPM2_PolicySecret</c> against a policy-less hierarchy is answered with
     /// <c>TPM_RC_AUTH_UNAVAILABLE</c> - the entity has no policy path at all, which is a different answer from a
     /// policy that failed to match. <c>TPM2_SetPrimaryPolicy</c> installs one ("The policy that is changed is
@@ -1254,11 +1254,11 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
 
     /// <summary>
     /// <c>@primaryHandle</c> is <c>TPM2_CreatePrimary</c>'s own USER-role authorization handle (TPM 2.0 Library
-    /// Part 3, Section 24.1, Table 174), so once the owner hierarchy carries a real authorization value a
+    /// Part 3, Section 24.1, Table 191), so once the owner hierarchy carries a real authorization value a
     /// WRONG password must refuse the command exactly as every other hierarchy command in this family refuses
     /// one: the bare, dictionary-attack-uncharged <c>TPM_RC_BAD_AUTH</c> a permanent entity's authValue
     /// mismatch answers (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM
-    /// 2.0 Library Specification</see>, Part 1, Section 17.8.1), never the session-encoded code an object slot
+    /// 2.0 Library Specification</see>, Part 1, Section 16.8.1), never the session-encoded code an object slot
     /// answers for the same kind of mismatch. The CORRECT password must still create. Both directions are
     /// proven across all four modelled CreatePrimary templates - ECC and RSA signing keys, ECC and RSA
     /// restricted storage parents - because each is dispatched to its own handler, and verifying some templates'
@@ -1323,11 +1323,11 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// <summary>
     /// The null hierarchy has no authValue slot of its own - its authorization value is structurally empty
     /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 1, Section 11.2), a different footing from a rotated-then-emptied hierarchy's
+    /// Specification</see>, Part 1, Section 10.2), a different footing from a rotated-then-emptied hierarchy's
     /// live Empty Buffer VALUE. <c>TPM2_CreatePrimary</c>'s null-hierarchy arm compares the supplied password,
-    /// trailing zeros stripped (Section 17.6.4.3), against that structural emptiness: any non-empty remainder
+    /// trailing zeros stripped (Section 16.6.4.3), against that structural emptiness: any non-empty remainder
     /// answers the bare, dictionary-attack-uncharged <c>TPM_RC_BAD_AUTH</c> a permanent entity's mismatch
-    /// answers (Section 17.8.1) - TPM_RH_NULL included, since only lockoutAuth carries the one-strike exception
+    /// answers (Section 16.8.1) - TPM_RH_NULL included, since only lockoutAuth carries the one-strike exception
     /// - while the Empty Buffer still creates.
     /// </summary>
     [TestMethod]
@@ -1591,7 +1591,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// does: <see cref="Tpm2bPublic.CreateRsaStorageParent"/> otherwise builds only the populated
     /// <c>outPublic</c> form a generated key returns, so passing an empty modulus here reproduces the
     /// caller-supplied, empty-unique <c>inPublic</c> shape a real <c>TPM2_CreatePrimary</c> command sends (TPM
-    /// 2.0 Library Part 3, Section 24.1, Table 174).
+    /// 2.0 Library Part 3, Section 24.1, Table 191).
     /// </summary>
     /// <param name="hierarchy">The hierarchy under which to create the parent.</param>
     /// <param name="password">Optional authValue for the parent (<see langword="null"/> for none).</param>
@@ -1631,9 +1631,9 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// Recovers what a bus observer holding <paramref name="candidateAuthValue"/> would read out of a captured
     /// rotation's encrypted <c>newAuth</c> parameter. The decrypt companion is bound to the target hierarchy, so
     /// its session key is <c>KDFa(sessionAlg, strip(authValue), "ATH", nonceTPM, nonceCaller)</c> (TPM 2.0
-    /// Library Part 1, Section 17.6.10, equation 20); a decrypt-only session's <c>sessionValue</c> is that key
-    /// alone (Section 19.1), and the command-direction XOR mask derives from it with
-    /// <c>nonceNewer</c> = nonceCaller and <c>nonceOlder</c> = the session's nonceTPM (Section 19.2). Uses the
+    /// Library Part 1, Section 16.6.10, equation 20); a decrypt-only session's <c>sessionValue</c> is that key
+    /// alone (Section 18.1), and the command-direction XOR mask derives from it with
+    /// <c>nonceNewer</c> = nonceCaller and <c>nonceOlder</c> = the session's nonceTPM (Section 18.2). Uses the
     /// project's own KDF and parameter-encryption primitives over wire bytes only, so a match means the
     /// keystream was genuinely derivable from the candidate and a mismatch means it was not.
     /// </summary>
@@ -1668,7 +1668,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// Assembles the data a response authorization HMAC is computed over:
     /// <c>rpHash ‖ nonceTPM ‖ nonceCaller ‖ sessionAttributes</c>, where
     /// <c>rpHash = H(responseCode ‖ commandCode ‖ parameters)</c> and every command in this family has no
-    /// response parameters at all (TPM 2.0 Library Part 1, clauses 16.8 and 17.6.5).
+    /// response parameters at all (TPM 2.0 Library Part 1, clauses 15.8 and 16.6.5).
     /// </summary>
     /// <param name="responseBytes">The captured response bytes, whose header supplies the response code.</param>
     /// <param name="commandCode">The command code folded into rpHash.</param>
@@ -1705,9 +1705,9 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
 
     /// <summary>
     /// Computes a session authorization HMAC: <c>HMAC_sessionAlg(sessionKey ‖ authValue, data)</c> (TPM 2.0
-    /// Library Part 1, Section 17.6.5, equation 17). The caller supplies the whole concatenated key, which for
+    /// Library Part 1, Section 16.6.5, equation 17). The caller supplies the whole concatenated key, which for
     /// an unbound, unsalted session reduces to the authorization value alone since such a session's key is the
-    /// Empty Buffer (Section 17.6.9).
+    /// Empty Buffer (Section 16.6.9).
     /// </summary>
     /// <param name="sessionValue">The concatenated HMAC key, trailing zeros already removed from its authValue term.</param>
     /// <param name="data">The HMAC input.</param>
@@ -1741,7 +1741,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// <summary>
     /// Locates the <c>TPM2_StartAuthSession</c> exchange that created <paramref name="sessionHandle"/>: the
     /// command that requested the session and the nonceTPM its response carried, which is the session's
-    /// <c>nonceOlder</c> for the first command sent over it (TPM 2.0 Library Part 1, Section 19.2).
+    /// <c>nonceOlder</c> for the first command sent over it (TPM 2.0 Library Part 1, Section 18.2).
     /// </summary>
     /// <param name="pairs">The recorded command/response triples.</param>
     /// <param name="sessionHandle">The session handle to find.</param>
@@ -1793,7 +1793,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// Walks a built command's authorization area and yields each session entry's handle, caller nonce,
     /// attributes octet, and the position of its <c>hmac</c> field's data octets: handle area,
     /// <c>authorizationSize</c>, then one <c>sessionHandle ‖ nonceCaller ‖ sessionAttributes ‖ hmac</c> entry
-    /// per session until the declared size is consumed (TPM 2.0 Library Part 1, Section 18.5).
+    /// per session until the declared size is consumed (TPM 2.0 Library Part 1, Section 17.5).
     /// </summary>
     /// <param name="command">The captured command bytes.</param>
     /// <param name="handleCount">The number of handles in the command's handle area.</param>
@@ -1846,7 +1846,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// <summary>
     /// Reads the (encrypted) <c>newAuth</c> parameter's data octets out of a built
     /// <c>TPM2_HierarchyChangeAuth</c> command: the command's sole parameter, a <c>TPM2B_AUTH</c> whose size
-    /// field is never encrypted (TPM 2.0 Library Part 1, Section 19.1).
+    /// field is never encrypted (TPM 2.0 Library Part 1, Section 18.1).
     /// </summary>
     /// <param name="command">The captured command bytes.</param>
     /// <param name="handleCount">The number of handles in the command's handle area.</param>
@@ -1935,7 +1935,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
 
     /// <summary>
     /// Removes trailing zero octets, the transformation an authorization value always undergoes before it is
-    /// used in an authorization computation (TPM 2.0 Library Part 1, Section 17.6.4.3).
+    /// used in an authorization computation (TPM 2.0 Library Part 1, Section 16.6.4.3).
     /// </summary>
     /// <param name="value">The value to strip.</param>
     /// <returns>The value with trailing zero octets removed.</returns>

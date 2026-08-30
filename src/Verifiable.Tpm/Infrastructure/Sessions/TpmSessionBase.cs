@@ -91,7 +91,7 @@ public abstract class TpmSessionBase
     /// <summary>
     /// Gets whether this session cryptographically verifies the response, so a successful response to a command
     /// this session authorizes MUST carry a response authorization area holding this session's own entry
-    /// (TPM 2.0 Library Part 1, clauses 16.6.1 and 17.6.5: a successful response carries the same number of
+    /// (TPM 2.0 Library Part 1, clauses 15.6.1 and 16.6.5: a successful response carries the same number of
     /// sessions in the same order as the request, each entry's HMAC keyed on sessionKey concatenated to
     /// authValue exactly as the command's was).
     /// </summary>
@@ -115,11 +115,11 @@ public abstract class TpmSessionBase
 
     /// <summary>
     /// Gets this session's current nonceTPM — the value stored since the last response, before any roll this
-    /// command's own response may cause (TPM 2.0 Library Part 1, clause 17.6.5).
+    /// command's own response may cause (TPM 2.0 Library Part 1, clause 16.6.5).
     /// </summary>
     /// <remarks>
     /// Used only by the executor to fold an OTHER session's nonceTPM into the FIRST authorizing session's command
-    /// HMAC when that other session carries the <c>decrypt</c> or <c>encrypt</c> attribute (clause 17.6.3.4); the
+    /// HMAC when that other session carries the <c>decrypt</c> or <c>encrypt</c> attribute (clause 16.6.3.4); the
     /// base implementation returns an empty buffer for sessions that track no TPM nonce (password sessions) or
     /// none meaningful to this fold (policy sessions, which have no command-HMAC key to fold into in the first
     /// place).
@@ -132,7 +132,7 @@ public abstract class TpmSessionBase
     /// <param name="pool">The memory pool for allocating the new nonce.</param>
     /// <remarks>
     /// <para>
-    /// The caller provides a fresh nonceCaller for each command in a session (TPM 2.0 Part 1, Section 17.6).
+    /// The caller provides a fresh nonceCaller for each command in a session (TPM 2.0 Part 1, Section 16.6).
     /// The executor calls this once at the start of building each command, before computing the command
     /// parameter encryption, cpHash, and auth HMAC, so all three observe the same caller nonce, and that same
     /// nonce remains available to decrypt the response (which is keyed on the command's caller nonce) until the
@@ -157,7 +157,7 @@ public abstract class TpmSessionBase
     /// <returns>A task that completes when the parameter has been encrypted.</returns>
     /// <remarks>
     /// Command parameter encryption uses nonceCaller as nonceNewer and nonceTPM as nonceOlder (TPM 2.0 Part 1,
-    /// Section 19.2) and runs before cpHash is computed (Section 19.1). The base implementation is a no-op for
+    /// Section 18.2) and runs before cpHash is computed (Section 18.1). The base implementation is a no-op for
     /// sessions that do not perform parameter encryption.
     /// </remarks>
     public virtual ValueTask EncryptFirstParameterAsync(
@@ -178,7 +178,7 @@ public abstract class TpmSessionBase
     /// <returns>A task that completes when the parameter has been decrypted.</returns>
     /// <remarks>
     /// Response parameter decryption uses nonceTPM as nonceNewer and nonceCaller as nonceOlder (TPM 2.0 Part 1,
-    /// Section 19.2) and runs only after the response HMAC verifies (Section 19.1: rpHash is computed over the
+    /// Section 18.2) and runs only after the response HMAC verifies (Section 18.1: rpHash is computed over the
     /// still-encrypted parameter). The executor calls this after <see cref="VerifyAndUpdateAsync"/> has adopted
     /// the new nonceTPM and before the next command rolls nonceCaller, so both nonces are correct. The base
     /// implementation is a no-op for sessions that do not perform parameter encryption.
@@ -215,7 +215,7 @@ public abstract class TpmSessionBase
     /// <param name="pool">The memory pool.</param>
     /// <param name="cancellationToken">Token to observe while awaiting HMAC computation.</param>
     /// <param name="foldedSessionNonces">
-    /// The nonceTPMdecrypt/nonceTPMencrypt fold (TPM 2.0 Library Part 1, clause 17.6.3.4): when this session is the
+    /// The nonceTPMdecrypt/nonceTPMencrypt fold (TPM 2.0 Library Part 1, clause 16.6.3.4): when this session is the
     /// FIRST session in the command's authorization area and it authorizes an entity, the concatenated nonceTPM of
     /// any OTHER session in the command carrying the <c>decrypt</c> or <c>encrypt</c> attribute (a decrypt/encrypt
     /// session that IS this session is never folded into its own HMAC — its nonceTPM already counts once as

@@ -25,7 +25,7 @@ namespace Verifiable.Tpm.Spec.Handles;
 /// Unmarshaling a value outside these ranges is <c>TPM_RC_VALUE</c>.
 /// </para>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 9.11, Table 58.
+/// Specification reference: TPM 2.0 Library Part 2, Section 9.11, Table 57.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]

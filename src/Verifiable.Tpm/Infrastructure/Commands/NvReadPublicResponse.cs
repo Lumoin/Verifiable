@@ -10,7 +10,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Response structure (TPM 2.0 Part 3, Section 31.6, Table 235):
+/// Response structure (TPM 2.0 Part 3, Section 31.6, Table 252):
 /// </para>
 /// <list type="bullet">
 ///   <item><description>nvPublic (TPM2B_NV_PUBLIC) - the public area of the NV Index: a UINT16
@@ -19,7 +19,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 ///   and <see cref="TpmsNvPublic"/> is parsed directly, the same shape
 ///   <c>NvDefineSpaceInput</c> writes it with.</description></item>
 ///   <item><description>nvName (TPM2B_NAME) - the Name of the Index: <c>nameAlg ‖
-///   H_nameAlg(TPMS_NV_PUBLIC)</c> (TPM 2.0 Part 1, Section 14, Table 6). The digest covers the
+///   H_nameAlg(TPMS_NV_PUBLIC)</c> (TPM 2.0 Part 1, Section 13, Table 9). The digest covers the
 ///   whole marshaled public area, whose own first field is the Index handle - the handle is
 ///   hashed once as part of it, never prepended a second time. The recipe
 ///   hashes the whole public area including <c>TPMA_NV_WRITTEN</c>, so the Name changes the

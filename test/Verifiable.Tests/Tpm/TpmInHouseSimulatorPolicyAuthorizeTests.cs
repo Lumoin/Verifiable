@@ -254,11 +254,12 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
 
     /// <summary>
     /// Verifies a forged <c>checkTicket</c> digest (approvedPolicy matches, but the ticket does not reproduce) is
-    /// rejected with <c>TPM_RC_VALUE</c> — never <c>TPM_RC_TICKET</c>, never <c>TPM_RC_POLICY</c> (TPM 2.0
-    /// Library Part 3, Section 23.16).
+    /// rejected with <c>TPM_RC_POLICY</c>: "If the ticket is not valid, the TPM shall return TPM_RC_POLICY" —
+    /// distinct from the approvedPolicy mismatch, which "shall return TPM_RC_VALUE" (TPM 2.0 Library Part 3,
+    /// clause 23.16.1).
     /// </summary>
     [TestMethod]
-    public async Task PolicyAuthorizeWithForgedCheckTicketReturnsValue()
+    public async Task PolicyAuthorizeWithForgedCheckTicketReturnsPolicy()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
@@ -296,7 +297,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
                 sessionHandle, approvedPolicy, policyRef, keySign, forgedTicket, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsFalse(authorizeResult.IsSuccess, "A forged checkTicket must be rejected.");
-            Assert.AreEqual(TpmRcConstants.TPM_RC_VALUE, authorizeResult.ResponseCode);
+            Assert.AreEqual(TpmRcConstants.TPM_RC_POLICY, authorizeResult.ResponseCode, "An invalid ticket answers TPM_RC_POLICY (TPM 2.0 Library Part 3, clause 23.16.1).");
         }
         finally
         {
@@ -306,12 +307,12 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
 
     /// <summary>
     /// Verifies a genuine ticket digest re-submitted under the WRONG claimed hierarchy is rejected with
-    /// <c>TPM_RC_VALUE</c>: the proof re-derives from the caller-supplied hierarchy, so a mismatched hierarchy
-    /// claim produces a non-matching HMAC even though the digest bytes are otherwise authentic (TPM 2.0 Library
-    /// Part 3, Section 23.16).
+    /// <c>TPM_RC_POLICY</c>: the proof re-derives from the caller-supplied hierarchy, so a mismatched hierarchy
+    /// claim produces a non-matching HMAC even though the digest bytes are otherwise authentic — an invalid
+    /// ticket, "the TPM shall return TPM_RC_POLICY" (TPM 2.0 Library Part 3, clause 23.16.1).
     /// </summary>
     [TestMethod]
-    public async Task PolicyAuthorizeWithWrongHierarchyCheckTicketReturnsValue()
+    public async Task PolicyAuthorizeWithWrongHierarchyCheckTicketReturnsPolicy()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
@@ -350,7 +351,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
 
         //The genuine digest re-claimed under TPM_RH_ENDORSEMENT rather than the authority key's own
         //TPM_RH_OWNER — the re-derived proof differs, so the recomputed HMAC no longer matches.
-        using TpmtTkVerified wrongHierarchyTicket = MintTicket(TpmRh.TPM_RH_ENDORSEMENT, verified.Validation.Digest, pool);
+        using TpmtTkVerified wrongHierarchyTicket = MintTicket(TpmRh.TPM_RH_ENDORSEMENT, verified.Validation.Hmac, pool);
 
         uint sessionHandle = 0;
         try
@@ -370,7 +371,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
                 sessionHandle, approvedPolicy, policyRef, keySign, wrongHierarchyTicket, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsFalse(authorizeResult.IsSuccess, "A checkTicket claiming the wrong hierarchy must be rejected.");
-            Assert.AreEqual(TpmRcConstants.TPM_RC_VALUE, authorizeResult.ResponseCode);
+            Assert.AreEqual(TpmRcConstants.TPM_RC_POLICY, authorizeResult.ResponseCode, "An invalid ticket answers TPM_RC_POLICY (TPM 2.0 Library Part 3, clause 23.16.1).");
         }
         finally
         {
@@ -686,7 +687,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
 
     /// <summary>
     /// Composes a TPMT_TK_VERIFIED value claiming <paramref name="hierarchy"/> over <paramref name="digest"/>
-    /// exactly as an attacker would submit one on the wire (TPM 2.0 Library Part 2, Section 10.7.4), parsed back
+    /// exactly as an attacker would submit one on the wire (TPM 2.0 Library Part 2, Section 10.6.5), parsed back
     /// through the production wire shape so the result is a genuine ticket value with a caller-chosen claim.
     /// </summary>
     /// <param name="hierarchy">The hierarchy the ticket claims.</param>

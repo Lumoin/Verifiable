@@ -40,8 +40,10 @@ internal static class TpmInfoFormatter
         ConsoleFormatter.WriteLabeled("Revision:", identity.Revision.ToString(CultureInfo.InvariantCulture));
         ConsoleFormatter.WriteLabeled("Firmware:", identity.FirmwareVersion);
 
-        string buildDate = $"Day {identity.FirmwareDayOfYear}, {identity.FirmwareYear}";
-        ConsoleFormatter.WriteLabeled("Build Date:", buildDate);
+        string specEdition = identity.SpecYear == 0
+            ? $"errata {identity.SpecErrata}"
+            : $"day {identity.SpecErrata} of {identity.SpecYear}";
+        ConsoleFormatter.WriteLabeled("Spec Edition:", specEdition);
 
         ConsoleFormatter.WriteLabeled("Platform:", platform);
         ConsoleFormatter.WriteLabeled("PCR Count:", identity.PcrCount.ToString(CultureInfo.InvariantCulture));

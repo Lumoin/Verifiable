@@ -68,7 +68,7 @@ internal sealed record TpmAttestationTrustContext(byte[] EnrolledAttestationKey)
 /// <para>
 /// The enrollment case proves AK↔EK co-residence by credential activation — <c>TPM2_MakeCredential()</c> wraps a
 /// challenge to the endorsement key's public area bound to the AK's Name, and <c>TPM2_ActivateCredential()</c>
-/// recovers it only in a device holding both keys (TPM 2.0 Library Part 1, clause 24; Part 3, clauses 12.6 and
+/// recovers it only in a device holding both keys (TPM 2.0 Library Part 1, clause 21; Part 3, clauses 12.6 and
 /// 12.5). Every command runs through the same production command path the production code uses
 /// (<see cref="TpmCommandExecutor"/> with the real inputs and response codecs); the signing backend is injected so
 /// the production <c>Verifiable.Tpm</c> assembly stays provider-agnostic, and the simulator runs both sides, so the

@@ -22,7 +22,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// } TPM2B_PUBLIC_KEY_MLKEM;
 /// </code>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 11.2.6.2, Table 205 (v1.85).
+/// Specification reference: TPM 2.0 Library Part 2, Section 11.2.6.2, Table 214 (v1.85).
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]

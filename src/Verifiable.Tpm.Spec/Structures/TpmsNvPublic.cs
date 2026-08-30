@@ -22,7 +22,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </list>
 /// <para>
 /// On the command interface this structure is carried inside a <c>TPM2B_NV_PUBLIC</c> (a UINT16
-/// size prefix around these octets). See TPM 2.0 Library Part 2, Section 13.6 (Table 235).
+/// size prefix around these octets). See TPM 2.0 Library Part 2, Section 13.6 (Table 251).
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]

@@ -28,10 +28,10 @@ namespace Verifiable.Tests.Tpm;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Covered here: the cpHash Name2 known-answer test (TPM 2.0 Library Part 1, clause 16.7 equation
-/// 15; Table 6), lockout-over-HMAC (Part 1, clause 17.8.5), nonceTPM rolling and its replay consequence (Part 1,
-/// clause 17.6.3.1), and the secure-by-default verb pair. The policy-session authorization arm (equations 26/27,
-/// Part 1, clause 17.6.12) and <c>TPM_RC_MODE</c> (Part 3, Section 23.4.1) live in the sibling
+/// Covered here: the cpHash Name2 known-answer test (TPM 2.0 Library Part 1, clause 15.7 equation
+/// 15; Table 9), lockout-over-HMAC (Part 1, clause 16.8.5), nonceTPM rolling and its replay consequence (Part 1,
+/// clause 16.6.3.1), and the secure-by-default verb pair. The policy-session authorization arm (equations 26/27,
+/// Part 1, clause 16.6.12) and <c>TPM_RC_MODE</c> (Part 3, Section 23.4.1) live in the sibling
 /// <c>TpmInHouseSimulatorPolicySessionHmacTests</c>.
 /// </para>
 /// <para>
@@ -105,8 +105,8 @@ internal sealed class TpmInHouseSimulatorSecureChannelTests
 
     /// <summary>
     /// PolicySecret's cpHash Name2 term is the <em>policySession parameter's</em> raw handle, never the
-    /// authorizing HMAC session's own handle, even when the two differ (TPM 2.0 Library Part 1, clause 16.7
-    /// equation 15; Table 6). Starts a policy session A (the parameter being extended) and a DISTINCT HMAC
+    /// authorizing HMAC session's own handle, even when the two differ (TPM 2.0 Library Part 1, clause 15.7
+    /// equation 15; Table 9). Starts a policy session A (the parameter being extended) and a DISTINCT HMAC
     /// session B (the authorizer bound to <c>TPM_RH_ENDORSEMENT</c>), captures the wire command B actually sent,
     /// and independently recomputes the authHMAC twice: once with Name2 = A (the correct, accepted value) and
     /// once with Name2 = B (an easily-transposed wrong value) — the two must diverge, and the supplied HMAC must
@@ -634,11 +634,11 @@ internal sealed class TpmInHouseSimulatorSecureChannelTests
     }
 
     /// <summary>
-    /// Independently recomputes PolicySecret's command authHMAC (TPM 2.0 Library Part 1, clause 16.7 equation 15;
-    /// clause 17.6.5 equation 17): <c>cpHash = H(TPM_CC_PolicySecret ‖ Name(authHandle) ‖ Name2 ‖ parameters)</c>,
+    /// Independently recomputes PolicySecret's command authHMAC (TPM 2.0 Library Part 1, clause 15.7 equation 15;
+    /// clause 16.6.5 equation 17): <c>cpHash = H(TPM_CC_PolicySecret ‖ Name(authHandle) ‖ Name2 ‖ parameters)</c>,
     /// then <c>authHMAC = HMAC(sessionKey, cpHash ‖ nonceCaller ‖ nonceTPM ‖ sessionAttributes)</c> — no authValue
-    /// term (the session is bound directly to <c>TPM_RH_ENDORSEMENT</c>, so equation 22 (Part 1, clause 17.6.10)'s bind-omission applies)
-    /// and no folded nonces (a single session in the authorization area, clause 17.6.3.4).
+    /// term (the session is bound directly to <c>TPM_RH_ENDORSEMENT</c>, so equation 22 (Part 1, clause 16.6.10)'s bind-omission applies)
+    /// and no folded nonces (a single session in the authorization area, clause 16.6.3.4).
     /// </summary>
     private static async ValueTask<IMemoryOwner<byte>> ComputePolicySecretAuthHmacAsync(
         ReadOnlyMemory<byte> sessionKey, uint name2Handle, ReadOnlyMemory<byte> nonceCaller, ReadOnlyMemory<byte> nonceTpm,

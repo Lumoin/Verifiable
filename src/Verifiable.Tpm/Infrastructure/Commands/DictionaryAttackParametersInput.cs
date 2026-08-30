@@ -22,11 +22,11 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 ///   <item><description><c>newLockoutRecovery</c> (UINT32) — the new lockoutAuth recovery wait, in seconds; zero requires a TPM Reset to re-arm lockoutAuth.</description></item>
 /// </list>
 /// <para>
-/// This command deliberately does not reset <c>failedTries</c> (Part 1, clause 17.8.6): lowering
+/// This command deliberately does not reset <c>failedTries</c> (Part 1, clause 16.8.6): lowering
 /// <see cref="NewMaxTries"/> to at or below the current failure count takes the TPM into Lockout mode
 /// immediately, as a side effect of the existing <c>failedTries &gt;= maxTries</c> test, with no distinct error
 /// code for that transition. It is authorized, so it is sent with <c>TPM_ST_SESSIONS</c>, and is permitted even
-/// while the TPM is in general Lockout mode. See TPM 2.0 Library Part 3, Section 25.3 (Table 182).
+/// while the TPM is in general Lockout mode. See TPM 2.0 Library Part 3, Section 25.3 (Table 212).
 /// </para>
 /// </remarks>
 /// <param name="LockHandle">The lockout hierarchy authorizing the change (<c>TPM_RH_LOCKOUT</c>).</param>

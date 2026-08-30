@@ -20,7 +20,7 @@ namespace Verifiable.Tests.Tpm;
 /// <summary>
 /// A BouncyCastle-backed <see cref="TpmRsaOaepEncryptDelegate"/>/<see cref="TpmRsaOaepDecryptDelegate"/> pair for
 /// the in-house <see cref="TpmSimulator"/>: the RSA arm of credential-protection seed transport (TPM 2.0 Library
-/// Part 1, Annex B.4 "RSAES_OAEP", B.10.3, B.10.4).
+/// Part 1, clause 43.4 "RSAES_OAEP", 20.3.2.3, 21.3).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -29,7 +29,7 @@ namespace Verifiable.Tests.Tpm;
 /// reproduce the <c>"IDENTITY"</c>-labelled encoding TPM 2.0 credential protection requires — only
 /// BouncyCastle's <see cref="OaepEncoding"/>, constructed with an explicit <c>encodingParams</c> byte array,
 /// supports an arbitrary OAEP label. The label is threaded through as a delegate parameter, never hardcoded
-/// here, so this backend stays a faithful mirror of the generic OAEP primitive Annex B.4 describes.
+/// here, so this backend stays a faithful mirror of the generic OAEP primitive clause 43.4 describes.
 /// </para>
 /// <para>
 /// <see cref="MicrosoftTpmRsaSigningBackend"/> supplies key generation and digest sign/verify (framework RSA is
@@ -51,7 +51,7 @@ internal static class BouncyCastleTpmRsaOaepBackend
     /// <summary>
     /// Creates the OAEP-decrypt delegate: decrypt-with-private-key drives <see cref="OaepEncoding"/> in
     /// decryption mode against the retained RSA private key, mapping any decode failure to
-    /// <see langword="null"/> (TPM 2.0 Library Part 1, Annex B.10.3).
+    /// <see langword="null"/> (TPM 2.0 Library Part 1, clause 20.3.2.3).
     /// </summary>
     /// <returns>The delegate to compose into a <see cref="TpmRsaSigningBackend"/>.</returns>
     public static TpmRsaOaepDecryptDelegate DecryptOaep => DecryptOaepAsync;
@@ -125,7 +125,8 @@ internal static class BouncyCastleTpmRsaOaepBackend
             //OAEP decode failed: a non-zero leading octet, an lhash mismatch, malformed padding, a missing 0x01
             //separator, or (equivalently) a ciphertext whose length does not match the modulus width. None of
             //these are surfaced as a distinct outcome — the null return lets the caller substitute an invalid
-            //seed and defer the failure to the outer integrity HMAC (TPM 2.0 Library Part 1, Annex B.10.3), so
+            //seed and defer the failure to the outer integrity HMAC (the v184 TPM 2.0 Library Part 1, clause A.10.3
+            //rule; v185 keeps its rationale at Part 3, clause 13.3.1), so
             //this backend cannot become a padding oracle.
             return ValueTask.FromResult<IMemoryOwner<byte>?>(null);
         }

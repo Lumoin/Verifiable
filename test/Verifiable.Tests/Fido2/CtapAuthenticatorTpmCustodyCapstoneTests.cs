@@ -62,13 +62,12 @@ namespace Verifiable.Tests.Fido2;
 ///   OWN failure mode, left otherwise unclosed) cannot roll a composed NV counter back.
 ///   </description></item>
 ///   <item><description>
-///   <b>Durable cross-TPM-instance custody.</b> <c>TPM2_Create</c>'s <c>outPrivate</c> is this simulator's
-///   own plaintext encoding with no real parent-key wrap or integrity protection (roadmap W3) — sound for
-///   an in-process custody backend (this simulator's own <c>TPM2_Load</c> always recovers its own
-///   encoding correctly) but NOT a durable, cross-chip-instance secret container: a sealed blob persisted
-///   by ONE chip instance is only ever unsealable by that SAME chip instance for as long as it lives. Every
-///   capstone below models exactly that scope — one chip, surviving across CTAP simulator instances, never
-///   across a chip instance itself.
+///   <b>Durable cross-TPM-instance custody.</b> <c>TPM2_Create</c>'s <c>outPrivate</c> is wrapped and
+///   integrity-bound under the storage parent's protection seed (TPM 2.0 Library Part 1, Clause 20), and
+///   that seed is generated fresh per parent per chip instance — so a sealed blob persisted by ONE chip
+///   instance is only ever unsealable by that SAME chip instance for as long as it lives, and never a
+///   durable, cross-chip-instance secret container. Every capstone below models exactly that scope — one
+///   chip, surviving across CTAP simulator instances, never across a chip instance itself.
 ///   </description></item>
 /// </list>
 /// </remarks>

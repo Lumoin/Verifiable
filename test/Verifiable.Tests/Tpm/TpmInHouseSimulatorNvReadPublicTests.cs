@@ -26,8 +26,8 @@ namespace Verifiable.Tests.Tpm;
 /// <remarks>
 /// <para>
 /// Every accepted-path test pins the returned Name against an INDEPENDENT in-test transcription of TPM 2.0
-/// Library Part 1, Section 14, Table 6's recipe (<c>nameAlg ‖ H_nameAlg(TPMS_NV_PUBLIC)</c>, marshaled per Part
-/// 2, Section 13.6, Table 235) - built here from <see cref="BinaryPrimitives"/> and the project's own registered
+/// Library Part 1, Section 13, Table 9's recipe (<c>nameAlg ‖ H_nameAlg(TPMS_NV_PUBLIC)</c>, marshaled per Part
+/// 2, Section 12.6, Table 251) - built here from <see cref="BinaryPrimitives"/> and the project's own registered
 /// digest seam, never by calling <c>TpmObjectName</c> or any other production Name-computation type, so a bug
 /// shared between the production recipe and this test's own oracle cannot pass silently.
 /// </para>
@@ -78,7 +78,7 @@ internal sealed class TpmInHouseSimulatorNvReadPublicTests
 
     /// <summary>
     /// A defined Index's returned public area matches what was defined, and its Name matches an independent
-    /// transcription of TPM 2.0 Library Part 1, Section 14, Table 6's recipe over a NON-EMPTY <c>authPolicy</c> -
+    /// transcription of TPM 2.0 Library Part 1, Section 13, Table 9's recipe over a NON-EMPTY <c>authPolicy</c> -
     /// pinning the retention fix, not merely the recipe's shape.
     /// </summary>
     [TestMethod]
@@ -104,7 +104,7 @@ internal sealed class TpmInHouseSimulatorNvReadPublicTests
         byte[] expectedName = await ComputeIndependentNvNameAsync(pool, OrdinaryIndexHandle, NameAlg, OrdinaryAttributes, NonEmptyAuthPolicy, OrdinaryIndexDataSize).ConfigureAwait(false);
         Assert.AreSequenceEqual(
             expectedName, response.NvName.Span.ToArray(),
-            "The returned Name must equal nameAlg || H_nameAlg(TPMS_NV_PUBLIC) transcribed independently from Part 1, Section 14, Table 6 and Part 2, Section 13.6, Table 235.");
+            "The returned Name must equal nameAlg || H_nameAlg(TPMS_NV_PUBLIC) transcribed independently from Part 1, Section 13, Table 9 and Part 2, Section 13.6, Table 251.");
     }
 
     /// <summary>
@@ -169,7 +169,7 @@ internal sealed class TpmInHouseSimulatorNvReadPublicTests
 
     /// <summary>
     /// A handle outside the NV-Index MSO range is TPM_RC_VALUE at unmarshal time (TPMI_RH_NV_INDEX's own
-    /// interface-type check, TPM 2.0 Library Part 2, Section 9.25, Table 72) - never reaching the handle-
+    /// interface-type check, TPM 2.0 Library Part 2, Section 9.25, Table 71) - never reaching the handle-
     /// existence gate at all.
     /// </summary>
     [TestMethod]
@@ -282,7 +282,7 @@ internal sealed class TpmInHouseSimulatorNvReadPublicTests
 
     /// <summary>
     /// A session BOUND to the very Index it then authorizes omits that Index's authValue from the command and
-    /// response HMAC keys (TPM 2.0 Library Part 1, Section 17.6.10, equation 22): binding already proved
+    /// response HMAC keys (TPM 2.0 Library Part 1, Section 16.6.10, equation 22): binding already proved
     /// knowledge of the authValue through the session-key KDFa, so folding it in again is redundant. The caller
     /// therefore never sets an authorization value on the session, and the read must still succeed - a
     /// simulator that folded the authValue anyway would answer an authorization failure and charge the
@@ -353,7 +353,7 @@ internal sealed class TpmInHouseSimulatorNvReadPublicTests
     /// <summary>
     /// Independently transcribes an NV Index's Name: <c>nameAlg ‖ H_nameAlg(nvIndex ‖ nameAlg ‖ attributes ‖
     /// authPolicy ‖ dataSize)</c>, the whole marshaled <c>TPMS_NV_PUBLIC</c> (TPM 2.0 Library Part 2, Section
-    /// 13.6, Table 235) hashed per Part 1, Section 14, Table 6. Uses <see cref="BinaryPrimitives"/> directly and
+    /// 13.6, Table 251) hashed per Part 1, Section 13, Table 9. Uses <see cref="BinaryPrimitives"/> directly and
     /// the project's own registered digest seam - never <c>TpmsNvPublic.WriteTo</c> or <c>TpmObjectName</c>.
     /// </summary>
     /// <param name="pool">The memory pool.</param>

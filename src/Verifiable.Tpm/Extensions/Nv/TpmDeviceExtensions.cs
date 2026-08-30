@@ -27,13 +27,13 @@ namespace Verifiable.Tpm.Extensions.Nv;
 /// </para>
 /// <para>
 /// <b>Why this group exists.</b> An NV Index's Name is <c>nameAlg ‖ H_nameAlg(TPMS_NV_PUBLIC)</c> (TPM
-/// 2.0 Library Part 1, Section 14, Table 6), the digest covering the whole marshaled public area - whose own
+/// 2.0 Library Part 1, Section 13, Table 9), the digest covering the whole marshaled public area - whose own
 /// first field is the Index handle, so the handle is hashed once as part of it and never prepended a second
 /// time - a value only the TPM's own retained public area can produce,
 /// because <c>TPMA_NV_WRITTEN</c> lives inside the hashed attributes field and flips the Name the moment the
 /// Index is first written. Every HMAC-session authorization over a multi-handle NV command (<c>NV_Write</c>,
 /// <c>NV_Read</c>, <c>NV_UndefineSpace</c>) needs that real, current Name to feed the command's cpHash (Part 1,
-/// Section 16.7, equation 15) - a caller cannot safely recompute it blind from locally cached attributes, since a
+/// Section 15.7, equation 15) - a caller cannot safely recompute it blind from locally cached attributes, since a
 /// stale WRITTEN flag alone would silently desynchronize the cpHash from what the TPM computes. <c>NvReadPublicAsync</c>
 /// is that authoritative source; <c>Extensions/Pin</c>'s bound- and unbound-HMAC verbs compose it internally for
 /// exactly this reason.
@@ -62,7 +62,7 @@ public static class TpmDeviceExtensions
         /// </para>
         /// <para>
         /// The returned Name (<c>nameAlg ‖ H_nameAlg(TPMS_NV_PUBLIC)</c>, TPM 2.0 Library Part 1, Section
-        /// 14, Table 6; Part 2, Section 13.6, Table 235) hashes the whole public area including
+        /// 14, Table 4; Part 2, Section 13.6, Table 251) hashes the whole public area including
         /// <c>TPMA_NV_WRITTEN</c>, so it changes the instant the Index is first written - callers deriving a
         /// cpHash Name for this Index use <see cref="NvReadPublicResponse.NvName"/> verbatim rather than
         /// recomputing it from a locally cached copy of the attributes.

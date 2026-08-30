@@ -24,11 +24,11 @@ namespace Verifiable.Tests.Tpm;
 /// Drives the NV Counter Index machinery — <c>TPM2_NV_Increment()</c>'s authorization ladder, the
 /// <c>TPM_NT_COUNTER</c> type gate on both <c>TPM2_NV_Increment()</c> and <c>TPM2_NV_Write()</c>,
 /// <c>TPM2_NV_DefineSpace()</c>'s counter-related tightening (<c>dataSize</c>, <c>TPMA_NV_CLEAR_STCLEAR</c>,
-/// and the BITS/EXTEND unsupported-modifier gate), and the phantom-counter rollback protection across
+/// and the BITS unsupported-modifier gate), and the phantom-counter rollback protection across
 /// <c>TPM2_NV_UndefineSpace()</c>/redefine — against the in-house behavioural <see cref="TpmSimulator"/>,
 /// entirely in-process with no external assets, through the same production command path the production code
 /// uses (<see cref="TpmCommandExecutor"/> and the real command/response codecs). TPM 2.0 Library Part 1,
-/// clause 37.2.6.3; Part 3, clauses 31.3.1, 31.7.1, 31.8.
+/// clause 34.2.6.3; Part 3, clauses 31.3.1, 31.7.1, 31.8.
 /// </summary>
 [TestClass]
 internal sealed class TpmInHouseSimulatorNvCounterTests
@@ -45,12 +45,6 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     /// <summary>An Ordinary Index handle, used to prove <c>TPM2_NV_Increment()</c> refuses a non-Counter type.</summary>
     private const uint OrdinaryIndexHandle = 0x0100_0043;
 
-    /// <summary>A Bit Field Index handle, used only for the define-time rejection test.</summary>
-    private const uint BitsIndexHandle = 0x0100_0044;
-
-    /// <summary>An Extend Index handle, used only for the define-time rejection test.</summary>
-    private const uint ExtendIndexHandle = 0x0100_0045;
-
     /// <summary>An <c>authHandle</c> that is neither the owner hierarchy nor any Index defined in this file.</summary>
     private const uint MismatchedAuthHandle = 0x0100_0099;
 
@@ -66,7 +60,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     /// </summary>
     private const int Sha256DigestSize = 32;
 
-    /// <summary>The RSA public exponent the framework RSA key generator uses (TPM 2.0 Library Part 2, Table 215).</summary>
+    /// <summary>The RSA public exponent the framework RSA key generator uses (TPM 2.0 Library Part 2, Table 228).</summary>
     private const uint DefaultRsaExponent = 65537;
 
     /// <summary>The Name algorithm of the RSA endorsement-key-shaped decrypt key the salted-session tests build.</summary>
@@ -99,16 +93,6 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     /// <summary>Ordinary Index attributes (TPM_NT_ORDINARY is the zero value, so no type shift is needed).</summary>
     private const TpmaNv OrdinaryAttributes =
         TpmaNv.TPMA_NV_AUTHREAD | TpmaNv.TPMA_NV_AUTHWRITE | TpmaNv.TPMA_NV_OWNERWRITE;
-
-    /// <summary>Bit Field Index attributes, used only to prove <c>TPM2_NV_DefineSpace()</c> now refuses the type.</summary>
-    private const TpmaNv BitsAttributes =
-        TpmaNv.TPMA_NV_AUTHREAD | TpmaNv.TPMA_NV_AUTHWRITE
-        | (TpmaNv)((uint)TpmNt.TPM_NT_BITS << TpmaNvFields.TPM_NT_SHIFT);
-
-    /// <summary>Extend Index attributes, used only to prove <c>TPM2_NV_DefineSpace()</c> now refuses the type.</summary>
-    private const TpmaNv ExtendAttributes =
-        TpmaNv.TPMA_NV_AUTHREAD | TpmaNv.TPMA_NV_AUTHWRITE
-        | (TpmaNv)((uint)TpmNt.TPM_NT_EXTEND << TpmaNvFields.TPM_NT_SHIFT);
 
     /// <summary>The Index authorization value (and, for owner-arm calls, an alias for "the correct value") used throughout.</summary>
     private static byte[] CorrectAuth { get; } = [0x01, 0x02, 0x03, 0x04];
@@ -143,7 +127,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     /// <summary>
     /// Verifies repeated wrong-authValue index-arm increments against a DA-protected Counter Index increment
     /// <c>FailedTries</c>, and that the TPM enters Lockout mode exactly at the (lowered) <c>maxTries</c>,
-    /// rejecting even the correct authValue thereafter (TPM 2.0 Library Part 1, clause 17.8.3), mirroring
+    /// rejecting even the correct authValue thereafter (TPM 2.0 Library Part 1, clause 16.8.3), mirroring
     /// <c>TpmInHouseSimulatorDictionaryAttackTests</c>' own lockout-loop pattern.
     /// </summary>
     [TestMethod]
@@ -182,7 +166,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     /// <summary>
     /// Verifies the owner-authorized increment arm stays available while the TPM is in Lockout mode: the
     /// clause 5.6 lockout gate binds the entity whose authValue is compared, and on this arm that entity is
-    /// the owner hierarchy (never dictionary-attack protected, TPM 2.0 Library Part 1, clause 17.8.1), not the
+    /// the owner hierarchy (never dictionary-attack protected, TPM 2.0 Library Part 1, clause 16.8.1), not the
     /// DA-protected Index - the same administrative posture <c>TPM2_NV_Write()</c>'s owner arm takes.
     /// </summary>
     [TestMethod]
@@ -290,7 +274,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
 
     /// <summary>
     /// Verifies a wrong index-arm authValue against a DA-protected Counter Index is an auth-failure (TPM 2.0
-    /// Library Part 1, clause 17.8.3), the DA half of the DA/NO_DA contrast this ladder must preserve.
+    /// Library Part 1, clause 16.8.3), the DA half of the DA/NO_DA contrast this ladder must preserve.
     /// </summary>
     [TestMethod]
     public async Task NvIncrementWithWrongAuthOnDaProtectedIndexReturnsAuthFail()
@@ -310,7 +294,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
 
     /// <summary>
     /// Verifies a wrong index-arm authValue against a <c>TPMA_NV_NO_DA</c> Counter Index is a plain
-    /// bad-authorization (TPM 2.0 Library Part 1, clause 17.8.1) - <c>TPMA_NV_NO_DA</c> applies uniformly,
+    /// bad-authorization (TPM 2.0 Library Part 1, clause 16.8.1) - <c>TPMA_NV_NO_DA</c> applies uniformly,
     /// with no counter-type carve-out (SPEC §5.1), the NO_DA half of the DA/NO_DA contrast.
     /// </summary>
     [TestMethod]
@@ -397,7 +381,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     /// Verifies the phantom high-water mark is TPM-GLOBAL, not per-handle: a Counter Index defined at a
     /// DIFFERENT handle after another counter was deleted still seeds its first increment above that deleted
     /// counter's last value. The specification describes exactly this scope - the mark tracks "the largest
-    /// count of any deleted NV Counter" (TPM 2.0 Library Part 1, clause 37.2.6.3 NOTE 2/NOTE 6), so a fresh
+    /// count of any deleted NV Counter" (TPM 2.0 Library Part 1, clause 34.2.6.3 NOTE 2/NOTE 6), so a fresh
     /// counter's first value reflects the TPM's counter history rather than starting at one.
     /// </summary>
     [TestMethod]
@@ -467,7 +451,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     /// could define a redefined Counter Index with <c>TPMA_NV_WRITTEN</c> already SET would make
     /// <c>TPM2_NV_Increment()</c> read the empty data area as counter value zero and restart the count from
     /// one instead of seeding from the phantom high-water mark, rolling a counter with this Name back below a
-    /// value it had already reported (TPM 2.0 Library Part 1, clause 37.2.6.3 NOTE 4 forbids exactly that).
+    /// value it had already reported (TPM 2.0 Library Part 1, clause 34.2.6.3 NOTE 4 forbids exactly that).
     /// The definition is refused, so the rollback is unreachable and the surviving counter keeps its history.
     /// </summary>
     [TestMethod]
@@ -518,7 +502,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
 
     /// <summary>
     /// Verifies <c>TPM2_NV_DefineSpace()</c> rejects a Counter Index with <c>TPMA_NV_CLEAR_STCLEAR</c> SET
-    /// (TPM 2.0 Library Part 3, clause 31.3.1; Part 2, Table 214; Part 1, clause 37.2.4.2 NOTE) - a counter is
+    /// (TPM 2.0 Library Part 3, clause 31.3.1; Part 2, Table 249; Part 1, clause 34.2.4.2 NOTE) - a counter is
     /// either restored on an orderly startup or advanced on a non-orderly one, never cleared by a Reset/Restart.
     /// </summary>
     [TestMethod]
@@ -531,44 +515,6 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
 
         TpmResult<NvDefineSpaceResponse> result = await DefineIndexAsync(
             device, pool, registry, CounterIndexHandle, ClearStclearCounterAttributes).ConfigureAwait(false);
-
-        Assert.AreEqual(TpmRcConstants.TPM_RC_ATTRIBUTES, result.ResponseCode);
-    }
-
-    /// <summary>
-    /// Verifies <c>TPM2_NV_DefineSpace()</c> now rejects <c>TPM_NT_BITS</c> (TPM 2.0 Library Part 3, clause
-    /// 31.3.1's unsupported-command gate: a TPM that does not implement a type's modifying command,
-    /// <c>TPM2_NV_SetBits()</c> here, must refuse the type at definition).
-    /// </summary>
-    [TestMethod]
-    public async Task NvDefineSpaceOfBitsIndexReturnsAttributes()
-    {
-        BaseMemoryPool pool = BaseMemoryPool.Shared;
-        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
-        TpmResponseRegistry registry = CreateNvRegistry();
-
-        TpmResult<NvDefineSpaceResponse> result = await DefineIndexAsync(
-            device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
-
-        Assert.AreEqual(TpmRcConstants.TPM_RC_ATTRIBUTES, result.ResponseCode);
-    }
-
-    /// <summary>
-    /// Verifies <c>TPM2_NV_DefineSpace()</c> now rejects <c>TPM_NT_EXTEND</c> (TPM 2.0 Library Part 3, clause
-    /// 31.3.1's unsupported-command gate: a TPM that does not implement a type's modifying command,
-    /// <c>TPM2_NV_Extend()</c> here, must refuse the type at definition).
-    /// </summary>
-    [TestMethod]
-    public async Task NvDefineSpaceOfExtendIndexReturnsAttributes()
-    {
-        BaseMemoryPool pool = BaseMemoryPool.Shared;
-        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
-        TpmResponseRegistry registry = CreateNvRegistry();
-
-        TpmResult<NvDefineSpaceResponse> result = await DefineIndexAsync(
-            device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
 
         Assert.AreEqual(TpmRcConstants.TPM_RC_ATTRIBUTES, result.ResponseCode);
     }
@@ -661,7 +607,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     /// The flagship rollback-protection positive: increments a Counter Index to a known value,
     /// undefines it, redefines the same handle, and verifies the first increment of the redefined Index seeds
     /// strictly above (exactly one past) the deleted counter's last value - the phantom high-water mark (TPM
-    /// 2.0 Library Part 1, clause 37.2.6.3 NOTE 2/NOTE 6) proving delete-then-redefine can never roll a
+    /// 2.0 Library Part 1, clause 34.2.6.3 NOTE 2/NOTE 6) proving delete-then-redefine can never roll a
     /// counter with this Name back.
     /// </summary>
     [TestMethod]
@@ -712,7 +658,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     /// survive the one event that discards all owner state. <c>TPM2_Clear()</c> "delete[s] any NV Index with
     /// TPMA_NV_PLATFORMCREATE == CLEAR" (TPM 2.0 Library Part 3, Section 24.6.1) - which is every Counter Index
     /// defined under Owner Authorization - yet the phantom high-water mark tracks "the largest count of any
-    /// deleted NV Counter" (Part 1, clause 37.2.6.3 NOTE 2/NOTE 6) and never falls, so a counter redefined under
+    /// deleted NV Counter" (Part 1, clause 34.2.6.3 NOTE 2/NOTE 6) and never falls, so a counter redefined under
     /// the NEW owner still cannot restart below a value this TPM has already reported. A clear that reset the
     /// mark, or that deleted the Index without retiring its value into the mark, would let an owner change roll
     /// a counter back - the exact history rewrite the mark exists to make impossible.
@@ -769,7 +715,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     /// password arm. A wrong authValue proven over an HMAC session against a dictionary-attack-protected
     /// (<c>TPMA_NV_NO_DA</c> CLEAR) Counter Index is <c>TPM_RC_AUTH_FAIL</c>, and repeating it drives the TPM
     /// into Lockout mode exactly as the password arm does, proving <c>failedTries</c> genuinely advances on
-    /// the HMAC path (TPM 2.0 Library Part 1, clause 17.8.1, p.142; clause 17.8.3, p.143). Each per-attempt
+    /// the HMAC path (TPM 2.0 Library Part 1, clause 16.8.1, p.142; clause 16.8.3, p.143). Each per-attempt
     /// mismatch is asserted against <c>BaseError</c> rather than the raw <c>ResponseCode</c>: a genuine
     /// command-HMAC failure names the offending session, so the wire code is the format-one session-encoded
     /// form - base error + <c>TPM_RC_S</c> + <c>0x100</c> for the offending slot (TPM 2.0 Library Part 2,
@@ -815,7 +761,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     /// <summary>
     /// The HMAC arm's NO_DA contrast to the test above. A wrong authValue proven over an
     /// HMAC session against a <c>TPMA_NV_NO_DA</c> Counter Index is a plain <c>TPM_RC_BAD_AUTH</c> and never
-    /// advances the TPM-wide <c>failedTries</c> counter at all (TPM 2.0 Library Part 2, Table 233, bit 25): a
+    /// advances the TPM-wide <c>failedTries</c> counter at all (TPM 2.0 Library Part 2, Table 249, bit 25): a
     /// single wrong HMAC attempt against a SEPARATE, freshly defined DA-protected Index right afterward - with
     /// <c>maxTries</c> lowered to one - still reads a plain auth-failure rather than Lockout mode, proving the
     /// NO_DA Index's own failure above left the shared counter untouched. Both mismatches are asserted against
@@ -860,7 +806,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
 
     /// <summary>
     /// Lockout mode refuses the HMAC arm exactly as the password arm (TPM 2.0 Library
-    /// Part 1, clause 17.8.3). Once wrong PASSWORD attempts have driven the TPM into Lockout mode, a single
+    /// Part 1, clause 16.8.3). Once wrong PASSWORD attempts have driven the TPM into Lockout mode, a single
     /// HMAC-proven attempt with the CORRECT authValue is refused with <c>TPM_RC_LOCKOUT</c> too - the gate
     /// binds the DA-protected entity, not the mechanism used to present the authValue.
     /// </summary>
@@ -899,7 +845,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     /// <summary>
     /// The HMAC arm's counterpart to <see cref="NvIncrementIndexArmWithoutAuthWriteReturnsAuthUnavailable"/>:
     /// with <c>TPMA_NV_AUTHWRITE</c> clear the Index's own authValue is not an available authorization
-    /// mechanism for an increment at all (TPM 2.0 Library Part 1, clause 35.2.6.1), so
+    /// mechanism for an increment at all (TPM 2.0 Library Part 1, clause 34.2.6.1), so
     /// <c>OnNvIncrementOverSession</c>'s entry gate (TPM 2.0 Library Part 3, clause 5.6, check 7.2.2, ordered
     /// ahead of check 9's command-HMAC verification) refuses the command with a BARE
     /// <c>TPM_RC_AUTH_UNAVAILABLE</c> before the session's command HMAC is ever evaluated and before the
@@ -969,7 +915,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
 
     /// <summary>
     /// The encrypt-attributed half of the parameter-encryption fail-closed pair: the response-side companion to the decrypt test above. Part 3, clause
-    /// 31.8.2, Table 239 gives <c>TPM2_NV_Increment()</c> no response parameter either, so an
+    /// 31.8.2, Table 256 gives <c>TPM2_NV_Increment()</c> no response parameter either, so an
     /// <c>encrypt</c>-attributed session fails closed with <c>TPM_RC_ATTRIBUTES</c> the same way (Part 3, clause
     /// 5.7), proven the same hand-framed way for the same reason - see the decrypt half's remarks - alongside
     /// the DECLINED case.
@@ -1051,8 +997,8 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     /// <summary>
     /// The bound-entity half: a SALTED, BOUND HMAC session bound directly to
     /// <see cref="CounterIndexHandle"/> itself - legal for a Counter Index, unlike the outright prohibition
-    /// TPM 2.0 Library Part 1, clause 35.2.8.3 places on binding to a PIN Pass/PIN Fail Index. The Index's own
-    /// authValue already feeds the session key's KDFa (Part 1, clause 17.6.12, equation 25), so the
+    /// TPM 2.0 Library Part 1, clause 34.2.8.3 places on binding to a PIN Pass/PIN Fail Index. The Index's own
+    /// authValue already feeds the session key's KDFa (Part 1, clause 16.6.12, equation 25), so the
     /// per-command HMAC key omits the authValue term entirely when the session authorizes that SAME bound
     /// entity (equation 27, p.123) - the increment succeeds even though the composing session never calls
     /// <c>SetAuthValue</c>.
@@ -1121,7 +1067,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
 
     /// <summary>
     /// The not-bound-entity half: the companion to the test above (TPM 2.0 Library Part 1,
-    /// clause 17.6.12, equation 26, p.123). The SAME salted-and-bound session shape, but bound to the OWNER
+    /// clause 16.6.12, equation 26, p.123). The SAME salted-and-bound session shape, but bound to the OWNER
     /// hierarchy rather than to the Index being authorized. Because the entity the session authorizes (the
     /// Index) differs from the entity it is bound to (the owner), the authValue term must still be supplied
     /// explicitly via <c>SetAuthValue</c> - the increment succeeds once it is.
@@ -1298,7 +1244,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
 
     /// <summary>
     /// The SIMULATOR-side proof for the parameter-encryption fail-closed gate: hand-frames a raw <c>TPM2_NV_Increment()</c> command
-    /// authorized by a single unbound, unsalted HMAC session (TPM 2.0 Library Part 1, clause 17.6.9, equation
+    /// authorized by a single unbound, unsalted HMAC session (TPM 2.0 Library Part 1, clause 16.6.9, equation
     /// 19) whose <c>sessionAttributes</c> octet carries <paramref name="attribute"/> (<c>decrypt</c> or
     /// <c>encrypt</c>), and submits it directly to the transport - bypassing <see cref="TpmCommandExecutor"/>
     /// entirely, since its own client-side admissibility guard would refuse this exact composition before any
@@ -1537,7 +1483,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     /// Creates a simulator, powers it on, and brings it through <c>TPM2_Startup(CLEAR)</c> into the
     /// operational phase. When <paramref name="withRsaBackend"/> is set, the simulator is also wired with the
     /// ECC (BouncyCastle) and RSA (framework) signing backends a salted HMAC session's RSA <c>tpmKey</c> needs
-    /// from <c>TPM2_CreatePrimary()</c> (TPM 2.0 Library Part 1, clause 11.4.10.3).
+    /// from <c>TPM2_CreatePrimary()</c> (TPM 2.0 Library Part 1, clause 10.4.10.3).
     /// </summary>
     /// <param name="withRsaBackend">When <see langword="true"/>, wires the ECC and RSA signing backends; otherwise the simulator carries neither.</param>
     /// <returns>The operational simulator.</returns>
