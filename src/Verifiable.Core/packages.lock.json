@@ -44,14 +44,14 @@
       "verifiable.cryptography": {
         "type": "Project",
         "dependencies": {
-          "Lumoin.Base": "[0.0.9, )",
+          "Lumoin.Base": "[0.0.10, )",
           "Verifiable.Foundation": "[0.0.0, )"
         }
       },
       "verifiable.foundation": {
         "type": "Project",
         "dependencies": {
-          "Lumoin.Base": "[0.0.9, )"
+          "Lumoin.Base": "[0.0.10, )"
         }
       },
       "verifiable.jcose": {
@@ -66,9 +66,9 @@
       },
       "Lumoin.Base": {
         "type": "CentralTransitive",
-        "requested": "[0.0.9, )",
-        "resolved": "0.0.9",
-        "contentHash": "B0ItIYFv2+iDPC3eFXYzE/8662UYFE8yBTyYYZjkCgbsFCCZ4aKDLhB4sANXxTLwV0oIABhZStiuxr7ytVfScA=="
+        "requested": "[0.0.10, )",
+        "resolved": "0.0.10",
+        "contentHash": "VVbu2kcXsnW9Ia0CWpiJ/P5gUJfzwDhUgdIeVNiDbpNdasJeA/z5IHbOtxq+iAYoIra8IhEkYANi/FL7ZWSUFw=="
       },
       "Lumoin.Veridical.Core": {
         "type": "CentralTransitive",
