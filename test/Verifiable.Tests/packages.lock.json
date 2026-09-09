@@ -226,9 +226,9 @@
       },
       "System.CommandLine": {
         "type": "Direct",
-        "requested": "[2.0.11, )",
-        "resolved": "2.0.11",
-        "contentHash": "Pmg3/T0M37ZS3ovwPHtfBNTCdqNpnxo+tnZMg8JDHVR0qD8KwcPUKlheEiZysb1En8IyH7yDoa9QDq97Ny/vhQ=="
+        "requested": "[2.0.12, )",
+        "resolved": "2.0.12",
+        "contentHash": "FpW672e6qqrTd1EfKqsvUtFZaJWlTlszUR1o8tdakXhkzKbnEZVndtpfd4K3fUPCFcIs9UmcswMyYGJP1zp/rg=="
       },
       "System.Reactive": {
         "type": "Direct",
@@ -601,7 +601,7 @@
         "dependencies": {
           "ModelContextProtocol": "[2.2.0, )",
           "SimpleBase": "[5.6.4, )",
-          "System.CommandLine": "[2.0.11, )",
+          "System.CommandLine": "[2.0.12, )",
           "Verifiable.Cbor": "[0.0.0, )",
           "Verifiable.Core": "[0.0.0, )",
           "Verifiable.Fido2": "[0.0.0, )",
