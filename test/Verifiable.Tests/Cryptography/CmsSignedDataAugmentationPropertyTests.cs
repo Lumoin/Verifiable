@@ -113,6 +113,9 @@ internal sealed class CmsSignedDataAugmentationPropertyTests
         var attributes = new List<CmsAttribute>(attributeCount);
         try
         {
+            //attributes is a collection of disposables, not one disposable value: a using declaration
+            //disposes one variable's own value, not a collection's elements, so the foreach below in the
+            //finally block is the release point.
             for(int i = 0; i < attributeCount; ++i)
             {
                 attributes.Add(CmsAttribute.Create(AppendedAttributeTypes[i], WriteOctetString(valueLength + i), BaseMemoryPool.Shared));

@@ -16,7 +16,7 @@ namespace Verifiable.Tests.TestInfrastructure;
 internal sealed class FakeMetadataBlobSerialNumberStore
 {
     /// <summary>The current serial-number baseline, keyed by <see cref="TenantId.Value"/>.</summary>
-    private readonly Dictionary<string, long> serialNumbersByTenant = new(StringComparer.Ordinal);
+    private Dictionary<string, long> SerialNumbersByTenant { get; } = new(StringComparer.Ordinal);
 
     /// <summary>
     /// The <c>(tenant, serial number)</c> pairs recorded by <see cref="PersistAsync"/>, in call
@@ -34,7 +34,7 @@ internal sealed class FakeMetadataBlobSerialNumberStore
     /// </summary>
     /// <param name="tenantId">The tenant to seed.</param>
     /// <param name="serialNumber">The previously-cached serial number to report on resolve.</param>
-    public void Seed(TenantId tenantId, long serialNumber) => serialNumbersByTenant[tenantId.Value] = serialNumber;
+    public void Seed(TenantId tenantId, long serialNumber) => SerialNumbersByTenant[tenantId.Value] = serialNumber;
 
 
     /// <summary>
@@ -45,7 +45,7 @@ internal sealed class FakeMetadataBlobSerialNumberStore
     /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
     /// <returns>The seeded or previously-persisted serial number, or <see langword="null"/> when none is recorded.</returns>
     public ValueTask<long?> ResolveAsync(TenantId tenantId, CancellationToken cancellationToken) =>
-        ValueTask.FromResult<long?>(serialNumbersByTenant.TryGetValue(tenantId.Value, out long serialNumber) ? serialNumber : null);
+        ValueTask.FromResult<long?>(SerialNumbersByTenant.TryGetValue(tenantId.Value, out long serialNumber) ? serialNumber : null);
 
 
     /// <summary>
@@ -59,7 +59,7 @@ internal sealed class FakeMetadataBlobSerialNumberStore
     public ValueTask PersistAsync(TenantId tenantId, VerifiedMetadataBlobResult result, CancellationToken cancellationToken)
     {
         long serialNumber = result.Blob.Payload.No;
-        serialNumbersByTenant[tenantId.Value] = serialNumber;
+        SerialNumbersByTenant[tenantId.Value] = serialNumber;
         Persisted.Add((tenantId, serialNumber));
 
         return ValueTask.CompletedTask;

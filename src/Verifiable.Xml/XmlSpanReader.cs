@@ -43,12 +43,12 @@ public ref struct XmlSpanReader
     public const int MaximumElementDepth = 1024;
 
     /// <summary>The UTF-8 document octets being tokenized.</summary>
-    private readonly ReadOnlySpan<byte> document;
+    private ReadOnlySpan<byte> Document { get; }
 
     /// <summary>The offset added to every reported byte position.</summary>
-    private readonly long baseByteOffset;
+    private long BaseByteOffset { get; }
 
-    /// <summary>The current position in <see cref="document"/>.</summary>
+    /// <summary>The current position in <see cref="Document"/>.</summary>
     private int position;
 
     /// <summary>The current element nesting depth.</summary>
@@ -96,15 +96,15 @@ public ref struct XmlSpanReader
     /// <param name="baseByteOffset">The offset added to every reported byte position.</param>
     public XmlSpanReader(ReadOnlySpan<byte> utf8Document, long baseByteOffset)
     {
-        document = utf8Document;
-        this.baseByteOffset = baseByteOffset;
+        Document = utf8Document;
+        this.BaseByteOffset = baseByteOffset;
     }
 
 
     /// <summary>
     /// The current read position in the coordinate space the reader was constructed with.
     /// </summary>
-    public readonly long BytePosition => baseByteOffset + position;
+    public readonly long BytePosition => BaseByteOffset + position;
 
     /// <summary>
     /// The current element nesting depth.
@@ -127,13 +127,13 @@ public ref struct XmlSpanReader
     /// </summary>
     public readonly ReadOnlySpan<byte> DeclaredEncoding => declaredEncodingLength == 0
         ? default
-        : document.Slice(declaredEncodingPosition, declaredEncodingLength);
+        : Document.Slice(declaredEncodingPosition, declaredEncodingLength);
 
     /// <summary>
     /// The byte offset of the declared encoding name, in the coordinate space the reader was constructed
     /// with.
     /// </summary>
-    public readonly long DeclaredEncodingByteOffset => baseByteOffset + declaredEncodingPosition;
+    public readonly long DeclaredEncodingByteOffset => BaseByteOffset + declaredEncodingPosition;
 
 
     /// <summary>
@@ -157,7 +157,7 @@ public ref struct XmlSpanReader
             return TryReadInsideStartTag(out token);
         }
 
-        if(position >= document.Length)
+        if(position >= Document.Length)
         {
             if(depth > 0 || !hasClosedRootElement)
             {
@@ -169,7 +169,7 @@ public ref struct XmlSpanReader
             return false;
         }
 
-        if(document[position] == (byte)'<')
+        if(Document[position] == (byte)'<')
         {
             return TryReadMarkup(out token);
         }
@@ -187,7 +187,7 @@ public ref struct XmlSpanReader
     private bool Refuse(XmlReadFailure failure, int refusalPosition)
     {
         hasFailed = true;
-        error = new XmlReadError(failure, baseByteOffset + refusalPosition);
+        error = new XmlReadError(failure, BaseByteOffset + refusalPosition);
 
         return false;
     }
@@ -205,15 +205,15 @@ public ref struct XmlSpanReader
     {
         token = default;
         int start = position;
-        while(position < document.Length)
+        while(position < Document.Length)
         {
-            byte current = document[position];
+            byte current = Document[position];
             if(current == (byte)'<')
             {
                 break;
             }
 
-            if(current == (byte)']' && document[position..].StartsWith("]]>"u8))
+            if(current == (byte)']' && Document[position..].StartsWith("]]>"u8))
             {
                 return Refuse(XmlReadFailure.MalformedMarkup, position);
             }
@@ -221,7 +221,7 @@ public ref struct XmlSpanReader
             position++;
         }
 
-        token = new XmlToken(XmlTokenKind.Text, default, document[start..position], baseByteOffset + start, baseByteOffset + start);
+        token = new XmlToken(XmlTokenKind.Text, default, Document[start..position], BaseByteOffset + start, BaseByteOffset + start);
 
         return true;
     }
@@ -238,7 +238,7 @@ public ref struct XmlSpanReader
     {
         token = default;
         int start = position;
-        while(position < document.Length && XmlCharacters.IsWhitespace(document[position]))
+        while(position < Document.Length && XmlCharacters.IsWhitespace(Document[position]))
         {
             position++;
         }
@@ -248,7 +248,7 @@ public ref struct XmlSpanReader
             return Refuse(XmlReadFailure.MalformedMarkup, position);
         }
 
-        token = new XmlToken(XmlTokenKind.WhitespaceOutsideRoot, default, document[start..position], baseByteOffset + start, baseByteOffset + start);
+        token = new XmlToken(XmlTokenKind.WhitespaceOutsideRoot, default, Document[start..position], BaseByteOffset + start, BaseByteOffset + start);
 
         return true;
     }
@@ -263,12 +263,12 @@ public ref struct XmlSpanReader
     {
         token = default;
         int markupStart = position;
-        if(position + 1 >= document.Length)
+        if(position + 1 >= Document.Length)
         {
-            return Refuse(XmlReadFailure.UnexpectedEndOfDocument, document.Length);
+            return Refuse(XmlReadFailure.UnexpectedEndOfDocument, Document.Length);
         }
 
-        byte discriminator = document[position + 1];
+        byte discriminator = Document[position + 1];
 
         return discriminator switch
         {
@@ -302,17 +302,17 @@ public ref struct XmlSpanReader
             return false;
         }
 
-        while(position < document.Length && XmlCharacters.IsWhitespace(document[position]))
+        while(position < Document.Length && XmlCharacters.IsWhitespace(Document[position]))
         {
             position++;
         }
 
-        if(position >= document.Length)
+        if(position >= Document.Length)
         {
-            return Refuse(XmlReadFailure.UnexpectedEndOfDocument, document.Length);
+            return Refuse(XmlReadFailure.UnexpectedEndOfDocument, Document.Length);
         }
 
-        if(document[position] != (byte)'>')
+        if(Document[position] != (byte)'>')
         {
             return Refuse(XmlReadFailure.MalformedMarkup, position);
         }
@@ -324,7 +324,7 @@ public ref struct XmlSpanReader
             hasClosedRootElement = true;
         }
 
-        token = new XmlToken(XmlTokenKind.ElementEnd, document.Slice(nameStart, nameLength), default, baseByteOffset + markupStart, baseByteOffset + markupStart);
+        token = new XmlToken(XmlTokenKind.ElementEnd, Document.Slice(nameStart, nameLength), default, BaseByteOffset + markupStart, BaseByteOffset + markupStart);
 
         return true;
     }
@@ -340,7 +340,7 @@ public ref struct XmlSpanReader
     private bool TryReadBangMarkup(int markupStart, out XmlToken token)
     {
         token = default;
-        ReadOnlySpan<byte> rest = document[markupStart..];
+        ReadOnlySpan<byte> rest = Document[markupStart..];
         if(rest.StartsWith("<!--"u8))
         {
             return TryReadComment(markupStart, out token);
@@ -364,7 +364,7 @@ public ref struct XmlSpanReader
         bool isTruncatedCandidate = "<!--"u8.StartsWith(rest) || "<![CDATA["u8.StartsWith(rest) || "<!DOCTYPE"u8.StartsWith(rest);
         if(isTruncatedCandidate)
         {
-            return Refuse(XmlReadFailure.UnexpectedEndOfDocument, document.Length);
+            return Refuse(XmlReadFailure.UnexpectedEndOfDocument, Document.Length);
         }
 
         return Refuse(XmlReadFailure.MalformedMarkup, markupStart);
@@ -387,19 +387,19 @@ public ref struct XmlSpanReader
         int i = contentStart;
         while(true)
         {
-            if(i + 1 >= document.Length)
+            if(i + 1 >= Document.Length)
             {
-                return Refuse(XmlReadFailure.UnexpectedEndOfDocument, document.Length);
+                return Refuse(XmlReadFailure.UnexpectedEndOfDocument, Document.Length);
             }
 
-            if(document[i] == (byte)'-' && document[i + 1] == (byte)'-')
+            if(Document[i] == (byte)'-' && Document[i + 1] == (byte)'-')
             {
-                if(i + 2 >= document.Length)
+                if(i + 2 >= Document.Length)
                 {
-                    return Refuse(XmlReadFailure.UnexpectedEndOfDocument, document.Length);
+                    return Refuse(XmlReadFailure.UnexpectedEndOfDocument, Document.Length);
                 }
 
-                if(document[i + 2] != (byte)'>')
+                if(Document[i + 2] != (byte)'>')
                 {
                     return Refuse(XmlReadFailure.MalformedMarkup, i);
                 }
@@ -410,7 +410,7 @@ public ref struct XmlSpanReader
             i++;
         }
 
-        token = new XmlToken(XmlTokenKind.Comment, default, document[contentStart..i], baseByteOffset + markupStart, baseByteOffset + contentStart);
+        token = new XmlToken(XmlTokenKind.Comment, default, Document[contentStart..i], BaseByteOffset + markupStart, BaseByteOffset + contentStart);
         position = i + 3;
 
         return true;
@@ -428,13 +428,13 @@ public ref struct XmlSpanReader
     {
         token = default;
         int contentStart = markupStart + 9;
-        int endIndex = document[contentStart..].IndexOf("]]>"u8);
+        int endIndex = Document[contentStart..].IndexOf("]]>"u8);
         if(endIndex < 0)
         {
-            return Refuse(XmlReadFailure.UnexpectedEndOfDocument, document.Length);
+            return Refuse(XmlReadFailure.UnexpectedEndOfDocument, Document.Length);
         }
 
-        token = new XmlToken(XmlTokenKind.CDataSection, default, document.Slice(contentStart, endIndex), baseByteOffset + markupStart, baseByteOffset + contentStart);
+        token = new XmlToken(XmlTokenKind.CDataSection, default, Document.Slice(contentStart, endIndex), BaseByteOffset + markupStart, BaseByteOffset + contentStart);
         position = contentStart + endIndex + 3;
 
         return true;
@@ -457,9 +457,9 @@ public ref struct XmlSpanReader
     {
         token = default;
         bool isDeclarationPosition = markupStart == 0
-            && document.Length >= 6
-            && document[..5].SequenceEqual("<?xml"u8)
-            && (XmlCharacters.IsWhitespace(document[5]) || document[5] == (byte)'?');
+            && Document.Length >= 6
+            && Document[..5].SequenceEqual("<?xml"u8)
+            && (XmlCharacters.IsWhitespace(Document[5]) || Document[5] == (byte)'?');
         if(isDeclarationPosition)
         {
             return TryReadXmlDeclaration(out token);
@@ -472,45 +472,45 @@ public ref struct XmlSpanReader
         }
 
         bool isReservedTarget = targetLength == 3
-            && (document[targetStart] is (byte)'x' or (byte)'X')
-            && (document[targetStart + 1] is (byte)'m' or (byte)'M')
-            && (document[targetStart + 2] is (byte)'l' or (byte)'L');
+            && (Document[targetStart] is (byte)'x' or (byte)'X')
+            && (Document[targetStart + 1] is (byte)'m' or (byte)'M')
+            && (Document[targetStart + 2] is (byte)'l' or (byte)'L');
         if(isReservedTarget)
         {
             return Refuse(XmlReadFailure.InvalidName, targetStart);
         }
 
-        if(position >= document.Length)
+        if(position >= Document.Length)
         {
-            return Refuse(XmlReadFailure.UnexpectedEndOfDocument, document.Length);
+            return Refuse(XmlReadFailure.UnexpectedEndOfDocument, Document.Length);
         }
 
-        if(document[position..].StartsWith("?>"u8))
+        if(Document[position..].StartsWith("?>"u8))
         {
-            token = new XmlToken(XmlTokenKind.ProcessingInstruction, document.Slice(targetStart, targetLength), default, baseByteOffset + markupStart, baseByteOffset + position);
+            token = new XmlToken(XmlTokenKind.ProcessingInstruction, Document.Slice(targetStart, targetLength), default, BaseByteOffset + markupStart, BaseByteOffset + position);
             position += 2;
 
             return true;
         }
 
-        if(!XmlCharacters.IsWhitespace(document[position]))
+        if(!XmlCharacters.IsWhitespace(Document[position]))
         {
             return Refuse(XmlReadFailure.MalformedMarkup, position);
         }
 
-        while(position < document.Length && XmlCharacters.IsWhitespace(document[position]))
+        while(position < Document.Length && XmlCharacters.IsWhitespace(Document[position]))
         {
             position++;
         }
 
         int dataStart = position;
-        int endIndex = document[dataStart..].IndexOf("?>"u8);
+        int endIndex = Document[dataStart..].IndexOf("?>"u8);
         if(endIndex < 0)
         {
-            return Refuse(XmlReadFailure.UnexpectedEndOfDocument, document.Length);
+            return Refuse(XmlReadFailure.UnexpectedEndOfDocument, Document.Length);
         }
 
-        token = new XmlToken(XmlTokenKind.ProcessingInstruction, document.Slice(targetStart, targetLength), document.Slice(dataStart, endIndex), baseByteOffset + markupStart, baseByteOffset + dataStart);
+        token = new XmlToken(XmlTokenKind.ProcessingInstruction, Document.Slice(targetStart, targetLength), Document.Slice(dataStart, endIndex), BaseByteOffset + markupStart, BaseByteOffset + dataStart);
         position = dataStart + endIndex + 2;
 
         return true;
@@ -542,7 +542,7 @@ public ref struct XmlSpanReader
 
         if(!TryMatchLiteral("version"u8) || !TrySkipEq())
         {
-            return hasFailed ? false : Refuse(XmlReadFailure.MalformedMarkup, position);
+            return !hasFailed && Refuse(XmlReadFailure.MalformedMarkup, position);
         }
 
         if(!TryReadQuotedVersionNumber())
@@ -555,7 +555,7 @@ public ref struct XmlSpanReader
             return false;
         }
 
-        if(document[position..].StartsWith("?>"u8))
+        if(Document[position..].StartsWith("?>"u8))
         {
             return CompleteXmlDeclaration(contentStart, out token);
         }
@@ -569,7 +569,7 @@ public ref struct XmlSpanReader
         {
             if(!TryMatchLiteral("encoding"u8) || !TrySkipEq() || !TryReadQuotedEncodingName())
             {
-                return hasFailed ? false : Refuse(XmlReadFailure.MalformedMarkup, position);
+                return !hasFailed && Refuse(XmlReadFailure.MalformedMarkup, position);
             }
 
             if(!TrySkipDeclarationWhitespace(out int whitespaceAfterEncoding))
@@ -577,7 +577,7 @@ public ref struct XmlSpanReader
                 return false;
             }
 
-            if(document[position..].StartsWith("?>"u8))
+            if(Document[position..].StartsWith("?>"u8))
             {
                 return CompleteXmlDeclaration(contentStart, out token);
             }
@@ -590,7 +590,7 @@ public ref struct XmlSpanReader
 
         if(!TryMatchLiteral("standalone"u8) || !TrySkipEq() || !TryReadQuotedStandaloneValue())
         {
-            return hasFailed ? false : Refuse(XmlReadFailure.MalformedMarkup, position);
+            return !hasFailed && Refuse(XmlReadFailure.MalformedMarkup, position);
         }
 
         if(!TrySkipDeclarationWhitespace(out _))
@@ -598,7 +598,7 @@ public ref struct XmlSpanReader
             return false;
         }
 
-        if(!document[position..].StartsWith("?>"u8))
+        if(!Document[position..].StartsWith("?>"u8))
         {
             return Refuse(XmlReadFailure.MalformedMarkup, position);
         }
@@ -615,7 +615,7 @@ public ref struct XmlSpanReader
     /// <returns>Always <see langword="true"/>.</returns>
     private bool CompleteXmlDeclaration(int contentStart, out XmlToken token)
     {
-        token = new XmlToken(XmlTokenKind.XmlDeclaration, default, document[contentStart..position], baseByteOffset, baseByteOffset + contentStart);
+        token = new XmlToken(XmlTokenKind.XmlDeclaration, default, Document[contentStart..position], BaseByteOffset, BaseByteOffset + contentStart);
         position += 2;
 
         return true;
@@ -631,15 +631,15 @@ public ref struct XmlSpanReader
     private bool TrySkipDeclarationWhitespace(out int skippedCount)
     {
         skippedCount = 0;
-        while(position < document.Length && XmlCharacters.IsWhitespace(document[position]))
+        while(position < Document.Length && XmlCharacters.IsWhitespace(Document[position]))
         {
             position++;
             skippedCount++;
         }
 
-        if(position >= document.Length)
+        if(position >= Document.Length)
         {
-            return Refuse(XmlReadFailure.UnexpectedEndOfDocument, document.Length);
+            return Refuse(XmlReadFailure.UnexpectedEndOfDocument, Document.Length);
         }
 
         return true;
@@ -653,7 +653,7 @@ public ref struct XmlSpanReader
     /// <returns><see langword="true"/> when the literal is next.</returns>
     private readonly bool TryPeekLiteral(ReadOnlySpan<byte> literal)
     {
-        return document[position..].StartsWith(literal);
+        return Document[position..].StartsWith(literal);
     }
 
 
@@ -664,7 +664,7 @@ public ref struct XmlSpanReader
     /// <returns><see langword="false"/> when the literal is not next; no refusal is recorded.</returns>
     private bool TryMatchLiteral(ReadOnlySpan<byte> literal)
     {
-        if(!document[position..].StartsWith(literal))
+        if(!Document[position..].StartsWith(literal))
         {
             return false;
         }
@@ -682,18 +682,18 @@ public ref struct XmlSpanReader
     /// <returns><see langword="false"/> when there is no equals sign; no refusal is recorded.</returns>
     private bool TrySkipEq()
     {
-        while(position < document.Length && XmlCharacters.IsWhitespace(document[position]))
+        while(position < Document.Length && XmlCharacters.IsWhitespace(Document[position]))
         {
             position++;
         }
 
-        if(position >= document.Length || document[position] != (byte)'=')
+        if(position >= Document.Length || Document[position] != (byte)'=')
         {
             return false;
         }
 
         position++;
-        while(position < document.Length && XmlCharacters.IsWhitespace(document[position]))
+        while(position < Document.Length && XmlCharacters.IsWhitespace(Document[position]))
         {
             position++;
         }
@@ -715,19 +715,19 @@ public ref struct XmlSpanReader
             return false;
         }
 
-        if(position + 1 >= document.Length)
+        if(position + 1 >= Document.Length)
         {
-            return Refuse(XmlReadFailure.UnexpectedEndOfDocument, document.Length);
+            return Refuse(XmlReadFailure.UnexpectedEndOfDocument, Document.Length);
         }
 
-        if(document[position] != (byte)'1' || document[position + 1] != (byte)'.')
+        if(Document[position] != (byte)'1' || Document[position + 1] != (byte)'.')
         {
             return Refuse(XmlReadFailure.MalformedMarkup, position);
         }
 
         position += 2;
         int digitCount = 0;
-        while(position < document.Length && document[position] >= (byte)'0' && document[position] <= (byte)'9')
+        while(position < Document.Length && Document[position] >= (byte)'0' && Document[position] <= (byte)'9')
         {
             position++;
             digitCount++;
@@ -757,9 +757,9 @@ public ref struct XmlSpanReader
         }
 
         int nameStart = position;
-        while(position < document.Length)
+        while(position < Document.Length)
         {
-            byte current = document[position];
+            byte current = Document[position];
             bool isFirst = position == nameStart;
             bool isLetter = (current >= (byte)'A' && current <= (byte)'Z') || (current >= (byte)'a' && current <= (byte)'z');
             bool isFollowCharacter = isLetter
@@ -815,12 +815,12 @@ public ref struct XmlSpanReader
     private bool TryReadQuoteCharacter(out byte quote)
     {
         quote = 0;
-        if(position >= document.Length)
+        if(position >= Document.Length)
         {
-            return Refuse(XmlReadFailure.UnexpectedEndOfDocument, document.Length);
+            return Refuse(XmlReadFailure.UnexpectedEndOfDocument, Document.Length);
         }
 
-        quote = document[position];
+        quote = Document[position];
         if(quote != (byte)'"' && quote != (byte)'\'')
         {
             return Refuse(XmlReadFailure.MalformedMarkup, position);
@@ -839,12 +839,12 @@ public ref struct XmlSpanReader
     /// <returns><see langword="false"/> on refusal.</returns>
     private bool TryReadClosingQuote(byte quote)
     {
-        if(position >= document.Length)
+        if(position >= Document.Length)
         {
-            return Refuse(XmlReadFailure.UnexpectedEndOfDocument, document.Length);
+            return Refuse(XmlReadFailure.UnexpectedEndOfDocument, Document.Length);
         }
 
-        if(document[position] != quote)
+        if(Document[position] != quote)
         {
             return Refuse(XmlReadFailure.MalformedMarkup, position);
         }
@@ -880,7 +880,7 @@ public ref struct XmlSpanReader
 
         isInsideStartTag = true;
         currentStartTagPosition = markupStart;
-        token = new XmlToken(XmlTokenKind.ElementStart, document.Slice(nameStart, nameLength), default, baseByteOffset + markupStart, baseByteOffset + markupStart);
+        token = new XmlToken(XmlTokenKind.ElementStart, Document.Slice(nameStart, nameLength), default, BaseByteOffset + markupStart, BaseByteOffset + markupStart);
 
         return true;
     }
@@ -900,18 +900,18 @@ public ref struct XmlSpanReader
     {
         token = default;
         int whitespaceCount = 0;
-        while(position < document.Length && XmlCharacters.IsWhitespace(document[position]))
+        while(position < Document.Length && XmlCharacters.IsWhitespace(Document[position]))
         {
             position++;
             whitespaceCount++;
         }
 
-        if(position >= document.Length)
+        if(position >= Document.Length)
         {
-            return Refuse(XmlReadFailure.UnexpectedEndOfDocument, document.Length);
+            return Refuse(XmlReadFailure.UnexpectedEndOfDocument, Document.Length);
         }
 
-        byte current = document[position];
+        byte current = Document[position];
         if(current == (byte)'>')
         {
             if(depth == MaximumElementDepth)
@@ -923,19 +923,19 @@ public ref struct XmlSpanReader
             position++;
             depth++;
             isInsideStartTag = false;
-            token = new XmlToken(XmlTokenKind.ElementStartClose, default, default, baseByteOffset + closePosition, baseByteOffset + closePosition);
+            token = new XmlToken(XmlTokenKind.ElementStartClose, default, default, BaseByteOffset + closePosition, BaseByteOffset + closePosition);
 
             return true;
         }
 
         if(current == (byte)'/')
         {
-            if(position + 1 >= document.Length)
+            if(position + 1 >= Document.Length)
             {
-                return Refuse(XmlReadFailure.UnexpectedEndOfDocument, document.Length);
+                return Refuse(XmlReadFailure.UnexpectedEndOfDocument, Document.Length);
             }
 
-            if(document[position + 1] != (byte)'>')
+            if(Document[position + 1] != (byte)'>')
             {
                 return Refuse(XmlReadFailure.MalformedMarkup, position + 1);
             }
@@ -948,7 +948,7 @@ public ref struct XmlSpanReader
                 hasClosedRootElement = true;
             }
 
-            token = new XmlToken(XmlTokenKind.ElementEmptyClose, default, default, baseByteOffset + closePosition, baseByteOffset + closePosition);
+            token = new XmlToken(XmlTokenKind.ElementEmptyClose, default, default, BaseByteOffset + closePosition, BaseByteOffset + closePosition);
 
             return true;
         }
@@ -966,8 +966,8 @@ public ref struct XmlSpanReader
 
         if(!TrySkipEq())
         {
-            return position >= document.Length
-                ? Refuse(XmlReadFailure.UnexpectedEndOfDocument, document.Length)
+            return position >= Document.Length
+                ? Refuse(XmlReadFailure.UnexpectedEndOfDocument, Document.Length)
                 : Refuse(XmlReadFailure.MalformedMarkup, position);
         }
 
@@ -979,12 +979,12 @@ public ref struct XmlSpanReader
         int valueStart = position;
         while(true)
         {
-            if(position >= document.Length)
+            if(position >= Document.Length)
             {
-                return Refuse(XmlReadFailure.UnexpectedEndOfDocument, document.Length);
+                return Refuse(XmlReadFailure.UnexpectedEndOfDocument, Document.Length);
             }
 
-            byte valueOctet = document[position];
+            byte valueOctet = Document[position];
             if(valueOctet == quote)
             {
                 break;
@@ -998,7 +998,7 @@ public ref struct XmlSpanReader
             position++;
         }
 
-        token = new XmlToken(XmlTokenKind.Attribute, document.Slice(nameStart, nameLength), document[valueStart..position], baseByteOffset + attributeStart, baseByteOffset + valueStart);
+        token = new XmlToken(XmlTokenKind.Attribute, Document.Slice(nameStart, nameLength), Document[valueStart..position], BaseByteOffset + attributeStart, BaseByteOffset + valueStart);
         position++;
 
         return true;
@@ -1023,9 +1023,9 @@ public ref struct XmlSpanReader
         nameLength = 0;
         bool isExpectingStartCharacter = true;
         bool hasSeenColon = false;
-        while(position < document.Length)
+        while(position < Document.Length)
         {
-            byte octet = document[position];
+            byte octet = Document[position];
             if(octet == (byte)':')
             {
                 if(!isColonAllowed || hasSeenColon || isExpectingStartCharacter)
@@ -1039,7 +1039,7 @@ public ref struct XmlSpanReader
                 continue;
             }
 
-            OperationStatus status = Rune.DecodeFromUtf8(document[position..], out Rune rune, out int consumed);
+            OperationStatus status = Rune.DecodeFromUtf8(Document[position..], out Rune rune, out int consumed);
             if(status != OperationStatus.Done)
             {
                 return Refuse(XmlReadFailure.IllFormedUtf8, position);
@@ -1064,8 +1064,8 @@ public ref struct XmlSpanReader
 
         if(isExpectingStartCharacter)
         {
-            return position >= document.Length
-                ? Refuse(XmlReadFailure.UnexpectedEndOfDocument, document.Length)
+            return position >= Document.Length
+                ? Refuse(XmlReadFailure.UnexpectedEndOfDocument, Document.Length)
                 : Refuse(XmlReadFailure.InvalidName, position);
         }
 

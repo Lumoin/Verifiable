@@ -18,7 +18,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// session the match check is skipped and the digest is set unconditionally.
 /// </para>
 /// <para>
-/// Command structure (TPM 2.0 Part 3, Section 23.6):
+/// Command structure (TPM 2.0 Library Part 3, clause 23.6):
 /// </para>
 /// <list type="bullet">
 ///   <item><description>policySession (TPMI_SH_POLICY): The policy session handle (command handle, no authorization).</description></item>
@@ -31,6 +31,15 @@ public sealed class PolicyOrInput: ITpmCommandInput
 
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_PolicyOR;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <c>policySession</c> carries Auth Index None (TPM 2.0 Library Part 3, clause 23.6.2, Table 150) — the
+    /// first session in an authorization area over this command is a companion, never an authorizer, so a
+    /// decrypt or encrypt session's own <c>nonceTPM</c> never folds into session 0's command HMAC (TPM 2.0
+    /// Library Part 1, clause 16.6.5).
+    /// </remarks>
+    public bool IsFirstHandleAuthorized => false;
 
     /// <summary>
     /// Gets the policy session handle the assertion is applied to.

@@ -1,10 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.IO;
 using System.Linq;
-using System.Reflection;
-using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 using Verifiable.Cryptography.Pki;
+using Verifiable.Tests.Foundation;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.EuEArk;
@@ -143,12 +144,11 @@ internal sealed class PreservationMessageTests
     [DataRow(nameof(SearchResponse), "Result", DisplayName = "clause 5.3.9.2")]
     public void EachMessageObligesTheMembersItsOwnClauseMakesMandatory(string typeName, string expectedRequiredMembers)
     {
-        Type messageType = typeof(PreservationMessage).Assembly.GetTypes().Single(type => type.Name == typeName);
         string[] expected = expectedRequiredMembers.Length == 0
             ? []
             : [.. expectedRequiredMembers.Split(',').OrderBy(member => member, StringComparer.Ordinal)];
 
-        Assert.AreSequenceEqual(expected, RequiredMembersOf(messageType), typeName);
+        Assert.AreSequenceEqual(expected, RequiredMembersOf(typeName), typeName);
     }
 
 
@@ -163,11 +163,11 @@ internal sealed class PreservationMessageTests
     [TestMethod]
     public void TheEvidenceComponentMakesTheFormatIdentifierMandatoryAndTheObjectComponentDoesNot()
     {
-        Assert.Contains("FormatId", RequiredMembersOf(typeof(PreservationEvidence)));
-        Assert.DoesNotContain("FormatId", RequiredMembersOf(typeof(PreservationObject)));
+        Assert.Contains("FormatId", RequiredMembersOf(nameof(PreservationEvidence)));
+        Assert.DoesNotContain("FormatId", RequiredMembersOf(nameof(PreservationObject)));
 
-        Assert.AreSequenceEqual(EvidenceRequiredMembers, RequiredMembersOf(typeof(PreservationEvidence)));
-        Assert.AreSequenceEqual(ObjectRequiredMembers, RequiredMembersOf(typeof(PreservationObject)));
+        Assert.AreSequenceEqual(EvidenceRequiredMembers, RequiredMembersOf(nameof(PreservationEvidence)));
+        Assert.AreSequenceEqual(ObjectRequiredMembers, RequiredMembersOf(nameof(PreservationObject)));
     }
 
 
@@ -184,14 +184,14 @@ internal sealed class PreservationMessageTests
     [TestMethod]
     public void ADeltaIsAPreservationObjectUnderAnotherElementName()
     {
-        PropertyInfo deltas = typeof(UpdatePreservationObjectContainerRequest).GetProperty(nameof(UpdatePreservationObjectContainerRequest.DeltaContainers))!;
-        Assert.AreEqual(typeof(IReadOnlyList<PreservationObject>), deltas.PropertyType);
+        string deltasType = PropertyTypeOf(nameof(UpdatePreservationObjectContainerRequest), nameof(UpdatePreservationObjectContainerRequest.DeltaContainers));
+        Assert.AreEqual("IReadOnlyList<PreservationObject>", deltasType);
 
-        PropertyInfo submitted = typeof(PreservePreservationObjectRequest).GetProperty(nameof(PreservePreservationObjectRequest.PreservationObjects))!;
-        Assert.AreEqual(deltas.PropertyType, submitted.PropertyType, "The same component carries both.");
+        string submittedType = PropertyTypeOf(nameof(PreservePreservationObjectRequest), nameof(PreservePreservationObjectRequest.PreservationObjects));
+        Assert.AreEqual(deltasType, submittedType, "The same component carries both.");
 
-        PropertyInfo report = typeof(ValidateEvidenceResponse).GetProperty(nameof(ValidateEvidenceResponse.ValidationReport))!;
-        Assert.AreEqual(typeof(PreservationObject), report.PropertyType, "A validation report is carried as a preservation object too.");
+        string reportType = PropertyTypeOf(nameof(ValidateEvidenceResponse), nameof(ValidateEvidenceResponse.ValidationReport));
+        Assert.AreEqual("PreservationObject", reportType, "A validation report is carried as a preservation object too.");
     }
 
 
@@ -203,21 +203,13 @@ internal sealed class PreservationMessageTests
     [TestMethod]
     public void TheDeletionResponseIsTheOnlyMessageWithNoPayloadOfItsOwn()
     {
-        static IReadOnlyList<string> OwnMembers(Type type) =>
-        [
-            .. type.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
-                .Select(property => property.Name)
-                .Where(name => name is not (nameof(PreservationMessage.Kind) or nameof(PreservationMessage.OperationName)))
-                .OrderBy(name => name, StringComparer.Ordinal)
-        ];
-
-        Assert.IsEmpty(OwnMembers(typeof(DeletePreservationObjectResponse)));
+        Assert.IsEmpty(OwnPropertiesOf(nameof(DeletePreservationObjectResponse)));
 
         foreach(PreservationMessage message in EveryMessage())
         {
             if(message.Kind != PreservationMessageKind.DeletePreservationObjectResponse)
             {
-                Assert.IsNotEmpty(OwnMembers(message.GetType()), $"{message.Kind} states members of its own.");
+                Assert.IsNotEmpty(OwnPropertiesOf(message.GetType().Name), $"{message.Kind} states members of its own.");
             }
 
             message.Dispose();
@@ -231,7 +223,10 @@ internal sealed class PreservationMessageTests
     /// </summary>
     /// <remarks>
     /// Proves <see href="https://www.etsi.org/deliver/etsi_ts/119500_119599/119512/01.02.01_60/ts_119512v010201p.pdf">
-    /// ETSI TS 119 512 V1.2.1</see> 512-5.4.7.1-13.
+    /// ETSI TS 119 512 V1.2.1</see> 512-5.4.7.1-13. Each fixture (<c>request</c>, <c>response</c>,
+    /// <c>validation</c>) is disposed explicitly, not via a <c>using</c> declaration, because the
+    /// <see cref="MeteredHousePool.OutstandingCount"/> assertion immediately after each dispose call must see
+    /// the carriers already returned; a <c>using</c> declaration would defer that release to the method's end.
     /// </remarks>
     [TestMethod]
     public void DisposingAMessageReturnsEveryCarrierItOwns()
@@ -336,24 +331,115 @@ internal sealed class PreservationMessageTests
     }
 
 
-    /// <summary>The members a type obliges a caller to state, in ordinal order.</summary>
-    /// <param name="type">The type to read.</param>
-    /// <returns>The names of the required members, including those the base types declare.</returns>
-    private static IReadOnlyList<string> RequiredMembersOf(Type type)
+    /// <summary>The repository-relative path declaring the sixteen message types and their two base components.</summary>
+    private const string PreservationMessagesPath = "src/Verifiable.Cryptography/Pki/PreservationMessages.cs";
+
+    /// <summary>The repository-relative path declaring <see cref="PreservationObject"/> and <see cref="PreservationEvidence"/>.</summary>
+    private const string PreservationComponentsPath = "src/Verifiable.Cryptography/Pki/PreservationComponents.cs";
+
+    /// <summary>Matches a top-level <c>public sealed class</c> or <c>public sealed record</c> declaration and the base-type list following its colon, if any.</summary>
+    private static Regex ClassOrRecordDeclarationPattern { get; } = new(
+        @"(?m)^public sealed (?:class|record) (\w+)(?:\s*:\s*([^\r\n{]+))?",
+        RegexOptions.Compiled);
+
+    /// <summary>Matches a public instance property declaration (block- or expression-bodied), capturing its type and name.</summary>
+    private static Regex PropertyDeclarationPattern { get; } = new(
+        @"public\s+(?:required\s+)?(?:override\s+)?([\w<>\[\],\.\?]+)\s+(\w+)\s*(?:\{|=>)",
+        RegexOptions.Compiled);
+
+    /// <summary>Matches a public <see langword="required"/> instance property declaration, capturing its name.</summary>
+    private static Regex RequiredPropertyDeclarationPattern { get; } = new(
+        @"public\s+required\s+[\w<>\[\],\.\?]+\s+(\w+)\s*(?:\{|=>)",
+        RegexOptions.Compiled);
+
+    /// <summary>
+    /// Every message and component type's own declaration span (its base-type list and its body text, up to
+    /// the next top-level class/record declaration or end of file), keyed by type name, read from the two
+    /// declaring files — a source scan standing in for reflection over the loaded types.
+    /// </summary>
+    private static Dictionary<string, (string BaseTypes, string Body)> MessageAndComponentClassSpans { get; } = BuildClassSpans();
+
+
+    /// <summary>Builds <see cref="MessageAndComponentClassSpans"/> from the two declaring files.</summary>
+    /// <returns>Every declared type's base-type list and body text, keyed by type name.</returns>
+    private static Dictionary<string, (string BaseTypes, string Body)> BuildClassSpans()
     {
-        List<string> required = [];
-        for(Type? current = type; current is not null; current = current.BaseType)
+        string repositoryRoot = SourceHygieneScanner.FindRepositoryRoot();
+        Dictionary<string, (string BaseTypes, string Body)> spans = SpansOf(File.ReadAllText(Path.Combine(repositoryRoot, PreservationMessagesPath)));
+        foreach((string name, (string baseTypes, string body)) in SpansOf(File.ReadAllText(Path.Combine(repositoryRoot, PreservationComponentsPath))))
         {
-            foreach(PropertyInfo property in current.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
-            {
-                if(property.GetCustomAttribute<RequiredMemberAttribute>() is not null)
-                {
-                    required.Add(property.Name);
-                }
-            }
+            spans[name] = (baseTypes, body);
         }
 
-        return [.. required.Distinct(StringComparer.Ordinal).OrderBy(name => name, StringComparer.Ordinal)];
+        return spans;
+
+
+        static Dictionary<string, (string BaseTypes, string Body)> SpansOf(string text)
+        {
+            List<(int Index, string Name, string BaseTypes)> declarations =
+            [
+                .. ClassOrRecordDeclarationPattern.Matches(text)
+                    .Select(static m => (m.Index, Name: m.Groups[1].Value, BaseTypes: m.Groups[2].Success ? m.Groups[2].Value : string.Empty))
+            ];
+
+            Dictionary<string, (string BaseTypes, string Body)> result = [];
+            for(int i = 0; i < declarations.Count; ++i)
+            {
+                int start = declarations[i].Index;
+                int end = i + 1 < declarations.Count ? declarations[i + 1].Index : text.Length;
+                result[declarations[i].Name] = (declarations[i].BaseTypes, text[start..end]);
+            }
+
+            return result;
+        }
+    }
+
+
+    /// <summary>The members a type obliges a caller to state, in ordinal order — read from its own declaring
+    /// file rather than by reflection over the loaded type: every <see langword="required"/> property this
+    /// type's own span declares, plus <c>Result</c> when the type extends <see cref="PreservationResponse"/>,
+    /// the one required member that base component declares.</summary>
+    /// <param name="typeName">The type to read.</param>
+    /// <returns>The names of the required members, including the one the response base type declares.</returns>
+    private static IReadOnlyList<string> RequiredMembersOf(string typeName)
+    {
+        (string baseTypes, string body) = MessageAndComponentClassSpans[typeName];
+        List<string> required = [.. RequiredPropertyDeclarationPattern.Matches(body).Select(static m => m.Groups[1].Value)];
+
+        if(baseTypes.Contains(nameof(PreservationResponse), StringComparison.Ordinal))
+        {
+            required.Add(nameof(PreservationResponse.Result));
+        }
+
+        return [.. required.Distinct(StringComparer.Ordinal).OrderBy(static name => name, StringComparer.Ordinal)];
+    }
+
+
+    /// <summary>The type text a property declares, from its own declaring type's span, with a trailing nullable-reference <c>?</c> stripped.</summary>
+    /// <param name="typeName">The declaring type.</param>
+    /// <param name="propertyName">The property to read.</param>
+    /// <returns>The declared type text.</returns>
+    private static string PropertyTypeOf(string typeName, string propertyName)
+    {
+        (_, string body) = MessageAndComponentClassSpans[typeName];
+        Match match = PropertyDeclarationPattern.Matches(body).Single(m => m.Groups[2].Value == propertyName);
+
+        return match.Groups[1].Value.TrimEnd('?');
+    }
+
+
+    /// <summary>The properties a type's own span declares, excluding the base <see cref="PreservationMessage.Kind"/>/<see cref="PreservationMessage.OperationName"/> overrides every message restates.</summary>
+    /// <param name="typeName">The type to read.</param>
+    /// <returns>The type's own declared property names, in ordinal order.</returns>
+    private static IReadOnlyList<string> OwnPropertiesOf(string typeName)
+    {
+        (_, string body) = MessageAndComponentClassSpans[typeName];
+
+        return [.. PropertyDeclarationPattern.Matches(body)
+            .Select(static m => m.Groups[2].Value)
+            .Where(static name => name is not (nameof(PreservationMessage.Kind) or nameof(PreservationMessage.OperationName)))
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(static name => name, StringComparer.Ordinal)];
     }
 
 

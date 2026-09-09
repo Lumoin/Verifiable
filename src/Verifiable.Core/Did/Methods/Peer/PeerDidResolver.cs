@@ -222,7 +222,7 @@ public static class PeerDidResolver
 
         DidDocument document = new()
         {
-            Context = new Context { Contexts = [Context.DidCore10, Context.Multikey10] },
+            Context = Context.FromIris(Context.DidCore10, Context.Multikey10),
             Id = new PeerDidMethod(did)
         };
 
@@ -315,7 +315,7 @@ public static class PeerDidResolver
         KeyFormat keyFormat;
         using(PublicKeyMemory publicKey = new(decoded.keyMaterial, publicKeyTag))
         {
-            keyFormat = MultikeyVerificationMethodTypeInfo.Instance.CreateKeyFormat(publicKey);
+            keyFormat = MultikeyVerificationMethodTypeInfo.Instance.CreateKeyFormat(publicKey, pool);
         }
 
         string referenceId = $"#key-{keyIndex}";

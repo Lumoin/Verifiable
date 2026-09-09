@@ -38,11 +38,14 @@ internal sealed class MeteredHousePool: IDisposable
     /// <summary>The listener reading the pool's counters.</summary>
     private MeterListener Listener { get; }
 
-    /// <summary>The gate serializing access to <see cref="rentedBySize"/>.</summary>
-    private Lock SizeGate { get; } = new();
+    /// <summary>
+    /// The gate serializing access to <see cref="RentedBySize"/>. A field, not a property: a lock
+    /// target must be one instance that no accessor can re-mint.
+    /// </summary>
+    private readonly Lock sizeGate = new();
 
     /// <summary>How many carriers have been rented, per requested size.</summary>
-    private readonly Dictionary<int, long> rentedBySize = [];
+    private Dictionary<int, long> RentedBySize { get; } = [];
 
     /// <summary>How many carriers have been rented in total.</summary>
     private long rentedCount;
@@ -97,9 +100,9 @@ internal sealed class MeteredHousePool: IDisposable
     /// <returns>The rent count for that size.</returns>
     public long RentedCountOfSize(int size)
     {
-        lock(SizeGate)
+        lock(sizeGate)
         {
-            return rentedBySize.TryGetValue(size, out long count) ? count : 0;
+            return RentedBySize.TryGetValue(size, out long count) ? count : 0;
         }
     }
 
@@ -127,9 +130,9 @@ internal sealed class MeteredHousePool: IDisposable
             {
                 if(string.Equals(tag.Key, BufferSizeTagName, StringComparison.Ordinal) && tag.Value is int size)
                 {
-                    lock(SizeGate)
+                    lock(sizeGate)
                     {
-                        rentedBySize[size] = rentedBySize.TryGetValue(size, out long count) ? count + value : value;
+                        RentedBySize[size] = RentedBySize.TryGetValue(size, out long count) ? count + value : value;
                     }
 
                     break;

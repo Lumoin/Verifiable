@@ -1,8 +1,10 @@
 using System;
+using System.Buffers;
 using System.Collections.Generic;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
+using System.IO;
 using System.Linq;
-using System.Reflection;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Cbor;
@@ -10,6 +12,7 @@ using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Foundation;
 using Verifiable.JCose;
+using Verifiable.Tests.Foundation;
 
 namespace Verifiable.Tests.JCose;
 
@@ -46,6 +49,9 @@ internal sealed class CBAdESUnsignedHeadersTests
 {
     /// <summary>The MSTest context, carrying the cancellation token the one asynchronous test observes.</summary>
     public TestContext TestContext { get; set; } = null!;
+
+    /// <summary>The repository-relative path declaring <see cref="CBAdESUnsignedHeaders"/>.</summary>
+    private const string CBAdESUnsignedHeadersPath = "src/Verifiable.Cryptography/Pki/CBAdESUnsignedHeaders.cs";
 
 
     /// <summary>
@@ -192,32 +198,32 @@ internal sealed class CBAdESUnsignedHeadersTests
     /// CB-5.3.1-03 ("New unsigned attributes shall always be added at the end") is enforced by API shape,
     /// not a runtime flag: <see cref="CBAdESUnsignedHeaders.Append"/> must remain the sole growth operation,
     /// and the public surface must never expose an insert-at/remove/reorder/sort member that could
-    /// reintroduce a reordering hazard. Checked by reflection over the declared public instance-method
-    /// surface, so a future edit that adds such a member fails this test rather than silently reopening the
-    /// hazard.
+    /// reintroduce a reordering hazard. Checked as a source scan of the declaring file's own public
+    /// instance-method declaration lines, so a future edit that adds such a member fails this test rather
+    /// than silently reopening the hazard — with no reflection over the loaded type.
     /// </summary>
     [TestMethod]
     public void PublicSurfaceExposesNoInsertRemoveOrReorderOperation()
     {
         string[] disallowedNameFragments = ["Insert", "Remove", "Sort", "Reverse", "Clear", "Reorder", "Replace", "SetItem", "Move"];
+        string text = File.ReadAllText(Path.Combine(SourceHygieneScanner.FindRepositoryRoot(), CBAdESUnsignedHeadersPath));
+        MatchCollection publicInstanceMethodDeclarations = Regex.Matches(
+            text, @"(?m)^\s*public\s+(?!static\b)[\w<>\[\],\.\?]+\s+(\w+)\s*\(");
 
-        MethodInfo[] publicInstanceMethods = typeof(CBAdESUnsignedHeaders)
-            .GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
-            .Where(method => !method.IsSpecialName)
-            .ToArray();
+        string[] publicInstanceMethodNames = [.. publicInstanceMethodDeclarations.Select(static m => m.Groups[1].Value)];
 
-        foreach(MethodInfo method in publicInstanceMethods)
+        foreach(string methodName in publicInstanceMethodNames)
         {
             foreach(string fragment in disallowedNameFragments)
             {
                 Assert.IsFalse(
-                    method.Name.Contains(fragment, StringComparison.OrdinalIgnoreCase),
-                    $"Public method '{method.Name}' looks like it could insert, remove, or reorder elements, " +
+                    methodName.Contains(fragment, StringComparison.OrdinalIgnoreCase),
+                    $"Public method '{methodName}' looks like it could insert, remove, or reorder elements, " +
                     "which would break the CB-5.3.1-03 append-only invariant.");
             }
         }
 
-        Assert.Contains("Append", publicInstanceMethods.Select(method => method.Name).ToArray(), "Append must remain the sole growth operation.");
+        Assert.Contains("Append", publicInstanceMethodNames, "Append must remain the sole growth operation.");
     }
 
 
@@ -311,11 +317,12 @@ internal sealed class CBAdESUnsignedHeadersTests
     [TestMethod]
     public void TryParseUnsignedHeadersFailsClosedOnEmptyArray()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartArray(0);
         writer.WriteEndArray();
 
-        bool parsed = CBAdESSerialization.TryParseUnsignedHeaders(writer.Encode(), BaseMemoryPool.Shared, out CBAdESUnsignedHeaders? result);
+        bool parsed = CBAdESSerialization.TryParseUnsignedHeaders(writerBuffer.WrittenSpan.ToArray(), BaseMemoryPool.Shared, out CBAdESUnsignedHeaders? result);
 
         Assert.IsFalse(parsed, "An empty 'uHeaders' array violates CB-5.3.1-07's non-empty-array requirement and must fail closed.");
         Assert.IsNull(result);
@@ -327,12 +334,13 @@ internal sealed class CBAdESUnsignedHeadersTests
     [TestMethod]
     public void TryParseUnsignedHeadersFailsClosedOnElementNotByteString()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartArray(1);
         writer.WriteInt32(42); //Not a bstr -- CB-5.3.1-04 requires every element encapsulated in a CBOR byte string.
         writer.WriteEndArray();
 
-        bool parsed = CBAdESSerialization.TryParseUnsignedHeaders(writer.Encode(), BaseMemoryPool.Shared, out CBAdESUnsignedHeaders? result);
+        bool parsed = CBAdESSerialization.TryParseUnsignedHeaders(writerBuffer.WrittenSpan.ToArray(), BaseMemoryPool.Shared, out CBAdESUnsignedHeaders? result);
 
         Assert.IsFalse(parsed, "A non-bstr array element violates CB-5.3.1-04 and must fail closed.");
         Assert.IsNull(result);
@@ -347,7 +355,8 @@ internal sealed class CBAdESUnsignedHeadersTests
     [TestMethod]
     public void TryParseUnsignedHeadersFailsClosedOnElementWrappingTwoEntryMap()
     {
-        var innerWriter = new CborWriter(CborConformanceMode.Canonical);
+        var innerWriterBuffer = new ArrayBufferWriter<byte>();
+        var innerWriter = new CborWriter(innerWriterBuffer, CborOptions.RfcCanonical);
         innerWriter.WriteStartMap(2);
         innerWriter.WriteInt32(1);
         innerWriter.WriteInt32(0);
@@ -355,12 +364,13 @@ internal sealed class CBAdESUnsignedHeadersTests
         innerWriter.WriteInt32(0);
         innerWriter.WriteEndMap();
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartArray(1);
-        writer.WriteByteString(innerWriter.Encode());
+        writer.WriteByteString(innerWriterBuffer.WrittenSpan.ToArray());
         writer.WriteEndArray();
 
-        bool parsed = CBAdESSerialization.TryParseUnsignedHeaders(writer.Encode(), BaseMemoryPool.Shared, out CBAdESUnsignedHeaders? result);
+        bool parsed = CBAdESSerialization.TryParseUnsignedHeaders(writerBuffer.WrittenSpan.ToArray(), BaseMemoryPool.Shared, out CBAdESUnsignedHeaders? result);
 
         Assert.IsFalse(parsed, "A UHeaderInstance bstr wrapping a two-entry map violates the one-entry-map shape and must fail closed.");
         Assert.IsNull(result);
@@ -469,12 +479,13 @@ internal sealed class CBAdESUnsignedHeadersTests
     [TestMethod]
     public void TryParseUnsignedHeadersFailsClosedOnIndefiniteLengthArray()
     {
-        var writer = new CborWriter(CborConformanceMode.Lax);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Lax);
         writer.WriteStartArray(null);
         writer.WriteByteString(EncodeTstContainerElement(1, [0x01]));
         writer.WriteEndArray();
 
-        bool parsed = CBAdESSerialization.TryParseUnsignedHeaders(writer.Encode(), BaseMemoryPool.Shared, out CBAdESUnsignedHeaders? result);
+        bool parsed = CBAdESSerialization.TryParseUnsignedHeaders(writerBuffer.WrittenSpan.ToArray(), BaseMemoryPool.Shared, out CBAdESUnsignedHeaders? result);
 
         Assert.IsFalse(parsed, "An indefinite-length uHeaders array must be rejected under canonical-mode parsing.");
         Assert.IsNull(result);
@@ -690,7 +701,8 @@ internal sealed class CBAdESUnsignedHeadersTests
         string unknownTextLabel,
         string unknownTextValue)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartArray(10);
 
         writer.WriteByteString(EncodeTstContainerElement(1, sigTstVal)); //sigTst_l = 1 (Table 8).
@@ -705,7 +717,7 @@ internal sealed class CBAdESUnsignedHeadersTests
         writer.WriteByteString(EncodeUnknownTextElement(unknownTextLabel, unknownTextValue)); //*label => value catch-all, tstr arm.
 
         writer.WriteEndArray();
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -714,11 +726,12 @@ internal sealed class CBAdESUnsignedHeadersTests
     /// <returns>The encoded one-element <c>uHeaders</c> array.</returns>
     private static byte[] BuildSingleElementUnsignedHeadersBytes(byte[] elementContentBytes)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartArray(1);
         writer.WriteByteString(elementContentBytes);
         writer.WriteEndArray();
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -733,7 +746,8 @@ internal sealed class CBAdESUnsignedHeadersTests
     /// <returns>The encoded <c>UHeaderInstance</c> map bytes.</returns>
     private static byte[] EncodeTstContainerElement(int label, byte[] tokenVal)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(label);
         writer.WriteStartMap(1);
@@ -746,7 +760,7 @@ internal sealed class CBAdESUnsignedHeadersTests
         writer.WriteEndArray();
         writer.WriteEndMap();
         writer.WriteEndMap();
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -758,7 +772,8 @@ internal sealed class CBAdESUnsignedHeadersTests
     /// <returns>The encoded <c>UHeaderInstance</c> map bytes.</returns>
     private static byte[] EncodeValDataElement(byte[] certBytes)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(2); //valData_l (Table 8).
         writer.WriteStartMap(1);
@@ -774,7 +789,7 @@ internal sealed class CBAdESUnsignedHeadersTests
         writer.WriteEndArray();
         writer.WriteEndMap();
         writer.WriteEndMap();
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -787,7 +802,8 @@ internal sealed class CBAdESUnsignedHeadersTests
     /// <returns>The encoded <c>UHeaderInstance</c> map bytes.</returns>
     private static byte[] EncodeRefsElement(int hashAlg, byte[] digestBytes)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(4); //refs_l (Table 8).
         writer.WriteStartMap(1);
@@ -803,7 +819,7 @@ internal sealed class CBAdESUnsignedHeadersTests
         writer.WriteEndArray();
         writer.WriteEndMap();
         writer.WriteEndMap();
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -815,7 +831,8 @@ internal sealed class CBAdESUnsignedHeadersTests
     /// <returns>The encoded <c>UHeaderInstance</c> map bytes.</returns>
     private static byte[] EncodeSigPStElement(byte[] docBytes)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(7); //sigPSt_l (Table 8).
         writer.WriteStartMap(1);
@@ -826,7 +843,7 @@ internal sealed class CBAdESUnsignedHeadersTests
         writer.WriteEndMap();
         writer.WriteEndMap();
         writer.WriteEndMap();
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -838,12 +855,13 @@ internal sealed class CBAdESUnsignedHeadersTests
     /// <returns>The encoded <c>UHeaderInstance</c> map bytes.</returns>
     private static byte[] EncodeX5ChainElement(byte[] certBytes)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(33); //x5chain arm (clause 5.3.1 CDDL; IETF RFC 9360 section 2).
         writer.WriteByteString(certBytes);
         writer.WriteEndMap();
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -856,9 +874,10 @@ internal sealed class CBAdESUnsignedHeadersTests
     /// <returns>The encoded value-only bytes.</returns>
     private static byte[] EncodeX5ChainOpaqueValue(byte[] certBytes)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteByteString(certBytes);
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -870,12 +889,13 @@ internal sealed class CBAdESUnsignedHeadersTests
     /// <returns>The encoded <c>UHeaderInstance</c> map bytes.</returns>
     private static byte[] EncodeFullCounterSignatureElement(byte[] counterSignatureValueBytes)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(11); //Full-counter-signature arm (clause 5.3.1 CDDL; IETF RFC 9338).
         writer.WriteEncodedValue(counterSignatureValueBytes);
         writer.WriteEndMap();
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -887,12 +907,13 @@ internal sealed class CBAdESUnsignedHeadersTests
     /// <returns>The encoded <c>UHeaderInstance</c> map bytes.</returns>
     private static byte[] EncodeAbbreviatedCounterSignatureElement(byte[] abbreviatedValueBytes)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(12); //Abbreviated-counter-signature arm (clause 5.3.1 CDDL; IETF RFC 9338).
         writer.WriteEncodedValue(abbreviatedValueBytes);
         writer.WriteEndMap();
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -906,14 +927,15 @@ internal sealed class CBAdESUnsignedHeadersTests
     /// <returns>The encoded value-only bytes (no enclosing <c>{11 =&gt; ...}</c> map).</returns>
     private static byte[] EncodeSingleCounterSignatureValue(byte[] protectedHeaderBytes, byte[] signatureBytes)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartArray(3);
         writer.WriteByteString(protectedHeaderBytes);
         writer.WriteStartMap(0);
         writer.WriteEndMap();
         writer.WriteByteString(signatureBytes);
         writer.WriteEndArray();
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -922,9 +944,10 @@ internal sealed class CBAdESUnsignedHeadersTests
     /// <returns>The encoded value-only bytes.</returns>
     private static byte[] EncodeBareByteString(byte[] bytes)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteByteString(bytes);
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -933,9 +956,10 @@ internal sealed class CBAdESUnsignedHeadersTests
     /// <returns>The encoded value-only bytes.</returns>
     private static byte[] EncodeIntValue(int value)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteInt32(value);
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -944,9 +968,10 @@ internal sealed class CBAdESUnsignedHeadersTests
     /// <returns>The encoded value-only bytes.</returns>
     private static byte[] EncodeTextValue(string value)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteTextString(value);
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -959,12 +984,13 @@ internal sealed class CBAdESUnsignedHeadersTests
     /// <returns>The encoded <c>UHeaderInstance</c> map bytes.</returns>
     private static byte[] EncodeUnknownIntElement(int label, int value)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(label);
         writer.WriteInt32(value);
         writer.WriteEndMap();
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -977,12 +1003,13 @@ internal sealed class CBAdESUnsignedHeadersTests
     /// <returns>The encoded <c>UHeaderInstance</c> map bytes.</returns>
     private static byte[] EncodeUnknownTextElement(string label, string value)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteTextString(label);
         writer.WriteTextString(value);
         writer.WriteEndMap();
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -996,7 +1023,8 @@ internal sealed class CBAdESUnsignedHeadersTests
     /// <returns>The encoded bytes.</returns>
     private static byte[] BuildDeeplyNestedArrayBytes(int depth)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         for(int i = 0; i < depth; i++)
         {
             writer.WriteStartArray(1);
@@ -1009,6 +1037,6 @@ internal sealed class CBAdESUnsignedHeadersTests
             writer.WriteEndArray();
         }
 
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 }

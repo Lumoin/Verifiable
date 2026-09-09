@@ -19,7 +19,8 @@ public sealed class TrustedAuthoritiesQueryConverter: JsonConverter<TrustedAutho
     {
         if(reader.TokenType != JsonTokenType.StartObject)
         {
-            JsonThrowHelper.ThrowJsonException();
+            JsonThrowHelper.ThrowJsonException(
+                $"Each 'trusted_authorities' entry must be a JSON object (OpenID for Verifiable Presentations 1.0, Section 6.1.1); got {reader.TokenType}.");
         }
 
         string? type = null;
@@ -44,12 +45,18 @@ public sealed class TrustedAuthoritiesQueryConverter: JsonConverter<TrustedAutho
             {
                 case var name when DcqlParameterNames.IsType(name):
                 {
+                    if(reader.TokenType != JsonTokenType.String)
+                    {
+                        throw new JsonException(
+                            "The 'type' property must be a string (OpenID for Verifiable Presentations 1.0, Section 6.1.1).");
+                    }
+
                     type = reader.GetString();
                     break;
                 }
                 case var name when DcqlParameterNames.IsValues(name):
                 {
-                    values = ReadStringArray(ref reader);
+                    values = ReadStringArray(ref reader, "values");
                     break;
                 }
                 default:
@@ -62,13 +69,26 @@ public sealed class TrustedAuthoritiesQueryConverter: JsonConverter<TrustedAutho
 
         if(type is null)
         {
-            throw new JsonException("The 'type' property is required.");
+            throw new JsonException(
+                "The 'type' property is required (OpenID for Verifiable Presentations 1.0, Section 6.1.1).");
+        }
+
+        if(values is null)
+        {
+            throw new JsonException(
+                "The 'values' property is required (OpenID for Verifiable Presentations 1.0, Section 6.1.1).");
+        }
+
+        if(values.Count == 0)
+        {
+            throw new JsonException(
+                "The 'values' property must be a non-empty array of strings (OpenID for Verifiable Presentations 1.0, Section 6.1.1).");
         }
 
         return new TrustedAuthoritiesQuery
         {
             Type = type,
-            Values = values ?? []
+            Values = values
         };
     }
 
@@ -98,11 +118,14 @@ public sealed class TrustedAuthoritiesQueryConverter: JsonConverter<TrustedAutho
     /// <summary>
     /// Reads a JSON array of strings manually without calling into <see cref="JsonSerializer"/>.
     /// </summary>
-    private static List<string> ReadStringArray(ref Utf8JsonReader reader)
+    /// <param name="reader">The reader, positioned at the array's start token.</param>
+    /// <param name="propertyName">The property name, for the exception message when an element is not a string.</param>
+    private static List<string> ReadStringArray(ref Utf8JsonReader reader, string propertyName)
     {
         if(reader.TokenType != JsonTokenType.StartArray)
         {
-            throw new JsonException("Expected StartArray for string array.");
+            throw new JsonException(
+                $"The '{propertyName}' property must be an array of strings (OpenID for Verifiable Presentations 1.0, Section 6.1.1); got {reader.TokenType}.");
         }
 
         var list = new List<string>();
@@ -115,7 +138,8 @@ public sealed class TrustedAuthoritiesQueryConverter: JsonConverter<TrustedAutho
 
             if(reader.TokenType != JsonTokenType.String)
             {
-                throw new JsonException($"Expected String but got {reader.TokenType}.");
+                throw new JsonException(
+                    $"Every element of the '{propertyName}' property must be a string (OpenID for Verifiable Presentations 1.0, Section 6.1.1); got {reader.TokenType}.");
             }
 
             list.Add(reader.GetString()!);

@@ -230,7 +230,8 @@ internal sealed class Fido2RsaPaddingAndEs256KTests
             AllowCrossOrigin = false,
             UserVerification = UserVerificationRequirement.Required,
             StoredSignCount = 0,
-            StoredUvInitialized = true
+            StoredUvInitialized = true,
+            ExtensionProcessingPool = BaseMemoryPool.Shared
         };
 
         return await Fido2AssertionVerifier.VerifyAsync(

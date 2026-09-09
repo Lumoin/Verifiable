@@ -41,7 +41,7 @@ namespace Verifiable.Core.Did.Methods.Peer
         public PeerDidMethod(string didString): base(didString)
         {
             ArgumentNullException.ThrowIfNull(didString);
-            if(!didString.StartsWith(Prefix, StringComparison.InvariantCulture))
+            if(!didString.StartsWith(Prefix, StringComparison.Ordinal))
             {
                 throw new ArgumentException($"The DID string must start with '{Prefix}'.", nameof(didString));
             }

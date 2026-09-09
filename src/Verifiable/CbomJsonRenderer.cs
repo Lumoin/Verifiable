@@ -67,11 +67,9 @@ internal static class CbomJsonRenderer
 
         static int RewriteObjectArm(JsonObject obj)
         {
-            if(obj.ContainsKey("bomRef"))
+            if(obj.Remove("bomRef", out JsonNode? removed))
             {
-                JsonNode? value = obj["bomRef"]?.DeepClone();
-                obj.Remove("bomRef");
-                obj["bom-ref"] = value;
+                obj["bom-ref"] = removed;
             }
 
             foreach(var property in obj)

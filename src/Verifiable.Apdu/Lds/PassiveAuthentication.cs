@@ -180,6 +180,9 @@ public static class PassiveAuthentication
 
         (DigestValue digest, _) = await computeDigest(
             new System.Buffers.ReadOnlySequence<byte>(dataGroup), length, tag, pool, null, cancellationToken).ConfigureAwait(false);
+
+        //Not a using declaration: digest comes out of a tuple deconstruction, a shape the using
+        //declaration syntax does not accept; the try/finally disposes it exactly once on every exit path.
         try
         {
             return CryptographicOperations.FixedTimeEquals(digest.AsReadOnlySpan(), expected.AsReadOnlySpan());

@@ -15,8 +15,8 @@ namespace Verifiable.Tests.StatusList;
 internal sealed class BitstringStatusListValidationTests
 {
     private const int Example4Index = 94567;
-    private static readonly DateTimeOffset Now = StatusListTestConstants.BitstringValidationReferenceTime;
-    private static readonly string[] RevocationPurposes = [BitstringStatusListConstants.RevocationPurpose];
+    private static DateTimeOffset Now { get; } = StatusListTestConstants.BitstringValidationReferenceTime;
+    private static string[] RevocationPurposes { get; } = [BitstringStatusListConstants.RevocationPurpose];
 
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 

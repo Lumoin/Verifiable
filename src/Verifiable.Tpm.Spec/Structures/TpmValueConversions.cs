@@ -57,7 +57,7 @@ public static class TpmValueConversions
     /// to decode the handle type and format an appropriate description.
     /// </para>
     /// <para>
-    /// Specification reference: TPM 2.0 Library Part 2, section 7.4.
+    /// Specification reference: TPM 2.0 Library Part 2, clause 7.4.
     /// </para>
     /// </remarks>
     /// <param name="handle">The TPM handle.</param>
@@ -140,7 +140,7 @@ public static class TpmValueConversions
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Used for properties like TPM_PT_YEAR and TPM_PT_DAY_OF_YEAR
+    /// Used for properties like TPM_PT_YEAR and, before Version 185, TPM_PT_DAY_OF_YEAR (now TPM_PT_ERRATA)
     /// combined into a single value.
     /// </para>
     /// </remarks>

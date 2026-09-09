@@ -1,5 +1,5 @@
 using System.Buffers;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Core.Model.Mdoc;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -46,22 +46,37 @@ namespace Verifiable.Cbor.Mdoc;
 public static class MdocCborDeviceResponseReader
 {
     /// <summary>
-    /// Reads a complete <c>DeviceResponse</c> from the supplied CBOR bytes.
+    /// Reads a complete <c>DeviceResponse</c> from the supplied CBOR bytes. This is the seam-boundary
+    /// method: <see cref="Core.Model.Mdoc.ParseMdocDeviceResponseDelegate"/> — the OID4VP verifier's mdoc
+    /// parse seam — documents its implementations as throwing <see cref="FormatException"/> for a
+    /// wire-shape rejection, so every malformed-CBOR rejection this method's own CBOR reading produces
+    /// is normalized to <see cref="FormatException"/> here, at the public boundary, rather than left to
+    /// a caller who cannot name <see cref="CborException"/> (the project's CBOR-leaf layering rule
+    /// bans the <c>Lumoin.Veritas.Cbor</c> namespace outside this project).
     /// </summary>
     /// <param name="encodedDeviceResponse">The CBOR-encoded DeviceResponse map bytes.</param>
     /// <param name="pool">Memory pool the owned carriers rent from. Caller owns the returned response and must dispose it.</param>
     /// <returns>The parsed, owned <see cref="MdocParsedDeviceResponse"/>.</returns>
-    /// <exception cref="CborContentException">
-    /// Thrown when the bytes do not satisfy the ISO/IEC 18013-5 §8.3.2.1
-    /// DeviceResponse wire shape or a required field is missing.
+    /// <exception cref="FormatException">
+    /// Thrown when the bytes do not satisfy the ISO/IEC 18013-5 §8.3.2.1 DeviceResponse wire shape or a
+    /// required field is missing (the <see cref="CborException"/> or <see cref="InvalidOperationException"/>
+    /// the CBOR reader raises for a malformed encoding rides as the <see cref="Exception.InnerException"/>).
     /// </exception>
     public static MdocParsedDeviceResponse Read(ReadOnlySpan<byte> encodedDeviceResponse, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
-        var reader = new CborReader(encodedDeviceResponse.ToArray(), CborConformanceMode.Lax);
+        var reader = new CborReader(encodedDeviceResponse.ToArray(), CborOptions.Lax, pool);
 
-        return ReadDeviceResponse(reader, pool);
+        try
+        {
+            return ReadDeviceResponse(reader, pool);
+        }
+        catch(Exception exception) when(exception is CborException or InvalidOperationException)
+        {
+            throw new FormatException(
+                "The DeviceResponse does not satisfy the ISO/IEC 18013-5 §8.3.2.1 wire shape.", exception);
+        }
     }
 
 
@@ -376,7 +391,7 @@ public static class MdocCborDeviceResponseReader
         //so the verifier MUST hash the same byte pattern the issuer committed to.
         EncodedCborItem wrapper = EncodedCborItem.Read(reader);
 
-        var inner = new CborReader(wrapper.InnerBytes.ToArray(), CborConformanceMode.Lax);
+        var inner = new CborReader(wrapper.InnerBytes.ToArray(), CborOptions.Lax, pool);
         int? entryCount = inner.ReadStartMap();
 
         uint? digestId = null;
@@ -590,9 +605,9 @@ public static class MdocCborDeviceResponseReader
     /// </summary>
     private static MdocDeviceNameSpaces ReadDeviceNameSpaces(ReadOnlyMemory<byte> encodedDeviceNameSpacesBytes)
     {
-        EncodedCborItem wrapper = EncodedCborItem.Read(new CborReader(encodedDeviceNameSpacesBytes, CborConformanceMode.Lax));
+        EncodedCborItem wrapper = EncodedCborItem.Read(new CborReader(encodedDeviceNameSpacesBytes, CborOptions.Lax));
 
-        var inner = new CborReader(wrapper.InnerBytes.ToArray(), CborConformanceMode.Lax);
+        var inner = new CborReader(wrapper.InnerBytes.ToArray(), CborOptions.Lax);
         int? namespaceCount = inner.ReadStartMap();
         Dictionary<string, IReadOnlyDictionary<string, ReadOnlyMemory<byte>>> entries = new(StringComparer.Ordinal);
 

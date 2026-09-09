@@ -19,7 +19,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// There are no parameters and no response parameters. This command is authorized, so it is sent with
 /// <c>TPM_ST_SESSIONS</c>. See
 /// <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-/// Specification</see>, Part 3, Section 31.8 (Table 222/223).
+/// Specification</see>, Part 3, clause 31.8 (Table 255/256).
 /// </para>
 /// </remarks>
 /// <param name="AuthHandle">The authorization handle (the Index itself for Index authorization, or the owner hierarchy).</param>

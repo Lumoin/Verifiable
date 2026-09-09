@@ -30,14 +30,14 @@ internal sealed class SiopSelfIssuedIdTokenValidationTests
     private const string ClientId = "https://verifier.example.org/cb";
     private const string RequestNonce = "n-0S6_WzA2Mj";
 
-    private static readonly string[] AllowedAlgorithms = [WellKnownJwaValues.Es256];
+    private static string[] AllowedAlgorithms { get; } = [WellKnownJwaValues.Es256];
 
-    private static readonly JwtHeaderSerializer HeaderSerializer =
+    private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)header,
             TestSetup.DefaultSerializationOptions);
 
-    private static readonly JwtPayloadSerializer PayloadSerializer =
+    private static JwtPayloadSerializer PayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)payload,
             TestSetup.DefaultSerializationOptions);

@@ -24,23 +24,41 @@ namespace Verifiable.Tests.Cryptography
             using var decodedVector1Owner = MultibaseSerializer.Decode(Vector1, codecHeaderLength: 2, TestSetup.Base58Decoder, BaseMemoryPool.Shared);
             var decodedVector1 = decodedVector1Owner.Memory.Span;
 
-            var multibaseEncodedPublicKey = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.Ed25519PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder);
-            var reEncodedVector1 = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.Ed25519PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder);
+            var reEncodedVector1 = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.Ed25519PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder, BaseMemoryPool.Shared);
             Assert.AreEqual(Vector1, reEncodedVector1);
 
             using var decodedVector2Owner = MultibaseSerializer.Decode(Vector2, codecHeaderLength: 2, TestSetup.Base58Decoder, BaseMemoryPool.Shared);
             var decodedVector2 = decodedVector2Owner.Memory.Span;
-            var reEncodedVector2 = MultibaseSerializer.Encode(decodedVector2, MulticodecHeaders.Ed25519PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder);
+            var reEncodedVector2 = MultibaseSerializer.Encode(decodedVector2, MulticodecHeaders.Ed25519PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder, BaseMemoryPool.Shared);
             Assert.AreEqual(Vector2, reEncodedVector2);
 
             using var decodedVector3Owner = MultibaseSerializer.Decode(Vector3, codecHeaderLength: 2, TestSetup.Base58Decoder, BaseMemoryPool.Shared);
             var decodedVector3 = decodedVector3Owner.Memory.Span;
-            var reEncodedVector3 = MultibaseSerializer.Encode(decodedVector3, MulticodecHeaders.Ed25519PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder);
+            var reEncodedVector3 = MultibaseSerializer.Encode(decodedVector3, MulticodecHeaders.Ed25519PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder, BaseMemoryPool.Shared);
             Assert.AreEqual(Vector3, reEncodedVector3);
 
             //A sanity check, some (in practice 'any') other vector type should not work.
-            var reEncodedVector1WithWrongHeader = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.P256PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder);
+            var reEncodedVector1WithWrongHeader = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.P256PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder, BaseMemoryPool.Shared);
             Assert.AreNotEqual(Vector1, reEncodedVector1WithWrongHeader);
+        }
+
+
+        /// <summary>
+        /// The <see href="https://w3c-ccg.github.io/did-method-key/#ed25519-x25519">did:key Ed25519</see>
+        /// multicodec header identifies the key type that follows it, so the header match must be
+        /// exact: a soft hyphen (U+00AD, a Unicode default-ignorable code point) inserted into the
+        /// encoded material produces a byte-different string that a culture-aware comparison could
+        /// still treat as starting with the header;
+        /// <see cref="Base58BtcEncodedMulticodecHeaders.MatchesHeader"/> must reject it.
+        /// </summary>
+        [TestMethod]
+        public void MatchesHeaderRejectsMaterialWithIgnorableCodePointInHeaderPosition()
+        {
+            const string Vector1 = "z6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp";
+            string tamperedVector1 = Vector1.InsertIgnorableCodePointAt(2);
+
+            Assert.IsTrue(Base58BtcEncodedMulticodecHeaders.MatchesHeader(Vector1, Base58BtcEncodedMulticodecHeaders.Ed25519PublicKey));
+            Assert.IsFalse(Base58BtcEncodedMulticodecHeaders.MatchesHeader(tamperedVector1, Base58BtcEncodedMulticodecHeaders.Ed25519PublicKey));
         }
 
 
@@ -57,22 +75,21 @@ namespace Verifiable.Tests.Cryptography
             using var decodedVector1Owner = MultibaseSerializer.Decode(Vector1, codecHeaderLength: 2, TestSetup.Base58Decoder, BaseMemoryPool.Shared);
             var decodedVector1 = decodedVector1Owner.Memory.Span;
 
-            var multibaseEncodedPublicKey = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.X25519PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder);
-            var reEncodedVector1 = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.X25519PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder);
+            var reEncodedVector1 = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.X25519PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder, BaseMemoryPool.Shared);
             Assert.AreEqual(Vector1, reEncodedVector1);
 
             using var decodedVector2Owner = MultibaseSerializer.Decode(Vector2, codecHeaderLength: 2, TestSetup.Base58Decoder, BaseMemoryPool.Shared);
             var decodedVector2 = decodedVector2Owner.Memory.Span;
-            var reEncodedVector2 = MultibaseSerializer.Encode(decodedVector2, MulticodecHeaders.X25519PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder);
+            var reEncodedVector2 = MultibaseSerializer.Encode(decodedVector2, MulticodecHeaders.X25519PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder, BaseMemoryPool.Shared);
             Assert.AreEqual(Vector2, reEncodedVector2);
 
             using var decodedVector3Owner = MultibaseSerializer.Decode(Vector3, codecHeaderLength: 2, TestSetup.Base58Decoder, BaseMemoryPool.Shared);
             var decodedVector3 = decodedVector3Owner.Memory.Span;
-            var reEncodedVector3 = MultibaseSerializer.Encode(decodedVector3, MulticodecHeaders.X25519PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder);
+            var reEncodedVector3 = MultibaseSerializer.Encode(decodedVector3, MulticodecHeaders.X25519PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder, BaseMemoryPool.Shared);
             Assert.AreEqual(Vector3, reEncodedVector3);
 
             //A sanity check, some (in practice 'any') other vector type should not work.
-            var reEncodedVector1WithWrongHeader = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.P256PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder);
+            var reEncodedVector1WithWrongHeader = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.P256PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder, BaseMemoryPool.Shared);
             Assert.AreNotEqual(Vector1, reEncodedVector1WithWrongHeader);
         }
 
@@ -90,22 +107,21 @@ namespace Verifiable.Tests.Cryptography
             using var decodedVector1Owner = MultibaseSerializer.Decode(Vector1, codecHeaderLength: 2, TestSetup.Base58Decoder, BaseMemoryPool.Shared);
             var decodedVector1 = decodedVector1Owner.Memory.Span;
 
-            var multibaseEncodedPublicKey = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.Secp256k1PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder);
-            var reEncodedVector1 = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.Secp256k1PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder);
+            var reEncodedVector1 = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.Secp256k1PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder, BaseMemoryPool.Shared);
             Assert.AreEqual(Vector1, reEncodedVector1);
 
             using var decodedVector2Owner = MultibaseSerializer.Decode(Vector2, codecHeaderLength: 2, TestSetup.Base58Decoder, BaseMemoryPool.Shared);
             var decodedVector2 = decodedVector2Owner.Memory.Span;
-            var reEncodedVector2 = MultibaseSerializer.Encode(decodedVector2, MulticodecHeaders.Secp256k1PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder);
+            var reEncodedVector2 = MultibaseSerializer.Encode(decodedVector2, MulticodecHeaders.Secp256k1PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder, BaseMemoryPool.Shared);
             Assert.AreEqual(Vector2, reEncodedVector2);
 
             using var decodedVector3Owner = MultibaseSerializer.Decode(Vector3, codecHeaderLength: 2, TestSetup.Base58Decoder, BaseMemoryPool.Shared);
             var decodedVector3 = decodedVector3Owner.Memory.Span;
-            var reEncodedVector3 = MultibaseSerializer.Encode(decodedVector3, MulticodecHeaders.Secp256k1PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder);
+            var reEncodedVector3 = MultibaseSerializer.Encode(decodedVector3, MulticodecHeaders.Secp256k1PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder, BaseMemoryPool.Shared);
             Assert.AreEqual(Vector3, reEncodedVector3);
 
             //A sanity check, some (in practice 'any') other vector type should not work.
-            var reEncodedVector1WithWrongHeader = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.P256PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder);
+            var reEncodedVector1WithWrongHeader = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.P256PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder, BaseMemoryPool.Shared);
             Assert.AreNotEqual(Vector1, reEncodedVector1WithWrongHeader);
         }
 
@@ -122,17 +138,16 @@ namespace Verifiable.Tests.Cryptography
             using var decodedVector1Owner = MultibaseSerializer.Decode(Vector1, codecHeaderLength: 2, TestSetup.Base58Decoder, BaseMemoryPool.Shared);
             var decodedVector1 = decodedVector1Owner.Memory.Span;
 
-            var multibaseEncodedPublicKey = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.Bls12381G2PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder);
-            var reEncodedVector1 = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.Bls12381G2PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder);
+            var reEncodedVector1 = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.Bls12381G2PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder, BaseMemoryPool.Shared);
             Assert.AreEqual(Vector1, reEncodedVector1);
 
             using var decodedVector2Owner = MultibaseSerializer.Decode(Vector2, codecHeaderLength: 2, TestSetup.Base58Decoder, BaseMemoryPool.Shared);
             var decodedVector2 = decodedVector2Owner.Memory.Span;
-            var reEncodedVector2 = MultibaseSerializer.Encode(decodedVector2, MulticodecHeaders.Bls12381G2PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder);
+            var reEncodedVector2 = MultibaseSerializer.Encode(decodedVector2, MulticodecHeaders.Bls12381G2PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder, BaseMemoryPool.Shared);
             Assert.AreEqual(Vector2, reEncodedVector2);
 
             //A sanity check, some (in practice 'any') other vector type should not work.
-            var reEncodedVector1WithWrongHeader = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.P256PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder);
+            var reEncodedVector1WithWrongHeader = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.P256PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder, BaseMemoryPool.Shared);
             Assert.AreNotEqual(Vector1, reEncodedVector1WithWrongHeader);
         }
 
@@ -149,17 +164,16 @@ namespace Verifiable.Tests.Cryptography
             using var decodedVector1Owner = MultibaseSerializer.Decode(Vector1, codecHeaderLength: 2, TestSetup.Base58Decoder, BaseMemoryPool.Shared);
             var decodedVector1 = decodedVector1Owner.Memory.Span;
 
-            var multibaseEncodedPublicKey = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.P256PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder);
-            var reEncodedVector1 = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.P256PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder);
+            var reEncodedVector1 = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.P256PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder, BaseMemoryPool.Shared);
             Assert.AreEqual(Vector1, reEncodedVector1);
 
             using var decodedVector2Owner = MultibaseSerializer.Decode(Vector2, codecHeaderLength: 2, TestSetup.Base58Decoder, BaseMemoryPool.Shared);
             var decodedVector2 = decodedVector2Owner.Memory.Span;
-            var reEncodedVector2 = MultibaseSerializer.Encode(decodedVector2, MulticodecHeaders.P256PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder);
+            var reEncodedVector2 = MultibaseSerializer.Encode(decodedVector2, MulticodecHeaders.P256PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder, BaseMemoryPool.Shared);
             Assert.AreEqual(Vector2, reEncodedVector2);
 
             //A sanity check, some (in practice 'any') other vector type should not work.
-            var reEncodedVector1WithWrongHeader = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.Ed25519PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder);
+            var reEncodedVector1WithWrongHeader = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.Ed25519PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder, BaseMemoryPool.Shared);
             Assert.AreNotEqual(Vector1, reEncodedVector1WithWrongHeader);
         }
 
@@ -176,17 +190,16 @@ namespace Verifiable.Tests.Cryptography
             using var decodedVector1Owner = MultibaseSerializer.Decode(Vector1, codecHeaderLength: 2, TestSetup.Base58Decoder, BaseMemoryPool.Shared);
             var decodedVector1 = decodedVector1Owner.Memory.Span;
 
-            var multibaseEncodedPublicKey = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.P384PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder);
-            var reEncodedVector1 = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.P384PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder);
+            var reEncodedVector1 = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.P384PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder, BaseMemoryPool.Shared);
             Assert.AreEqual(Vector1, reEncodedVector1);
 
             using var decodedVector2Owner = MultibaseSerializer.Decode(Vector2, codecHeaderLength: 2, TestSetup.Base58Decoder, BaseMemoryPool.Shared);
             var decodedVector2 = decodedVector2Owner.Memory.Span;
-            var reEncodedVector2 = MultibaseSerializer.Encode(decodedVector2, MulticodecHeaders.P384PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder);
+            var reEncodedVector2 = MultibaseSerializer.Encode(decodedVector2, MulticodecHeaders.P384PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder, BaseMemoryPool.Shared);
             Assert.AreEqual(Vector2, reEncodedVector2);
 
             //A sanity check, some (in practice 'any') other vector type should not work.
-            var reEncodedVector1WithWrongHeader = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.P256PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder);
+            var reEncodedVector1WithWrongHeader = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.P256PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder, BaseMemoryPool.Shared);
             Assert.AreNotEqual(Vector1, reEncodedVector1WithWrongHeader);
         }
 
@@ -205,17 +218,16 @@ namespace Verifiable.Tests.Cryptography
             using var decodedVector1Owner = MultibaseSerializer.Decode(Vector1, codecHeaderLength: 2, simpleBase58Decoder, BaseMemoryPool.Shared);
             var decodedVector1 = decodedVector1Owner.Memory.Span;
 
-            var multibaseEncodedPublicKey = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.P521PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder);
-            var reEncodedVector1 = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.P521PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder);
+            var reEncodedVector1 = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.P521PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder, BaseMemoryPool.Shared);
             Assert.AreEqual(Vector1, reEncodedVector1);
 
             using var decodedVector2Owner = MultibaseSerializer.Decode(Vector2, codecHeaderLength: 2, simpleBase58Decoder, BaseMemoryPool.Shared);
             var decodedVector2 = decodedVector2Owner.Memory.Span;
-            var reEncodedVector2 = MultibaseSerializer.Encode(decodedVector2, MulticodecHeaders.P521PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder);
+            var reEncodedVector2 = MultibaseSerializer.Encode(decodedVector2, MulticodecHeaders.P521PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder, BaseMemoryPool.Shared);
             Assert.AreEqual(Vector2, reEncodedVector2);
 
             //A sanity check, some (in practice 'any') other vector type should not work.
-            var reEncodedVector1WithWrongHeader = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.P256PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder);
+            var reEncodedVector1WithWrongHeader = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.P256PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder, BaseMemoryPool.Shared);
             Assert.AreNotEqual(Vector1, reEncodedVector1WithWrongHeader);
         }
 
@@ -231,12 +243,11 @@ namespace Verifiable.Tests.Cryptography
             using var decodedVector1Owner = MultibaseSerializer.Decode(Vector1, codecHeaderLength: 2, TestSetup.Base58Decoder, BaseMemoryPool.Shared);
             var decodedVector1 = decodedVector1Owner.Memory.Span;
 
-            var multibaseEncodedPublicKey = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.RsaPublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder);
-            var reEncodedVector1 = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.RsaPublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder);
+            var reEncodedVector1 = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.RsaPublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder, BaseMemoryPool.Shared);
             Assert.AreEqual(Vector1, reEncodedVector1);
 
             //A sanity check, some (in practice 'any') other vector type should not work.
-            var reEncodedVector1WithWrongHeader = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.P256PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder);
+            var reEncodedVector1WithWrongHeader = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.P256PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder, BaseMemoryPool.Shared);
             Assert.AreNotEqual(Vector1, reEncodedVector1WithWrongHeader);
         }
 
@@ -252,12 +263,11 @@ namespace Verifiable.Tests.Cryptography
             using var decodedVector1Owner = MultibaseSerializer.Decode(Vector1, codecHeaderLength: 2, TestSetup.Base58Decoder, BaseMemoryPool.Shared);
             var decodedVector1 = decodedVector1Owner.Memory.Span;
 
-            var multibaseEncodedPublicKey = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.RsaPublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder);
-            var reEncodedVector1 = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.RsaPublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder);
+            var reEncodedVector1 = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.RsaPublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder, BaseMemoryPool.Shared);
             Assert.AreEqual(Vector1, reEncodedVector1);
 
             //A sanity check, some (in practice 'any') other vector type should not work.
-            var reEncodedVector1WithWrongHeader = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.P256PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder);
+            var reEncodedVector1WithWrongHeader = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.P256PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder, BaseMemoryPool.Shared);
             Assert.AreNotEqual(Vector1, reEncodedVector1WithWrongHeader);
         }
     }

@@ -40,7 +40,7 @@ namespace Verifiable.Tests.OAuth;
 /// <see cref="FlowTests.DataIntegrityPresentationFlowTests"/> verbatim: <see cref="KeyDidBuilder"/>
 /// for the holder, <c>SignAsync</c> with <c>Challenge</c>/<c>Domain</c> and the <c>authentication</c>
 /// proof purpose, JCS canonicalization, base58btc proof values, and
-/// <see cref="MicrosoftCryptographicFunctions.ComputeDigestAsync"/>.
+/// <see cref="MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync"/>.
 /// </remarks>
 [TestClass]
 internal sealed class CredentialDiVpProofTests
@@ -52,7 +52,7 @@ internal sealed class CredentialDiVpProofTests
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private const string ClientId = "https://wallet.client.test";
-    private static readonly Uri ClientBaseUri = new("https://wallet.client.test");
+    private static Uri ClientBaseUri { get; } = new("https://wallet.client.test");
     private const string OfferSubject = "urn:uuid:end-user-42";
     private const string ConfigurationId = "UniversityDegree_dc_sd_jwt";
     private const string CredentialNonce = "c-nonce-di-vp-42";
@@ -60,7 +60,7 @@ internal sealed class CredentialDiVpProofTests
     private const string DidWebHolderDomain = "holder.web.test";
     private const string DidWebHolderDocumentUrl = "https://holder.web.test/.well-known/did.json";
 
-    private static readonly ImmutableHashSet<CapabilityIdentifier> CredentialCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> CredentialCapabilities { get; } =
         ImmutableHashSet.Create(
             WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
             WellKnownCapabilityIdentifiers.Oid4VciPreAuthorizedCodeGrant,
@@ -68,7 +68,7 @@ internal sealed class CredentialDiVpProofTests
 
     private static JsonSerializerOptions JsonOptions { get; } = TestSetup.DefaultSerializationOptions;
     private static KeyDidBuilder KeyDidBuilder { get; } = new();
-    private static WebDidBuilder WebDidBuilder { get; } = new();
+    private static WebDidBuilder WebDidBuilder { get; } = new(BaseMemoryPool.Shared);
 
     //The library's DID-resolution seam wired for the did:key holder — the same construction
     //Oid4VpSchemeFixtures uses for the decentralized_identifier: path. The holder did:key
@@ -81,7 +81,7 @@ internal sealed class CredentialDiVpProofTests
     private static CanonicalizationDelegate JcsCanonicalizer { get; } = (json, contextResolver, _, cancellationToken) =>
         ValueTask.FromResult(new CanonicalizationResult { CanonicalForm = Jcs.Canonicalize(json) });
 
-    private static readonly ExchangeContext EmptyContext = new();
+    private static ExchangeContext EmptyContext { get; } = new();
 
     private static ProofValueEncoderDelegate ProofValueEncoder { get; } = ProofValueCodecs.EncodeBase58Btc;
     private static ProofValueDecoderDelegate ProofValueDecoder { get; } = ProofValueCodecs.DecodeBase58Btc;
@@ -681,7 +681,7 @@ internal sealed class CredentialDiVpProofTests
             SerializePresentation = SerializePresentation,
             SerializeProofOptions = SerializeProofOptions,
             Decoder = TestSetup.Base58Decoder,
-            ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             MemoryPool = Pool
         };
 
@@ -709,6 +709,7 @@ internal sealed class CredentialDiVpProofTests
         await KeyDidBuilder.BuildAsync(
             holderPublic,
             MultikeyVerificationMethodTypeInfo.Instance,
+            BaseMemoryPool.Shared,
             includeDefaultContext: false,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -890,6 +891,9 @@ internal sealed class CredentialDiVpProofTests
         private string DocumentUrl { get; } = documentUrl;
         private string DidJson { get; } = didJson;
 
+        //Ownership of the returned HttpResponseMessage transfers to the caller
+        //through the HttpMessageHandler pipeline, the standard shape for this
+        //override — the pipeline disposes it, not this method.
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
@@ -917,7 +921,7 @@ internal sealed class CredentialDiVpProofTests
 
         return await new VerifiablePresentation
         {
-            Context = new Context { Contexts = [Context.Credentials20] },
+            Context = Context.FromIris(Context.Credentials20),
             Type = ["VerifiablePresentation"],
             Holder = holderDid
         }.SignAsync(
@@ -934,7 +938,7 @@ internal sealed class CredentialDiVpProofTests
             DeserializePresentation,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             Pool,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);

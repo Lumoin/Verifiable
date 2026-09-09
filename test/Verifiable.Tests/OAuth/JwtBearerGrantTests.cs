@@ -1344,7 +1344,7 @@ internal sealed class JwtBearerGrantTests
             expectedIssuer,
             ResourceServerAudience,
             resolver,
-            MicrosoftCryptographicFunctions.VerifyP256Async,
+            MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             JwsAccessTokenTestSupport.Parser,
             TestSetup.Base64UrlDecoder,
             TimeProvider,

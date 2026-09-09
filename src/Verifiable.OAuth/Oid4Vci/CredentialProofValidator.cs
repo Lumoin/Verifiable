@@ -442,6 +442,8 @@ public static class CredentialProofValidator
         }
         catch
         {
+            //The proof is client-supplied wire input, structurally unverified at this point; any
+            //decode/read failure is a malformed proof rather than an internal fault.
             return CredentialProofValidationResult.Failure(CredentialProofValidationFailureReason.Malformed);
         }
 
@@ -496,7 +498,7 @@ public static class CredentialProofValidator
         //header parameter". Composes Jws.VerifyAsync — the registry overload resolves the verifier
         //from the key's algorithm, the explicit overload uses the supplied delegate.
         bool isSignatureValid;
-        try
+        using(publicKey)
         {
             isSignatureValid = verificationDelegate is null
                 ? await Jws.VerifyAsync(
@@ -512,10 +514,6 @@ public static class CredentialProofValidator
                     publicKey,
                     verificationDelegate,
                     cancellationToken).ConfigureAwait(false);
-        }
-        finally
-        {
-            publicKey.Dispose();
         }
 
         if(!isSignatureValid)

@@ -7,8 +7,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Core;
 using Verifiable.Core.Model.DataIntegrity;
-using Verifiable.JsonPointer;
-using Rfc6901JsonPointer = Verifiable.JsonPointer.JsonPointer;
+using Lumoin.Veritas.JsonPointer;
+using Rfc6901JsonPointer = Lumoin.Veritas.JsonPointer.JsonPointer;
 
 namespace Verifiable.Json;
 

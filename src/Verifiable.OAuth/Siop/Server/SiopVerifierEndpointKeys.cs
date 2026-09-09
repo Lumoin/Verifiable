@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Core;
 using Verifiable.Cryptography.Text;
 
@@ -28,5 +29,7 @@ public static class SiopVerifierEndpointKeys
     /// delegate; the delegate reads the handle and incorporates it into the URL. The handle is
     /// unrelated to the internal flow identifier, which never leaves the server process.
     /// </remarks>
-    public static readonly string RequestUri = Utf8Constants.ToInternedString(RequestUriUtf8);
+    [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
+        Justification = "This member is the library's internal endpoint-role KEY NAME 'siop.endpoint.requestUri' (compared as a string, never dereferenced), not the URL it identifies.")]
+    public static string RequestUri { get; } = Utf8Constants.ToInternedString(RequestUriUtf8);
 }

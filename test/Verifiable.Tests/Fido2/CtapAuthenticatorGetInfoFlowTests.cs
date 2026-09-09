@@ -3,12 +3,14 @@ using System.Buffers;
 using System.Collections;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Time.Testing;
 using Verifiable.Apdu;
 using Verifiable.Apdu.Ctap;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Cbor.Fido2;
 using Verifiable.Fido2.Ctap;
 using Verifiable.Fido2.Ctap.Authenticator.Automata;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Fido2;
 
@@ -87,7 +89,9 @@ internal sealed class CtapAuthenticatorGetInfoFlowTests
             CtapMakeCredentialExtensionOutputsCborWriter.Write,
             CtapGetAssertionExtensionOutputsCborWriter.Write,
             supportedExtensions: supportedExtensions,
-            rng: FillFixedAaguidPattern);
+            rng: FillFixedAaguidPattern,
+            timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch),
+            pinUvAuthKeyAgreementPool: pool);
 
         using CtapNfcResponder responder = CtapNfcResponder.Create(simulator.TransceiveAsync);
         using ApduDevice device = ApduDevice.Create(responder.TransceiveAsync);
@@ -115,7 +119,7 @@ internal sealed class CtapAuthenticatorGetInfoFlowTests
         Guid expectedAaguid = new(expectedAaguidBytes, bigEndian: true);
 
         Assert.AreEqual(expectedAaguid, response.Aaguid);
-        Assert.AreSequenceEqual(new[] { WellKnownCtapVersions.Fido23 }, (ICollection)new List<string>(response.Versions));
+        Assert.AreSequenceEqual(new[] { WellKnownCtapVersions.Fido23 }, new List<string>(response.Versions));
         Assert.IsNotNull(response.Extensions);
         Assert.HasCount(supportedExtensions.Count, response.Extensions!);
         Assert.AreSequenceEqual(supportedExtensions, new List<string>(response.Extensions!));

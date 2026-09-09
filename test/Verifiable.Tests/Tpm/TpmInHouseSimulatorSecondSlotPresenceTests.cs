@@ -15,6 +15,7 @@ using Verifiable.Tpm.Spec.Attributes;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -23,7 +24,7 @@ namespace Verifiable.Tests.Tpm;
 /// <c>TPM2_Create()</c>, <c>TPM2_Unseal()</c>, <c>TPM2_NV_ChangeAuth()</c>, and
 /// <c>TPM2_HierarchyChangeAuth()</c> — against the in-house behavioural <see cref="TpmSimulator"/> with a block
 /// that names handle <c>0x00000000</c>, a value <c>TPMI_SH_AUTH_SESSION</c> does not admit at all (TPM 2.0
-/// Library Part 2, clause 9.8, Table 55).
+/// Library Part 2, clause 9.8, Table 54).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -94,7 +95,7 @@ internal sealed class TpmInHouseSimulatorSecondSlotPresenceTests
     /// </summary>
     /// <remarks>
     /// The second slot of this command is the one that may carry <c>decrypt</c> to protect <c>inSensitive</c>
-    /// (TPM 2.0 Library Part 1, clause 19.1), so a block read as absent would take the whole command down the
+    /// (TPM 2.0 Library Part 1, clause 18.1), so a block read as absent would take the whole command down the
     /// unprotected path with the caller believing otherwise. Refusing on the handle's type keeps that
     /// disagreement impossible.
     /// </remarks>
@@ -106,7 +107,7 @@ internal sealed class TpmInHouseSimulatorSecondSlotPresenceTests
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         TpmResponseRegistry registry = CreateRegistry();
 
-        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         using CreatePrimaryResponse parent = await CreateStorageParentAsync(plainDevice, registry, pool).ConfigureAwait(false);
 
         long baseline = trackingPool.OutstandingCount;
@@ -143,7 +144,7 @@ internal sealed class TpmInHouseSimulatorSecondSlotPresenceTests
     /// </summary>
     /// <remarks>
     /// The second slot of this command is the one that may carry <c>encrypt</c> to protect the recovered
-    /// <c>outData</c> (TPM 2.0 Library Part 1, clause 19.1). Reading such a block as absent would return the
+    /// <c>outData</c> (TPM 2.0 Library Part 1, clause 18.1). Reading such a block as absent would return the
     /// secret in the CLEAR while the host, seeing its own block in the area, decrypted what it received — a
     /// disagreement that corrupts the recovered value rather than announcing itself.
     /// </remarks>
@@ -155,7 +156,7 @@ internal sealed class TpmInHouseSimulatorSecondSlotPresenceTests
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         TpmResponseRegistry registry = CreateRegistry();
 
-        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         using CreatePrimaryResponse parent = await CreateStorageParentAsync(plainDevice, registry, pool).ConfigureAwait(false);
         using LoadResponse item = await SealAndLoadAsync(plainDevice, registry, pool, parent.ObjectHandle.Value).ConfigureAwait(false);
 
@@ -164,10 +165,10 @@ internal sealed class TpmInHouseSimulatorSecondSlotPresenceTests
 
         try
         {
-            //The client session adopts the started session's nonceTPM carrier (Part 1, clause 16.6.1) and holds
+            //The client session adopts the started session's nonceTPM carrier (Part 1, clause 15.6.1) and holds
             //it for its own lifetime, so it is created BEFORE the baseline is taken: a balance read across that
             //adoption would move by the adopted rental rather than by anything the command did.
-            using TpmSession session = new(new TpmHandle(sessionHandle), started.NonceTPM, SessionAlg, pool);
+            using TpmSession session = new(new TpmHandle(sessionHandle), started.NonceTPM, SessionAlg, TestEntropy.NewCounterStream(), pool);
             session.SetAuthValue(SealedUserAuth, pool);
 
             long baseline = trackingPool.OutstandingCount;
@@ -209,7 +210,7 @@ internal sealed class TpmInHouseSimulatorSecondSlotPresenceTests
     /// </summary>
     /// <remarks>
     /// The second slot of this command is the one that may carry <c>decrypt</c> to protect <c>newAuth</c> — the
-    /// sole, and so the first, sized command parameter (TPM 2.0 Library Part 1, clause 19.1). A block read as
+    /// sole, and so the first, sized command parameter (TPM 2.0 Library Part 1, clause 18.1). A block read as
     /// absent would install as the Index's new authorization value whatever the host had encrypted, so the
     /// structural answer is what keeps a rotation from silently landing on ciphertext.
     /// </remarks>
@@ -221,7 +222,7 @@ internal sealed class TpmInHouseSimulatorSecondSlotPresenceTests
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         TpmResponseRegistry registry = CreateRegistry();
 
-        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         await DefineNvIndexAsync(plainDevice, registry, pool).ConfigureAwait(false);
         byte[] indexName = await ReadNvNameAsync(plainDevice).ConfigureAwait(false);
 
@@ -240,7 +241,7 @@ internal sealed class TpmInHouseSimulatorSecondSlotPresenceTests
 
             //The client session adopts the started session's nonceTPM carrier, so it is created BEFORE the
             //baseline is taken.
-            using TpmSession session = new(new TpmHandle(sessionHandle), started.NonceTPM, SessionAlg, pool);
+            using TpmSession session = new(new TpmHandle(sessionHandle), started.NonceTPM, SessionAlg, TestEntropy.NewCounterStream(), pool);
 
             long baseline = trackingPool.OutstandingCount;
 
@@ -280,7 +281,7 @@ internal sealed class TpmInHouseSimulatorSecondSlotPresenceTests
     /// <remarks>
     /// This command's authorizing slot may not itself carry <c>decrypt</c> — an unbound, unsalted session of that
     /// shape would key its keystream on the very authValue being rotated away from (TPM 2.0 Library Part 1,
-    /// clause 19.1's own Note) — so the second slot is the ONLY place a caller can put confidentiality for
+    /// clause 18.1's own Note) — so the second slot is the ONLY place a caller can put confidentiality for
     /// <c>newAuth</c>. Reading a block there as absent would rotate a hierarchy's authorization value to
     /// ciphertext, locking the caller out of it.
     /// </remarks>
@@ -292,7 +293,7 @@ internal sealed class TpmInHouseSimulatorSecondSlotPresenceTests
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         TpmResponseRegistry registry = CreateRegistry();
 
-        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         StartAuthSessionResponse started = await StartUnboundHmacSessionAsync(plainDevice, registry, pool).ConfigureAwait(false);
         uint sessionHandle = started.SessionHandle.Value;
@@ -301,7 +302,7 @@ internal sealed class TpmInHouseSimulatorSecondSlotPresenceTests
         {
             //The client session adopts the started session's nonceTPM carrier, so it is created BEFORE the
             //baseline is taken.
-            using TpmSession session = new(new TpmHandle(sessionHandle), started.NonceTPM, SessionAlg, pool);
+            using TpmSession session = new(new TpmHandle(sessionHandle), started.NonceTPM, SessionAlg, TestEntropy.NewCounterStream(), pool);
 
             long baseline = trackingPool.OutstandingCount;
 
@@ -406,10 +407,10 @@ internal sealed class TpmInHouseSimulatorSecondSlotPresenceTests
             }
 
             return await simulator.SubmitAsync(bytes, commandPool, cancellationToken).ConfigureAwait(false);
-        });
+        }, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
     }
 
-    /// <summary>Reads a framed command's <c>commandCode</c> field (TPM 2.0 Library Part 1, clause 18.2's command header).</summary>
+    /// <summary>Reads a framed command's <c>commandCode</c> field (TPM 2.0 Library Part 1, clause 15.2.3's commandCode header field).</summary>
     /// <param name="command">The framed command.</param>
     /// <returns>The command code.</returns>
     private static TpmCcConstants ReadCommandCode(ReadOnlySpan<byte> command)
@@ -438,7 +439,7 @@ internal sealed class TpmInHouseSimulatorSecondSlotPresenceTests
     /// <returns>The StartAuthSession response carrying the session's handle and initial nonceTPM.</returns>
     private async Task<StartAuthSessionResponse> StartUnboundHmacSessionAsync(TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool)
     {
-        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(SessionAlg);
+        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(SessionAlg, TestEntropy.NewCounterStream(), pool);
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             tpm, startInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession (unbound HMAC) failed: '{startResult.ResponseCode}'.");
@@ -570,7 +571,7 @@ internal sealed class TpmInHouseSimulatorSecondSlotPresenceTests
     {
         var simulator = new TpmSimulator(
             "tpm-in-house-second-slot-presence",
-            signingBackend: BouncyCastleTpmEccSigningBackend.Create());
+            signingBackend: BouncyCastleTpmEccSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await IssueStartupClearAsync(simulator, pool).ConfigureAwait(false);
 

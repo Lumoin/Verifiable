@@ -1,4 +1,3 @@
-using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Verifiable.Tpm;
@@ -23,8 +22,10 @@ namespace Verifiable.Tpm;
 /// <see cref="TpmCommandException"/> is thrown containing the command and response codes.
 /// </para>
 /// <para>
-/// <b>Memory:</b> Operations use the device's configured <see cref="TpmDevice.Pool"/>
-/// if available, otherwise <see cref="MemoryPool{T}.Shared"/>.
+/// <b>Memory:</b> <see cref="TpmDevice"/> carries the <see cref="BaseMemoryPool"/> its extension verbs rent
+/// command/response buffers from (<see cref="TpmDevice.Pool"/>); <see cref="TpmDevice.SubmitAsync"/> still
+/// takes the pool for one submission as an explicit parameter, letting a caller route a single exchange
+/// through a different pool than the device's own.
 /// </para>
 /// </remarks>
 /// <seealso cref="TpmDevice"/>

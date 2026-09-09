@@ -24,7 +24,7 @@ namespace Verifiable.Tests.Did
         /// <inheritdoc/>
         public override string ToString()
         {
-            return $"Algorithm: {AlgorithmName}, VerificationMethodTypeInfo: {VerificationMethodTypeInfo}, ExpectedKeyFormat: {ExpectedKeyFormat.Name}";
+            return $"Algorithm: {AlgorithmName}, VerificationMethodTypeInfo: {VerificationMethodTypeInfo.TypeName}, ExpectedKeyFormat: {ExpectedKeyFormat.Name}";
         }
     }
 
@@ -80,7 +80,8 @@ namespace Verifiable.Tests.Did
                 publicKey,
                 testData.VerificationMethodTypeInfo,
                 Id,
-                Controller);
+                Controller,
+                BaseMemoryPool.Shared);
 
             var actualKeyFormat = verificationMethod.KeyFormat;
             Assert.IsInstanceOfType(actualKeyFormat, testData.ExpectedKeyFormat);
@@ -108,7 +109,8 @@ namespace Verifiable.Tests.Did
                 publicKey,
                 Ed25519VerificationKey2020VerificationMethodTypeInfo.Instance,
                 Id,
-                Controller);
+                Controller,
+                BaseMemoryPool.Shared);
 
             var actualMultibaseKeyFormat = verificationMethodInMultibase.KeyFormat;
             Assert.IsInstanceOfType(actualMultibaseKeyFormat, WellKnownKeyFormats.PublicKeyMultibase);
@@ -145,7 +147,8 @@ namespace Verifiable.Tests.Did
                     publicKey,
                     Ed25519VerificationKey2020VerificationMethodTypeInfo.Instance,
                     Id,
-                    Controller);
+                    Controller,
+                    BaseMemoryPool.Shared);
 
                 var actualJwkKeyFormat = verificationMethodInJwk.KeyFormat;
                 Assert.IsInstanceOfType(actualJwkKeyFormat, WellKnownKeyFormats.PublicKeyJwk);

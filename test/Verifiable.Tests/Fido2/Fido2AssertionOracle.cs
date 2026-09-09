@@ -8,6 +8,7 @@ using Verifiable.Cryptography.Context;
 using Verifiable.Fido2;
 using Verifiable.JCose;
 using Verifiable.Tests.TestDataProviders;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Fido2;
 
@@ -64,10 +65,10 @@ internal sealed record MintedAssertion(byte[] AuthenticatorData, byte[] ClientDa
 internal sealed class Fido2AssertionOracle: IDisposable
 {
     /// <summary>The credential key pair minting and verification is exercised against.</summary>
-    private readonly PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyMaterial;
+    private PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> KeyMaterial { get; }
 
     /// <summary>The independent BouncyCastle signing primitive minting calls directly.</summary>
-    private readonly SigningDelegate independentSigner;
+    private SigningDelegate IndependentSigner { get; }
 
     /// <summary>Guards against double disposal.</summary>
     private bool disposed;
@@ -82,9 +83,9 @@ internal sealed class Fido2AssertionOracle: IDisposable
         CoseKey credentialPublicKey,
         SigningDelegate independentSigner)
     {
-        this.keyMaterial = keyMaterial;
+        this.KeyMaterial = keyMaterial;
         CredentialPublicKey = credentialPublicKey;
-        this.independentSigner = independentSigner;
+        this.IndependentSigner = independentSigner;
     }
 
 
@@ -102,7 +103,7 @@ internal sealed class Fido2AssertionOracle: IDisposable
         var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
         CoseKey coseKey = BuildEc2CoseKey(keys.PublicKey, CoseKeyCurves.P256, WellKnownCoseAlgorithms.Es256);
 
-        return new Fido2AssertionOracle(keys, coseKey, BouncyCastleCryptographicFunctions.SignP256Async);
+        return new Fido2AssertionOracle(keys, coseKey, BouncyCastleCryptographicFunctionsAdapter.SignP256Async);
     }
 
 
@@ -112,7 +113,7 @@ internal sealed class Fido2AssertionOracle: IDisposable
         var keys = TestKeyMaterialProvider.CreateFreshP384KeyMaterial();
         CoseKey coseKey = BuildEc2CoseKey(keys.PublicKey, CoseKeyCurves.P384, WellKnownCoseAlgorithms.Es384);
 
-        return new Fido2AssertionOracle(keys, coseKey, BouncyCastleCryptographicFunctions.SignP384Async);
+        return new Fido2AssertionOracle(keys, coseKey, BouncyCastleCryptographicFunctionsAdapter.SignP384Async);
     }
 
 
@@ -122,7 +123,7 @@ internal sealed class Fido2AssertionOracle: IDisposable
         var keys = TestKeyMaterialProvider.CreateFreshP521KeyMaterial();
         CoseKey coseKey = BuildEc2CoseKey(keys.PublicKey, CoseKeyCurves.P521, WellKnownCoseAlgorithms.Es512);
 
-        return new Fido2AssertionOracle(keys, coseKey, BouncyCastleCryptographicFunctions.SignP521Async);
+        return new Fido2AssertionOracle(keys, coseKey, BouncyCastleCryptographicFunctionsAdapter.SignP521Async);
     }
 
 
@@ -132,7 +133,7 @@ internal sealed class Fido2AssertionOracle: IDisposable
         var keys = TestKeyMaterialProvider.CreateFreshRsa2048KeyMaterial();
         CoseKey coseKey = BuildRsaCoseKey(keys.PublicKey, WellKnownCoseAlgorithms.Rs256);
 
-        return new Fido2AssertionOracle(keys, coseKey, BouncyCastleCryptographicFunctions.SignRsa2048Async);
+        return new Fido2AssertionOracle(keys, coseKey, BouncyCastleCryptographicFunctionsAdapter.SignRsa2048Async);
     }
 
 
@@ -142,7 +143,7 @@ internal sealed class Fido2AssertionOracle: IDisposable
         var keys = TestKeyMaterialProvider.CreateFreshRsa2048KeyMaterial();
         CoseKey coseKey = BuildRsaCoseKey(keys.PublicKey, WellKnownCoseAlgorithms.Rs384);
 
-        return new Fido2AssertionOracle(keys, coseKey, BouncyCastleCryptographicFunctions.SignRsaSha384Pkcs1Async);
+        return new Fido2AssertionOracle(keys, coseKey, BouncyCastleCryptographicFunctionsAdapter.SignRsaSha384Pkcs1Async);
     }
 
 
@@ -152,7 +153,7 @@ internal sealed class Fido2AssertionOracle: IDisposable
         var keys = TestKeyMaterialProvider.CreateFreshRsa2048KeyMaterial();
         CoseKey coseKey = BuildRsaCoseKey(keys.PublicKey, WellKnownCoseAlgorithms.Rs512);
 
-        return new Fido2AssertionOracle(keys, coseKey, BouncyCastleCryptographicFunctions.SignRsaSha512Pkcs1Async);
+        return new Fido2AssertionOracle(keys, coseKey, BouncyCastleCryptographicFunctionsAdapter.SignRsaSha512Pkcs1Async);
     }
 
 
@@ -166,7 +167,7 @@ internal sealed class Fido2AssertionOracle: IDisposable
         var keys = TestKeyMaterialProvider.CreateFreshRsa2048KeyMaterial();
         CoseKey coseKey = BuildRsaCoseKey(keys.PublicKey, WellKnownCoseAlgorithms.Ps256);
 
-        return new Fido2AssertionOracle(keys, coseKey, BouncyCastleCryptographicFunctions.SignRsaSha256PssAsync);
+        return new Fido2AssertionOracle(keys, coseKey, BouncyCastleCryptographicFunctionsAdapter.SignRsaSha256PssAsync);
     }
 
 
@@ -176,7 +177,7 @@ internal sealed class Fido2AssertionOracle: IDisposable
         var keys = TestKeyMaterialProvider.CreateFreshRsa2048KeyMaterial();
         CoseKey coseKey = BuildRsaCoseKey(keys.PublicKey, WellKnownCoseAlgorithms.Ps384);
 
-        return new Fido2AssertionOracle(keys, coseKey, BouncyCastleCryptographicFunctions.SignRsaSha384PssAsync);
+        return new Fido2AssertionOracle(keys, coseKey, BouncyCastleCryptographicFunctionsAdapter.SignRsaSha384PssAsync);
     }
 
 
@@ -186,7 +187,7 @@ internal sealed class Fido2AssertionOracle: IDisposable
         var keys = TestKeyMaterialProvider.CreateFreshRsa2048KeyMaterial();
         CoseKey coseKey = BuildRsaCoseKey(keys.PublicKey, WellKnownCoseAlgorithms.Ps512);
 
-        return new Fido2AssertionOracle(keys, coseKey, BouncyCastleCryptographicFunctions.SignRsaSha512PssAsync);
+        return new Fido2AssertionOracle(keys, coseKey, BouncyCastleCryptographicFunctionsAdapter.SignRsaSha512PssAsync);
     }
 
 
@@ -200,7 +201,7 @@ internal sealed class Fido2AssertionOracle: IDisposable
         var keys = TestKeyMaterialProvider.CreateFreshSecp256k1KeyMaterial();
         CoseKey coseKey = BuildEc2CoseKey(keys.PublicKey, CoseKeyCurves.Secp256k1, WellKnownCoseAlgorithms.Es256K);
 
-        return new Fido2AssertionOracle(keys, coseKey, BouncyCastleCryptographicFunctions.SignSecp256k1Async);
+        return new Fido2AssertionOracle(keys, coseKey, BouncyCastleCryptographicFunctionsAdapter.SignSecp256k1Async);
     }
 
 
@@ -210,7 +211,7 @@ internal sealed class Fido2AssertionOracle: IDisposable
         var keys = TestKeyMaterialProvider.CreateFreshEd25519KeyMaterial();
         CoseKey coseKey = BuildOkpCoseKey(keys.PublicKey, CoseKeyCurves.Ed25519, WellKnownCoseAlgorithms.EdDsa);
 
-        return new Fido2AssertionOracle(keys, coseKey, BouncyCastleCryptographicFunctions.SignEd25519Async);
+        return new Fido2AssertionOracle(keys, coseKey, BouncyCastleCryptographicFunctionsAdapter.SignEd25519Async);
     }
 
 
@@ -254,8 +255,8 @@ internal sealed class Fido2AssertionOracle: IDisposable
         using DigestValue clientDataHash = Fido2ClientDataHash.Compute(clientDataJson, BaseMemoryPool.Shared);
         byte[] toBeSigned = Fido2TestVectors.Concat(authenticatorData, clientDataHash.AsReadOnlySpan().ToArray());
 
-        Signature mintedSignature = await keyMaterial.PrivateKey.SignAsync(
-            toBeSigned, independentSigner, BaseMemoryPool.Shared, context: null).ConfigureAwait(false);
+        Signature mintedSignature = await KeyMaterial.PrivateKey.SignAsync(
+            toBeSigned, IndependentSigner, BaseMemoryPool.Shared, context: null).ConfigureAwait(false);
         Signature signature = ReencodeToDerIfEc(mintedSignature, CredentialPublicKey.Alg, BaseMemoryPool.Shared);
 
         return new MintedAssertion(authenticatorData, clientDataJson, signature);
@@ -267,8 +268,8 @@ internal sealed class Fido2AssertionOracle: IDisposable
     {
         if(!disposed)
         {
-            keyMaterial.PublicKey.Dispose();
-            keyMaterial.PrivateKey.Dispose();
+            KeyMaterial.PublicKey.Dispose();
+            KeyMaterial.PrivateKey.Dispose();
             disposed = true;
         }
     }

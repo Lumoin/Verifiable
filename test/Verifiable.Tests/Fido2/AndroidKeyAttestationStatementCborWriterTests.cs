@@ -64,6 +64,9 @@ internal sealed class AndroidKeyAttestationStatementCborWriterTests
 
         TaggedMemory<byte> written = AndroidKeyAttestationStatementCborWriter.Write(WellKnownCoseAlgorithms.Rs256, signature, [credCert, caCert]);
 
+        //statement.X5c is a collection of disposables, not one disposable value: a using declaration
+        //disposes one variable's own value, not a collection's elements, so the foreach below in the
+        //finally block is the release point.
         AndroidKeyAttestationStatement statement = AndroidKeyAttestationStatementCborReader.Parse(written.Memory, BaseMemoryPool.Shared);
         try
         {

@@ -70,16 +70,16 @@ internal sealed class VcalmHolderEndpointTests
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private const string ClientId = "https://holder.client.test";
-    private static readonly Uri ClientBaseUri = new("https://holder.client.test");
+    private static Uri ClientBaseUri { get; } = new("https://holder.client.test");
 
     private const string SdIssuerVerificationMethodId = "did:example:issuer#key-1";
 
-    private static readonly ImmutableHashSet<CapabilityIdentifier> HolderCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> HolderCapabilities { get; } =
         ImmutableHashSet.Create(WellKnownVcalmCapabilities.VcalmHolder);
 
     //The §3.5.2 round-trip needs both the holder and the verifier roles on the same tenant so a
     //created presentation can be POSTed straight to /presentations/verify.
-    private static readonly ImmutableHashSet<CapabilityIdentifier> HolderAndVerifierCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> HolderAndVerifierCapabilities { get; } =
         ImmutableHashSet.Create(
             WellKnownVcalmCapabilities.VcalmHolder, WellKnownVcalmCapabilities.VcalmVerifier);
 
@@ -116,7 +116,7 @@ internal sealed class VcalmHolderEndpointTests
     private static ProofOptionsSerializeDelegate SerializeProofOptions { get; } =
         ProofOptionsSerializer.Create(JsonOptions);
 
-    private static readonly ExchangeContext EmptyContext = new();
+    private static ExchangeContext EmptyContext { get; } = new();
 
     private List<VerifierKeyMaterial> RegisteredMaterials { get; } = [];
 
@@ -179,7 +179,7 @@ internal sealed class VcalmHolderEndpointTests
             derivedRoot.GetRawText(), JsonOptions)!;
         CredentialVerificationResult<DataIntegritySecuredCredential> verification = await received.VerifyDerivedProofAsync(
             sd.IssuerPublicKey,
-            BouncyCastleCryptographicFunctions.VerifyP256Async,
+            BouncyCastleCryptographicFunctionsAdapter.VerifyP256Async,
             EcdsaSd2023CborSerializer.ParseDerivedProof,
             RdfcCanonicalizer,
             ContextResolver,
@@ -284,7 +284,6 @@ internal sealed class VcalmHolderEndpointTests
     public async Task DeriveNonSdCredentialYields400()
     {
         await using TestHostShell app = new(TimeProvider);
-        SdIssuerContext sd = CreateSdIssuerKeys();
         string segment = RegisterHolder(app);
 
         //A credential with an ordinary (non-SD) eddsa proof: the converter upcasts it to the secured
@@ -575,7 +574,7 @@ internal sealed class VcalmHolderEndpointTests
                 SerializePresentation = SerializePresentation,
                 SerializeProofOptions = SerializeProofOptions,
                 Decoder = TestSetup.Base58Decoder,
-                ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync,
+                ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
                 MemoryPool = Pool
             };
         }
@@ -770,12 +769,13 @@ internal sealed class VcalmHolderEndpointTests
         DidDocument issuerDidDocument = await KeyDidBuilder.BuildAsync(
             issuerPublic,
             MultikeyVerificationMethodTypeInfo.Instance,
+            BaseMemoryPool.Shared,
             includeDefaultContext: false,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         VerifiableCredential credential = new()
         {
-            Context = new Context { Contexts = [Context.Credentials20, CanonicalizationTestUtilities.CredentialsExamplesV2ContextUrl] },
+            Context = Context.FromIris(Context.Credentials20, CanonicalizationTestUtilities.CredentialsExamplesV2ContextUrl),
             Id = "urn:uuid:non-sd-credential",
             Type = ["VerifiableCredential", "ExampleAlumniCredential"],
             Issuer = new Issuer { Id = issuerDidDocument.Id!.ToString() },
@@ -798,7 +798,7 @@ internal sealed class VcalmHolderEndpointTests
             DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             Pool,
             EmptyContext,
             TestContext.CancellationToken).ConfigureAwait(false);
@@ -815,6 +815,7 @@ internal sealed class VcalmHolderEndpointTests
         DidDocument holderDidDocument = await KeyDidBuilder.BuildAsync(
             keyPair.PublicKey,
             MultikeyVerificationMethodTypeInfo.Instance,
+            BaseMemoryPool.Shared,
             includeDefaultContext: false,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -838,7 +839,7 @@ internal sealed class VcalmHolderEndpointTests
             DeserializePresentation = DeserializePresentation,
             SerializeProofOptions = SerializeProofOptions,
             Encoder = TestSetup.Base58Encoder,
-            ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             MemoryPool = Pool
         };
 

@@ -17,7 +17,18 @@ namespace Verifiable.DidComm.Transport;
 /// </remarks>
 public sealed record DidCommSocketSessionOptions
 {
+    /// <summary>
+    /// The backing store <see cref="MaxReceiveBytes"/>'s validating <c>init</c> accessor assigns. A field
+    /// because an <c>init</c> accessor may assign a sibling field of its own declaring type outside a
+    /// constructor, but never a get-only auto-property's compiler-generated backing field, which only a
+    /// constructor of the declaring type may assign.
+    /// </summary>
     private readonly long? maxReceiveBytes;
+
+    /// <summary>
+    /// The backing store <see cref="ExchangeTimeout"/>'s validating <c>init</c> accessor assigns, for the
+    /// same reason <see cref="maxReceiveBytes"/> stays a field.
+    /// </summary>
     private readonly TimeSpan? exchangeTimeout;
 
 

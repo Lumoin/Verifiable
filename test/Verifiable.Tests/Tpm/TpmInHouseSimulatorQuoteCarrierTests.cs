@@ -12,12 +12,13 @@ using Verifiable.Tpm.Spec.Attributes;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
 /// <summary>
 /// Proves the pooled-carrier ownership of <c>TPM2_Quote()</c>'s wire parameters (TPM 2.0 Library Part 3, clause
-/// 18.4, Table 93) against the in-house behavioural <see cref="TpmSimulator"/>: the <c>qualifyingData</c>
+/// 18.4, Table 101) against the in-house behavioural <see cref="TpmSimulator"/>: the <c>qualifyingData</c>
 /// (<c>TPM2B_DATA</c>) and <c>PCRselect</c> (<c>TPML_PCR_SELECTION</c>) carriers the parser rents reach the pool
 /// again on every path a command can leave by — refused at the entry transition, refused at the session
 /// continuation, refused for a mismatched command HMAC, and attested successfully — and a frame the parser
@@ -68,19 +69,20 @@ internal sealed class TpmInHouseSimulatorQuoteCarrierTests
     public TestContext TestContext { get; set; } = null!;
 
     /// <summary>
-    /// A <c>TPM2_Quote()</c> refused by the entry transition — the signHandle resolves to no loaded object, so
-    /// TPM 2.0 Library Part 3, clause 18.4's handle check answers <c>TPM_RC_HANDLE</c> before any parameter is
-    /// looked at — returns every carrier the parser rented: the sign slot's supplied password, the
-    /// <c>TPM2B_DATA</c> qualifying data, and the <c>TPML_PCR_SELECTION</c>. The refusing arm reaches them
-    /// through the request record's own <c>IDisposable.Dispose</c>, which is the only owner they ever had,
-    /// because a handle refusal transfers nothing into an action.
+    /// A <c>TPM2_Quote()</c> refused by the entry transition — the signHandle (the sole handle, index 0) is
+    /// transient-range but resolves to no loaded object, so TPM 2.0 Library Part 3, clause 5.4 step 2.1 answers
+    /// <c>TPM_RC_REFERENCE_H0</c> before any parameter is looked at — returns every carrier the parser rented:
+    /// the sign slot's supplied password, the <c>TPM2B_DATA</c> qualifying data, and the
+    /// <c>TPML_PCR_SELECTION</c>. The refusing arm reaches them through the request record's own
+    /// <c>IDisposable.Dispose</c>, which is the only owner they ever had, because a handle refusal transfers
+    /// nothing into an action.
     /// </summary>
     [TestMethod]
     public async Task RefusedQuoteAtTheEntryTransitionReturnsTheParseRentedCarriersToPool()
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         long baseline = trackingPool.OutstandingCount;
@@ -95,8 +97,8 @@ internal sealed class TpmInHouseSimulatorQuoteCarrierTests
             TpmResult<QuoteResponse> result = await TpmCommandExecutor.ExecuteAsync<QuoteResponse>(
                 tpm, quoteInput, [keyAuth], null, trackingPool.Pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
             Assert.AreEqual(
-                TpmRcConstants.TPM_RC_HANDLE, result.ResponseCode,
-                "A signHandle that resolves to no loaded object is a bare TPM_RC_HANDLE (TPM 2.0 Library Part 3, clause 18.4).");
+                TpmRcConstants.TPM_RC_REFERENCE_H0, result.ResponseCode,
+                "A transient-range signHandle (the sole handle, index 0) that resolves to no loaded object is TPM_RC_REFERENCE_H0 (TPM 2.0 Library Part 3, clause 5.4, step 2.1).");
 
             Assert.IsGreaterThan(
                 qualifyingRentsBefore, trackingPool.RentedCountOfSize(CarrierProofNonce.Length),
@@ -120,7 +122,7 @@ internal sealed class TpmInHouseSimulatorQuoteCarrierTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateHmacArmRegistry();
 
         using CreatePrimaryResponse ak = await CreateNoDaSigningPrimaryWithAuthAsync(tpm, registry, trackingPool.Pool).ConfigureAwait(false);
@@ -130,7 +132,7 @@ internal sealed class TpmInHouseSimulatorQuoteCarrierTests
         TpmResult<QuoteResponse> result = await QuoteOverRealSignSessionAsync(
             tpm, registry, trackingPool, ak, CarrierProofNonce, TpmAlgIdConstants.TPM_ALG_SHA1, SignKeyPasswordBytes).ConfigureAwait(false);
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_HASH, result.ResponseCode,
+            HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_HASH, 1), result.ResponseCode,
             "A scheme hash the attest digest path does not implement is refused with TPM_RC_HASH after the command HMAC has verified.");
 
         Assert.AreEqual(
@@ -150,7 +152,7 @@ internal sealed class TpmInHouseSimulatorQuoteCarrierTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateHmacArmRegistry();
 
         using CreatePrimaryResponse ak = await CreateNoDaSigningPrimaryWithAuthAsync(tpm, registry, trackingPool.Pool).ConfigureAwait(false);
@@ -173,14 +175,14 @@ internal sealed class TpmInHouseSimulatorQuoteCarrierTests
     /// response has been consumed: the qualifying data and the PCR selection transferred out of the request into
     /// the quote action, so it is the attesting effect — not the continuation — that is their terminal owner,
     /// and the attestation has copied their octets by the time it releases them (TPM 2.0 Library Part 3, clause
-    /// 18.4; Part 1, clause 16.6.1 for the response entry).
+    /// 18.4; Part 1, clause 15.6.1 for the response entry).
     /// </summary>
     [TestMethod]
     public async Task SuccessfulQuoteOverSessionReturnsTheParseRentedCarriersToPool()
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateHmacArmRegistry();
 
         using CreatePrimaryResponse ak = await CreateNoDaSigningPrimaryWithAuthAsync(tpm, registry, trackingPool.Pool).ConfigureAwait(false);
@@ -204,8 +206,8 @@ internal sealed class TpmInHouseSimulatorQuoteCarrierTests
 
     /// <summary>
     /// A <c>qualifyingData</c> wider than <c>TPM2B_DATA</c>'s declared bound — <c>sizeof(TPMT_HA)</c>, the
-    /// 2-octet algorithm identifier plus the largest supported digest (TPM 2.0 Library Part 2, clause 10.4.3,
-    /// Table 93) — is refused with <c>TPM_RC_SIZE</c> while the frame is still being parsed, so the parse rents
+    /// 2-octet algorithm identifier plus the largest supported digest (TPM 2.0 Library Part 2, clause 10.3.3,
+    /// Table 91) — is refused with <c>TPM_RC_SIZE</c> while the frame is still being parsed, so the parse rents
     /// nothing at all: the pool balance does not move, and the refusal is a response code rather than an
     /// exception escaping the command surface.
     /// </summary>
@@ -214,7 +216,7 @@ internal sealed class TpmInHouseSimulatorQuoteCarrierTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse ak = await CreateSigningPrimaryAsync(tpm, registry, trackingPool.Pool).ConfigureAwait(false);
@@ -234,8 +236,8 @@ internal sealed class TpmInHouseSimulatorQuoteCarrierTests
             TpmResult<QuoteResponse> result = await TpmCommandExecutor.ExecuteAsync<QuoteResponse>(
                 tpm, quoteInput, [keyAuth], null, trackingPool.Pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
             Assert.AreEqual(
-                TpmRcConstants.TPM_RC_SIZE, result.ResponseCode,
-                "A qualifyingData wider than sizeof(TPMT_HA) is TPM_RC_SIZE (TPM 2.0 Library Part 2, clause 10.4.3, Table 93).");
+                HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SIZE, 0), result.ResponseCode,
+                "A qualifyingData wider than sizeof(TPMT_HA) is TPM_RC_SIZE at qualifyingData, parameter 1 of the Quote command table (TPM 2.0 Library Part 2, clause 10.3.3, Table 91).");
 
             Assert.AreEqual(
                 overBoundRentsBefore, trackingPool.RentedCountOfSize(overBound.Length),
@@ -249,7 +251,7 @@ internal sealed class TpmInHouseSimulatorQuoteCarrierTests
 
     /// <summary>
     /// A <c>TPML_PCR_SELECTION</c> naming more banks than the list admits — its count field is bounded by
-    /// HASH_COUNT selections (TPM 2.0 Library Part 2, clause 10.9.7, Table 125, whose out-of-range count is
+    /// HASH_COUNT selections (TPM 2.0 Library Part 2, clause 10.8.7, Table 128, whose out-of-range count is
     /// <c>#TPM_RC_SIZE</c>) — is refused with <c>TPM_RC_SIZE</c> while the frame is still being parsed, rather
     /// than being carried into the attestation. The frame is composed octet by octet because the typed command
     /// input cannot express a selection this shape.
@@ -259,7 +261,7 @@ internal sealed class TpmInHouseSimulatorQuoteCarrierTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse ak = await CreateSigningPrimaryAsync(tpm, registry, trackingPool.Pool).ConfigureAwait(false);
@@ -278,12 +280,47 @@ internal sealed class TpmInHouseSimulatorQuoteCarrierTests
         TpmRcConstants overBoundCode = await SubmitHandFramedQuoteAsync(
             simulator, trackingPool.Pool, ak.ObjectHandle, CarrierProofNonce, overBoundSelection).ConfigureAwait(false);
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_SIZE, overBoundCode,
-            "A selection naming more than HASH_COUNT banks is out of the list's declared bound and is TPM_RC_SIZE (TPM 2.0 Library Part 2, clause 10.9.7, Table 125).");
+            HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SIZE, 2), overBoundCode,
+            "PCRselect is TPM2_Quote()'s third parameter (Table 101, index 2); a selection naming more than HASH_COUNT banks is out of the list's declared bound and is parameter-encoded TPM_RC_SIZE (TPM 2.0 Library Part 2, clause 10.8.7, Table 128).");
 
         Assert.AreEqual(
             baseline, trackingPool.OutstandingCount,
             "Neither the admitted nor the refused selection may leave a carrier outstanding.");
+    }
+
+    /// <summary>
+    /// A <c>TPML_PCR_SELECTION</c> that is BOTH over-bound (a declared count of 17, one more than
+    /// <see cref="TpmlPcrSelection.MaxSelections"/>) AND truncated (far too few octets follow to walk even one
+    /// entry) answers <c>TPM_RC_SIZE</c> rather than <c>TPM_RC_INSUFFICIENT</c>: the shared probe walker checks
+    /// the count bound immediately after reading <c>count</c>, before any element is walked, so the bound wins
+    /// over the truncation it would otherwise have reported further into the list. This is the compound case for
+    /// every PCR-select reader that shares the walker, Quote included.
+    /// </summary>
+    [TestMethod]
+    public async Task QuoteWithAnOverBoundAndTruncatedSelectionAnswersSizeNotInsufficient()
+    {
+        using var trackingPool = new MeteredHousePool();
+        using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryResponse ak = await CreateSigningPrimaryAsync(tpm, registry, trackingPool.Pool).ConfigureAwait(false);
+
+        //count = 17, then two octets — nowhere near enough to walk even one TPMS_PCR_SELECTION entry (which
+        //needs at least a UINT16 hash plus a BYTE sizeofSelect), let alone seventeen.
+        byte[] overBoundAndTruncated = [0x00, 0x00, 0x00, 0x11, 0x00];
+
+        long baseline = trackingPool.OutstandingCount;
+
+        TpmRcConstants code = await SubmitHandFramedQuoteAsync(
+            simulator, trackingPool.Pool, ak.ObjectHandle, CarrierProofNonce, overBoundAndTruncated).ConfigureAwait(false);
+        Assert.AreEqual(
+            HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SIZE, 2), code,
+            "PCRselect is TPM2_Quote()'s third parameter (Table 101, index 2); a list that is both over-bound and truncated answers the count bound before the truncation it would otherwise report, parameter-encoded.");
+
+        Assert.AreEqual(
+            baseline, trackingPool.OutstandingCount,
+            "The refused probe must rent nothing.");
     }
 
     /// <summary>
@@ -294,7 +331,7 @@ internal sealed class TpmInHouseSimulatorQuoteCarrierTests
     /// </summary>
     /// <remarks>
     /// <c>pcrSelect</c> is "information on algID, PCR selected and digest" for the PCR the digest covers (TPM 2.0
-    /// Library Part 2, clause 10.12.4, Table 143), so byte-identity with the request is the special case — the
+    /// Library Part 2, clause 10.11.4, Table 146), so byte-identity with the request is the special case — the
     /// one where nothing was filtered — rather than the rule.
     /// <see cref="QuotedPcrSelectClearsBitsForABankTheModelDoesNotImplement"/> and
     /// <see cref="QuotedPcrSelectClearsBitsForPcrIndexesTheModelDoesNotHold"/> pin the general case.
@@ -304,7 +341,7 @@ internal sealed class TpmInHouseSimulatorQuoteCarrierTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse ak = await CreateSigningPrimaryAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -349,7 +386,7 @@ internal sealed class TpmInHouseSimulatorQuoteCarrierTests
     /// "If the required bank does not exist, clear input selection" is what the reference's <c>FilterPcr</c> does
     /// to the caller's list, and <c>PCRComputeCurrentDigest</c> is documented as modifying its selection argument
     /// so that only the implemented PCR keep their bits set; <c>TPM2_Quote()</c> then copies the MODIFIED list
-    /// into <c>TPMS_QUOTE_INFO.pcrSelect</c> (TPM 2.0 Library Part 2, clause 10.12.4, Table 143). The entry is
+    /// into <c>TPMS_QUOTE_INFO.pcrSelect</c> (TPM 2.0 Library Part 2, clause 10.11.4, Table 146). The entry is
     /// kept rather than dropped, so the marshaled width is unchanged and a verifier can see that the bank was
     /// asked for and yielded nothing.
     /// </remarks>
@@ -358,7 +395,7 @@ internal sealed class TpmInHouseSimulatorQuoteCarrierTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse ak = await CreateSigningPrimaryAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -403,17 +440,17 @@ internal sealed class TpmInHouseSimulatorQuoteCarrierTests
     /// <summary>
     /// A selection naming PCR indexes at or beyond the number of registers a bank holds is attested with those
     /// bits CLEARED: "if the TPM implements more PCR than there are bits in pcrSelect, the additional PCR are not
-    /// selected" (TPM 2.0 Library Part 2, clause 10.6.1), and the converse is settled the same way — the bit is
+    /// selected" (TPM 2.0 Library Part 2, clause 10.5.1), and the converse is settled the same way — the bit is
     /// cleared rather than refused, exactly as the reference's <c>FilterPcr</c> masks the caller's bitmap against
     /// the bank's own allocation before <c>TPM2_Quote()</c> copies it into <c>TPMS_QUOTE_INFO.pcrSelect</c>
-    /// (clause 10.12.4, Table 143).
+    /// (clause 10.11.4, Table 146).
     /// </summary>
     [TestMethod]
     public async Task QuotedPcrSelectClearsBitsForPcrIndexesTheModelDoesNotHold()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse ak = await CreateSigningPrimaryAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -460,7 +497,7 @@ internal sealed class TpmInHouseSimulatorQuoteCarrierTests
     /// <remarks>
     /// The width is bounded on both sides — <c>sizeofSelect {PCR_SELECT_MIN:}</c> and
     /// <c>pcrSelect[sizeofSelect] {:PCR_SELECT_MAX}</c>, both carrying <c>#TPM_RC_VALUE</c> (TPM 2.0 Library Part
-    /// 2, clause 10.6.2, Table 106; the widths themselves are clause 10.6.1's equations 1 and 2) — and the
+    /// 2, clause 10.5.2, Table 107; the widths themselves are clause 10.5.1's equations 1 and 2) — and the
     /// reference unmarshaler answers <c>TPM_RC_VALUE</c> for a width outside them, between reading
     /// <c>sizeofSelect</c> and reading the bitmap. A zero width additionally names a bitmap covering no PCR at
     /// all, which no conformant caller can mean.
@@ -471,7 +508,7 @@ internal sealed class TpmInHouseSimulatorQuoteCarrierTests
         using var trackingPool = new MeteredHousePool();
         BaseMemoryPool pool = trackingPool.Pool;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse ak = await CreateSigningPrimaryAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -492,8 +529,8 @@ internal sealed class TpmInHouseSimulatorQuoteCarrierTests
         TpmRcConstants zeroWidthCode = await SubmitHandFramedQuoteAsync(
             simulator, pool, ak.ObjectHandle, CarrierProofNonce, zeroWidthSelection).ConfigureAwait(false);
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_VALUE, zeroWidthCode,
-            "A sizeofSelect below PCR_SELECT_MIN is out of the member's declared range and is TPM_RC_VALUE (Part 2, clause 10.6.2, Table 106).");
+            HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_VALUE, 2), zeroWidthCode,
+            "PCRselect is TPM2_Quote()'s third parameter (Table 101, index 2); a sizeofSelect below PCR_SELECT_MIN is out of the member's declared range and is parameter-encoded TPM_RC_VALUE (Part 2, clause 10.5.2, Table 107).");
 
         Assert.AreEqual(
             baseline, trackingPool.OutstandingCount,
@@ -528,7 +565,7 @@ internal sealed class TpmInHouseSimulatorQuoteCarrierTests
     /// <summary>
     /// Frames a <c>TPM2_Quote()</c> command carrying a caller-composed <c>TPML_PCR_SELECTION</c> octet sequence
     /// and a single empty-auth <c>TPM_RS_PW</c> slot, exactly as the executor lays one out (TPM 2.0 Library Part
-    /// 3, clause 18.4, Table 93), for selection shapes <see cref="QuoteInput"/> cannot build.
+    /// 3, clause 18.4, Table 101), for selection shapes <see cref="QuoteInput"/> cannot build.
     /// </summary>
     /// <param name="pool">The memory pool the command buffer is rented from.</param>
     /// <param name="signHandle">The signing key's handle.</param>
@@ -602,7 +639,7 @@ internal sealed class TpmInHouseSimulatorQuoteCarrierTests
     /// Quotes the fixed PCR selection with <paramref name="ak"/> over a fresh, real, unbound and unsalted HMAC
     /// sign session carrying <paramref name="signSlotAuthValue"/>, flushing the session on the way out. The
     /// session lives entirely inside this call, so the nonce carrier it adopts from the response (TPM 2.0
-    /// Library Part 1, clause 16.6.1) is released before a caller reads the pool balance.
+    /// Library Part 1, clause 15.6.1) is released before a caller reads the pool balance.
     /// </summary>
     /// <param name="tpm">The TPM device.</param>
     /// <param name="registry">The response codec registry.</param>
@@ -616,7 +653,7 @@ internal sealed class TpmInHouseSimulatorQuoteCarrierTests
         TpmDevice tpm, TpmResponseRegistry registry, MeteredHousePool trackingPool, CreatePrimaryResponse ak,
         ReadOnlyMemory<byte> qualifyingData, TpmAlgIdConstants schemeHashAlg, ReadOnlyMemory<byte> signSlotAuthValue)
     {
-        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(HmacSessionAlg);
+        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(HmacSessionAlg, TestEntropy.NewCounterStream(), BaseMemoryPool.Shared);
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             tpm, startInput, [], null, trackingPool.Pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession failed: '{startResult.ResponseCode}'.");
@@ -626,7 +663,7 @@ internal sealed class TpmInHouseSimulatorQuoteCarrierTests
 
         try
         {
-            using TpmSession signSession = new(new TpmHandle(sessionHandle), started.NonceTPM, HmacSessionAlg, trackingPool.Pool);
+            using TpmSession signSession = new(new TpmHandle(sessionHandle), started.NonceTPM, HmacSessionAlg, TestEntropy.NewCounterStream(), trackingPool.Pool);
             signSession.SetAuthValue(signSlotAuthValue.Span, trackingPool.Pool);
 
             using TpmlPcrSelection pcrSelection = TpmlPcrSelection.Create(PcrBank, PcrIndices, trackingPool.Pool);
@@ -707,7 +744,7 @@ internal sealed class TpmInHouseSimulatorQuoteCarrierTests
         var simulator = new TpmSimulator(
             "tpm-in-house-quote-carriers",
             signingBackend: BouncyCastleTpmEccSigningBackend.Create(),
-            rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create());
+            rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await BringOperationalAsync(simulator, pool).ConfigureAwait(false);
 

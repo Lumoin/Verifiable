@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Core;
 using Verifiable.Cryptography.Text;
 
@@ -42,7 +43,7 @@ public static class PolicyContextKeys
     /// Value type: <see cref="JarAudienceMode"/>. Audit row: "JAR <c>aud</c>
     /// semantic".
     /// </summary>
-    public static readonly string JarAudienceValidation = Utf8Constants.ToInternedString(JarAudienceValidationUtf8);
+    public static string JarAudienceValidation { get; } = Utf8Constants.ToInternedString(JarAudienceValidationUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="RequiredJarTimingClaims"/>.</summary>
     public static ReadOnlySpan<byte> RequiredJarTimingClaimsUtf8 => "policy.requiredJarTimingClaims"u8;
@@ -52,7 +53,7 @@ public static class PolicyContextKeys
     /// inbound JARs. Value type: <see cref="TimingClaimSet"/>. Audit row:
     /// "JAR all-three-timing-claims required".
     /// </summary>
-    public static readonly string RequiredJarTimingClaims = Utf8Constants.ToInternedString(RequiredJarTimingClaimsUtf8);
+    public static string RequiredJarTimingClaims { get; } = Utf8Constants.ToInternedString(RequiredJarTimingClaimsUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="JarLifetimeCeiling"/>.</summary>
     public static ReadOnlySpan<byte> JarLifetimeCeilingUtf8 => "policy.jarLifetimeCeiling"u8;
@@ -62,7 +63,7 @@ public static class PolicyContextKeys
     /// Clause 13. Value type: <see cref="TimeSpan"/>. Audit row: "JAR
     /// lifetime ceiling".
     /// </summary>
-    public static readonly string JarLifetimeCeiling = Utf8Constants.ToInternedString(JarLifetimeCeilingUtf8);
+    public static string JarLifetimeCeiling { get; } = Utf8Constants.ToInternedString(JarLifetimeCeilingUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="AllowedPkceMethods"/>.</summary>
     public static ReadOnlySpan<byte> AllowedPkceMethodsUtf8 => "policy.allowedPkceMethods"u8;
@@ -71,7 +72,7 @@ public static class PolicyContextKeys
     /// The set of accepted PKCE <c>code_challenge_method</c> values. Value
     /// type: <see cref="PkceMethodSet"/>. Audit row: "PKCE method enforcement".
     /// </summary>
-    public static readonly string AllowedPkceMethods = Utf8Constants.ToInternedString(AllowedPkceMethodsUtf8);
+    public static string AllowedPkceMethods { get; } = Utf8Constants.ToInternedString(AllowedPkceMethodsUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="AuthorizationCodeLifetime"/>.</summary>
     public static ReadOnlySpan<byte> AuthorizationCodeLifetimeUtf8 => "policy.authorizationCodeLifetime"u8;
@@ -80,7 +81,7 @@ public static class PolicyContextKeys
     /// Lifetime of authorization codes per RFC 6749 §4.1.2. Value type:
     /// <see cref="TimeSpan"/>. Audit row: "Authorization-code lifetime".
     /// </summary>
-    public static readonly string AuthorizationCodeLifetime = Utf8Constants.ToInternedString(AuthorizationCodeLifetimeUtf8);
+    public static string AuthorizationCodeLifetime { get; } = Utf8Constants.ToInternedString(AuthorizationCodeLifetimeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="AccessTokenLifetime"/>.</summary>
     public static ReadOnlySpan<byte> AccessTokenLifetimeUtf8 => "policy.accessTokenLifetime"u8;
@@ -90,7 +91,7 @@ public static class PolicyContextKeys
     /// not specify a per-registration override. Value type:
     /// <see cref="TimeSpan"/>. Audit row: "Access token lifetime".
     /// </summary>
-    public static readonly string AccessTokenLifetime = Utf8Constants.ToInternedString(AccessTokenLifetimeUtf8);
+    public static string AccessTokenLifetime { get; } = Utf8Constants.ToInternedString(AccessTokenLifetimeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="IdTokenLifetime"/>.</summary>
     public static ReadOnlySpan<byte> IdTokenLifetimeUtf8 => "policy.idTokenLifetime"u8;
@@ -100,7 +101,7 @@ public static class PolicyContextKeys
     /// specify a per-registration override. Value type: <see cref="TimeSpan"/>.
     /// Audit row: "ID token lifetime".
     /// </summary>
-    public static readonly string IdTokenLifetime = Utf8Constants.ToInternedString(IdTokenLifetimeUtf8);
+    public static string IdTokenLifetime { get; } = Utf8Constants.ToInternedString(IdTokenLifetimeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="RefreshTokenLifetime"/>.</summary>
     public static ReadOnlySpan<byte> RefreshTokenLifetimeUtf8 => "policy.refreshTokenLifetime"u8;
@@ -110,7 +111,7 @@ public static class PolicyContextKeys
     /// RFC 6749 §6. Value type: <see cref="TimeSpan"/>. Audit row:
     /// "Refresh token lifetime".
     /// </summary>
-    public static readonly string RefreshTokenLifetime = Utf8Constants.ToInternedString(RefreshTokenLifetimeUtf8);
+    public static string RefreshTokenLifetime { get; } = Utf8Constants.ToInternedString(RefreshTokenLifetimeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="RequestUriLifetime"/>.</summary>
     public static ReadOnlySpan<byte> RequestUriLifetimeUtf8 => "policy.requestUriLifetime"u8;
@@ -120,7 +121,9 @@ public static class PolicyContextKeys
     /// Value type: <see cref="TimeSpan"/>. Audit row: "AuthCode PAR
     /// <c>request_uri</c> lifetime".
     /// </summary>
-    public static readonly string RequestUriLifetime = Utf8Constants.ToInternedString(RequestUriLifetimeUtf8);
+    [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
+        Justification = "This member is the library's internal context-bag KEY NAME 'policy.requestUriLifetime' (compared as a string, never dereferenced), not a URI.")]
+    public static string RequestUriLifetime { get; } = Utf8Constants.ToInternedString(RequestUriLifetimeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="ClockSkewTolerance"/>.</summary>
     public static ReadOnlySpan<byte> ClockSkewToleranceUtf8 => "policy.clockSkewTolerance"u8;
@@ -130,7 +133,7 @@ public static class PolicyContextKeys
     /// claims on inbound JWTs. Value type: <see cref="TimeSpan"/>. Audit row:
     /// "Clock skew".
     /// </summary>
-    public static readonly string ClockSkewTolerance = Utf8Constants.ToInternedString(ClockSkewToleranceUtf8);
+    public static string ClockSkewTolerance { get; } = Utf8Constants.ToInternedString(ClockSkewToleranceUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="KbJwtMaxAgeWindow"/>.</summary>
     public static ReadOnlySpan<byte> KbJwtMaxAgeWindowUtf8 => "policy.kbJwtMaxAgeWindow"u8;
@@ -142,7 +145,7 @@ public static class PolicyContextKeys
     /// per-call via the existing <see cref="Verifiable.OAuth.Validation.ValidationContext.KbJwtMaxAge"/>
     /// path). Audit row: "KB-JWT <c>iat</c>-too-old window".
     /// </summary>
-    public static readonly string KbJwtMaxAgeWindow = Utf8Constants.ToInternedString(KbJwtMaxAgeWindowUtf8);
+    public static string KbJwtMaxAgeWindow { get; } = Utf8Constants.ToInternedString(KbJwtMaxAgeWindowUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="EnforceNoOverDisclosure"/>.</summary>
     public static ReadOnlySpan<byte> EnforceNoOverDisclosureUtf8 => "policy.enforceNoOverDisclosure"u8;
@@ -155,7 +158,7 @@ public static class PolicyContextKeys
     /// Base OID4VP/SD-JWT VC treat minimization as a holder duty and do not
     /// mandate verifier rejection, so deployments may set this <see langword="false"/>.
     /// </summary>
-    public static readonly string EnforceNoOverDisclosure = Utf8Constants.ToInternedString(EnforceNoOverDisclosureUtf8);
+    public static string EnforceNoOverDisclosure { get; } = Utf8Constants.ToInternedString(EnforceNoOverDisclosureUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="EnforceMinimumSaltLength"/>.</summary>
     public static ReadOnlySpan<byte> EnforceMinimumSaltLengthUtf8 => "policy.enforceMinimumSaltLength"u8;
@@ -168,7 +171,7 @@ public static class PolicyContextKeys
     /// opts in to enforcement. See
     /// <see cref="Verifiable.OAuth.Validation.ValidationChecks.CheckDisclosureSaltLength"/>.
     /// </summary>
-    public static readonly string EnforceMinimumSaltLength = Utf8Constants.ToInternedString(EnforceMinimumSaltLengthUtf8);
+    public static string EnforceMinimumSaltLength { get; } = Utf8Constants.ToInternedString(EnforceMinimumSaltLengthUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="EmitIssOnRedirect"/>.</summary>
     public static ReadOnlySpan<byte> EmitIssOnRedirectUtf8 => "policy.emitIssOnRedirect"u8;
@@ -178,7 +181,7 @@ public static class PolicyContextKeys
     /// <c>iss</c> response parameter. Value type: <see cref="bool"/>. Audit
     /// row: "<c>iss</c> response parameter on Authorize redirect".
     /// </summary>
-    public static readonly string EmitIssOnRedirect = Utf8Constants.ToInternedString(EmitIssOnRedirectUtf8);
+    public static string EmitIssOnRedirect { get; } = Utf8Constants.ToInternedString(EmitIssOnRedirectUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="ScopeRequiredOnRequest"/>.</summary>
     public static ReadOnlySpan<byte> ScopeRequiredOnRequestUtf8 => "policy.scopeRequiredOnRequest"u8;
@@ -188,7 +191,7 @@ public static class PolicyContextKeys
     /// requests. Value type: <see cref="bool"/>. Audit row: "AuthCode JAR
     /// scope required" / "AuthCode PAR scope handling".
     /// </summary>
-    public static readonly string ScopeRequiredOnRequest = Utf8Constants.ToInternedString(ScopeRequiredOnRequestUtf8);
+    public static string ScopeRequiredOnRequest { get; } = Utf8Constants.ToInternedString(ScopeRequiredOnRequestUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="RequirePushedAuthorizationRequests"/>.</summary>
     public static ReadOnlySpan<byte> RequirePushedAuthorizationRequestsUtf8 => "policy.requirePushedAuthorizationRequests"u8;
@@ -199,7 +202,7 @@ public static class PolicyContextKeys
     /// request first (FAPI 2.0 §5.2.2). Value type: <see cref="bool"/>. Audit row:
     /// "require_pushed_authorization_requests".
     /// </summary>
-    public static readonly string RequirePushedAuthorizationRequests = Utf8Constants.ToInternedString(RequirePushedAuthorizationRequestsUtf8);
+    public static string RequirePushedAuthorizationRequests { get; } = Utf8Constants.ToInternedString(RequirePushedAuthorizationRequestsUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="PreAuthorizedGrantAnonymousAccessSupported"/>.</summary>
     public static ReadOnlySpan<byte> PreAuthorizedGrantAnonymousAccessSupportedUtf8 => "policy.preAuthorizedGrantAnonymousAccessSupported"u8;
@@ -211,7 +214,7 @@ public static class PolicyContextKeys
     /// document advertises <c>pre-authorized_grant_anonymous_access_supported</c> only when a
     /// deployment opts in. Audit row: "<c>pre-authorized_grant_anonymous_access_supported</c>".
     /// </summary>
-    public static readonly string PreAuthorizedGrantAnonymousAccessSupported = Utf8Constants.ToInternedString(PreAuthorizedGrantAnonymousAccessSupportedUtf8);
+    public static string PreAuthorizedGrantAnonymousAccessSupported { get; } = Utf8Constants.ToInternedString(PreAuthorizedGrantAnonymousAccessSupportedUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="DiscoveryIssuerShape"/>.</summary>
     public static ReadOnlySpan<byte> DiscoveryIssuerShapeUtf8 => "policy.discoveryIssuerShape"u8;
@@ -221,7 +224,7 @@ public static class PolicyContextKeys
     /// <c>iss</c> claim of issued tokens. Value type: <see cref="IssuerShape"/>.
     /// Audit row: "Discovery / token <c>iss</c> shape".
     /// </summary>
-    public static readonly string DiscoveryIssuerShape = Utf8Constants.ToInternedString(DiscoveryIssuerShapeUtf8);
+    public static string DiscoveryIssuerShape { get; } = Utf8Constants.ToInternedString(DiscoveryIssuerShapeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="AccessTokenAudPolicy"/>.</summary>
     public static ReadOnlySpan<byte> AccessTokenAudPolicyUtf8 => "policy.accessTokenAudPolicy"u8;
@@ -231,7 +234,7 @@ public static class PolicyContextKeys
     /// Value type: <see cref="AccessTokenAudPolicy"/>. Audit row: "RFC 9068
     /// access-token <c>aud</c> claim shape".
     /// </summary>
-    public static readonly string AccessTokenAudPolicy = Utf8Constants.ToInternedString(AccessTokenAudPolicyUtf8);
+    public static string AccessTokenAudPolicy { get; } = Utf8Constants.ToInternedString(AccessTokenAudPolicyUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="IdTokenAudFormat"/>.</summary>
     public static ReadOnlySpan<byte> IdTokenAudFormatUtf8 => "policy.idTokenAudFormat"u8;
@@ -242,7 +245,7 @@ public static class PolicyContextKeys
     /// <see cref="AudClaimFormat"/>. Audit row: "ID-token <c>aud</c> claim
     /// format".
     /// </summary>
-    public static readonly string IdTokenAudFormat = Utf8Constants.ToInternedString(IdTokenAudFormatUtf8);
+    public static string IdTokenAudFormat { get; } = Utf8Constants.ToInternedString(IdTokenAudFormatUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="StateMatchingMode"/>.</summary>
     public static ReadOnlySpan<byte> StateMatchingModeUtf8 => "policy.stateMatchingMode"u8;
@@ -252,7 +255,7 @@ public static class PolicyContextKeys
     /// validating callbacks. Value type: <see cref="StateMatchingMode"/>.
     /// Audit row: "<c>state</c> matching mode".
     /// </summary>
-    public static readonly string StateMatchingMode = Utf8Constants.ToInternedString(StateMatchingModeUtf8);
+    public static string StateMatchingMode { get; } = Utf8Constants.ToInternedString(StateMatchingModeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="JtiReplayPolicy"/>.</summary>
     public static ReadOnlySpan<byte> JtiReplayPolicyUtf8 => "policy.jtiReplayPolicy"u8;
@@ -262,5 +265,5 @@ public static class PolicyContextKeys
     /// Value type: <see cref="JtiReplayPolicy"/>. Audit row: "JAR <c>jti</c>
     /// replay defense".
     /// </summary>
-    public static readonly string JtiReplayPolicy = Utf8Constants.ToInternedString(JtiReplayPolicyUtf8);
+    public static string JtiReplayPolicy { get; } = Utf8Constants.ToInternedString(JtiReplayPolicyUtf8);
 }

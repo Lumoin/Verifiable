@@ -65,7 +65,14 @@ public class CredentialSubject: IEquatable<CredentialSubject>
     public IDictionary<string, object>? AdditionalData { get; set; }
 
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Determines whether this subject is equal to <paramref name="other"/> by comparing
+    /// <see cref="Id"/> (<see cref="AdditionalData"/> is not compared, being an open-world bag).
+    /// Equality is exact-type, not polymorphic over subtypes: a derived type adding further
+    /// identity-bearing members is never equal to a same-valued instance of this type.
+    /// </summary>
+    /// <param name="other">The credential subject to compare against.</param>
+    /// <returns><see langword="true"/> if the subjects are equal; otherwise <see langword="false"/>.</returns>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public bool Equals(CredentialSubject? other)
     {
@@ -79,15 +86,19 @@ public class CredentialSubject: IEquatable<CredentialSubject>
             return true;
         }
 
-        //Note: AdditionalData equality is not compared due to dictionary complexity.
-        //Two subjects are considered equal if they have the same Id.
+        if(GetType() != other.GetType())
+        {
+            return false;
+        }
+
         return string.Equals(Id, other.Id, StringComparison.Ordinal);
     }
 
 
     /// <inheritdoc/>
     [EditorBrowsable(EditorBrowsableState.Never)]
-    public override bool Equals([NotNullWhen(true)] object? obj) => obj is CredentialSubject other && Equals(other);
+    public override bool Equals([NotNullWhen(true)] object? obj) =>
+        obj is CredentialSubject other && Equals(other);
 
 
     /// <inheritdoc/>

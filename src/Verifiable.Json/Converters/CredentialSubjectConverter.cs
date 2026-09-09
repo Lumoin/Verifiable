@@ -101,6 +101,18 @@ public class CredentialSubjectConverter: JsonConverter<List<CredentialSubject>>
     }
 
 
+    /// <summary>
+    /// Reads one JSON object into a <see cref="CredentialSubject"/>: a string-valued <c>id</c>
+    /// maps to <see cref="CredentialSubject.Id"/>; every other member, and an <c>id</c> whose
+    /// value is JSON <see langword="null"/>, is captured verbatim in
+    /// <see cref="CredentialSubject.AdditionalData"/> under its property name - the null is
+    /// data belonging to the member, not an absent member, so it is stored rather than
+    /// dropped. A <see langword="null"/>-valued <c>id</c> cannot be told apart from an absent
+    /// <c>id</c> on the string-typed <see cref="CredentialSubject.Id"/> property alone, which
+    /// is why it is routed into the bucket instead.
+    /// </summary>
+    /// <param name="reader">The reader positioned on the object's <c>StartObject</c> token.</param>
+    /// <returns>The parsed <see cref="CredentialSubject"/>.</returns>
     private static CredentialSubject? ReadSingleSubject(ref Utf8JsonReader reader)
     {
         if(reader.TokenType != JsonTokenType.StartObject)
@@ -128,15 +140,22 @@ public class CredentialSubjectConverter: JsonConverter<List<CredentialSubject>>
 
             if(propertyName == "id")
             {
-                id = reader.GetString();
+                if(reader.TokenType == JsonTokenType.Null)
+                {
+                    //A JSON null "id" is data, not an absent member; there is no separate
+                    //"explicitly null" state on the string-typed Id property to carry it, so
+                    //it is kept in the additional-data bucket instead, where WriteSingleSubject
+                    //re-emits it as the null literal.
+                    additionalData["id"] = null!;
+                }
+                else
+                {
+                    id = reader.GetString();
+                }
             }
             else if(propertyName is not null)
             {
-                object? value = ManualJsonReader.ReadValue(ref reader);
-                if(value is not null)
-                {
-                    additionalData[propertyName] = value;
-                }
+                additionalData[propertyName] = ManualJsonReader.ReadValue(ref reader)!;
             }
         }
 
@@ -148,6 +167,14 @@ public class CredentialSubjectConverter: JsonConverter<List<CredentialSubject>>
     }
 
 
+    /// <summary>
+    /// Writes one <see cref="CredentialSubject"/> as a JSON object: <see cref="CredentialSubject.Id"/>
+    /// first when present, then every <see cref="CredentialSubject.AdditionalData"/> entry,
+    /// including one whose value is <see langword="null"/>, which round-trips as the JSON
+    /// <c>null</c> literal via <see cref="ManualJsonWriter.WriteValue"/>.
+    /// </summary>
+    /// <param name="writer">The writer to write to.</param>
+    /// <param name="subject">The subject to write.</param>
     private static void WriteSingleSubject(Utf8JsonWriter writer, CredentialSubject subject)
     {
         writer.WriteStartObject();

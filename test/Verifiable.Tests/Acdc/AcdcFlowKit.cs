@@ -50,7 +50,7 @@ internal delegate string FixedIdentifierEventBuilder(string version, string said
 internal static class AcdcFlowKit
 {
     /// <summary>The Blake3-256 CESR digest code SAIDs are stamped with.</summary>
-    public static readonly string Code = CesrDigestCodes.Blake3Bits256;
+    public static string Code { get; } = CesrDigestCodes.Blake3Bits256;
 
 
     /// <summary>A minted, signed KEL event: its pooled serialization, its SAID, and the signature over it.</summary>
@@ -458,7 +458,7 @@ internal static class AcdcFlowKit
 
 
     /// <summary>Decodes a KERI event's JSON bytes into a neutral field map for the production KEL replay.</summary>
-    private static readonly KeriEventFieldMapDecoder JsonFieldMapDecoder = (serialization, serializationKind) => KeriEventJson.DecodeFieldMap(serialization);
+    private static KeriEventFieldMapDecoder JsonFieldMapDecoder { get; } = (serialization, serializationKind) => KeriEventJson.DecodeFieldMap(serialization);
 
 
     /// <summary>

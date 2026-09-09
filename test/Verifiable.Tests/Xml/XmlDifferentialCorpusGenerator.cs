@@ -92,27 +92,27 @@ internal sealed class XmlDifferentialCorpusGenerator
     /// element-name pool never produces it, so at most one exists per document.</summary>
     internal const string ApexLocalName = "apex";
 
-    private static readonly string[] ElementNames = ["doc", "item", "node", "data", "entry", "list", "value", "meta", "rec", "unit"];
-    private static readonly string[] AttributeLocalNames = ["a", "attr", "idx", "key", "order", "refn", "val", "zed"];
-    private static readonly string[] NamespacePrefixes = ["pa", "pb", "pc", "pd", "pe"];
-    private static readonly string[] AbsoluteNamespaceUris = ["urn:alpha", "urn:beta", "urn:gamma", "http://example.com/one", "http://example.org/two", "urn:omega"];
-    private static readonly string[] TextRuns = ["plain text", "  padded  ", "line1\r\nline2", "greater > than", "ä ö å € 漢字 𐍈", "\n\t indent \n"];
-    private static readonly string[] CharacterReferences = ["&#x41;", "&#66;", "&#x20AC;", "&#xD;", "&#x9;", "&#xA;", "&#x10348;"];
-    private static readonly string[] EntityReferences = ["&amp;", "&lt;", "&gt;", "&apos;", "&quot;"];
-    private static readonly string[] CdataRuns = ["a<b&c>d", " ä € ", "plain cdata"];
-    private static readonly string[] CommentRuns = ["c1 note", "x - y", "kommentti ä"];
-    private static readonly string[] ProcessingInstructionTargets = ["pi1", "proc", "style-x"];
-    private static readonly string[] ProcessingInstructionData = ["d=1 e=2", "  spaced  ", "", "data ä €"];
-    private static readonly string[] AttributeValueRuns = ["v1", "  padded  ", "quote ' here", "gt > here", "multi\nline", "ä€漢"];
-    private static readonly string[] XmlLangValues = ["en", "fi", "de-DE"];
-    private static readonly string[] XmlSpaceValues = ["default", "preserve"];
-    private static readonly string[] XmlBaseValues = ["http://example.com/base/", "sub/dir/", "../up"];
-    private static readonly string[] PrefixListTokens = ["pa", "pb", "pc", "pd", "pe", "zz", "#default"];
+    private static string[] ElementNames { get; } = ["doc", "item", "node", "data", "entry", "list", "value", "meta", "rec", "unit"];
+    private static string[] AttributeLocalNames { get; } = ["a", "attr", "idx", "key", "order", "refn", "val", "zed"];
+    private static string[] NamespacePrefixes { get; } = ["pa", "pb", "pc", "pd", "pe"];
+    private static string[] AbsoluteNamespaceUris { get; } = ["urn:alpha", "urn:beta", "urn:gamma", "http://example.com/one", "http://example.org/two", "urn:omega"];
+    private static string[] TextRuns { get; } = ["plain text", "  padded  ", "line1\r\nline2", "greater > than", "ä ö å € 漢字 𐍈", "\n\t indent \n"];
+    private static string[] CharacterReferences { get; } = ["&#x41;", "&#66;", "&#x20AC;", "&#xD;", "&#x9;", "&#xA;", "&#x10348;"];
+    private static string[] EntityReferences { get; } = ["&amp;", "&lt;", "&gt;", "&apos;", "&quot;"];
+    private static string[] CdataRuns { get; } = ["a<b&c>d", " ä € ", "plain cdata"];
+    private static string[] CommentRuns { get; } = ["c1 note", "x - y", "kommentti ä"];
+    private static string[] ProcessingInstructionTargets { get; } = ["pi1", "proc", "style-x"];
+    private static string[] ProcessingInstructionData { get; } = ["d=1 e=2", "  spaced  ", "", "data ä €"];
+    private static string[] AttributeValueRuns { get; } = ["v1", "  padded  ", "quote ' here", "gt > here", "multi\nline", "ä€漢"];
+    private static string[] XmlLangValues { get; } = ["en", "fi", "de-DE"];
+    private static string[] XmlSpaceValues { get; } = ["default", "preserve"];
+    private static string[] XmlBaseValues { get; } = ["http://example.com/base/", "sub/dir/", "../up"];
+    private static string[] PrefixListTokens { get; } = ["pa", "pb", "pc", "pd", "pe", "zz", "#default"];
 
     private ulong state;
     private StringBuilder builder = new();
-    private readonly List<(string Prefix, string Uri)> scope = [];
-    private readonly List<string> rootDeclaredPrefixes = [];
+    private List<(string Prefix, string Uri)> Scope { get; } = [];
+    private List<string> RootDeclaredPrefixes { get; } = [];
     private bool isApexDocument;
     private int maximumDepth;
     private int remainingElements;
@@ -159,8 +159,8 @@ internal sealed class XmlDifferentialCorpusGenerator
         }
 
         builder = new StringBuilder();
-        scope.Clear();
-        rootDeclaredPrefixes.Clear();
+        Scope.Clear();
+        RootDeclaredPrefixes.Clear();
         isApexDocument = index % 2 == 0;
         maximumDepth = 4 + NextBelow(3);
         remainingElements = 12 + NextBelow(20);
@@ -256,7 +256,7 @@ internal sealed class XmlDifferentialCorpusGenerator
         var keptTokens = new List<string>();
         foreach(string token in tokens)
         {
-            if(!string.Equals(token, "#default", StringComparison.Ordinal) && !rootDeclaredPrefixes.Contains(token))
+            if(!string.Equals(token, "#default", StringComparison.Ordinal) && !RootDeclaredPrefixes.Contains(token))
             {
                 keptTokens.Add(token);
             }
@@ -276,7 +276,7 @@ internal sealed class XmlDifferentialCorpusGenerator
     private void AppendElement(int depth, string? forcedLocalName)
     {
         --remainingElements;
-        int scopeMark = scope.Count;
+        int scopeMark = Scope.Count;
         var attributeTexts = new List<string>();
         var prefixesDeclaredHere = new HashSet<string>(StringComparer.Ordinal);
 
@@ -291,7 +291,7 @@ internal sealed class XmlDifferentialCorpusGenerator
                     {
                         string uri = NextChance(25) ? string.Empty : Pick(AbsoluteNamespaceUris);
                         attributeTexts.Add($"xmlns=\"{uri}\"");
-                        scope.Add((string.Empty, uri));
+                        Scope.Add((string.Empty, uri));
                     }
                 }
                 else
@@ -301,10 +301,10 @@ internal sealed class XmlDifferentialCorpusGenerator
                     {
                         string uri = NextChance(35) && TryResolvePrefix(prefix, out string boundUri) && boundUri.Length > 0 ? boundUri : Pick(AbsoluteNamespaceUris);
                         attributeTexts.Add($"xmlns:{prefix}=\"{uri}\"");
-                        scope.Add((prefix, uri));
+                        Scope.Add((prefix, uri));
                         if(depth == 0)
                         {
-                            rootDeclaredPrefixes.Add(prefix);
+                            RootDeclaredPrefixes.Add(prefix);
                         }
                     }
                 }
@@ -312,7 +312,7 @@ internal sealed class XmlDifferentialCorpusGenerator
         }
 
         var usablePrefixes = new List<string>();
-        foreach((string prefix, string _) in scope)
+        foreach((string prefix, string _) in Scope)
         {
             if(prefix.Length > 0 && !usablePrefixes.Contains(prefix))
             {
@@ -377,7 +377,7 @@ internal sealed class XmlDifferentialCorpusGenerator
                 builder.Append("></").Append(qualifiedName).Append('>');
             }
 
-            scope.RemoveRange(scopeMark, scope.Count - scopeMark);
+            Scope.RemoveRange(scopeMark, Scope.Count - scopeMark);
 
             return;
         }
@@ -395,7 +395,7 @@ internal sealed class XmlDifferentialCorpusGenerator
         }
 
         builder.Append("</").Append(qualifiedName).Append('>');
-        scope.RemoveRange(scopeMark, scope.Count - scopeMark);
+        Scope.RemoveRange(scopeMark, Scope.Count - scopeMark);
     }
 
 
@@ -571,11 +571,11 @@ internal sealed class XmlDifferentialCorpusGenerator
     /// <returns><see langword="true"/> when the prefix is bound in scope.</returns>
     private bool TryResolvePrefix(string prefix, out string uri)
     {
-        for(int i = scope.Count - 1; i >= 0; --i)
+        for(int i = Scope.Count - 1; i >= 0; --i)
         {
-            if(scope[i].Prefix == prefix)
+            if(Scope[i].Prefix == prefix)
             {
-                uri = scope[i].Uri;
+                uri = Scope[i].Uri;
 
                 return true;
             }

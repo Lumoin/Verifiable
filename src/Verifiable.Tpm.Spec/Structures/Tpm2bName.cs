@@ -32,7 +32,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// followed by the hash digest. The total size is 2 + digestSize.
 /// </para>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 10.5.3.
+/// Specification reference: TPM 2.0 Library Part 2, clause 10.4.3.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -207,9 +207,17 @@ public sealed class Tpm2bName: IDisposable, ITpmWireType
     /// <summary>
     /// Parses a Name from a TPM reader.
     /// </summary>
+    /// <remarks>
+    /// The declared size is checked against <see cref="TpmReader.Remaining"/> before any pooled buffer is
+    /// rented, so a truncated buffer throws the same <see cref="ArgumentOutOfRangeException"/>
+    /// <see cref="TpmReader.ReadBytes(int)"/> would have thrown for the same input, but without renting first —
+    /// a rent-then-read ordering would otherwise orphan the rental on that throw.
+    /// </remarks>
     /// <param name="reader">The reader.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The parsed Name.</returns>
+    /// <exception cref="InvalidOperationException">The declared size exceeds <see cref="MaxSize"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The declared size exceeds the octets remaining in <paramref name="reader"/>.</exception>
     public static Tpm2bName Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
@@ -223,6 +231,11 @@ public sealed class Tpm2bName: IDisposable, ITpmWireType
         if(size > MaxSize)
         {
             throw new InvalidOperationException($"Name size {size} exceeds maximum {MaxSize}.");
+        }
+
+        if(size > reader.Remaining)
+        {
+            throw new ArgumentOutOfRangeException(nameof(reader), size, $"Name size {size} exceeds the {reader.Remaining} octets remaining in the reader.");
         }
 
         IMemoryOwner<byte> storage = pool.Rent(size);

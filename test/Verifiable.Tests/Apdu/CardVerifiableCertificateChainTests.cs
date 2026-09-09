@@ -16,9 +16,9 @@ namespace Verifiable.Tests.Apdu;
 [TestClass]
 internal sealed class CardVerifiableCertificateChainTests
 {
-    private static readonly DateOnly Effective = new(2024, 1, 1);
-    private static readonly DateOnly Expiration = new(2026, 1, 1);
-    private static readonly DateOnly WithinValidity = new(2025, 1, 1);
+    private static DateOnly Effective { get; } = new(2024, 1, 1);
+    private static DateOnly Expiration { get; } = new(2026, 1, 1);
+    private static DateOnly WithinValidity { get; } = new(2025, 1, 1);
 
 
     public required TestContext TestContext { get; set; }

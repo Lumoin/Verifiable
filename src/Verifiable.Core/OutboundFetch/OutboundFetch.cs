@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Verifiable.Core.Transport;
 
 namespace Verifiable.Core.OutboundFetch;
 
@@ -78,7 +79,7 @@ public static class OutboundFetch
             OutboundResponse response = await transport(current, context, cancellationToken).ConfigureAwait(false);
 
             if(!RedirectStatusCodes.Contains(response.StatusCode)
-                || !response.TryGetHeader("Location", out string? location)
+                || !response.Headers.TryGetValue(WellKnownHttpHeaderNames.Location, out string? location)
                 || string.IsNullOrWhiteSpace(location))
             {
                 //Terminal (non-redirect) response.

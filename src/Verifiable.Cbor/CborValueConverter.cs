@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Formats.Cbor;
 using System.Linq;
+using System.Numerics;
+using Lumoin.Veritas.Cbor;
+using Lumoin.Veritas.Cbor.Converters;
 
 namespace Verifiable.Cbor;
 
@@ -26,7 +28,7 @@ namespace Verifiable.Cbor;
 /// <item><description>Null -> CBOR null.</description></item>
 /// <item><description>Boolean -> CBOR boolean.</description></item>
 /// <item><description>Integer types (byte, sbyte, short, ushort, int, uint, long, ulong) -> CBOR integer.</description></item>
-/// <item><description>Floating-point types (float, double, decimal) -> CBOR float.</description></item>
+/// <item><description>Floating-point types (float, double) -> CBOR float; decimal -> an RFC 8949 §3.4.4 Tag 4 decimal fraction.</description></item>
 /// <item><description>String -> CBOR text string.</description></item>
 /// <item><description>Byte arrays and Memory&lt;byte&gt; -> CBOR byte string.</description></item>
 /// <item><description>DateTimeOffset, DateTime -> CBOR integer (Unix seconds).</description></item>
@@ -124,7 +126,7 @@ public static class CborValueConverter
             }
             case decimal decimalValue:
             {
-                writer.WriteDecimal(decimalValue);
+                WriteDecimalFraction(writer, decimalValue);
                 break;
             }
             case string stringValue:
@@ -213,22 +215,21 @@ public static class CborValueConverter
 
 
     /// <summary>
-    /// Writes a CLR value as CBOR using the specified options.
+    /// Writes a CLR value as CBOR, taking <paramref name="options"/> for parity with the other
+    /// options-carrying overloads in this class. A <see langword="null"/> value is omitted rather
+    /// than written, matching the only null-handling behavior any caller of this overload has ever
+    /// exercised.
     /// </summary>
     /// <param name="writer">The CBOR writer.</param>
     /// <param name="value">The value to write.</param>
-    /// <param name="options">The serializer options.</param>
+    /// <param name="options">The serializer options; unused today beyond establishing overload parity.</param>
     /// <exception cref="NotSupportedException">Thrown when the type is not supported.</exception>
-    /// <remarks>
-    /// This overload is provided for compatibility with the <see cref="CborConverter{T}"/> infrastructure.
-    /// Currently, options only affects null handling via <see cref="CborSerializerOptions.WriteNullValues"/>.
-    /// </remarks>
     public static void WriteValue(CborWriter writer, object? value, CborSerializerOptions options)
     {
         ArgumentNullException.ThrowIfNull(writer);
         ArgumentNullException.ThrowIfNull(options);
 
-        if(value is null && !options.WriteNullValues)
+        if(value is null)
         {
             return;
         }
@@ -254,7 +255,7 @@ public static class CborValueConverter
             CborReaderState.Boolean => reader.ReadBoolean(),
             CborReaderState.UnsignedInteger => ReadUnsignedInteger(ref reader),
             CborReaderState.NegativeInteger => ReadNegativeInteger(ref reader),
-            CborReaderState.HalfPrecisionFloat => reader.ReadDouble(),
+            CborReaderState.HalfPrecisionFloat => (double)reader.ReadHalf(),
             CborReaderState.SinglePrecisionFloat => reader.ReadSingle(),
             CborReaderState.DoublePrecisionFloat => reader.ReadDouble(),
             CborReaderState.TextString => reader.ReadTextString(),
@@ -303,7 +304,7 @@ public static class CborValueConverter
             CborReaderState.Boolean => reader.ReadBoolean(),
             CborReaderState.UnsignedInteger => ReadUnsignedInteger(ref reader),
             CborReaderState.NegativeInteger => ReadNegativeInteger(ref reader),
-            CborReaderState.HalfPrecisionFloat => reader.ReadDouble(),
+            CborReaderState.HalfPrecisionFloat => (double)reader.ReadHalf(),
             CborReaderState.SinglePrecisionFloat => reader.ReadSingle(),
             CborReaderState.DoublePrecisionFloat => reader.ReadDouble(),
             CborReaderState.TextString => reader.ReadTextString(),
@@ -436,7 +437,7 @@ public static class CborValueConverter
         object? value = ReadValue(ref reader);
 
         //Return as tuple; callers can handle specific tags as needed.
-        return (Tag: (ulong)tag, Value: value);
+        return (Tag: tag.Value, Value: value);
     }
 
 
@@ -445,7 +446,7 @@ public static class CborValueConverter
         CborTag tag = reader.ReadTag();
         object? value = ReadValue(ref reader, options);
 
-        return (Tag: (ulong)tag, Value: value);
+        return (Tag: tag.Value, Value: value);
     }
 
 
@@ -543,5 +544,32 @@ public static class CborValueConverter
             WriteValue(writer, item);
         }
         writer.WriteEndArray();
+    }
+
+
+    /// <summary>
+    /// Writes <paramref name="value"/> as an RFC 8949 §3.4.4 Tag 4 decimal fraction: the two-element
+    /// array <c>[exponent, mantissa]</c> that <see cref="DecimalFractionCborConverter"/> encodes,
+    /// with the exponent and unscaled mantissa read directly off the decimal's own bit layout so the
+    /// wire value is exact for every representable <see cref="decimal"/>.
+    /// </summary>
+    private static void WriteDecimalFraction(CborWriter writer, decimal value)
+    {
+        Span<int> bits = stackalloc int[4];
+        decimal.GetBits(value, bits);
+
+        int scale = (bits[3] >> 16) & 0x7F;
+        bool isNegative = bits[3] < 0;
+
+        BigInteger mantissa = (new BigInteger((uint)bits[2]) << 64)
+            | (new BigInteger((uint)bits[1]) << 32)
+            | new BigInteger((uint)bits[0]);
+
+        if(isNegative)
+        {
+            mantissa = -mantissa;
+        }
+
+        new DecimalFractionCborConverter().Write(writer, new CborDecimalFraction(-scale, mantissa));
     }
 }

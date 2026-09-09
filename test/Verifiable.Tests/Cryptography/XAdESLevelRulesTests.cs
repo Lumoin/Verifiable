@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Diagnostics;
 using Microsoft.Extensions.Time.Testing;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -1163,16 +1162,17 @@ internal sealed class XAdESLevelRulesTests
 
 
     /// <summary>
-    /// Cost hardening: <see cref="XAdESLevelRules.CheckReferencesResolveToValidationDataAsync"/> resolves references against candidates through a digest-value-keyed index built
+    /// Cost hardening, counted: <see cref="XAdESLevelRules.CheckReferencesResolveToValidationDataAsync"/> resolves references against candidates through a digest-value-keyed index built
     /// ONCE per distinct algorithm (<c>CandidateDigestIndex</c>), not by re-digesting the whole candidate list for every reference — O(references + candidates), not O(references &#215;
-    /// candidates). The worst case is exactly the attacker's own: every reference NON-resolving, since a non-resolving reference is the one that would have walked the WHOLE candidate list under
-    /// the unmemoized shape. At the shipped per-element ceilings (<c>XAdESCompleteRevocationRefs.MaximumRevocationRefEntryCount</c>/<c>XAdESCertificateValues.MaximumEntryCount</c>, both 4096) the
-    /// unmemoized shape measured ~456 ms at 512&#215;512 and extrapolated to roughly 29 seconds at this exact 4096&#215;4096 ceiling shape; the fix keeps it inside a loose few-second ceiling —
-    /// proving the bound is the CONSTANT, not the attacker's chosen non-resolving count. Anchored to <see
+    /// candidates). The discriminator is a rent count observed on a <see cref="MeteredHousePool"/>, not a wall-clock ceiling: at the shipped per-element ceilings
+    /// (<c>XAdESCompleteRevocationRefs.MaximumRevocationRefEntryCount</c>/<c>XAdESCertificateValues.MaximumEntryCount</c>, both 4096), the memoized shape rents exactly one 32-octet digest per
+    /// candidate — <c>count</c> rents, the index built once for the one triggered SHA-256 algorithm — while the unmemoized O(references &#215; candidates) shape (re-digesting the whole candidate
+    /// list for every reference) would rent <c>count &#215; count == 16,777,216</c> 32-octet digests instead: a factor-of-<c>count</c> signal that discriminates a regression unconditionally,
+    /// independent of machine speed. Anchored to <see
     /// href="https://www.etsi.org/deliver/etsi_en/319100_319199/31913201/01.03.01_60/en_31913201v010301p.pdf">ETSI EN 319 132-1 V1.3.1</see> Annex A.1.1.
     /// </summary>
     [TestMethod]
-    public async Task CheckReferencesResolveToValidationDataAsyncStaysWithinTheCeilingShapeCost()
+    public async Task CheckReferencesResolveToValidationDataAsyncResolvesReferencesWithOneDigestPerCandidate()
     {
         const int count = 4096;
         var refs = new List<XAdESCertificateReferenceDigestFact>(count);
@@ -1190,13 +1190,13 @@ internal sealed class XAdESLevelRulesTests
 
         using XAdESQualifyingPropertiesFacts facts = BuildFacts(completeCertificateRefs: refs, embeddedCertificates: candidates, certificateValidationDataTriggered: true);
 
-        var stopwatch = Stopwatch.StartNew();
-        IReadOnlyList<XAdESRuleViolation> violations = await XAdESLevelRules.CheckReferencesResolveToValidationDataAsync(facts, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
-        stopwatch.Stop();
+        using var meteredPool = new MeteredHousePool();
+        IReadOnlyList<XAdESRuleViolation> violations = await XAdESLevelRules.CheckReferencesResolveToValidationDataAsync(facts, meteredPool.Pool, TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.HasCount(count, violations, "Every one of the count non-resolving references must produce its own violation.");
-        Assert.IsLessThan(TimeSpan.FromSeconds(5), stopwatch.Elapsed,
-            $"Took {stopwatch.Elapsed}; the unmemoized O(references x candidates) shape this fixes extrapolated to ~29s at this exact 4096x4096 ceiling shape.");
+        Assert.HasCount(count, violations, $"Every one of the {count} non-resolving references must produce its own violation.");
+        Assert.AreEqual(count, meteredPool.RentedCountOfSize(32),
+            $"The memoized CandidateDigestIndex digests each of the {count} candidates exactly once for the one triggered algorithm; the unmemoized O(references x candidates) shape would rent {count}*{count} == {(long)count * count:N0} 32-octet digests instead.");
+        Assert.AreEqual(0L, meteredPool.OutstandingCount, "The index's per-candidate digest rentals must all be returned before the rule returns.");
     }
 
 

@@ -67,29 +67,22 @@ public static class PkceGeneration
         //SHA-256 of the ASCII bytes of the Base64url-encoded verifier per RFC 7636 §4.2.
         //S256 is not configurable — always SHA-256.
         int inputByteCount = Encoding.ASCII.GetByteCount(encodedVerifier);
-        IMemoryOwner<byte> inputOwner = pool.Rent(inputByteCount);
-        try
-        {
-            Span<byte> inputBytes = inputOwner.Memory.Span[..inputByteCount];
-            Encoding.ASCII.GetBytes(encodedVerifier, inputBytes);
+        using IMemoryOwner<byte> inputOwner = pool.Rent(inputByteCount);
+        Span<byte> inputBytes = inputOwner.Memory.Span[..inputByteCount];
+        Encoding.ASCII.GetBytes(encodedVerifier, inputBytes);
 
-            //The PKCE S256 challenge is a SHA-256 of the local code verifier — sync by nature, no hardware-async
-            //backend — so it hashes through the registered synchronous HashFunctionDelegate seam.
-            string encodedChallenge;
-            using(DigestValue challenge = CryptographicKeyEvents.ComputeDigest(
-                inputBytes,
-                ChallengeSha256ByteLength,
-                CryptoTags.Sha256Digest,
-                pool))
-            {
-                encodedChallenge = base64UrlEncoder(challenge.AsReadOnlySpan());
-            }
-
-            return new PkceParameters(encodedVerifier, encodedChallenge, PkceMethod.S256);
-        }
-        finally
+        //The PKCE S256 challenge is a SHA-256 of the local code verifier — sync by nature, no hardware-async
+        //backend — so it hashes through the registered synchronous HashFunctionDelegate seam.
+        string encodedChallenge;
+        using(DigestValue challenge = CryptographicKeyEvents.ComputeDigest(
+            inputBytes,
+            ChallengeSha256ByteLength,
+            CryptoTags.Sha256Digest,
+            pool))
         {
-            inputOwner.Dispose();
+            encodedChallenge = base64UrlEncoder(challenge.AsReadOnlySpan());
         }
+
+        return new PkceParameters(encodedVerifier, encodedChallenge, PkceMethod.S256);
     }
 }

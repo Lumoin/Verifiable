@@ -75,7 +75,7 @@ internal sealed class AnnexAValidationScenario: IDisposable
     private static ReadOnlyMemory<byte> ExampleContent { get; } = new("the Annex A validation example content"u8.ToArray());
 
     /// <summary>The carriers, certificates and keys this scenario minted, released in reverse order.</summary>
-    private readonly List<IDisposable> owned = [];
+    private List<IDisposable> Owned { get; } = [];
 
     /// <summary>Whether <see cref="Dispose"/> has already run.</summary>
     private bool disposed;
@@ -266,12 +266,12 @@ internal sealed class AnnexAValidationScenario: IDisposable
         }
 
         disposed = true;
-        for(int i = owned.Count - 1; i >= 0; --i)
+        for(int i = Owned.Count - 1; i >= 0; --i)
         {
-            owned[i].Dispose();
+            Owned[i].Dispose();
         }
 
-        owned.Clear();
+        Owned.Clear();
     }
 
 
@@ -691,7 +691,7 @@ internal sealed class AnnexAValidationScenario: IDisposable
     /// <returns>The same artefact.</returns>
     private T Own<T>(T artefact) where T: IDisposable
     {
-        owned.Add(artefact);
+        Owned.Add(artefact);
 
         return artefact;
     }

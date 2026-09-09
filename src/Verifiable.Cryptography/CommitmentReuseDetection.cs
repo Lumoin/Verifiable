@@ -76,6 +76,6 @@ public static class CommitmentReuseDetection
             }
         }
 
-        return reused ?? (IReadOnlyList<DigestValue>)[];
+        return reused ?? [];
     }
 }

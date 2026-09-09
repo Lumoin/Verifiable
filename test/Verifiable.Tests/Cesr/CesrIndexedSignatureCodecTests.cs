@@ -1,4 +1,4 @@
-﻿using System.Buffers;
+using System.Buffers;
 using System.Collections.Generic;
 using Lumoin.Base;
 using Verifiable.Cesr;
@@ -32,7 +32,7 @@ internal sealed class CesrIndexedSignatureCodecTests
             "d8000000100a5f1a7b23654ba314cdd5d45c1b37d924d822335fe818c2ed0a29ad9c5f57ac9a7c3e3a7b51858550fc08db33a4bd7241664c7f5e3c2e0a54106446abbe9a0a"];
 
         //Variable indexed code with an empty value and no other-index.
-        yield return ["0z", "", 0, (int?)null, "0zAA", "d33000"];
+        yield return ["0z", "", 0, null, "0zAA", "d33000"];
     }
 
 

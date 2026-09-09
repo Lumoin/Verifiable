@@ -76,11 +76,11 @@ internal sealed class RefreshedIdTokenParityTests
 
     private const string ExpectedEmail = "parity-subject@example.test";
 
-    private static readonly Uri ClientBaseUri = new(ClientId);
+    private static Uri ClientBaseUri { get; } = new(ClientId);
 
-    private static readonly Uri RedirectUri = new("https://client.example.com/callback");
+    private static Uri RedirectUri { get; } = new("https://client.example.com/callback");
 
-    private static readonly string Scope =
+    private static string Scope { get; } =
         $"{WellKnownScopes.OpenId} {WellKnownScopes.Profile} {WellKnownScopes.Email}";
 
 
@@ -317,7 +317,7 @@ internal sealed class RefreshedIdTokenParityTests
 
         return await DpopProofConstruction.BuildAsync(
             claims, dpopKey, TestHostShell.Base64UrlEncoder, DpopTestSupport.Serializer,
-            MicrosoftCryptographicFunctions.SignP256Async, TestHostShell.MemoryPool,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async, TestHostShell.MemoryPool,
             TestContext.CancellationToken).ConfigureAwait(false);
     }
 

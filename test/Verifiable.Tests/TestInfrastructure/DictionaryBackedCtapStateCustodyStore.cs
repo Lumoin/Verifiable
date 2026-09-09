@@ -31,7 +31,7 @@ namespace Verifiable.Tests.TestInfrastructure;
 internal sealed class DictionaryBackedCtapStateCustodyStore
 {
     /// <summary>Every persisted snapshot's bytes, by run id.</summary>
-    private readonly Dictionary<string, byte[]> snapshotsByRunId = [];
+    private Dictionary<string, byte[]> SnapshotsByRunId { get; } = [];
 
     /// <summary>
     /// The order every load/persist/wipe operation ran in, one entry per call, formatted
@@ -48,7 +48,7 @@ internal sealed class DictionaryBackedCtapStateCustodyStore
     /// <summary>Whether a snapshot is currently persisted for <paramref name="runId"/>.</summary>
     /// <param name="runId">The run id to check.</param>
     /// <returns><see langword="true"/> if a snapshot is persisted; otherwise <see langword="false"/>.</returns>
-    public bool HasSnapshot(string runId) => snapshotsByRunId.ContainsKey(runId);
+    public bool HasSnapshot(string runId) => SnapshotsByRunId.ContainsKey(runId);
 
 
     /// <summary>
@@ -58,7 +58,7 @@ internal sealed class DictionaryBackedCtapStateCustodyStore
     /// </summary>
     /// <param name="runId">The run id whose persisted bytes to copy.</param>
     /// <returns>An independent copy of the persisted bytes.</returns>
-    public byte[] GetSnapshotBytesCopy(string runId) => (byte[])snapshotsByRunId[runId].Clone();
+    public byte[] GetSnapshotBytesCopy(string runId) => (byte[])SnapshotsByRunId[runId].Clone();
 
 
     /// <summary>
@@ -68,7 +68,7 @@ internal sealed class DictionaryBackedCtapStateCustodyStore
     /// </summary>
     /// <param name="runId">The run id whose persisted bytes to replace.</param>
     /// <param name="bytes">The replacement bytes.</param>
-    public void ReplaceSnapshotBytes(string runId, byte[] bytes) => snapshotsByRunId[runId] = bytes;
+    public void ReplaceSnapshotBytes(string runId, byte[] bytes) => SnapshotsByRunId[runId] = bytes;
 
 
     /// <summary>Attempts to load the snapshot bytes persisted for <paramref name="runId"/>. Has the <see cref="TryLoadSnapshotAsyncDelegate"/> shape.</summary>
@@ -76,7 +76,7 @@ internal sealed class DictionaryBackedCtapStateCustodyStore
     {
         OperationLog.Add($"Load:{runId}");
 
-        if(!snapshotsByRunId.TryGetValue(runId, out byte[]? bytes))
+        if(!SnapshotsByRunId.TryGetValue(runId, out byte[]? bytes))
         {
             return ValueTask.FromResult<PooledMemory?>(null);
         }
@@ -88,7 +88,7 @@ internal sealed class DictionaryBackedCtapStateCustodyStore
     /// <summary>Persists a copy of <paramref name="snapshot"/>'s bytes for <paramref name="runId"/>. Has the <see cref="PersistSnapshotAsyncDelegate"/> shape.</summary>
     private ValueTask PersistSnapshotAsync(string runId, PooledMemory snapshot, CancellationToken cancellationToken)
     {
-        snapshotsByRunId[runId] = snapshot.AsReadOnlySpan().ToArray();
+        SnapshotsByRunId[runId] = snapshot.AsReadOnlySpan().ToArray();
         OperationLog.Add($"Persist:{runId}");
 
         return ValueTask.CompletedTask;
@@ -98,7 +98,7 @@ internal sealed class DictionaryBackedCtapStateCustodyStore
     /// <summary>Deletes whatever snapshot is persisted for <paramref name="runId"/>. Has the <see cref="WipeSnapshotAsyncDelegate"/> shape.</summary>
     private ValueTask WipeSnapshotAsync(string runId, CancellationToken cancellationToken)
     {
-        snapshotsByRunId.Remove(runId);
+        SnapshotsByRunId.Remove(runId);
         OperationLog.Add($"Wipe:{runId}");
 
         return ValueTask.CompletedTask;

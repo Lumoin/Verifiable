@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Verifiable.Tpm.Spec.Attributes;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Structures;
 
@@ -49,7 +50,7 @@ public sealed class TpmPolicyBuilder
     /// <c>TPM2_PolicyTicket()</c> ONLY when that ticket was minted with an empty <c>policyRef</c> — this method
     /// always folds an empty one (per its own summary), while <c>TPM2_PolicyTicket()</c> dispatches to the same
     /// <c>PolicyUpdate(TPM_CC_PolicySecret, ...)</c> fold using the ticket's OWN <c>policyRef</c> (TPM 2.0
-    /// Library Part 3, Section 23.5), selected by the ticket's tag rather than by <c>TPM_CC_PolicyTicket</c>
+    /// Library Part 3, clause 23.5), selected by the ticket's tag rather than by <c>TPM_CC_PolicyTicket</c>
     /// itself. For a ticket minted with a non-empty <c>policyRef</c>, this method predicts a different digest;
     /// there is no builder verb for that case — fold it directly with <see cref="TpmPolicyDigest.ExtendForSecret"/>.
     /// </remarks>
@@ -108,6 +109,117 @@ public sealed class TpmPolicyBuilder
     }
 
     /// <summary>
+    /// Appends a TPM2_PolicyPassword assertion.
+    /// </summary>
+    /// <returns>This builder.</returns>
+    public TpmPolicyBuilder WithPassword()
+    {
+        Assertions.Add(new PasswordPolicyAssertion());
+
+        return this;
+    }
+
+    /// <summary>
+    /// Appends a TPM2_PolicyCpHash assertion.
+    /// </summary>
+    /// <param name="cpHashA">The command parameter digest the policy binds to.</param>
+    /// <returns>This builder.</returns>
+    public TpmPolicyBuilder WithCpHash(ReadOnlyMemory<byte> cpHashA)
+    {
+        Assertions.Add(new CpHashPolicyAssertion(cpHashA));
+
+        return this;
+    }
+
+    /// <summary>
+    /// Appends a TPM2_PolicyNameHash assertion.
+    /// </summary>
+    /// <param name="nameHash">The digest of the concatenated target Names the policy binds to.</param>
+    /// <returns>This builder.</returns>
+    public TpmPolicyBuilder WithNameHash(ReadOnlyMemory<byte> nameHash)
+    {
+        Assertions.Add(new NameHashPolicyAssertion(nameHash));
+
+        return this;
+    }
+
+    /// <summary>
+    /// Appends a TPM2_PolicyDuplicationSelect assertion.
+    /// </summary>
+    /// <param name="objectName">The Name of the object to be duplicated.</param>
+    /// <param name="newParentName">The Name of the new parent.</param>
+    /// <param name="isObjectIncluded">Whether the object Name is folded into the policyDigest, binding the pair rather than the new parent alone.</param>
+    /// <returns>This builder.</returns>
+    public TpmPolicyBuilder WithDuplicationSelect(ReadOnlyMemory<byte> objectName, ReadOnlyMemory<byte> newParentName, bool isObjectIncluded)
+    {
+        Assertions.Add(new DuplicationSelectPolicyAssertion(objectName, newParentName, isObjectIncluded));
+
+        return this;
+    }
+
+    /// <summary>
+    /// Appends a TPM2_PolicyParameters assertion.
+    /// </summary>
+    /// <param name="parametersHash">The digest of the command code and parameters the policy binds to.</param>
+    /// <returns>This builder.</returns>
+    public TpmPolicyBuilder WithParameters(ReadOnlyMemory<byte> parametersHash)
+    {
+        Assertions.Add(new ParametersPolicyAssertion(parametersHash));
+
+        return this;
+    }
+
+    /// <summary>
+    /// Appends a TPM2_PolicyTemplate assertion.
+    /// </summary>
+    /// <param name="templateHash">The digest of the bound object template.</param>
+    /// <returns>This builder.</returns>
+    public TpmPolicyBuilder WithTemplate(ReadOnlyMemory<byte> templateHash)
+    {
+        Assertions.Add(new TemplatePolicyAssertion(templateHash));
+
+        return this;
+    }
+
+    /// <summary>
+    /// Appends a TPM2_PolicyLocality assertion.
+    /// </summary>
+    /// <param name="locality">The set of localities the policy admits.</param>
+    /// <returns>This builder.</returns>
+    public TpmPolicyBuilder WithLocality(TpmaLocality locality)
+    {
+        Assertions.Add(new LocalityPolicyAssertion(locality));
+
+        return this;
+    }
+
+    /// <summary>
+    /// Appends a TPM2_PolicyNvWritten assertion.
+    /// </summary>
+    /// <param name="isWrittenSet"><see langword="true"/> to require TPMA_NV_WRITTEN SET (YES); <see langword="false"/> to require it CLEAR (NO).</param>
+    /// <returns>This builder.</returns>
+    public TpmPolicyBuilder WithNvWritten(bool isWrittenSet)
+    {
+        Assertions.Add(new NvWrittenPolicyAssertion(isWrittenSet));
+
+        return this;
+    }
+
+    /// <summary>
+    /// Appends a TPM2_PolicyAuthorizeNV assertion.
+    /// </summary>
+    /// <param name="authHandle">The authorization handle for reading the Index.</param>
+    /// <param name="nvIndex">The NV Index whose held authPolicy authorizes the session.</param>
+    /// <param name="nvName">The NV Index's Name (<c>nameAlg || H(TPMS_NV_PUBLIC)</c>).</param>
+    /// <returns>This builder.</returns>
+    public TpmPolicyBuilder WithAuthorizeNv(uint authHandle, uint nvIndex, ReadOnlyMemory<byte> nvName)
+    {
+        Assertions.Add(new AuthorizeNvPolicyAssertion(authHandle, nvIndex, nvName));
+
+        return this;
+    }
+
+    /// <summary>
     /// Appends a TPM2_PolicyOR assertion over precomputed branch digests.
     /// </summary>
     /// <param name="branchDigests">The OR branch policy digests (build each branch as a <see cref="TpmPolicy"/> and pass its computed digest).</param>
@@ -127,7 +239,7 @@ public sealed class TpmPolicyBuilder
     /// This is also the digest a session reaches by replaying a TPM2_PolicySigned-minted ticket through
     /// <c>TPM2_PolicyTicket()</c>: that command dispatches to this same <c>PolicyUpdate(TPM_CC_PolicySigned,
     /// ...)</c> fold, selected by the ticket's own tag rather than by <c>TPM_CC_PolicyTicket</c> itself (TPM 2.0
-    /// Library Part 3, Section 23.5). A ticket-authorized branch therefore predicts with this same method — there
+    /// Library Part 3, clause 23.5). A ticket-authorized branch therefore predicts with this same method — there
     /// is no separate builder verb for it.
     /// </remarks>
     /// <param name="authObject">The handle of the key whose public part validates the signature.</param>

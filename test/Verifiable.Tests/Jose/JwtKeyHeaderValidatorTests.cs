@@ -8,7 +8,7 @@ namespace Verifiable.Tests.Jwt
     internal sealed class JwtKeyHeaderValidatorTests
     {
         //TODO: Put these to JsonWebKey2020?
-        private static readonly List<(Func<string, bool> IsAlg, Func<string, bool> IsCrv)> ValidAlgCrvPairs = new()
+        private static List<(Func<string, bool> IsAlg, Func<string, bool> IsCrv)> ValidAlgCrvPairs { get; } = new()
         {
             (WellKnownJwaValues.IsEs256, WellKnownCurveValues.IsP256),
             (WellKnownJwaValues.IsEs384, WellKnownCurveValues.IsP384),

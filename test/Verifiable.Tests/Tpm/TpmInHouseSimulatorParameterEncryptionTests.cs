@@ -12,6 +12,7 @@ using Verifiable.Tpm.Spec.Attributes;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -23,15 +24,15 @@ namespace Verifiable.Tests.Tpm;
 /// session negotiating a symmetric definition (XOR obfuscation or AES-CFB), sets <c>CONTINUE_SESSION | ENCRYPT</c>,
 /// and runs two <c>TPM2_GetRandom()</c> commands over the session, asserting each response verifies (the response
 /// HMAC) and decrypts to the requested length and that the two decrypted buffers differ (TPM 2.0 Library Part 1,
-/// clauses 17.6, 16.7, and 19).
+/// clauses 16.6, 15.7, and 18).
 /// </summary>
 /// <remarks>
 /// <para>
-/// The simulator derives the session key with the SAME <c>KDFa</c> (Part 1, clause 17.6.10 equation 20) the host
+/// The simulator derives the session key with the SAME <c>KDFa</c> (Part 1, clause 16.6.10 equation 20) the host
 /// <see cref="TpmSession.CreateBoundAsync"/> uses, keys the response HMAC and the parameter-encryption
 /// mask/keystream on the SAME session value, and frames the response in the order the production executor expects
 /// (the first response parameter is encrypted before rpHash is computed over the ciphertext, and the caller
-/// decrypts only after the response HMAC verifies; Part 1, clauses 16.7 and 19.1). So the on-device derivation and
+/// decrypts only after the response HMAC verifies; Part 1, clauses 15.7 and 18.1). So the on-device derivation and
 /// the host's verification cannot diverge by construction: these tests exercise the bound-session lifecycle, the
 /// nonce rolling, and the encrypt-attribute command path, not the byte-exact transform, whose correctness is the
 /// independent-oracle role of the transform's own known-answer tests.
@@ -59,7 +60,7 @@ internal sealed class TpmInHouseSimulatorParameterEncryptionTests
     [TestMethod]
     public async Task AesCfbEncryptedGetRandomRoundTripsThroughTheProductionPath()
     {
-        //AES-CFB parameter encryption (Part 1, clause 19.3) is platform specific; this exercises the full
+        //AES-CFB parameter encryption (Part 1, clause 18.3) is platform specific; this exercises the full
         //bound-session round trip over the AES-CFB channel through the production executor.
         await RunEncryptedGetRandomAsync(TpmtSymDef.Aes(128, TpmAlgIdConstants.TPM_ALG_CFB)).ConfigureAwait(false);
     }
@@ -75,7 +76,7 @@ internal sealed class TpmInHouseSimulatorParameterEncryptionTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_CreatePrimary, TpmResponseCodec.CreatePrimary);
@@ -104,7 +105,7 @@ internal sealed class TpmInHouseSimulatorParameterEncryptionTests
 
         try
         {
-            StartAuthSessionInput startInput = StartAuthSessionInput.CreateBoundUnsaltedHmacSession(objectHandle, SessionAlg, symmetric);
+            StartAuthSessionInput startInput = StartAuthSessionInput.CreateBoundUnsaltedHmacSession(objectHandle, SessionAlg, TestEntropy.NewCounterStream(), pool, symmetric);
 
             TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
                 tpm, startInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
@@ -119,7 +120,7 @@ internal sealed class TpmInHouseSimulatorParameterEncryptionTests
                 bindAuth.AsReadOnlyMemory(),
                 startInput.NonceCaller,
                 startResponse.NonceTPM,
-                SessionAlg,
+                SessionAlg, TestEntropy.NewCounterStream(),
                 pool,
                 symmetric: symmetric,
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -183,7 +184,7 @@ internal sealed class TpmInHouseSimulatorParameterEncryptionTests
     /// <returns>The operational simulator.</returns>
     private async Task<TpmSimulator> CreateOperationalAsync(BaseMemoryPool pool)
     {
-        var simulator = new TpmSimulator("tpm-in-house-paramenc", signingBackend: BouncyCastleTpmEccSigningBackend.Create());
+        var simulator = new TpmSimulator("tpm-in-house-paramenc", signingBackend: BouncyCastleTpmEccSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await BringOperationalAsync(simulator, pool).ConfigureAwait(false);
 

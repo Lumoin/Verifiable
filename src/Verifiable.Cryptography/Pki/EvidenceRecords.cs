@@ -326,10 +326,18 @@ public static class EvidenceRecords
     /// <exception cref="EvidenceRecordCreationException">When no data object was supplied, or the acquired token does not bind the tree's root.</exception>
     /// <exception cref="TimestampAcquisitionException">When the authority could not be reached, or its response failed a check.</exception>
     /// <remarks>
+    /// <para>
     /// The token is acquired through <see cref="TimestampAcquisition.AcquireAsync"/>, which verifies the
     /// response — its status, its own message imprint against the request, and its nonce — before returning it,
     /// and this method additionally asserts that the imprint is octet for octet the root the tree produced
     /// before writing it into any record. A token that does not bind the root is never attached.
+    /// </para>
+    /// <para>
+    /// <strong>Manual disposal, not a <see langword="using"/> declaration.</strong> <c>records</c> is a
+    /// per-group list, not one disposable value, so a fault before every group's record is minted disposes
+    /// whatever was built so far in the <see langword="catch"/> below rather than through a
+    /// <see langword="using"/> declaration.
+    /// </para>
     /// </remarks>
     public static async ValueTask<EvidenceRecordCreation> CreateInitialAsync(
         EvidenceRecordCreationContext context,
@@ -415,20 +423,10 @@ public static class EvidenceRecords
             ReadOnlyMemory<byte> timeStamp,
             BaseMemoryPool pool)
         {
-            PooledMemory? archiveTimeStamp = null;
-            PooledMemory? chain = null;
-            try
-            {
-                archiveTimeStamp = EncodeArchiveTimeStamp(statedAlgorithm, attributes: null, reducedHashtree, timeStamp, pool);
-                chain = EncodeArchiveTimeStampChain([archiveTimeStamp.AsReadOnlyMemory()], pool);
+            using PooledMemory archiveTimeStamp = EncodeArchiveTimeStamp(statedAlgorithm, attributes: null, reducedHashtree, timeStamp, pool);
+            using PooledMemory chain = EncodeArchiveTimeStampChain([archiveTimeStamp.AsReadOnlyMemory()], pool);
 
-                return EvidenceRecord.Create([treeAlgorithm], cryptoInfos, [chain.AsReadOnlyMemory()], pool);
-            }
-            finally
-            {
-                chain?.Dispose();
-                archiveTimeStamp?.Dispose();
-            }
+            return EvidenceRecord.Create([treeAlgorithm], cryptoInfos, [chain.AsReadOnlyMemory()], pool);
         }
     }
 

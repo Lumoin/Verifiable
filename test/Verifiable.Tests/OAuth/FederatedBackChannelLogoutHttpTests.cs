@@ -22,7 +22,7 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.OAuth;
 
 /// <summary>
-/// Slice 5d — federated logout end-to-end over real HTTP. One OP session is shared
+/// Federated logout end-to-end over real HTTP. One OP session is shared
 /// across two relying parties (SSO: one OP <c>sid</c>, two RP sessions). The user logs
 /// out at the OP; the OP terminates the local session and fans a signed
 /// <c>logout_token</c> out to <em>every</em> registered RP over a real socket. Each RP
@@ -38,7 +38,7 @@ namespace Verifiable.Tests.OAuth;
 /// compact token bytes and nothing else.
 /// </para>
 /// <para>
-/// Scope choice (per the slice's latitude): the OP drives its session setup and the
+/// Scope choice: the OP drives its session setup and the
 /// <c>end_session</c> trigger in-process — that path is already covered by
 /// <see cref="EndSessionLogoutTests.EndSessionFansOutBackChannelLogoutAfterTerminate"/> —
 /// while the security-critical OP→RP <c>logout_token</c> delivery crosses a real Kestrel
@@ -69,14 +69,14 @@ internal sealed class FederatedBackChannelLogoutHttpTests
     private const string SsoSessionId = "session-sso";
 
     /// <summary>The redirect URI every client registered by the host shares.</summary>
-    private static readonly Uri RedirectUri = new("https://client.example.com/callback");
+    private static Uri RedirectUri { get; } = new("https://client.example.com/callback");
 
     /// <summary>
     /// Auth-code/OIDC defaults plus both logout capabilities. RP-Initiated Logout
     /// activates the <c>end_session</c> endpoint; Back-Channel Logout opens the fan-out
     /// drop-out after the local session is terminated.
     /// </summary>
-    private static readonly ImmutableHashSet<CapabilityIdentifier> RpCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> RpCapabilities { get; } =
         ImmutableHashSet.Create(
             WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
             WellKnownCapabilityIdentifiers.OAuthPushedAuthorization,
@@ -296,20 +296,20 @@ internal sealed class RelyingPartyReceiver: IAsyncDisposable
     /// <summary>The relative path the OP POSTs this RP's <c>logout_token</c> to.</summary>
     private const string BackChannelLogoutPath = "/backchannel-logout";
 
-    private readonly MinimalHttpHost host;
-    private readonly PublicKeyMemory opPublic;
-    private readonly string expectedIssuer;
-    private readonly HashSet<string> activeSessions = new(StringComparer.Ordinal);
-    private readonly List<string> verifiedSessionIds = [];
+    private MinimalHttpHost Host { get; }
+    private PublicKeyMemory OpPublic { get; }
+    private string ExpectedIssuer { get; }
+    private HashSet<string> ActiveSessions { get; } = new(StringComparer.Ordinal);
+    private List<string> VerifiedSessionIdList { get; } = [];
 
 
     private RelyingPartyReceiver(
         MinimalHttpHost host, string clientId, PublicKeyMemory opPublic, string expectedIssuer)
     {
-        this.host = host;
+        this.Host = host;
         ClientId = clientId;
-        this.opPublic = opPublic;
-        this.expectedIssuer = expectedIssuer;
+        this.OpPublic = opPublic;
+        this.ExpectedIssuer = expectedIssuer;
         BackChannelLogoutUri = new Uri(host.BaseAddress, BackChannelLogoutPath);
     }
 
@@ -321,10 +321,10 @@ internal sealed class RelyingPartyReceiver: IAsyncDisposable
     public Uri BackChannelLogoutUri { get; }
 
     /// <summary>The self-signed leaf certificate this RP's HTTPS listener presents; the OP-side delivery client pins to this exact certificate rather than trusting a CA.</summary>
-    public X509Certificate2 Certificate => host.Certificate;
+    public X509Certificate2 Certificate => Host.Certificate;
 
     /// <summary>The <c>sid</c> values this RP has verified and dropped, in arrival order.</summary>
-    public IReadOnlyList<string> VerifiedSessionIds => verifiedSessionIds;
+    public IReadOnlyList<string> VerifiedSessionIds => VerifiedSessionIdList;
 
     /// <summary>The <c>sub</c> of the most recently verified Logout Token, or <see langword="null"/>.</summary>
     public string? LastSubject { get; private set; }
@@ -362,14 +362,14 @@ internal sealed class RelyingPartyReceiver: IAsyncDisposable
     public void SeedSession(string sessionId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
-        activeSessions.Add(sessionId);
+        ActiveSessions.Add(sessionId);
     }
 
 
     /// <summary>Whether this RP still holds an active session for <paramref name="sessionId"/>.</summary>
     /// <param name="sessionId">The OP session id to test.</param>
     /// <returns><see langword="true"/> while the session is live; <see langword="false"/> once dropped.</returns>
-    public bool HasActiveSession(string sessionId) => activeSessions.Contains(sessionId);
+    public bool HasActiveSession(string sessionId) => ActiveSessions.Contains(sessionId);
 
 
     /// <summary>
@@ -397,8 +397,8 @@ internal sealed class RelyingPartyReceiver: IAsyncDisposable
 
         BackChannelLogoutVerificationResult result = await BackChannelLogout.VerifyLogoutTokenAsync(
             logoutToken,
-            opPublic,
-            expectedIssuer,
+            OpPublic,
+            ExpectedIssuer,
             ClientId,
             TestSetup.Base64UrlDecoder,
             bytes => SecurityEventTestJson.DeserializePart(bytes),
@@ -413,8 +413,8 @@ internal sealed class RelyingPartyReceiver: IAsyncDisposable
         //§2.6 sid: drop the session this Logout Token names.
         if(result.SessionId is not null)
         {
-            activeSessions.Remove(result.SessionId);
-            verifiedSessionIds.Add(result.SessionId);
+            ActiveSessions.Remove(result.SessionId);
+            VerifiedSessionIdList.Add(result.SessionId);
         }
 
         LastSubject = result.Subject;
@@ -451,6 +451,6 @@ internal sealed class RelyingPartyReceiver: IAsyncDisposable
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
     {
-        await host.DisposeAsync().ConfigureAwait(false);
+        await Host.DisposeAsync().ConfigureAwait(false);
     }
 }

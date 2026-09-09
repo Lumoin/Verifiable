@@ -19,7 +19,7 @@ namespace Verifiable.JCose;
 /// </remarks>
 public ref struct JwkJsonWriter
 {
-    private readonly Span<byte> buffer;
+    private Span<byte> Buffer { get; }
     private int position;
 
     /// <summary>Gets the current write position in the buffer.</summary>
@@ -32,7 +32,7 @@ public ref struct JwkJsonWriter
     /// <param name="buffer">The target buffer. Must be large enough for all intended writes.</param>
     public JwkJsonWriter(Span<byte> buffer)
     {
-        this.buffer = buffer;
+        this.Buffer = buffer;
         position = 0;
     }
 
@@ -95,13 +95,13 @@ public ref struct JwkJsonWriter
 
     private void WriteLiteral(ReadOnlySpan<byte> utf8Literal)
     {
-        utf8Literal.CopyTo(buffer[position..]);
+        utf8Literal.CopyTo(Buffer[position..]);
         position += utf8Literal.Length;
     }
 
 
     private void WriteString(string value)
     {
-        position += Encoding.UTF8.GetBytes(value, buffer[position..]);
+        position += Encoding.UTF8.GetBytes(value, Buffer[position..]);
     }
 }

@@ -13,7 +13,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// beyond the standard header with response code.
 /// </para>
 /// <para>
-/// <b>Response parameters (Part 3, Section 28.4):</b> None.
+/// <b>Response parameters (Part 3, clause 28.4):</b> None.
 /// </para>
 /// <para>
 /// <b>Note:</b> This type exists for consistency with other commands and

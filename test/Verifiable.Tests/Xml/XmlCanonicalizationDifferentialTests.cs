@@ -29,7 +29,7 @@ internal sealed class XmlCanonicalizationDifferentialTests
     private const string ExclusiveCanonicalXml10Identifier = "http://www.w3.org/2001/10/xml-exc-c14n#";
     private const string ExclusiveCanonicalXml10WithCommentsIdentifier = "http://www.w3.org/2001/10/xml-exc-c14n#WithComments";
 
-    private static readonly IReadOnlyList<XmlDifferentialCase> Corpus = XmlDifferentialCorpusGenerator.Generate();
+    private static IReadOnlyList<XmlDifferentialCase> Corpus { get; } = XmlDifferentialCorpusGenerator.Generate();
 
 
     /// <summary>
@@ -639,7 +639,7 @@ internal sealed class XmlCanonicalizationDifferentialTests
     /// </summary>
     private sealed class MaterializedNodeList: XmlNodeList
     {
-        private readonly List<XmlNode> nodes;
+        private List<XmlNode> Nodes { get; }
 
 
         /// <summary>
@@ -648,25 +648,25 @@ internal sealed class XmlCanonicalizationDifferentialTests
         /// <param name="nodes">The nodes in document order.</param>
         public MaterializedNodeList(List<XmlNode> nodes)
         {
-            this.nodes = nodes;
+            this.Nodes = nodes;
         }
 
 
         /// <inheritdoc/>
-        public override int Count => nodes.Count;
+        public override int Count => Nodes.Count;
 
 
         /// <inheritdoc/>
         public override XmlNode? Item(int index)
         {
-            return index >= 0 && index < nodes.Count ? nodes[index] : null;
+            return index >= 0 && index < Nodes.Count ? Nodes[index] : null;
         }
 
 
         /// <inheritdoc/>
         public override System.Collections.IEnumerator GetEnumerator()
         {
-            return nodes.GetEnumerator();
+            return Nodes.GetEnumerator();
         }
     }
 }

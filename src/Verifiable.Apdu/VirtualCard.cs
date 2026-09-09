@@ -45,6 +45,10 @@ namespace Verifiable.Apdu;
 public sealed class VirtualCard
 {
     private Dictionary<int, byte[]> Responses { get; } = [];
+
+    /// <summary>
+    /// A field, not a property: a lock target must be one instance that no accessor can re-mint.
+    /// </summary>
     private readonly Lock gate = new();
 
     /// <summary>

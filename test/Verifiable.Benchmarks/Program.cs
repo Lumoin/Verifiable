@@ -17,6 +17,8 @@ namespace Verifiable.Benchmarks
             }
             catch(Exception ex)
             {
+                //This is the process's own top-level boundary: any fault from the benchmark switcher
+                //becomes a printed message and a non-zero exit code rather than an unhandled crash.
                 Console.ForegroundColor = ConsoleColor.Red;
                 Console.WriteLine(ex.Message);
                 Console.ResetColor();

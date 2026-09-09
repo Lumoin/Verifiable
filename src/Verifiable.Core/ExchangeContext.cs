@@ -64,7 +64,13 @@ public class ExchangeContext: Dictionary<string, object>, IEquatable<ExchangeCon
         : base(entries, StringComparer.Ordinal) { }
 
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Determines whether this context is equal to <paramref name="other"/> by comparing every
+    /// entry's key and value. Equality is exact-type, not polymorphic over subtypes: a
+    /// protocol-specific specialization with the same entries is never equal to a base instance.
+    /// </summary>
+    /// <param name="other">The exchange context to compare against.</param>
+    /// <returns><see langword="true"/> if the contexts are equal; otherwise <see langword="false"/>.</returns>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public bool Equals(ExchangeContext? other)
     {
@@ -76,6 +82,11 @@ public class ExchangeContext: Dictionary<string, object>, IEquatable<ExchangeCon
         if(ReferenceEquals(this, other))
         {
             return true;
+        }
+
+        if(GetType() != other.GetType())
+        {
+            return false;
         }
 
         if(Count != other.Count)

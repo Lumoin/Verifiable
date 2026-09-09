@@ -38,8 +38,13 @@ internal static partial class VerifiableOperations
     /// <summary>
     /// Gets TPM information as a structured object.
     /// </summary>
-    public static async Task<Result<TpmInfo, string>> GetTpmInfoAsync()
+    /// <param name="pool">The pool the opened <see cref="TpmDevice"/>'s extension verbs rent their command/response buffers from.</param>
+    /// <param name="rng">The entropy the opened <see cref="TpmDevice"/>'s host side mints its session nonces and salts from.</param>
+    public static async Task<Result<TpmInfo, string>> GetTpmInfoAsync(BaseMemoryPool pool, FillEntropyDelegate rng)
     {
+        ArgumentNullException.ThrowIfNull(pool);
+        ArgumentNullException.ThrowIfNull(rng);
+
         if(!TpmDevice.IsAvailable)
         {
             return Result.Failure<TpmInfo, string>("TPM is not available on this platform.");
@@ -47,7 +52,7 @@ internal static partial class VerifiableOperations
 
         try
         {
-            using TpmDevice device = TpmDevice.Open();
+            using TpmDevice device = TpmDevice.Open(pool, rng);
             TpmResult<TpmInfo> result = await device.GetInfoAsync().ConfigureAwait(false);
 
             return result.Match(
@@ -57,6 +62,8 @@ internal static partial class VerifiableOperations
         }
         catch(Exception ex)
         {
+            //This is the CLI command's own top-level boundary: any fault reaching here becomes the
+            //command's failure message rather than an unhandled exception terminating the process.
             return Result.Failure<TpmInfo, string>($"Error retrieving TPM information: {ex.Message}");
         }
     }
@@ -65,9 +72,11 @@ internal static partial class VerifiableOperations
     /// <summary>
     /// Gets TPM information as a JSON string.
     /// </summary>
-    public static async Task<Result<string, string>> GetTpmInfoAsJsonAsync()
+    /// <param name="pool">The pool threaded through to <see cref="GetTpmInfoAsync"/>.</param>
+    /// <param name="rng">The entropy threaded through to <see cref="GetTpmInfoAsync"/>.</param>
+    public static async Task<Result<string, string>> GetTpmInfoAsJsonAsync(BaseMemoryPool pool, FillEntropyDelegate rng)
     {
-        var infoResult = await GetTpmInfoAsync().ConfigureAwait(false);
+        var infoResult = await GetTpmInfoAsync(pool, rng).ConfigureAwait(false);
 
         if(!infoResult.IsSuccess)
         {
@@ -81,10 +90,13 @@ internal static partial class VerifiableOperations
     /// <summary>
     /// Saves TPM information to a JSON file.
     /// </summary>
-    public static async Task<Result<string, string>> SaveTpmInfoToFileAsync(string? filePath = null)
+    /// <param name="pool">The pool threaded through to <see cref="GetTpmInfoAsJsonAsync"/>.</param>
+    /// <param name="rng">The entropy threaded through to <see cref="GetTpmInfoAsJsonAsync"/>.</param>
+    /// <param name="filePath">The destination file path, or <see langword="null"/> to default to <c>tpm_data.json</c>.</param>
+    public static async Task<Result<string, string>> SaveTpmInfoToFileAsync(BaseMemoryPool pool, FillEntropyDelegate rng, string? filePath = null)
     {
         string targetPath = filePath ?? "tpm_data.json";
-        var infoResult = await GetTpmInfoAsJsonAsync().ConfigureAwait(false);
+        var infoResult = await GetTpmInfoAsJsonAsync(pool, rng).ConfigureAwait(false);
         if(!infoResult.IsSuccess)
         {
             return Result.Failure<string, string>(infoResult.Error!);
@@ -97,6 +109,8 @@ internal static partial class VerifiableOperations
         }
         catch(Exception ex)
         {
+            //Same CLI top-level boundary as the other operations in this file: any fault reaching here
+            //becomes the command's failure message rather than an unhandled exception terminating the process.
             return Result.Failure<string, string>($"Error saving TPM information: {ex.Message}");
         }
     }
@@ -122,15 +136,19 @@ internal static partial class VerifiableOperations
     /// Emits the declarative ("capabilities") CBOM as CycloneDX 1.6 JSON: every
     /// cryptographic asset the library can describe, independent of the wired provider.
     /// </summary>
-    public static Result<string, string> EmitDeclarativeCbom()
+    public static Result<string, string> EmitDeclarativeCbom(TimeProvider timeProvider)
     {
+        ArgumentNullException.ThrowIfNull(timeProvider);
+
         try
         {
-            CbomDocument document = DeclarativeCbomGenerator.Generate(CurrentTimestamp(), ToolVersion);
+            CbomDocument document = DeclarativeCbomGenerator.Generate(CurrentTimestamp(timeProvider), ToolVersion);
             return Result.Success<string, string>(CbomJsonRenderer.Render(document));
         }
         catch(Exception ex)
         {
+            //Same CLI top-level boundary as the other operations in this file: any fault reaching here
+            //becomes the command's failure message rather than an unhandled exception terminating the process.
             return Result.Failure<string, string>($"Error generating declarative CBOM: {ex.Message}");
         }
     }
@@ -154,22 +172,29 @@ internal static partial class VerifiableOperations
     /// see <see cref="CryptoEventProvenance"/>'s remarks for why the two mechanisms are never merged.
     /// Defaults to <see langword="false"/>, which reproduces this method's output unchanged.
     /// </param>
+    /// <param name="pool">The memory pool the observed workload's buffers are rented from.</param>
+    /// <param name="timeProvider">The clock the CBOM timestamp and every emitted <see cref="CryptoEvent"/> use.</param>
     /// <param name="cancellationToken">A token to cancel the workload.</param>
     public static async Task<Result<string, string>> EmitObservedCbomAsync(
+        BaseMemoryPool pool,
+        TimeProvider timeProvider,
         bool includeEventProvenance = false,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(pool);
+        ArgumentNullException.ThrowIfNull(timeProvider);
+
         try
         {
-            CryptoProviderStartup.EnsureRegistered();
+            CryptoProviderStartup.EnsureRegistered(timeProvider);
 
             using CbomObserver observer = new();
 
             if(!includeEventProvenance)
             {
                 CbomDocument document = await observer.ObserveAsync(
-                    () => RunObservableWorkloadAsync(cancellationToken),
-                    CurrentTimestamp(),
+                    () => RunObservableWorkloadAsync(pool, timeProvider, cancellationToken),
+                    CurrentTimestamp(timeProvider),
                     ToolVersion).ConfigureAwait(false);
 
                 return Result.Success<string, string>(CbomJsonRenderer.Render(document));
@@ -177,8 +202,8 @@ internal static partial class VerifiableOperations
 
             (CbomDocument observedDocument, IReadOnlyList<CryptoEvent> events) = await CryptoEventProvenance.CaptureAsync(
                 () => observer.ObserveAsync(
-                    () => RunObservableWorkloadAsync(cancellationToken),
-                    CurrentTimestamp(),
+                    () => RunObservableWorkloadAsync(pool, timeProvider, cancellationToken),
+                    CurrentTimestamp(timeProvider),
                     ToolVersion)).ConfigureAwait(false);
 
             string cbomJson = CbomJsonRenderer.Render(observedDocument);
@@ -189,6 +214,8 @@ internal static partial class VerifiableOperations
         }
         catch(Exception ex)
         {
+            //Same CLI top-level boundary as the other operations in this file: any fault reaching here
+            //becomes the command's failure message rather than an unhandled exception terminating the process.
             return Result.Failure<string, string>($"Error generating observed CBOM: {ex.Message}");
         }
     }
@@ -197,9 +224,10 @@ internal static partial class VerifiableOperations
     //A minimal real workload that produces crypto.* telemetry spans: P-256 sign/verify,
     //a SHA-256 digest, and entropy-backed salt and nonce. Everything routes through the
     //registered Microsoft provider rather than System.Security.Cryptography directly.
-    private static async Task RunObservableWorkloadAsync(CancellationToken cancellationToken)
+    private static async Task RunObservableWorkloadAsync(BaseMemoryPool pool, TimeProvider timeProvider, CancellationToken cancellationToken)
     {
-        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        ArgumentNullException.ThrowIfNull(pool);
+        ArgumentNullException.ThrowIfNull(timeProvider);
         byte[] payload = Encoding.UTF8.GetBytes("Verifiable CBOM observed workload payload.");
 
         //Routes through the CreateKeyPair choke point so the observed CBOM's provenance also carries the
@@ -216,11 +244,11 @@ internal static partial class VerifiableOperations
         //emit hook is internal to Verifiable.Cryptography. The Activity spans these calls emit are what
         //EmitCbom --observe actually reads (CBOM and CryptoEvent are separate mechanisms).
         (Signature signature, CryptoEvent? _) = await MicrosoftCryptographicFunctions.SignP256Async(
-            privateKey.AsReadOnlyMemory(), payload, pool, cancellationToken: cancellationToken).ConfigureAwait(false);
+            privateKey.AsReadOnlyMemory(), payload, pool, timeProvider, cancellationToken: cancellationToken).ConfigureAwait(false);
         using(signature)
         {
             _ = await MicrosoftCryptographicFunctions.VerifyP256Async(
-                payload, signature.AsReadOnlyMemory(), publicKey.AsReadOnlyMemory(), cancellationToken: cancellationToken).ConfigureAwait(false);
+                payload, signature.AsReadOnlyMemory(), publicKey.AsReadOnlyMemory(), timeProvider, cancellationToken: cancellationToken).ConfigureAwait(false);
         }
 
         //JOSE-signed leg: unlike the raw backend call directly above, Jws.SignAsync/
@@ -257,7 +285,7 @@ internal static partial class VerifiableOperations
         //A real FIDO2 assertion ceremony, so the observed CBOM also carries FIDO2 provenance
         //(the sign/verify Activity spans, and the SignatureProducedEvent/VerificationCompletedEvent this
         //ceremony emits via the PrivateKey.SignAsync/PublicKey.VerifyAsync choke point).
-        await RunFido2ObservedWorkloadAsync(cancellationToken).ConfigureAwait(false);
+        await RunFido2ObservedWorkloadAsync(pool, timeProvider, cancellationToken).ConfigureAwait(false);
     }
 
 
@@ -274,8 +302,8 @@ internal static partial class VerifiableOperations
         new(Encoding.UTF8.GetBytes(json), BufferTags.Json);
 
 
-    private static string CurrentTimestamp() =>
-        TimeProvider.System.GetUtcNow().ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture);
+    private static string CurrentTimestamp(TimeProvider timeProvider) =>
+        timeProvider.GetUtcNow().ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture);
 
 
     private static string ToolVersion =>

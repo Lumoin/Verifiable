@@ -22,7 +22,7 @@ public static class DefaultJwtValidationClaims
     {
         ArgumentNullException.ThrowIfNull(jwtHeaders);
         var checks = new List<Claim>();
-        if(!jwtHeaders.TryGetValue("alg", out object? value))
+        if(!jwtHeaders.TryGetValue(WellKnownJoseHeaderNames.Alg, out object? value))
         {
             checks.Add(new Claim(ClaimId.AlgExists, ClaimOutcome.Failure));
             return checks;

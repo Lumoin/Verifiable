@@ -51,7 +51,7 @@ internal sealed class CtapUserPresenceTests
     {
         var timeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch);
         using CtapAuthenticatorSimulator simulator = CreateSimulator(
-            "up-tenseconds-boundary", timeProvider: timeProvider, simulateUserPresence: AlwaysPending);
+            "up-tenseconds-boundary", BaseMemoryPool.Shared, timeProvider: timeProvider, simulateUserPresence: AlwaysPending);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool);
@@ -79,7 +79,7 @@ internal sealed class CtapUserPresenceTests
     {
         var timeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch);
         using CtapAuthenticatorSimulator simulator = CreateSimulator(
-            "up-timeout-elapsed", timeProvider: timeProvider, simulateUserPresence: AlwaysPending);
+            "up-timeout-elapsed", BaseMemoryPool.Shared, timeProvider: timeProvider, simulateUserPresence: AlwaysPending);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool);
@@ -115,7 +115,7 @@ internal sealed class CtapUserPresenceTests
             return ValueTask.FromResult(CtapUserPresenceDecision.Granted);
         }
 
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-mc-granted-once", simulateUserPresence: CountingGrantedProvider);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-mc-granted-once", BaseMemoryPool.Shared, simulateUserPresence: CountingGrantedProvider);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool);
@@ -130,7 +130,7 @@ internal sealed class CtapUserPresenceTests
     [TestMethod]
     public async Task MakeCredentialDeniedProviderReturnsOperationDenied()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-mc-denied", simulateUserPresence: AlwaysDenied);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-mc-denied", BaseMemoryPool.Shared, simulateUserPresence: AlwaysDenied);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool);
@@ -149,7 +149,7 @@ internal sealed class CtapUserPresenceTests
     [TestMethod]
     public async Task MakeCredentialPendingProviderReturnsUserActionTimeout()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-mc-pending-sync", simulateUserPresence: AlwaysPending);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-mc-pending-sync", BaseMemoryPool.Shared, simulateUserPresence: AlwaysPending);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool);
@@ -163,7 +163,7 @@ internal sealed class CtapUserPresenceTests
     [TestMethod]
     public async Task GetAssertionGrantedProviderSucceeds()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-ga-granted");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-ga-granted",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         _ = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0x71), TestContext.CancellationToken);
@@ -183,7 +183,7 @@ internal sealed class CtapUserPresenceTests
     [TestMethod]
     public async Task GetAssertionDeniedProviderReturnsOperationDenied()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-ga-denied", simulateUserPresence: AlwaysDenied);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-ga-denied", BaseMemoryPool.Shared, simulateUserPresence: AlwaysDenied);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapGetAssertionRequest request = BuildGetAssertionRequest(pool);
@@ -197,7 +197,7 @@ internal sealed class CtapUserPresenceTests
     [TestMethod]
     public async Task GetAssertionPendingProviderReturnsUserActionTimeout()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-ga-pending-sync", simulateUserPresence: AlwaysPending);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-ga-pending-sync", BaseMemoryPool.Shared, simulateUserPresence: AlwaysPending);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapGetAssertionRequest request = BuildGetAssertionRequest(pool);
@@ -229,7 +229,7 @@ internal sealed class CtapUserPresenceTests
             return ValueTask.FromResult(CtapUserPresenceDecision.Granted);
         }
 
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-ga-upfalse-no-consult", simulateUserPresence: GrantOnceThenThrowProvider);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-ga-upfalse-no-consult", BaseMemoryPool.Shared, simulateUserPresence: GrantOnceThenThrowProvider);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         _ = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0x72), TestContext.CancellationToken);
@@ -257,7 +257,7 @@ internal sealed class CtapUserPresenceTests
     [TestMethod]
     public async Task MakeCredentialUserPresenceFalseStaysInvalidOptionWithoutConsultingProvider()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-mc-upfalse-no-consult", simulateUserPresence: AlwaysThrow);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-mc-upfalse-no-consult", BaseMemoryPool.Shared, simulateUserPresence: AlwaysThrow);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool, options: new CtapCommandOptions(UserPresence: false));
@@ -271,7 +271,7 @@ internal sealed class CtapUserPresenceTests
     [TestMethod]
     public async Task MakeCredentialExcludeListOfNineReturnsLimitExceeded()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-mc-excludelist-nine");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-mc-excludelist-nine",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         List<PublicKeyCredentialDescriptor> excludeList = BuildDummyDescriptors(pool, count: 9, seed: 0x80);
@@ -286,7 +286,7 @@ internal sealed class CtapUserPresenceTests
     [TestMethod]
     public async Task MakeCredentialExcludeListOfEightSucceeds()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-mc-excludelist-eight");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-mc-excludelist-eight",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         List<PublicKeyCredentialDescriptor> excludeList = BuildDummyDescriptors(pool, CtapAuthenticatorState.MaxCredentialCountInListCapacity, seed: 0x90);
@@ -301,7 +301,7 @@ internal sealed class CtapUserPresenceTests
     [TestMethod]
     public async Task GetAssertionAllowListOfNineReturnsLimitExceeded()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-ga-allowlist-nine");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-ga-allowlist-nine",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         List<PublicKeyCredentialDescriptor> allowList = BuildDummyDescriptors(pool, count: 9, seed: 0xA0);
@@ -316,7 +316,7 @@ internal sealed class CtapUserPresenceTests
     [TestMethod]
     public async Task GetAssertionAllowListOfEightWithRealCredentialSucceeds()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-ga-allowlist-eight");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-ga-allowlist-eight",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         byte[] realCredentialId = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0x73), TestContext.CancellationToken, resident: false);
@@ -335,7 +335,7 @@ internal sealed class CtapUserPresenceTests
     [TestMethod]
     public async Task MakeCredentialExcludeListOfNineReturnsLimitExceededWithoutConsultingProvider()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-mc-excludelist-adversarial", simulateUserPresence: AlwaysThrow);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-mc-excludelist-adversarial", BaseMemoryPool.Shared, simulateUserPresence: AlwaysThrow);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         List<PublicKeyCredentialDescriptor> excludeList = BuildDummyDescriptors(pool, count: 9, seed: 0xC0);
@@ -350,7 +350,7 @@ internal sealed class CtapUserPresenceTests
     [TestMethod]
     public async Task GetAssertionAllowListOfNineReturnsLimitExceededWithoutConsultingProvider()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-ga-allowlist-adversarial", simulateUserPresence: AlwaysThrow);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-ga-allowlist-adversarial", BaseMemoryPool.Shared, simulateUserPresence: AlwaysThrow);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         List<PublicKeyCredentialDescriptor> allowList = BuildDummyDescriptors(pool, count: 9, seed: 0xD0);
@@ -378,7 +378,7 @@ internal sealed class CtapUserPresenceTests
         static ValueTask<CtapUserPresenceDecision> ThrowingProvider(CancellationToken cancellationToken) =>
             throw new InvalidOperationException("Simulated user-presence collect-effect fault.");
 
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-begin-collect-fault", simulateUserPresence: ThrowingProvider);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-begin-collect-fault", BaseMemoryPool.Shared, simulateUserPresence: ThrowingProvider);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool);
@@ -403,7 +403,7 @@ internal sealed class CtapUserPresenceTests
     [TestMethod]
     public async Task BeginDeferredMakeCredentialWithPendingProviderParksAndReturnsEmptyMarker()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-begin-parks", simulateUserPresence: AlwaysPending);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-begin-parks", BaseMemoryPool.Shared, simulateUserPresence: AlwaysPending);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var trace = new TestObserver<TraceEntry<CtapAuthenticatorState, CtapAuthenticatorInput>>();
@@ -425,7 +425,7 @@ internal sealed class CtapUserPresenceTests
     [TestMethod]
     public async Task PollDeferredTransceiveWithStillPendingProviderStaysPendingAcrossMultiplePolls()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-poll-repeatable", simulateUserPresence: AlwaysPending);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-poll-repeatable", BaseMemoryPool.Shared, simulateUserPresence: AlwaysPending);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool);
@@ -472,7 +472,7 @@ internal sealed class CtapUserPresenceTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using CtapAuthenticatorSimulator deferredSimulator = CreateSimulator(
-            "up-poll-resume-deferred", aaguid: sharedAaguid, simulateUserPresence: GrantOnThirdConsultProvider);
+            "up-poll-resume-deferred", BaseMemoryPool.Shared, aaguid: sharedAaguid, simulateUserPresence: GrantOnThirdConsultProvider);
 
         CtapMakeCredentialRequest deferredRequest = BuildMakeCredentialRequest(pool);
         byte[] envelope = CtapMakeCredentialGetAssertionRequestEnvelopes.BuildMakeCredentialEnvelope(deferredRequest);
@@ -488,7 +488,7 @@ internal sealed class CtapUserPresenceTests
         Assert.AreNotEqual(0, resumedResponse.Length);
         Assert.AreEqual(WellKnownCtapStatusCodes.Ok, resumedResponse.AsReadOnlySpan()[0]);
 
-        using CtapAuthenticatorSimulator syncSimulator = CreateSimulator("up-poll-resume-sync", aaguid: sharedAaguid);
+        using CtapAuthenticatorSimulator syncSimulator = CreateSimulator("up-poll-resume-sync", BaseMemoryPool.Shared, aaguid: sharedAaguid);
         CtapMakeCredentialRequest syncRequest = BuildMakeCredentialRequest(pool);
         using PooledMemory syncResponse = await SendMakeCredentialAsync(syncSimulator, syncRequest, pool, TestContext.CancellationToken);
         Assert.AreEqual(WellKnownCtapStatusCodes.Ok, syncResponse.AsReadOnlySpan()[0]);
@@ -531,7 +531,7 @@ internal sealed class CtapUserPresenceTests
             return ValueTask.FromResult(consultCount >= 2 ? CtapUserPresenceDecision.Denied : CtapUserPresenceDecision.Pending);
         }
 
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-poll-denied", simulateUserPresence: DenyOnSecondConsultProvider);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-poll-denied", BaseMemoryPool.Shared, simulateUserPresence: DenyOnSecondConsultProvider);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool);
@@ -556,7 +556,7 @@ internal sealed class CtapUserPresenceTests
     [TestMethod]
     public async Task CancelDeferredTransceiveReturnsKeepaliveCancelAndDiscardsTheWait()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-cancel", simulateUserPresence: AlwaysPending);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-cancel", BaseMemoryPool.Shared, simulateUserPresence: AlwaysPending);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool);
@@ -579,7 +579,7 @@ internal sealed class CtapUserPresenceTests
     [TestMethod]
     public async Task NewCommandWhilePendingSupersedesAndDiscardsTheWait()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-supersede", simulateUserPresence: AlwaysPending);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-supersede", BaseMemoryPool.Shared, simulateUserPresence: AlwaysPending);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool);
@@ -602,7 +602,7 @@ internal sealed class CtapUserPresenceTests
     [TestMethod]
     public async Task PowerCycleDiscardsThePendingWait()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-powercycle", simulateUserPresence: AlwaysPending);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-powercycle", BaseMemoryPool.Shared, simulateUserPresence: AlwaysPending);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool);
@@ -612,7 +612,7 @@ internal sealed class CtapUserPresenceTests
         using PooledMemory begin = await simulator.BeginDeferredTransceiveAsync(envelope, pool, TestContext.CancellationToken);
         Assert.AreEqual(0, begin.Length);
 
-        simulator.PowerCycle();
+        simulator.PowerCycle(BaseMemoryPool.Shared);
 
         _ = await Assert.ThrowsExactlyAsync<InvalidOperationException>(
             () => simulator.PollDeferredTransceiveAsync(pool, TestContext.CancellationToken).AsTask());
@@ -624,7 +624,7 @@ internal sealed class CtapUserPresenceTests
     public async Task AuthenticatorResetDiscardsThePendingWait()
     {
         var timeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch);
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-reset", timeProvider: timeProvider, simulateUserPresence: AlwaysPending);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-reset", BaseMemoryPool.Shared, timeProvider: timeProvider, simulateUserPresence: AlwaysPending);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool);
@@ -647,7 +647,7 @@ internal sealed class CtapUserPresenceTests
     [TestMethod]
     public async Task PollDeferredTransceiveWithNothingPendingThrows()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-poll-nothing-pending");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-poll-nothing-pending",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         _ = await Assert.ThrowsExactlyAsync<InvalidOperationException>(
@@ -659,7 +659,7 @@ internal sealed class CtapUserPresenceTests
     [TestMethod]
     public async Task CancelDeferredTransceiveWithNothingPendingThrows()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-cancel-nothing-pending");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-cancel-nothing-pending",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         _ = await Assert.ThrowsExactlyAsync<InvalidOperationException>(
@@ -679,7 +679,7 @@ internal sealed class CtapUserPresenceTests
             return ValueTask.FromResult(CtapUserPresenceDecision.Pending);
         }
 
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-begin-getinfo", simulateUserPresence: CountingPendingProvider);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-begin-getinfo", BaseMemoryPool.Shared, simulateUserPresence: CountingPendingProvider);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         byte[] envelope = [WellKnownCtapCommands.GetInfo];
@@ -703,7 +703,7 @@ internal sealed class CtapUserPresenceTests
             return ValueTask.FromResult(CtapUserPresenceDecision.Pending);
         }
 
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-begin-ga-upfalse", simulateUserPresence: CountingPendingProvider);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-begin-ga-upfalse", BaseMemoryPool.Shared, simulateUserPresence: CountingPendingProvider);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapGetAssertionRequest request = BuildGetAssertionRequest(pool, options: new CtapCommandOptions(UserPresence: false));

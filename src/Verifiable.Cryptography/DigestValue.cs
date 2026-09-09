@@ -146,9 +146,8 @@ public sealed class DigestValue: SensitiveMemory, IEquatable<DigestValue>
         //remains usable while a bucketing pool still fails at debug time instead of producing a
         //wire-visible defect. Compiled out in Release builds.
         Debug.Assert(owner.Memory.Length == outputByteLength,
-            "DigestValue.Compute requires exact-length rentals (BaseMemoryPool.Shared, a custom " +
-            "house-configured instance, or a pool delegating to one); the rented buffer length " +
-            "must equal the requested digest length.");
+            "DigestValue.Compute requires the caller-supplied pool to make exact-length rentals; " +
+            "the rented buffer length must equal the requested digest length.");
         hashFunction(input, owner.Memory.Span);
 
         return new DigestValue(owner, tag, lifetime);

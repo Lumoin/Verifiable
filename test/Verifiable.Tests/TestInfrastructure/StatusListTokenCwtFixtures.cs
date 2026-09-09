@@ -1,7 +1,7 @@
 using System;
 using System.Buffers;
 using System.Collections.Generic;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Threading;
@@ -106,18 +106,19 @@ internal static class StatusListTokenCwtFixtures
     /// <summary>Writes the Status List Token's CWT Claims Set (Section 5.2) with the shared canonical-mode converter.</summary>
     private static byte[] EncodeClaims(StatusListToken token)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
-        Converter.Write(writer, token, CborSerializerOptions.Default);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
+        Converter.Write(writer, token);
 
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
     }
 
 
     /// <summary>Reads a Status List Token's CWT Claims Set back from the verified COSE_Sign1 payload bytes.</summary>
     private static StatusListToken DecodeClaims(ReadOnlyMemory<byte> payload)
     {
-        var reader = new CborReader(payload, CborConformanceMode.Lax);
+        var reader = new CborReader(payload, CborOptions.Lax);
 
-        return Converter.Read(ref reader, typeof(StatusListToken), CborSerializerOptions.Default);
+        return Converter.Read(reader);
     }
 }

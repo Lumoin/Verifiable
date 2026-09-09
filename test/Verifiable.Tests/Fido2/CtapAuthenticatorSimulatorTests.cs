@@ -2,6 +2,7 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Time.Testing;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Cbor.Fido2;
 using Verifiable.Cryptography;
@@ -61,7 +62,9 @@ internal sealed class CtapAuthenticatorSimulatorTests
             CtapLargeBlobsResponseCborWriter.Write,
             CtapMakeCredentialExtensionOutputsCborWriter.Write,
             CtapGetAssertionExtensionOutputsCborWriter.Write,
-            rng: FillFixedPattern);
+            rng: FillFixedPattern,
+            timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch),
+            pinUvAuthKeyAgreementPool: BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         //Independent oracle: computed from the same fixed fill pattern handed to the simulator,
@@ -106,7 +109,10 @@ internal sealed class CtapAuthenticatorSimulatorTests
             CtapLargeBlobsRequestCborReader.Read,
             CtapLargeBlobsResponseCborWriter.Write,
             CtapMakeCredentialExtensionOutputsCborWriter.Write,
-            CtapGetAssertionExtensionOutputsCborWriter.Write);
+            CtapGetAssertionExtensionOutputsCborWriter.Write,
+            rng: TestEntropy.NewCounterStream(),
+            timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch),
+            pinUvAuthKeyAgreementPool: BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         //0xFE: unrecognized, unlike WellKnownCtapCommands.GetInfo (0x04) or any other registered command byte.
@@ -141,7 +147,10 @@ internal sealed class CtapAuthenticatorSimulatorTests
             CtapLargeBlobsRequestCborReader.Read,
             CtapLargeBlobsResponseCborWriter.Write,
             CtapMakeCredentialExtensionOutputsCborWriter.Write,
-            CtapGetAssertionExtensionOutputsCborWriter.Write);
+            CtapGetAssertionExtensionOutputsCborWriter.Write,
+            rng: TestEntropy.NewCounterStream(),
+            timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch),
+            pinUvAuthKeyAgreementPool: BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using PooledMemory response = await simulator.TransceiveAsync(ReadOnlyMemory<byte>.Empty, pool, TestContext.CancellationToken);
@@ -175,7 +184,9 @@ internal sealed class CtapAuthenticatorSimulatorTests
             CtapLargeBlobsResponseCborWriter.Write,
             CtapMakeCredentialExtensionOutputsCborWriter.Write,
             CtapGetAssertionExtensionOutputsCborWriter.Write,
-            rng: FillFixedPattern);
+            rng: FillFixedPattern,
+            timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch),
+            pinUvAuthKeyAgreementPool: BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] request = [WellKnownCtapCommands.GetInfo];
 
@@ -201,7 +212,7 @@ internal sealed class CtapAuthenticatorSimulatorTests
     [TestMethod]
     public async Task MakeCredentialAssociatesUserNameAndDisplayNameWithTheStoredRecord()
     {
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("user-name-fidelity");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("user-name-fidelity",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var trace = new TestObserver<TraceEntry<CtapAuthenticatorState, CtapAuthenticatorInput>>();

@@ -9,7 +9,7 @@ namespace Verifiable.Tpm.Spec;
 /// <remarks>
 /// <para>
 /// TPM response codes use a structured bit layout defined in TPM 2.0 Library Specification
-/// Part 2, section 6.6. This class provides methods to extract and interpret the various
+/// Part 2, clause 6.6. This class provides methods to extract and interpret the various
 /// fields within a response code.
 /// </para>
 /// <para>
@@ -28,7 +28,7 @@ namespace Verifiable.Tpm.Spec;
 ///   </item>
 /// </list>
 /// <para>
-/// <b>Format-zero bit layout (Table 16):</b>
+/// <b>Format-zero bit layout (Table 14):</b>
 /// </para>
 /// <list type="bullet">
 ///   <item><description>Bits 6:0 (E): Error number.</description></item>
@@ -39,7 +39,7 @@ namespace Verifiable.Tpm.Spec;
 ///   <item><description>Bit 11 (S): Severity, set for warnings.</description></item>
 /// </list>
 /// <para>
-/// <b>Format-one bit layout (Table 18):</b>
+/// <b>Format-one bit layout (Table 16):</b>
 /// </para>
 /// <list type="bullet">
 ///   <item><description>Bits 5:0 (E): Error number.</description></item>
@@ -60,7 +60,7 @@ public static class TpmRcExtensions
     private const int NumberFieldShift = 8;
 
     //Error number masks differ by format (TPM 2.0 Library Specification Part 2, Tables 16 and 18).
-    [SuppressMessage("Performance", "CA1823:Avoid unused private fields", Justification = "Spec-defined mask for format-zero error extraction (TPM 2.0 Part 2, Table 16).")]
+    [SuppressMessage("Performance", "CA1823:Avoid unused private fields", Justification = "Spec-defined mask for format-zero error extraction (TPM 2.0 Part 2, Table 14).")]
     private const uint FormatZeroErrorMask = 0x07F;
     private const uint FormatOneErrorMask = 0x03F;
 
@@ -78,6 +78,29 @@ public static class TpmRcExtensions
     public static bool IsFormatOne(this TpmRcConstants rc)
     {
         return ((uint)rc & FormatBitMask) != 0;
+    }
+
+    /// <summary>
+    /// Determines whether a format-one response code already carries a handle, session, or parameter
+    /// designation.
+    /// </summary>
+    /// <remarks>
+    /// TPM 2.0 Library Part 2, clause 6.6.2, Table 15's closing sentence — "If an implementation is not able
+    /// to designate the handle, session, or parameter in error, then P and N will be zero" — makes P set or a
+    /// non-zero N field the mark of a code that already names its offender; a code is designated once. This
+    /// mirrors the reference code's own <c>RcSafeAddToResult()</c> guard (<c>ResponseCodeProcessing.c</c>), whose
+    /// doc comment states a modifier is added "as long as ... no modifier has already been added" and whose
+    /// body tests <c>!(responseCode &amp; 0xf40)</c> — the P bit (0x040) plus the N field (0xf00) — before
+    /// adding one.
+    /// </remarks>
+    /// <param name="rc">The TPM response code.</param>
+    /// <returns>
+    /// <see langword="true"/> if the code is format-one and already carries a non-zero N field or the P bit
+    /// set; <see langword="false"/> otherwise.
+    /// </returns>
+    public static bool IsDesignated(this TpmRcConstants rc)
+    {
+        return rc.IsFormatOne() && ((uint)rc & (ParameterBitMask | NumberFieldMask)) != 0;
     }
 
     /// <summary>
@@ -273,6 +296,66 @@ public static class TpmRcExtensions
         //Format-zero: the value is already the base error.
         return rc;
     }
+
+    /// <summary>
+    /// The format-one session-index encoding (TPM 2.0 Library Part 2, clause 6.6.2): the P bit clear, N field
+    /// 8..15 selecting a session by its zero-based index via <c>TPM_RC_S</c> (flips the N field's meaning from
+    /// handle to session) plus <c>TPM_RC_n</c> (the 1-based additive block, <c>N = index + 1</c>).
+    /// </summary>
+    /// <remarks>
+    /// Shared by every session-area and session-command-HMAC failure site that can name the offending slot,
+    /// including the wire-parse helper that settles a password slot's structural rules before any lookup. A site
+    /// that cannot attribute a failure to one slot answers the bare code instead.
+    /// </remarks>
+    /// <param name="baseRc">The unencoded base response code.</param>
+    /// <param name="sessionIndex">The offending session's zero-based index.</param>
+    /// <returns>The session-index-encoded response code.</returns>
+    public static TpmRcConstants SessionEncodedRc(TpmRcConstants baseRc, int sessionIndex) =>
+        (TpmRcConstants)((uint)baseRc + (uint)TpmRcConstants.TPM_RC_S + (0x100u * (uint)(sessionIndex + 1)));
+
+    /// <summary>
+    /// The format-one handle-index encoding (TPM 2.0 Library Part 2, clause 6.6.2 — Table 15's bit layout
+    /// and Table 16's field definitions): the clause's own text states "For an error associated with a
+    /// handle, a parameter number (1 to 7) is added to the N field", and Table 16 — the Format-One Response
+    /// Codes (TPM_RC) Fields Description — carries the N field's own definition, naming it the "Number of
+    /// the handle, session, or parameter in error" and stating "The number is one based." <c>TPM_RC_H</c>
+    /// is 0x000 (the P bit clear, no session offset), so only the one-based additive block carries the
+    /// handle's position.
+    /// </summary>
+    /// <remarks>
+    /// <paramref name="handleIndex"/> is the handle's ZERO-based position in the command's handle area — the same
+    /// index <c>HandleIndexedReferenceRc</c> takes for the format-zero <c>TPM_RC_REFERENCE_H0..H6</c>
+    /// answer — while Table 16's N field is one based, so this adds <c>handleIndex + 1</c>. The reference code's
+    /// per-command <c>RC_&lt;Command&gt;_&lt;handle&gt;</c> constants are this same arithmetic spelled out for one
+    /// site each: <c>RC_SequenceUpdate_sequenceHandle</c> is <c>TPM_RC_H + TPM_RC_1</c>, the first (index 0)
+    /// handle's encoding.
+    /// </remarks>
+    /// <param name="baseRc">The unencoded base response code.</param>
+    /// <param name="handleIndex">The offending handle's zero-based index in the command's handle area.</param>
+    /// <returns>The handle-index-encoded response code.</returns>
+    public static TpmRcConstants HandleEncodedRc(TpmRcConstants baseRc, int handleIndex) =>
+        (TpmRcConstants)((uint)baseRc + (0x100u * (uint)(handleIndex + 1)));
+
+    /// <summary>
+    /// The format-one parameter-index encoding (TPM 2.0 Library Part 2, clause 6.6.2, Table 15): "When an
+    /// error is associated with a parameter, TPM_RC_P (0x040) is added and N is set to the parameter number."
+    /// The reference code's worked example is <c>RC_Startup_startupType</c>: "the first parameter, TPM_RC_1
+    /// (0x100) plus TPM_RC_P (0x040) or 0x140," so that <c>TPM_RC_VALUE + RC_Startup_startupType</c> is
+    /// <c>0x080 + 0x004 + 0x140 = 0x1c4</c> — the same additive shape this method performs.
+    /// </summary>
+    /// <remarks>
+    /// <paramref name="parameterIndex"/> is the parameter's ZERO-based position in the command's parameter
+    /// area, matching how <see cref="HandleEncodedRc"/> and <see cref="SessionEncodedRc"/> take their indices,
+    /// while Table 15's parameter number is one based, so this adds <paramref name="parameterIndex"/> + 1. The
+    /// reference code's per-command <c>RC_&lt;Command&gt;_&lt;parameter&gt;</c> constants are this same
+    /// arithmetic spelled out for one site each, as the <c>RC_Startup_startupType</c> example above shows for
+    /// the first (index 0) parameter.
+    /// </remarks>
+    /// <param name="baseRc">The unencoded base response code.</param>
+    /// <param name="parameterIndex">The offending parameter's zero-based index in the command's parameter area.</param>
+    /// <returns>The parameter-index-encoded response code.</returns>
+    public static TpmRcConstants ParameterEncodedRc(TpmRcConstants baseRc, int parameterIndex) =>
+        (TpmRcConstants)((uint)baseRc + (uint)TpmRcConstants.TPM_RC_P + (0x100u * (uint)(parameterIndex + 1)));
 
     /// <summary>
     /// Gets a human-readable description of the TPM response code.

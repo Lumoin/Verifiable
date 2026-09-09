@@ -43,7 +43,12 @@ namespace Verifiable.Apdu;
 public sealed class ApduRecorder : IObserver<ApduExchange>, IDisposable
 {
     private List<ApduExchange> Exchanges { get; } = [];
+
+    /// <summary>
+    /// A field, not a property: a lock target must be one instance that no accessor can re-mint.
+    /// </summary>
     private readonly Lock gate = new();
+
     private bool completed;
 
     /// <summary>

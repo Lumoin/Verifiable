@@ -27,16 +27,16 @@ namespace Verifiable.Tests.DidComm;
 [TestClass]
 internal sealed class DidCommServiceEndpointTests
 {
-    private static readonly ExchangeContext Context = new();
+    private static ExchangeContext Context { get; } = new();
 
     private const string DidPrefix = "did:example";
     private const string Recipient = "did:example:recipient";
     private const string Mediator = "did:example:mediator";
     private const string AnotherMediatorKey = "did:example:anothermediator#somekey";
 
-    private static readonly string[] OneRoutingKey = ["did:example:m1"];
-    private static readonly string[] M2RoutingKey = ["did:example:m2"];
-    private static readonly string[] TwoRoutingKeys = ["did:example:m1", "did:example:m2"];
+    private static string[] OneRoutingKey { get; } = ["did:example:m1"];
+    private static string[] M2RoutingKey { get; } = ["did:example:m2"];
+    private static string[] TwoRoutingKeys { get; } = ["did:example:m1", "did:example:m2"];
 
 
     [TestMethod]

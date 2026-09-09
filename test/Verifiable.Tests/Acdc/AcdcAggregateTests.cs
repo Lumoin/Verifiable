@@ -19,7 +19,7 @@ namespace Verifiable.Tests.Acdc;
 internal sealed class AcdcAggregateTests
 {
     /// <summary>The three block SAIDs in order, the list the AGID is taken over.</summary>
-    private static readonly string[] BlockSaids =
+    private static string[] BlockSaids { get; } =
         [AcdcExampleVectors.AggregateIssueeBlockSaid, AcdcExampleVectors.AggregateScoreBlockSaid, AcdcExampleVectors.AggregateNameBlockSaid];
 
 

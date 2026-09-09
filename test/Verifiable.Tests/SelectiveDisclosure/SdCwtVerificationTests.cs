@@ -228,7 +228,7 @@ internal sealed class SdCwtVerificationTests
         {
             Assert.IsTrue(result.IsValid);
             Assert.IsNotNull(context, "A token past the signature check must expose intermediate context.");
-            Assert.HasCount(2, context.BoundPaths);
+            Assert.AreEqual(2, context.BoundPaths.Count, "Both holder-selected Disclosures must bind to a position in the payload.");
             Assert.IsGreaterThan(0, context.Message.Payload.Length, "The parsed redacted payload must be exposed.");
         }
     }

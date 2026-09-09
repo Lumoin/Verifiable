@@ -55,9 +55,11 @@ public static class LibsodiumCryptographicFunctions
         ReadOnlyMemory<byte> privateKeyBytes,
         ReadOnlyMemory<byte> dataToSign,
         BaseMemoryPool signaturePool,
+        TimeProvider timeProvider,
         FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(signaturePool);
+        ArgumentNullException.ThrowIfNull(timeProvider);
         LibsodiumCrypto.EnsureInitialized();
 
         if(privateKeyBytes.Length != LibsodiumCrypto.Ed25519SeedLength)
@@ -80,7 +82,7 @@ public static class LibsodiumCryptographicFunctions
 
         var signatureResult = new Signature(memoryPooledSignature, CryptoTags.Ed25519Signature);
         CryptoEvent evt = SignatureProducedEvent.Create(
-            CryptoAlgorithm.Ed25519, dataToSign.Length, LibsodiumCrypto.Ed25519SignatureLength, CryptoLib.Name);
+            CryptoAlgorithm.Ed25519, dataToSign.Length, LibsodiumCrypto.Ed25519SignatureLength, CryptoLib.Name, timeProvider: timeProvider);
 
         return ValueTask.FromResult<(Signature, CryptoEvent?)>((signatureResult, evt));
 
@@ -153,8 +155,10 @@ public static class LibsodiumCryptographicFunctions
         ReadOnlyMemory<byte> dataToVerify,
         ReadOnlyMemory<byte> signature,
         ReadOnlyMemory<byte> publicKeyMaterial,
+        TimeProvider timeProvider,
         FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(timeProvider);
         LibsodiumCrypto.EnsureInitialized();
 
         if(publicKeyMaterial.Length != LibsodiumCrypto.Ed25519PublicKeyLength)
@@ -183,7 +187,7 @@ public static class LibsodiumCryptographicFunctions
         bool isVerified = verifyResult == 0;
 
         CryptoEvent evt = VerificationCompletedEvent.Create(
-            CryptoAlgorithm.Ed25519, isVerified ? VerificationOutcome.Valid : VerificationOutcome.Invalid, dataToVerify.Length, CryptoLib.Name);
+            CryptoAlgorithm.Ed25519, isVerified ? VerificationOutcome.Valid : VerificationOutcome.Invalid, dataToVerify.Length, CryptoLib.Name, timeProvider: timeProvider);
 
         return ValueTask.FromResult<(bool, CryptoEvent?)>((isVerified, evt));
     }

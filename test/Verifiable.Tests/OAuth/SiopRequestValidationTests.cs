@@ -17,15 +17,15 @@ internal sealed class SiopRequestValidationTests
     private const string ClientId = "https://client.example.org/cb";
     private const string Nonce = "n-0S6_WzA2Mj";
 
-    private static readonly Uri RedirectUri = new("https://client.example.org/cb");
+    private static Uri RedirectUri { get; } = new("https://client.example.org/cb");
 
     //The OP's own capabilities: the Subject Syntax Types it supports (its §6.1
     //subject_syntax_types_supported) and the ID Token signing algorithms it will honor
     //(its §6.1 id_token_signing_alg_values_supported).
-    private static readonly string[] OpSupportedSubjectSyntaxTypes =
+    private static string[] OpSupportedSubjectSyntaxTypes { get; } =
         [SiopSubjectSyntaxTypes.JwkThumbprint, "did:key"];
 
-    private static readonly string[] OpSupportedSigningAlgValues = ["ES256", "EdDSA"];
+    private static string[] OpSupportedSigningAlgValues { get; } = ["ES256", "EdDSA"];
 
 
     [TestMethod]

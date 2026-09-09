@@ -1,6 +1,10 @@
 using System.Buffers;
+using Verifiable.Core.Dcql;
+using Verifiable.Core.Model.Dcql;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.Pki;
+using Verifiable.JCose;
 
 namespace Verifiable.OAuth.Oid4Vp.Server;
 
@@ -38,8 +42,8 @@ public static class SdCwtVpTokenVerification
     /// </summary>
     /// <param name="vpToken">The base64url-encoded SD-CWT Key Binding Token from the vp_token slot.</param>
     /// <param name="credentialQueryId">
-    /// The DCQL credential query identifier that matched this token. Used as the key in
-    /// <see cref="VpTokenParsed.ExtractedClaims"/>.
+    /// The DCQL credential query identifier that matched this token. Carried onto
+    /// <see cref="VpTokenParsed.CredentialQueryId"/>.
     /// </param>
     /// <param name="seams">The CBOR/COSE verification seams plus the issuer-key resolver.</param>
     /// <param name="decoder">Delegate for Base64Url decoding the vp_token value.</param>
@@ -48,7 +52,7 @@ public static class SdCwtVpTokenVerification
     /// <returns>The parsed and crypto-verified VP token contents.</returns>
     public static async ValueTask<VpTokenParsed> VerifyAsync(
         string vpToken,
-        string credentialQueryId,
+        CredentialQueryId credentialQueryId,
         SdCwtVpVerificationSeams seams,
         DecodeDelegate decoder,
         CommitmentReuseDetectionSeam? saltReuseSeam,
@@ -56,7 +60,7 @@ public static class SdCwtVpTokenVerification
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(vpToken);
-        ArgumentException.ThrowIfNullOrWhiteSpace(credentialQueryId);
+        ArgumentNullException.ThrowIfNull(credentialQueryId);
         ArgumentNullException.ThrowIfNull(seams);
         ArgumentNullException.ThrowIfNull(decoder);
         ArgumentNullException.ThrowIfNull(pool);
@@ -67,48 +71,91 @@ public static class SdCwtVpTokenVerification
         //the Core SD-CWT KB verification through the application-wired seams.
         using IMemoryOwner<byte> kbtBytes = decoder(vpToken, pool);
 
-        SdCwtKbtVerificationResult result = await KbCwtVerification.VerifyAsync(
-            kbtBytes.Memory,
-            seams.ParseCoseSign1,
-            seams.ExtractKcwt,
-            seams.ParseSdCwt,
-            seams.ExtractHolderKey,
-            seams.ReadKbtClaims,
-            seams.ExtractIssuer,
-            seams.ResolveIssuerKey,
-            seams.VerifyCredential,
-            seams.BuildSigStructure,
-            saltReuseSeam,
-            pool,
-            cancellationToken).ConfigureAwait(false);
-
-        //Engine-facing view: full canonical "/claimName" path with the disclosed value.
-        var disclosedByPath = new Dictionary<CredentialPath, object?>();
-        foreach(KeyValuePair<string, string> claim in result.DisclosedClaims)
+        //When an x5chain evidence resolver is wired, extract the embedded presentation SD-CWT's own
+        //COSE_Sign1 bytes independently (the same kcwt protected-header parameter
+        //KbCwtVerification.VerifyAsync below re-parses) so its x5chain can be read for OID4VP 1.0
+        //§6.1.1 trust evidence. The chain certificates are pool-owned copies, safe to keep past this
+        //probe parse's own disposal; they are resolved and disposed once the verified iss is known.
+        IReadOnlyList<PkiCertificateMemory> trustedAuthorityChain = [];
+        if(seams.ResolveTrustedAuthorityEvidence is not null && seams.ExtractCoseSign1X5Chain is not null)
         {
-            disclosedByPath[CredentialPath.Root.Append(claim.Key)] = claim.Value;
+            using CoseSign1Message probeKbt = seams.ParseCoseSign1(kbtBytes.Memory, pool);
+            ReadOnlyMemory<byte> embeddedSdCwt = seams.ExtractKcwt(probeKbt.ProtectedHeader.AsReadOnlyMemory());
+            trustedAuthorityChain = seams.ExtractCoseSign1X5Chain(embeddedSdCwt, pool);
         }
 
-        return new VpTokenParsed
+        try
         {
-            KbJwtNonce = result.Cnonce,
-            KbJwtAud = result.Audience,
-            KbJwtIat = result.IssuedAt,
-            KbJwtSignatureValid = result.HolderSignatureValid,
-            CredentialSignatureValid = result.CredentialSignatureValid,
-            CredentialIssuer = result.Issuer,
-            SdHashValid = true,
-            SessionTranscriptValid = true,
-            ExtractedClaims = new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.Ordinal)
+            SdCwtKbtVerificationResult result = await KbCwtVerification.VerifyAsync(
+                kbtBytes.Memory,
+                seams.ParseCoseSign1,
+                seams.ExtractKcwt,
+                seams.ParseSdCwt,
+                seams.ExtractHolderKey,
+                seams.ReadKbtClaims,
+                seams.ExtractIssuer,
+                seams.ExtractCredentialType,
+                seams.ExtractStatus,
+                seams.ResolveIssuerKey,
+                seams.VerifyCredential,
+                seams.BuildSigStructure,
+                saltReuseSeam,
+                pool,
+                cancellationToken).ConfigureAwait(false);
+
+            //The relying-party-facing string projection of the same path-keyed map KbCwtVerification
+            //already resolved (embeddedToken.DisclosurePaths) — no re-flattening onto claim names.
+            var extractedClaims = new Dictionary<CredentialPath, string>();
+            foreach(KeyValuePair<CredentialPath, object?> claim in result.DisclosedClaims)
             {
-                [credentialQueryId] = result.DisclosedClaims
-            },
-            DisclosedClaimPaths = new Dictionary<string, IReadOnlyDictionary<CredentialPath, object?>>(StringComparer.Ordinal)
+                extractedClaims[claim.Key] = claim.Value?.ToString() ?? "";
+            }
+
+            //Resolve the trust evidence now that the verified iss is known; the outer finally
+            //disposes the chain certificates extracted above regardless of outcome.
+            TrustedAuthorityEvidence? trustedAuthorityEvidence = null;
+            if(seams.ResolveTrustedAuthorityEvidence is not null)
             {
-                [credentialQueryId] = disclosedByPath
-            },
-            MinimumDisclosureSaltLengthBytes = result.MinimumDisclosureSaltLengthBytes,
-            SaltReused = result.SaltReused
-        };
+                trustedAuthorityEvidence = await seams.ResolveTrustedAuthorityEvidence(
+                    trustedAuthorityChain, result.Issuer, pool, cancellationToken).ConfigureAwait(false);
+            }
+
+            //Both the status claim and the issuer key come off the verification result: the Core
+            //orchestration read the status at the parse boundary of the embedded token it already
+            //held, and the key is the one the credential's issuer signature verified under, borrowed
+            //from the seam that resolved it. Nothing here re-parses the presentation or re-resolves
+            //the key, and nothing here disposes the key.
+            return new VpTokenParsed
+            {
+                CredentialQueryId = credentialQueryId,
+                CredentialIssuerKey = result.IssuerVerificationKey,
+                Credential = new VpCredentialClaims
+                {
+                    Extracted = extractedClaims,
+                    Disclosed = result.DisclosedClaims,
+                    UnconditionallyDisclosed = result.UnconditionallyDisclosedPaths,
+                    CredentialType = result.CredentialType,
+                    Issuer = result.Issuer,
+                    TrustedAuthorityEvidence = trustedAuthorityEvidence,
+                    Status = result.Status
+                },
+                KbJwtNonce = result.Cnonce,
+                KbJwtAud = result.Audience,
+                KbJwtIat = result.IssuedAt,
+                KbJwtSignatureValid = result.HolderSignatureValid,
+                CredentialSignatureValid = result.CredentialSignatureValid,
+                SdHashValid = true,
+                SessionTranscriptValid = true,
+                MinimumDisclosureSaltLengthBytes = result.MinimumDisclosureSaltLengthBytes,
+                SaltReused = result.SaltReused
+            };
+        }
+        finally
+        {
+            foreach(PkiCertificateMemory certificate in trustedAuthorityChain)
+            {
+                certificate.Dispose();
+            }
+        }
     }
 }

@@ -3,6 +3,7 @@ using Verifiable.Cryptography.Pki;
 using Verifiable.Fido2;
 using Verifiable.JCose;
 using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Fido2;
 
@@ -503,7 +504,7 @@ internal sealed class Fido2RegistrationRulesTests
     /// <returns>The generated <see cref="ClaimIssueResult"/>.</returns>
     private Task<ClaimIssueResult> IssueClaimsAsync(RegistrationCeremonyInput input)
     {
-        var issuer = new ClaimIssuer<RegistrationCeremonyInput>("fido2-registration-rules-test", Fido2ValidationProfiles.RegistrationRules());
+        var issuer = new ClaimIssuer<RegistrationCeremonyInput>("fido2-registration-rules-test", Fido2ValidationProfiles.RegistrationRules(), new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         return issuer.GenerateClaimsAsync(input, "fido2-registration-rules-test-correlation", TestContext.CancellationToken).AsTask();
     }

@@ -18,7 +18,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// comparison is skipped and only the digest is updated.
 /// </para>
 /// <para>
-/// Command structure (TPM 2.0 Part 3, Section 23.9):
+/// Command structure (TPM 2.0 Library Part 3, clause 23.9):
 /// </para>
 /// <list type="bullet">
 ///   <item><description>authHandle (TPMI_RH_NV_AUTH): The authorization for reading the Index (the Index itself, or a hierarchy with the matching read attribute). Requires authorization.</description></item>
@@ -52,8 +52,8 @@ public readonly record struct PolicyNvInput(
 
     /// <summary>
     /// Refuses an operand the <c>TPM2B_OPERAND</c> wire type cannot carry, so the caller learns it at
-    /// construction rather than from the TPM's <c>TPM_RC_SIZE</c> after a round trip. Part 2, clause 10.4.6,
-    /// Table 96 bounds <c>TPM2B_OPERAND</c> by the digest structure's own <c>sizeof(TPMU_HA)</c>.
+    /// construction rather than from the TPM's <c>TPM_RC_SIZE</c> after a round trip. Part 2, clause 10.3.6,
+    /// Table 94 bounds <c>TPM2B_OPERAND</c> by the digest structure's own <c>sizeof(TPMU_HA)</c>.
     /// </summary>
     /// <param name="candidate">The operand offered by the caller.</param>
     /// <returns><paramref name="candidate"/> when it is within the bound.</returns>

@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Verifiable.Cryptography;
 using Verifiable.Core.Did.Methods.Key;
 using Verifiable.Core.Did.Methods.Web;
 using Verifiable.Core.Model.Common;
@@ -24,11 +25,13 @@ namespace Verifiable.Core.Resolvers;
 /// <see cref="WellKnownDidRegistrationValues.WebDomainOption"/>. Never <see langword="null"/> (empty when the
 /// request carried none).
 /// </param>
+/// <param name="pool">The memory pool the builder rents its encoding buffers from.</param>
 /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
 /// <returns>The constructed DID document.</returns>
 public delegate ValueTask<DidDocument> DidDocumentBuildDelegate(
     IReadOnlyList<KeyMaterialInput> keys,
     IReadOnlyDictionary<string, object?> options,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken);
 
 /// <summary>
@@ -56,7 +59,7 @@ public delegate ValueTask<DidDocument> DidDocumentBuildDelegate(
 public sealed class DidRegistrationBuilders
 {
     /// <summary>An empty options bag passed to a builder when the request carried no options.</summary>
-    private static readonly IReadOnlyDictionary<string, object?> EmptyOptions =
+    private static IReadOnlyDictionary<string, object?> EmptyOptions { get; } =
         ReadOnlyDictionary<string, object?>.Empty;
 
     /// <summary>The registered builders keyed by DID method name (the token after <c>did:</c>, e.g. <c>key</c>).</summary>
@@ -126,13 +129,13 @@ public sealed class DidRegistrationBuilders
     {
         var registry = new DidRegistrationBuilders();
 
-        _ = registry.Register("key", static (keys, options, cancellationToken) =>
-            new KeyDidBuilder().BuildAsync(keys, cancellationToken: cancellationToken));
+        _ = registry.Register("key", static (keys, options, pool, cancellationToken) =>
+            new KeyDidBuilder().BuildAsync(keys, pool, cancellationToken: cancellationToken));
 
         //did:key DIDs are immutable — the DID is the key, with no registrar state to update or deactivate.
         _ = registry.RegisterGenerative("key");
 
-        _ = registry.Register("web", static (keys, options, cancellationToken) =>
+        _ = registry.Register("web", static (keys, options, pool, cancellationToken) =>
         {
             //Each option key maps to a WebDidBuilder.BuildAsync named parameter; the untyped DIF options bag is
             //adapted to the builder's strongly-typed surface here, at the method boundary.
@@ -141,7 +144,7 @@ public sealed class DidRegistrationBuilders
             string? didCoreVersion = ReadOptionalString(options, WellKnownDidRegistrationValues.WebDidCoreVersionOption);
             string[]? additionalContexts = ReadOptionalStringSequence(options, WellKnownDidRegistrationValues.WebAdditionalContextsOption);
 
-            return new WebDidBuilder().BuildAsync(keys, domain, representation, didCoreVersion, additionalContexts, cancellationToken);
+            return new WebDidBuilder(pool).BuildAsync(keys, domain, representation, didCoreVersion, additionalContexts, cancellationToken);
         });
 
         return registry;
@@ -164,12 +167,15 @@ public sealed class DidRegistrationBuilders
     /// <c>methodNotSupported</c>, since such DIDs are immutable. Proof-based anchoring (the <c>did:webplus</c> update
     /// builder, matrix row J2) layers on top per method and is still gated on the proof-signing seam.
     /// </remarks>
+    /// <param name="pool">The memory pool every registered builder rents its encoding buffers from.</param>
     /// <returns>A method handler suitable for <see cref="DidRegistrationTransitions.Create"/>.</returns>
-    public Func<RegistrationFlowState, RegistrationInput, CancellationToken, ValueTask<RegistrationFlowState>> CreateMethodHandler()
+    public Func<RegistrationFlowState, RegistrationInput, CancellationToken, ValueTask<RegistrationFlowState>> CreateMethodHandler(BaseMemoryPool pool)
     {
+        ArgumentNullException.ThrowIfNull(pool);
+
         return async (state, input, cancellationToken) => input switch
         {
-            BeginCreate create => await HandleCreateAsync(create, cancellationToken).ConfigureAwait(false),
+            BeginCreate create => await HandleCreateAsync(create, pool, cancellationToken).ConfigureAwait(false),
             BeginUpdate update => HandleUpdate(update),
             BeginDeactivate deactivate => HandleDeactivate(deactivate),
 
@@ -183,9 +189,10 @@ public sealed class DidRegistrationBuilders
     /// directly with a pre-built document.
     /// </summary>
     /// <param name="create">The create request.</param>
+    /// <param name="pool">The memory pool the registered builder rents its encoding buffers from.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>The resulting registration state.</returns>
-    private async ValueTask<RegistrationFlowState> HandleCreateAsync(BeginCreate create, CancellationToken cancellationToken)
+    private async ValueTask<RegistrationFlowState> HandleCreateAsync(BeginCreate create, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         if(create.Keys is { Count: > 0 } keys)
         {
@@ -194,7 +201,7 @@ public sealed class DidRegistrationBuilders
                 return new RegistrationFailed($"methodNotSupported: no builder registered for did:{create.Method}.");
             }
 
-            DidDocument document = await builder(keys, create.Options ?? EmptyOptions, cancellationToken).ConfigureAwait(false);
+            DidDocument document = await builder(keys, create.Options ?? EmptyOptions, pool, cancellationToken).ConfigureAwait(false);
 
             return new RegistrationCompleted(document.Id?.Id ?? string.Empty, document);
         }

@@ -160,7 +160,7 @@ public abstract class JAdESDetachedDataObjectReference
     /// <summary>The <c>ctys</c> member's JSON key name (clause 5.2.8.1, Annex B.1 schema).</summary>
     public const string ContentTypesMemberName = "ctys";
 
-    /// <summary>Restricts direct subtyping to the sibling types declared in this file.</summary>
+    /// <summary>Restricts direct subtyping to a type declared in this assembly.</summary>
     private protected JAdESDetachedDataObjectReference()
     {
     }

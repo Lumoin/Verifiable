@@ -42,9 +42,9 @@ internal sealed class Oid4VpSchemeFormatMatrixTests
 
     private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
-    private static readonly Uri VerifierBaseUri = new("https://verifier.example.com");
+    private static Uri VerifierBaseUri { get; } = new("https://verifier.example.com");
 
-    private static readonly ImmutableHashSet<CapabilityIdentifier> Oid4VpCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> Oid4VpCapabilities { get; } =
         ImmutableHashSet.Create(
             WellKnownCapabilityIdentifiers.VcVerifiablePresentation,
             WellKnownCapabilityIdentifiers.OAuthJwksEndpoint,
@@ -70,6 +70,14 @@ internal sealed class Oid4VpSchemeFormatMatrixTests
         select new object[] { scheme, format };
 
 
+    /// <summary>
+    /// Names one <see cref="Matrix"/> row after its scheme and format fixtures. <see cref="MethodInfo"/> is
+    /// the parameter shape <c>DynamicDataAttribute.DynamicDataDisplayName</c> itself requires; no reflection
+    /// happens beyond what that MSTest contract hands in, and the parameter is unused here.
+    /// </summary>
+    /// <param name="_">The test method MSTest's <c>DynamicDataDisplayName</c> contract supplies, unused.</param>
+    /// <param name="data">The row's two fixture objects.</param>
+    /// <returns>The display name for this row.</returns>
     public static string MatrixDisplayName(MethodInfo _, object[] data) =>
         $"{((SchemeFixture)data[0]).Name} × {((FormatFixture)data[1]).Name}";
 

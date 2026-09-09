@@ -22,7 +22,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// } TPM2B_CREATION_DATA;
 /// </code>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 15.2, Table 247.
+/// Specification reference: TPM 2.0 Library Part 2, clause 15.2, Table 262.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -140,9 +140,19 @@ public sealed class Tpm2bCreationData: IDisposable, ITpmWireType
     /// <summary>
     /// Parses creation data from a TPM reader.
     /// </summary>
+    /// <remarks>
+    /// The declared size is checked against <see cref="TpmReader.Remaining"/> before <c>rawStorage</c> is
+    /// rented, so a truncated outer buffer throws the same <see cref="ArgumentOutOfRangeException"/>
+    /// <see cref="TpmReader.ReadBytes(int)"/> would have thrown without ever renting. Once <c>rawStorage</c> is
+    /// rented, a refusing <see cref="TpmsCreationData.Parse"/> — any field of the enclosed structure declaring a
+    /// size past its own bound, or truncated before it — is caught and <c>rawStorage</c> is released before the
+    /// exception leaves, the same try/catch/dispose/rethrow shape as <see cref="FromMarshaled"/>.
+    /// </remarks>
     /// <param name="reader">The reader.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The parsed creation data.</returns>
+    /// <exception cref="InvalidOperationException">The declared size is zero, or a field of the enclosed <c>TPMS_CREATION_DATA</c> declares a size past its own structure's bound.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The declared size exceeds the octets remaining in <paramref name="reader"/>, or a field of the enclosed <c>TPMS_CREATION_DATA</c> is truncated before its own declared size.</exception>
     public static Tpm2bCreationData Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
@@ -153,16 +163,27 @@ public sealed class Tpm2bCreationData: IDisposable, ITpmWireType
             throw new InvalidOperationException("TPM2B_CREATION_DATA size cannot be zero.");
         }
 
-        // Read raw bytes for hashing purposes.
+        if(size > reader.Remaining)
+        {
+            throw new ArgumentOutOfRangeException(nameof(reader), size, $"TPM2B_CREATION_DATA size {size} exceeds the {reader.Remaining} octets remaining in the reader.");
+        }
+
         IMemoryOwner<byte> rawStorage = pool.Rent(size);
-        ReadOnlySpan<byte> source = reader.ReadBytes(size);
-        source.CopyTo(rawStorage.Memory.Span.Slice(0, size));
+        try
+        {
+            ReadOnlySpan<byte> source = reader.ReadBytes(size);
+            source.CopyTo(rawStorage.Memory.Span.Slice(0, size));
 
-        // Parse the structure from the raw bytes.
-        var innerReader = new TpmReader(rawStorage.Memory.Span.Slice(0, size));
-        var creationData = TpmsCreationData.Parse(ref innerReader, pool);
+            var innerReader = new TpmReader(rawStorage.Memory.Span.Slice(0, size));
+            var creationData = TpmsCreationData.Parse(ref innerReader, pool);
 
-        return new Tpm2bCreationData(creationData, rawStorage, size);
+            return new Tpm2bCreationData(creationData, rawStorage, size);
+        }
+        catch
+        {
+            rawStorage.Dispose();
+            throw;
+        }
     }
 
     /// <summary>

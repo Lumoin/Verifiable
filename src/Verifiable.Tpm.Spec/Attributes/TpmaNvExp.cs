@@ -13,7 +13,7 @@ namespace Verifiable.Tpm.Spec.Attributes;
 /// Added in version 1.83.
 /// </para>
 /// <para>
-/// Specification: <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2: Structures, section 13.5 (TPMA_NV_EXP).
+/// Specification: <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2: Structures, clause 13.5 (TPMA_NV_EXP).
 /// </para>
 /// </remarks>
 [Flags]

@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using Verifiable.Tests.TestInfrastructure;
@@ -9,20 +8,15 @@ namespace Verifiable.Tests.Xml;
 /// <summary>
 /// Adversarial hardening tests for <see cref="XmlNodeTable.TryParse"/> over namespace abuse, document
 /// structure violations, degenerate inputs and resource-bound payloads: refusal with the correct <see
-/// cref="XmlReadFailure"/> and a usable byte offset — or acceptance in linear time under bounded
-/// pooled memory — never a crash, a hang or a wrong acceptance. Pooled-buffer custody is proven on
-/// every path through <see cref="MeteredHousePool"/> accounting.
+/// cref="XmlReadFailure"/> and a usable byte offset — or acceptance with the correctly parsed shape under
+/// bounded pooled memory — never a crash, a hang or a wrong acceptance. Pooled-buffer custody is proven on
+/// every path through <see cref="MeteredHousePool"/> accounting. The throughput characterisation of the
+/// resource-bound payloads — whether parsing and duplicate detection stay linear rather than quadratic —
+/// lives in <c>Verifiable.Benchmarks</c>'s <c>XmlReaderAdversarialLimitsBenchmarks</c>.
 /// </summary>
 [TestClass]
 internal sealed class XmlReaderAdversarialLimitsTests
 {
-    /// <summary>
-    /// The wall-clock ceiling for the resource-bound payloads, deliberately loose so the assertion
-    /// catches only quadratic blowups, never scheduler jitter.
-    /// </summary>
-    private static readonly TimeSpan ResourceCaseCeiling = TimeSpan.FromSeconds(30);
-
-
     /// <summary>
     /// Proves <see href="https://www.w3.org/TR/2009/REC-xml-names-20091208/">Namespaces in XML 1.0 (Third
     /// Edition)</see> section 3 namespace constraint Reserved Prefixes and Namespace Names: "The prefix
@@ -251,12 +245,13 @@ internal sealed class XmlReaderAdversarialLimitsTests
 
 
     /// <summary>
-    /// Proves for oversized attribute values: a single eight-mebibyte attribute value parses in linear
-    /// time — bounded here by a deliberately loose wall-clock ceiling that only a quadratic blowup
-    /// could breach — with every buffer rented from the caller's pool and returned on disposal.
+    /// Proves for oversized attribute values: a single eight-mebibyte attribute value parses to the
+    /// correct length, with every buffer rented from the caller's pool and returned on disposal. The
+    /// throughput characterisation of this shape lives in <c>Verifiable.Benchmarks</c>'s
+    /// <c>XmlReaderAdversarialLimitsBenchmarks.EightMebibyteAttributeValueParses</c>.
     /// </summary>
     [TestMethod]
-    public void EightMebibyteAttributeValueParsesLinearlyWithPooledCustody()
+    public void EightMebibyteAttributeValueParsesWithPooledCustody()
     {
         const int ValueLength = 8 * 1024 * 1024;
         byte[] prefix = "<a x=\""u8.ToArray();
@@ -267,9 +262,7 @@ internal sealed class XmlReaderAdversarialLimitsTests
         suffix.CopyTo(document, prefix.Length + ValueLength);
 
         using var metered = new MeteredHousePool();
-        var stopwatch = Stopwatch.StartNew();
         bool isAccepted = XmlNodeTable.TryParse(document, metered.Pool, out XmlNodeTable? table, out XmlReadError error);
-        stopwatch.Stop();
 
         Assert.IsTrue(isAccepted, $"The oversized attribute value must parse but was refused with {error.Failure} at {error.ByteOffset}.");
         int parsedValueLength = table!.AttributeValueOf(table.DocumentElementIndex, 0).Length;
@@ -277,17 +270,17 @@ internal sealed class XmlReaderAdversarialLimitsTests
         Assert.IsGreaterThan(0L, metered.RentedCount, "Parsing must rent from the supplied pool.");
         table.Dispose();
         Assert.AreEqual(0L, metered.OutstandingCount, "Every pooled buffer must be returned after disposal.");
-        Assert.IsLessThan(ResourceCaseCeiling, stopwatch.Elapsed, $"Parsing took {stopwatch.Elapsed}, exceeding the loose linear-time ceiling {ResourceCaseCeiling}.");
     }
 
 
     /// <summary>
-    /// Proves for oversized names: an element whose name is eight mebibytes of name characters parses
-    /// in linear time — bounded by the same deliberately loose wall-clock ceiling — with every buffer
-    /// rented from the caller's pool and returned on disposal.
+    /// Proves for oversized names: an element whose name is eight mebibytes of name characters parses to
+    /// the correct length, with every buffer rented from the caller's pool and returned on disposal. The
+    /// throughput characterisation of this shape lives in <c>Verifiable.Benchmarks</c>'s
+    /// <c>XmlReaderAdversarialLimitsBenchmarks.EightMebibyteElementNameParses</c>.
     /// </summary>
     [TestMethod]
-    public void EightMebibyteElementNameParsesLinearlyWithPooledCustody()
+    public void EightMebibyteElementNameParsesWithPooledCustody()
     {
         const int NameLength = 8 * 1024 * 1024;
         byte[] document = new byte[1 + NameLength + 2];
@@ -297,16 +290,13 @@ internal sealed class XmlReaderAdversarialLimitsTests
         document[2 + NameLength] = (byte)'>';
 
         using var metered = new MeteredHousePool();
-        var stopwatch = Stopwatch.StartNew();
         bool isAccepted = XmlNodeTable.TryParse(document, metered.Pool, out XmlNodeTable? table, out XmlReadError error);
-        stopwatch.Stop();
 
         Assert.IsTrue(isAccepted, $"The oversized element name must parse but was refused with {error.Failure} at {error.ByteOffset}.");
         int parsedNameLength = table!.LocalNameOf(table.DocumentElementIndex).Length;
         Assert.AreEqual(NameLength, parsedNameLength);
         table.Dispose();
         Assert.AreEqual(0L, metered.OutstandingCount, "Every pooled buffer must be returned after disposal.");
-        Assert.IsLessThan(ResourceCaseCeiling, stopwatch.Elapsed, $"Parsing took {stopwatch.Elapsed}, exceeding the loose linear-time ceiling {ResourceCaseCeiling}.");
     }
 
 
@@ -314,12 +304,14 @@ internal sealed class XmlReaderAdversarialLimitsTests
     /// Proves for adversarial attribute counts: a start-tag carrying twenty thousand attributes whose
     /// duplicate sits last is refused as <see cref="XmlReadFailure.DuplicateAttribute"/> per the Unique
     /// Att Spec well-formedness constraint of <see
-    /// href="https://www.w3.org/TR/2008/REC-xml-20081126/">XML 1.0 (Fifth Edition)</see> section 3.1,
-    /// inside the loose wall-clock ceiling — duplicate detection must stay near-linear in the attribute
-    /// count — with the pool balanced on the refusal path.
+    /// href="https://www.w3.org/TR/2008/REC-xml-20081126/">XML 1.0 (Fifth Edition)</see> section 3.1, with
+    /// the pool balanced on the refusal path. The throughput characterisation of duplicate detection —
+    /// whether it stays near-linear rather than quadratic in the attribute count — lives in
+    /// <c>Verifiable.Benchmarks</c>'s
+    /// <c>XmlReaderAdversarialLimitsBenchmarks.TwentyThousandAttributesWithTrailingDuplicateAreRefused</c>.
     /// </summary>
     [TestMethod]
-    public void TwentyThousandAttributesWithTrailingDuplicateAreRefusedLinearly()
+    public void TwentyThousandAttributesWithTrailingDuplicateAreRefused()
     {
         const int AttributeCount = 20_000;
         var builder = new StringBuilder(AttributeCount * 16);
@@ -331,11 +323,8 @@ internal sealed class XmlReaderAdversarialLimitsTests
 
         builder.Append(" a0=\"duplicate\"/>");
 
-        var stopwatch = Stopwatch.StartNew();
         XmlReadError error = XmlAdversarialParsing.ParseRefusedWithBalancedPool(Encoding.UTF8.GetBytes(builder.ToString()));
-        stopwatch.Stop();
 
         Assert.AreEqual(XmlReadFailure.DuplicateAttribute, error.Failure);
-        Assert.IsLessThan(ResourceCaseCeiling, stopwatch.Elapsed, $"Duplicate detection took {stopwatch.Elapsed}, exceeding the loose linear-time ceiling {ResourceCaseCeiling}.");
     }
 }

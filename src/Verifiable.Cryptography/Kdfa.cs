@@ -18,7 +18,7 @@ namespace Verifiable.Cryptography;
 /// <para>
 /// KDFa derives keying material - session keys, HMAC keys, and the keys/masks used for command
 /// parameter encryption - from a key plus a label and two context fields. It is defined in the
-/// TCG TPM 2.0 Library, Part 1, Section 11.4.10.2:
+/// TCG TPM 2.0 Library Part 1, clause 8.4.10.2:
 /// </para>
 /// <code>
 /// KDFa(hashAlg, key, label, contextU, contextV, bits):

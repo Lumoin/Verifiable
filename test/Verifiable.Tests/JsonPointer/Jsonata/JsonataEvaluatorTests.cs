@@ -16,7 +16,7 @@ namespace Verifiable.Tests.JsonPointer.Jsonata;
 [TestClass]
 internal sealed class JsonataEvaluatorTests
 {
-    private static readonly string[] ExpectedOrderedKeys = ["id", "kind"];
+    private static string[] ExpectedOrderedKeys { get; } = ["id", "kind"];
 
 
     //Builds an input object value from a set of members, preserving order.

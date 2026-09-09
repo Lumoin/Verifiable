@@ -18,7 +18,7 @@ namespace Verifiable.Xml;
 /// </summary>
 public static class XAdESRefsOnlyTimeStampV2Imprint
 {
-    private static readonly (byte[] Namespace, byte[] LocalName)[] CoveredProperties =
+    private static (byte[] Namespace, byte[] LocalName)[] CoveredProperties { get; } =
     [
         (XAdESIdentifiers.XAdESNamespaceV141Utf8.ToArray(), "CompleteCertificateRefsV2"u8.ToArray()),
         (XAdESIdentifiers.XAdESNamespaceV132Utf8.ToArray(), "CompleteRevocationRefs"u8.ToArray()),
@@ -259,6 +259,9 @@ public static class XAdESRefsOnlyTimeStampV2Imprint
     /// <summary>
     /// Canonicalizes one node-set with the property's own resolved algorithm/prefix-list and appends the result
     /// to the running message-imprint input, releasing the intermediate buffer immediately.
+    /// <c>canonical</c> is bound through <see cref="XmlReferenceProcessing.TryCanonicalizeForAlgorithm"/>'s
+    /// <see langword="out"/> parameter, so it is declared <see langword="null"/> and disposed manually in
+    /// the <see langword="finally"/> below rather than through a <see langword="using"/> declaration.
     /// </summary>
     private static bool TryAppendCanonicalized(XmlNodeTable table, XmlNodeSet nodeSet, XmlCanonicalizationAlgorithm algorithm, ReadOnlySpan<byte> prefixList, BaseMemoryPool pool, PooledStructList<byte> output, out XAdESProcessingError error)
     {

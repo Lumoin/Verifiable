@@ -2,7 +2,7 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Cbor.Fido2;
 using Verifiable.Cryptography;
 using Verifiable.Fido2;
@@ -63,7 +63,7 @@ public static class CtapGetAssertionRequestCborReader
         try
         {
             string rpId = new CborReader(
-                RequireMember(parameters, WellKnownCtapGetAssertionRequestKeys.RpId, "rpId"), CborConformanceMode.Ctap2Canonical).ReadTextString();
+                RequireMember(parameters, WellKnownCtapGetAssertionRequestKeys.RpId, "rpId"), CborOptions.Ctap2Canonical, pool).ReadTextString();
 
             DigestValue clientDataHash = ReadDigest(
                 RequireMember(parameters, WellKnownCtapGetAssertionRequestKeys.ClientDataHash, "clientDataHash"), pool);
@@ -75,7 +75,7 @@ public static class CtapGetAssertionRequestCborReader
             try
             {
                 allowList = parameters.TryGetValue(WellKnownCtapGetAssertionRequestKeys.AllowList, out ReadOnlyMemory<byte> allowListCbor)
-                    ? CtapCommandEntityCborCodec.ReadDescriptorArray(new CborReader(allowListCbor, CborConformanceMode.Ctap2Canonical), pool)
+                    ? CtapCommandEntityCborCodec.ReadDescriptorArray(new CborReader(allowListCbor, CborOptions.Ctap2Canonical, pool), pool)
                     : null;
 
                 //Assigned via an explicit if/else rather than a ternary: a ternary whose "present" branch
@@ -101,14 +101,14 @@ public static class CtapGetAssertionRequestCborReader
                 }
 
                 CtapCommandOptions? options = parameters.TryGetValue(WellKnownCtapGetAssertionRequestKeys.Options, out ReadOnlyMemory<byte> optionsCbor)
-                    ? CtapCommandEntityCborCodec.ReadOptions(new CborReader(optionsCbor, CborConformanceMode.Ctap2Canonical))
+                    ? CtapCommandEntityCborCodec.ReadOptions(new CborReader(optionsCbor, CborOptions.Ctap2Canonical, pool))
                     : null;
 
                 //See the remarks on the extensions member above for why this is an if/else, not a ternary.
                 ReadOnlyMemory<byte>? pinUvAuthParam;
                 if(parameters.TryGetValue(WellKnownCtapGetAssertionRequestKeys.PinUvAuthParam, out ReadOnlyMemory<byte> pinUvAuthParamCbor))
                 {
-                    pinUvAuthParam = new CborReader(pinUvAuthParamCbor, CborConformanceMode.Ctap2Canonical).ReadByteString();
+                    pinUvAuthParam = new CborReader(pinUvAuthParamCbor, CborOptions.Ctap2Canonical, pool).ReadByteString();
                 }
                 else
                 {
@@ -116,7 +116,7 @@ public static class CtapGetAssertionRequestCborReader
                 }
 
                 int? pinUvAuthProtocol = parameters.TryGetValue(WellKnownCtapGetAssertionRequestKeys.PinUvAuthProtocol, out ReadOnlyMemory<byte> pinUvAuthProtocolCbor)
-                    ? checked((int)new CborReader(pinUvAuthProtocolCbor, CborConformanceMode.Ctap2Canonical).ReadInt64())
+                    ? checked((int)new CborReader(pinUvAuthProtocolCbor, CborOptions.Ctap2Canonical, pool).ReadInt64())
                     : null;
 
                 return new CtapGetAssertionRequest(
@@ -137,7 +137,7 @@ public static class CtapGetAssertionRequestCborReader
                 throw;
             }
         }
-        catch(CborContentException exception)
+        catch(CborException exception)
         {
             throw new Fido2FormatException(Fido2FormatFailureKind.MalformedCbor, "The authenticatorGetAssertion request parameter bytes are not valid CTAP2 canonical CBOR.", exception);
         }
@@ -162,7 +162,7 @@ public static class CtapGetAssertionRequestCborReader
         //Decodes the required clientDataHash byte string into a pooled, SHA-256-tagged carrier.
         static DigestValue ReadDigest(ReadOnlyMemory<byte> encodedValue, BaseMemoryPool pool)
         {
-            var nestedReader = new CborReader(encodedValue, CborConformanceMode.Ctap2Canonical);
+            var nestedReader = new CborReader(encodedValue, CborOptions.Ctap2Canonical, pool);
             byte[] bytes = nestedReader.ReadByteString();
 
             IMemoryOwner<byte> owner = pool.Rent(bytes.Length);
@@ -200,7 +200,7 @@ public static class CtapGetAssertionRequestCborReader
         //is a transition-level concern, not this reader's.
         static (bool? LargeBlobKey, CtapGetAssertionHmacSecretInput? HmacSecret) ReadExtensionValues(ReadOnlyMemory<byte> extensionsCbor)
         {
-            var reader = new CborReader(extensionsCbor, CborConformanceMode.Ctap2Canonical);
+            var reader = new CborReader(extensionsCbor, CborOptions.Ctap2Canonical);
             int? entryCount = reader.ReadStartMap();
 
             bool? largeBlobKey = null;

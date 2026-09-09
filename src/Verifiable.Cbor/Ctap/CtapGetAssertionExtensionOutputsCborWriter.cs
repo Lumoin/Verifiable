@@ -1,4 +1,5 @@
-using System.Formats.Cbor;
+using System.Buffers;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Fido2;
 
 namespace Verifiable.Cbor.Ctap;
@@ -37,14 +38,15 @@ public static class CtapGetAssertionExtensionOutputsCborWriter
             return TaggedMemory<byte>.Empty;
         }
 
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.Ctap2Canonical);
 
         writer.WriteStartMap(1);
         writer.WriteTextString(WellKnownWebAuthnExtensionIdentifiers.HmacSecret);
         writer.WriteByteString(hmacSecret.Value.Span);
         writer.WriteEndMap();
 
-        byte[] encoded = writer.Encode();
+        byte[] encoded = buffer.WrittenSpan.ToArray();
 
         return new TaggedMemory<byte>(encoded, Fido2BufferTags.CtapGetAssertionExtensionOutputsPayload);
     }

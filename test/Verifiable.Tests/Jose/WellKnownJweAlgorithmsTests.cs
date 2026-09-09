@@ -69,6 +69,22 @@ namespace Verifiable.Tests.Jwt
             //and a different reference.
             string incorrectAlgorithm = instanceAlgorithm.ToggleCaseForLetterAt(0);
             Assert.IsFalse(isCorrectAlgorithm(incorrectAlgorithm), "Comparison should fail when casing is changed.");
-        }   
+        }
+
+
+        /// <summary>
+        /// RFC 7518 &#167;4.1 specifies JWE "alg" values as case-sensitive strings compared for exact
+        /// match. A soft hyphen (U+00AD, a Unicode default-ignorable code point) inserted into the
+        /// value produces a byte-different string that a culture-aware comparison could still treat
+        /// as equal; <see cref="WellKnownJweAlgorithms.Equals(string, string)"/> must reject it.
+        /// </summary>
+        [TestMethod]
+        public void JweAlgorithmWithIgnorableCodePointIsNotEqualToCanonicalValue()
+        {
+            string tamperedAlgorithm = WellKnownJweAlgorithms.Rsa15.InsertIgnorableCodePointAt(2);
+
+            Assert.IsFalse(WellKnownJweAlgorithms.Equals(WellKnownJweAlgorithms.Rsa15, tamperedAlgorithm));
+            Assert.IsFalse(WellKnownJweAlgorithms.IsRsa15(tamperedAlgorithm));
+        }
     }
 }

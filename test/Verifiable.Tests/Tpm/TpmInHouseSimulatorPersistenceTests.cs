@@ -14,6 +14,8 @@ using Verifiable.Tpm.Spec.Attributes;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
+using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -52,43 +54,44 @@ internal sealed class TpmInHouseSimulatorPersistenceTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse primary = await CreateSigningPrimaryAsync(tpm, registry, pool).ConfigureAwait(false);
 
         //Persist the transient key to the fixed persistent handle.
-        TpmResult<EvictControlResponse> persistResult = await EvictControlAsync(
-            tpm, registry, pool, primary.ObjectHandle.Value, PersistentHandle).ConfigureAwait(false);
+        TpmResult<EvictControlResponse> persistResult = await TpmEvictControlHarness.EvictControlAsync(
+            tpm, registry, pool, primary.ObjectHandle.Value, PersistentHandle, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(persistResult.IsSuccess, $"EvictControl (persist) failed: '{persistResult.ResponseCode}'.");
 
         //Evict it. A successful eviction proves a persistent object existed at the handle — i.e. the persist took
         //effect.
-        TpmResult<EvictControlResponse> evictResult = await EvictControlAsync(
-            tpm, registry, pool, PersistentHandle, PersistentHandle).ConfigureAwait(false);
+        TpmResult<EvictControlResponse> evictResult = await TpmEvictControlHarness.EvictControlAsync(
+            tpm, registry, pool, PersistentHandle, PersistentHandle, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(evictResult.IsSuccess, $"EvictControl (evict) failed: '{evictResult.ResponseCode}'.");
 
         //Evicting the now-absent persistent handle must fail with TPM_RC_HANDLE.
-        TpmResult<EvictControlResponse> reEvictResult = await EvictControlAsync(
-            tpm, registry, pool, PersistentHandle, PersistentHandle).ConfigureAwait(false);
-        Assert.AreEqual(TpmRcConstants.TPM_RC_HANDLE, reEvictResult.ResponseCode, "Evicting an already-evicted handle must fail with TPM_RC_HANDLE.");
+        TpmResult<EvictControlResponse> reEvictResult = await TpmEvictControlHarness.EvictControlAsync(
+            tpm, registry, pool, PersistentHandle, PersistentHandle, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(HmacKeyHarness.HandleEncodedRc(TpmRcConstants.TPM_RC_HANDLE, 1), reEvictResult.ResponseCode, "Evicting an already-evicted handle must fail with TPM_RC_HANDLE at objectHandle, handle 2 of the EvictControl command table.");
     }
 
     /// <summary>
     /// <c>TPM2_EvictControl</c>'s @auth slot (<c>TPMI_RH_PROVISION</c>, Auth Role USER; TPM 2.0 Library Part
-    /// 3, clause 28.5) is verified against the named provisioning hierarchy's own authorization value through
+    /// 3, clause 4.2.10) is verified against the named provisioning hierarchy's own authorization value through
     /// the house hierarchy-authorization ladder: after <c>TPM2_HierarchyChangeAuth</c> installs a real owner
-    /// password, a WRONG password is refused with the bare, uncharged <c>TPM_RC_BAD_AUTH</c> a permanent
-    /// entity answers - never session-encoded and never a dictionary-attack strike, because a hierarchy
-    /// authorization value carries no such protection (Part 1, clause 17.8.1) - while the CORRECT password
-    /// persists the transient key, and a second correctly-authorized call evicts it.
+    /// password, a WRONG password is refused with <c>TPM_RC_BAD_AUTH</c> at the authorizing session, session 1
+    /// of <c>TPM2_EvictControl</c>'s own command table (Part 2, clause 6.6.2, Table 15) - never a
+    /// dictionary-attack strike, because the owner hierarchy carries no such protection (Part 1, clause
+    /// 16.8.1) - while the CORRECT password persists the transient key, and a second correctly-authorized call
+    /// evicts it.
     /// </summary>
     [TestMethod]
     public async Task EvictControlVerifiesTheOwnerAuthValue()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         //CreatePrimary is itself resolved under TPM_RH_OWNER (TPM 2.0 Library Part 3, clause 5.6), so the
@@ -102,24 +105,24 @@ internal sealed class TpmInHouseSimulatorPersistenceTests
 
         TpmResult<TpmDictionaryAttackParameters> before = await tpm.GetDictionaryAttackParametersAsync(pool, TestContext.CancellationToken).ConfigureAwait(false);
 
-        TpmResult<EvictControlResponse> wrongAuthResult = await EvictControlAsync(
-            tpm, registry, pool, primary.ObjectHandle.Value, PersistentHandle, WrongOwnerAuthBytes).ConfigureAwait(false);
+        TpmResult<EvictControlResponse> wrongAuthResult = await TpmEvictControlHarness.EvictControlAsync(
+            tpm, registry, pool, primary.ObjectHandle.Value, PersistentHandle, auth: WrongOwnerAuthBytes, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsFalse(wrongAuthResult.IsSuccess, "A wrong owner password must not persist the object.");
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_BAD_AUTH, wrongAuthResult.ResponseCode,
-            "The owner hierarchy is a dictionary-attack-exempt permanent entity, so a wrong password is the bare TPM_RC_BAD_AUTH, never session-index-encoded.");
+            HmacKeyHarness.SessionEncodedRc(TpmRcConstants.TPM_RC_BAD_AUTH, 0), wrongAuthResult.ResponseCode,
+            "The owner hierarchy is a dictionary-attack-exempt permanent entity, so a wrong password fails the owner authorization, session 1 of TPM2_EvictControl's own command table.");
 
         TpmResult<TpmDictionaryAttackParameters> afterWrong = await tpm.GetDictionaryAttackParametersAsync(pool, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(
             before.Value.LockoutCounter, afterWrong.Value.LockoutCounter,
-            "A wrong owner password must never charge the dictionary-attack counter (TPM 2.0 Library Part 1, clause 17.8.1 exempts permanent entities).");
+            "A wrong owner password must never charge the dictionary-attack counter (TPM 2.0 Library Part 1, clause 16.8.1 exempts permanent entities).");
 
-        TpmResult<EvictControlResponse> persistResult = await EvictControlAsync(
-            tpm, registry, pool, primary.ObjectHandle.Value, PersistentHandle, OwnerAuthBytes).ConfigureAwait(false);
+        TpmResult<EvictControlResponse> persistResult = await TpmEvictControlHarness.EvictControlAsync(
+            tpm, registry, pool, primary.ObjectHandle.Value, PersistentHandle, auth: OwnerAuthBytes, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(persistResult.IsSuccess, $"EvictControl (persist) with the correct owner password failed: '{persistResult.ResponseCode}'.");
 
-        TpmResult<EvictControlResponse> evictResult = await EvictControlAsync(
-            tpm, registry, pool, PersistentHandle, PersistentHandle, OwnerAuthBytes).ConfigureAwait(false);
+        TpmResult<EvictControlResponse> evictResult = await TpmEvictControlHarness.EvictControlAsync(
+            tpm, registry, pool, PersistentHandle, PersistentHandle, auth: OwnerAuthBytes, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(evictResult.IsSuccess, $"EvictControl (evict) with the correct owner password failed: '{evictResult.ResponseCode}'.");
     }
 
@@ -135,15 +138,15 @@ internal sealed class TpmInHouseSimulatorPersistenceTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
-        TpmResult<EvictControlResponse> result = await EvictControlAsync(
-            tpm, registry, pool, PersistentHandle, PersistentHandle, auth: default, authHandle: TpmRh.TPM_RH_ENDORSEMENT).ConfigureAwait(false);
+        TpmResult<EvictControlResponse> result = await TpmEvictControlHarness.EvictControlAsync(
+            tpm, registry, pool, PersistentHandle, PersistentHandle, authHandle: TpmRh.TPM_RH_ENDORSEMENT, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsSuccess, "A non-provision auth handle must not be admitted.");
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_VALUE, result.ResponseCode,
+            HmacKeyHarness.HandleEncodedRc(TpmRcConstants.TPM_RC_VALUE, 0), result.ResponseCode,
             "TPMI_RH_PROVISION admits only the owner and platform hierarchies (TPM 2.0 Library Part 2, clause 9.21); the endorsement hierarchy is refused with TPM_RC_VALUE ahead of the authorization ladder.");
     }
 
@@ -158,26 +161,26 @@ internal sealed class TpmInHouseSimulatorPersistenceTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         TpmResult<HierarchyChangeAuthResponse> rotation = await tpm.ChangeHierarchyAuthWithPasswordAsync(
             TpmRh.TPM_RH_OWNER, ReadOnlyMemory<byte>.Empty, OwnerAuthBytes, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(rotation.IsSuccess, $"Rotating the owner authorization value away from the Empty Buffer failed: '{rotation.ResponseCode}'.");
 
-        TpmResult<EvictControlResponse> result = await EvictControlAsync(
-            tpm, registry, pool, PersistentHandle, PersistentHandle, WrongOwnerAuthBytes).ConfigureAwait(false);
+        TpmResult<EvictControlResponse> result = await TpmEvictControlHarness.EvictControlAsync(
+            tpm, registry, pool, PersistentHandle, PersistentHandle, auth: WrongOwnerAuthBytes, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_HANDLE, result.ResponseCode,
-            "An object handle with nothing loaded or persisted at it is refused at handle-area validation (TPM 2.0 Library Part 3, clause 5.4), ahead of the authorization compare.");
+            HmacKeyHarness.HandleEncodedRc(TpmRcConstants.TPM_RC_HANDLE, 1), result.ResponseCode,
+            "An object handle with nothing loaded or persisted at it is refused at objectHandle, handle 2 of the EvictControl command table (TPM 2.0 Library Part 3, clause 5.4), ahead of the authorization compare.");
     }
 
     /// <summary>
     /// The authorizing hierarchy's availability is resolved as a handle-area outcome on @auth, ahead of the
     /// next handle's presence (TPM 2.0 Library Part 3, clause 5.4): with the owner hierarchy disabled — which
     /// also flushes its transient objects — a request naming an absent object handle answers
-    /// <c>TPM_RC_HIERARCHY</c> (a disabled hierarchy's authValue can authorize nothing, Part 1, clause 11.2),
+    /// <c>TPM_RC_HIERARCHY</c> (a disabled hierarchy's authValue can authorize nothing, Part 1, clause 10.2),
     /// not the <c>TPM_RC_HANDLE</c> the presence probe would give.
     /// </summary>
     [TestMethod]
@@ -185,18 +188,18 @@ internal sealed class TpmInHouseSimulatorPersistenceTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         TpmResult<HierarchyControlResponse> disableResult = await tpm.DisableHierarchyWithPasswordAsync(
             TpmRh.TPM_RH_OWNER, ReadOnlyMemory<byte>.Empty, TpmRh.TPM_RH_OWNER, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(disableResult.IsSuccess, $"Disabling the owner hierarchy failed: '{disableResult.ResponseCode}'.");
 
-        TpmResult<EvictControlResponse> result = await EvictControlAsync(
-            tpm, registry, pool, PersistentHandle, PersistentHandle).ConfigureAwait(false);
+        TpmResult<EvictControlResponse> result = await TpmEvictControlHarness.EvictControlAsync(
+            tpm, registry, pool, PersistentHandle, PersistentHandle, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_HIERARCHY, result.ResponseCode,
+            HmacKeyHarness.HandleEncodedRc(TpmRcConstants.TPM_RC_HIERARCHY, 0), result.ResponseCode,
             "A disabled authorizing hierarchy is refused as a handle-area availability outcome (TPM 2.0 Library Part 3, clause 5.4), ahead of the object handle's presence probe.");
     }
 
@@ -205,7 +208,7 @@ internal sealed class TpmInHouseSimulatorPersistenceTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         TpmResult<NvDefineSpaceResponse> defineResult = await DefineIndexAsync(tpm, registry, pool, NvIndexHandle).ConfigureAwait(false);
@@ -220,7 +223,7 @@ internal sealed class TpmInHouseSimulatorPersistenceTests
 
         //Undefining a handle that was never defined must fail with TPM_RC_HANDLE.
         TpmResult<NvUndefineSpaceResponse> undefineUnknown = await UndefineAsync(tpm, registry, pool, NvIndexHandle + 1).ConfigureAwait(false);
-        Assert.AreEqual(TpmRcConstants.TPM_RC_HANDLE, undefineUnknown.ResponseCode, "Undefining an unknown NV Index must fail with TPM_RC_HANDLE.");
+        Assert.AreEqual(HmacKeyHarness.HandleEncodedRc(TpmRcConstants.TPM_RC_HANDLE, 1), undefineUnknown.ResponseCode, "Undefining an unknown NV Index must fail with TPM_RC_HANDLE.");
     }
 
     /// <summary>
@@ -230,14 +233,14 @@ internal sealed class TpmInHouseSimulatorPersistenceTests
     /// handle-area outcomes — admit, then enable — before probing the next handle's presence, the same
     /// convention <c>TPM2_EvictControl()</c> holds. With the owner hierarchy disabled, a request naming an
     /// unknown NV Index handle answers <c>TPM_RC_HIERARCHY</c> (a disabled hierarchy's authValue can authorize
-    /// nothing, Part 1, clause 11.2), not the <c>TPM_RC_HANDLE</c> the Index presence probe alone would give.
+    /// nothing, Part 1, clause 10.2), not the <c>TPM_RC_HANDLE</c> the Index presence probe alone would give.
     /// </summary>
     [TestMethod]
     public async Task NvUndefineSpaceUnderADisabledOwnerHierarchyAnswersHierarchy()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         TpmResult<HierarchyControlResponse> disableResult = await tpm.DisableHierarchyWithPasswordAsync(
@@ -247,13 +250,13 @@ internal sealed class TpmInHouseSimulatorPersistenceTests
         TpmResult<NvUndefineSpaceResponse> result = await UndefineAsync(tpm, registry, pool, NvIndexHandle).ConfigureAwait(false);
 
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_HIERARCHY, result.ResponseCode,
+            HmacKeyHarness.HandleEncodedRc(TpmRcConstants.TPM_RC_HIERARCHY, 0), result.ResponseCode,
             "A disabled authorizing hierarchy is refused as a handle-area availability outcome (TPM 2.0 Library Part 3, clause 5.4), ahead of the NV Index handle's presence probe.");
     }
 
     /// <summary>
     /// <see cref="NvUndefineSpaceUnderADisabledOwnerHierarchyAnswersHierarchy"/>'s handle-order pin replayed
-    /// over an HMAC session rather than a password session: <c>OnNvUndefineSpaceOverSession</c> resolves the
+    /// over an HMAC session rather than a password session: the session form resolves the
     /// identical handle-area ladder — @authHandle's admit, then enable, then the Index handle's presence —
     /// ahead of the session area and its authorization checks (Part 3, clause 5.4 requires the handle area
     /// before the authorization checks, and permits any order within it), and so before it ever declares the
@@ -269,7 +272,7 @@ internal sealed class TpmInHouseSimulatorPersistenceTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistryWithSessionSupport();
 
         (uint sessionHandle, TpmSession session) = await StartOwnerBoundHmacSessionAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -282,7 +285,7 @@ internal sealed class TpmInHouseSimulatorPersistenceTests
                 Assert.IsTrue(disableResult.IsSuccess, $"Disabling the owner hierarchy failed: '{disableResult.ResponseCode}'.");
 
                 //The rejection below is decided before the Index's Name is ever computed, so this placeholder
-                //never has to carry the Index's genuine Name (TPM 2.0 Library Part 1, clause 16.7) - it only
+                //never has to carry the Index's genuine Name (TPM 2.0 Library Part 1, clause 15.7) - it only
                 //has to be non-empty, satisfying the executor's requirement that a named handle supply one.
                 ReadOnlyMemory<byte>[] handleNames = [ReadOnlyMemory<byte>.Empty, new byte[] { 0x00 }];
                 var input = new NvUndefineSpaceInput(TpmRh.TPM_RH_OWNER, NvIndexHandle);
@@ -291,7 +294,7 @@ internal sealed class TpmInHouseSimulatorPersistenceTests
                     tpm, input, [session], handleNames, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
                 Assert.AreEqual(
-                    TpmRcConstants.TPM_RC_HIERARCHY, result.ResponseCode,
+                    HmacKeyHarness.HandleEncodedRc(TpmRcConstants.TPM_RC_HIERARCHY, 0), result.ResponseCode,
                     "The HMAC-session arm resolves the disabled authorizing hierarchy ahead of the NV Index handle's presence, exactly as the password arm does (TPM 2.0 Library Part 3, clause 5.4).");
             }
         }
@@ -302,7 +305,7 @@ internal sealed class TpmInHouseSimulatorPersistenceTests
     }
 
     /// <summary>
-    /// <c>OnNvUndefineSpaceOverSession</c> resolves the whole handle area before any session work at all
+    /// TPM2_NV_UndefineSpace()'s session form resolves the whole handle area before any session work at all
     /// (TPM 2.0 Library Part 3, clause 5.4: handle-area validation is required before the authorization
     /// checks): a request naming an unknown NV Index handle over a session handle the simulator has never
     /// issued answers the Index handle's <c>TPM_RC_HANDLE</c>, not a session-area outcome — the presence
@@ -315,12 +318,12 @@ internal sealed class TpmInHouseSimulatorPersistenceTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistryWithSessionSupport();
 
         //An HMAC-session-ranged handle (MSO 0x02) the simulator has never issued.
         const uint UnknownSessionHandle = 0x0200_00EE;
-        using TpmSession unknownSession = new(new TpmHandle(UnknownSessionHandle), Tpm2bNonce.CreateRandom(16, pool), TpmAlgIdConstants.TPM_ALG_SHA256, pool);
+        using TpmSession unknownSession = new(new TpmHandle(UnknownSessionHandle), Tpm2bNonce.CreateRandom(16, TestEntropy.NewCounterStream(), pool), TpmAlgIdConstants.TPM_ALG_SHA256, TestEntropy.NewCounterStream(), pool);
         unknownSession.SetAuthValue([0x01], pool);
 
         //The rejection is decided at the handle area, so the placeholder never has to carry the Index's
@@ -333,7 +336,7 @@ internal sealed class TpmInHouseSimulatorPersistenceTests
             tpm, input, [unknownSession], handleNames, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_HANDLE, result.ResponseCode,
+            HmacKeyHarness.HandleEncodedRc(TpmRcConstants.TPM_RC_HANDLE, 1), result.ResponseCode,
             "The unknown Index handle's presence probe is a handle-area outcome, resolved before the authorizing session is looked up at all (TPM 2.0 Library Part 3, clause 5.4).");
     }
 
@@ -341,7 +344,7 @@ internal sealed class TpmInHouseSimulatorPersistenceTests
     /// <c>TPM2_Clear</c> reclaims the owner's provisioning wholesale: it will "flush resident objects (persistent
     /// and volatile) in the Storage and Endorsement hierarchies" and "delete any NV Index with
     /// TPMA_NV_PLATFORMCREATE == CLEAR" - every Index defined under Owner Authorization, which is every Index
-    /// this simulator can define (TPM 2.0 Library Part 3, Section 24.6.1). Observed through the two teardown
+    /// this simulator can define (TPM 2.0 Library Part 3, clause 24.6.1). Observed through the two teardown
     /// commands this file already covers: after the clear, evicting the persistent handle and undefining the
     /// Index both answer <c>TPM_RC_HANDLE</c> because neither exists any more, and the freed handles accept
     /// fresh definitions - so the deletion released the handle rather than merely hiding the entry.
@@ -351,13 +354,13 @@ internal sealed class TpmInHouseSimulatorPersistenceTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse primary = await CreateSigningPrimaryAsync(tpm, registry, pool).ConfigureAwait(false);
 
-        TpmResult<EvictControlResponse> persistResult = await EvictControlAsync(
-            tpm, registry, pool, primary.ObjectHandle.Value, PersistentHandle).ConfigureAwait(false);
+        TpmResult<EvictControlResponse> persistResult = await TpmEvictControlHarness.EvictControlAsync(
+            tpm, registry, pool, primary.ObjectHandle.Value, PersistentHandle, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(persistResult.IsSuccess, $"EvictControl (persist) failed: '{persistResult.ResponseCode}'.");
 
         TpmResult<NvDefineSpaceResponse> defineResult = await DefineIndexAsync(tpm, registry, pool, NvIndexHandle).ConfigureAwait(false);
@@ -366,15 +369,15 @@ internal sealed class TpmInHouseSimulatorPersistenceTests
         TpmResult<ClearResponse> clearResult = await tpm.ClearAsync(ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(clearResult.IsSuccess, $"TPM2_Clear failed: '{clearResult.ResponseCode}'.");
 
-        TpmResult<EvictControlResponse> evictAfterClear = await EvictControlAsync(
-            tpm, registry, pool, PersistentHandle, PersistentHandle).ConfigureAwait(false);
+        TpmResult<EvictControlResponse> evictAfterClear = await TpmEvictControlHarness.EvictControlAsync(
+            tpm, registry, pool, PersistentHandle, PersistentHandle, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_HANDLE, evictAfterClear.ResponseCode,
-            "A clear flushes owner-hierarchy persistent objects, so nothing remains at the persistent handle to evict.");
+            HmacKeyHarness.HandleEncodedRc(TpmRcConstants.TPM_RC_HANDLE, 1), evictAfterClear.ResponseCode,
+            "A clear flushes owner-hierarchy persistent objects, so nothing remains at objectHandle, handle 2 of the EvictControl command table, to evict.");
 
         TpmResult<NvUndefineSpaceResponse> undefineAfterClear = await UndefineAsync(tpm, registry, pool, NvIndexHandle).ConfigureAwait(false);
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_HANDLE, undefineAfterClear.ResponseCode,
+            HmacKeyHarness.HandleEncodedRc(TpmRcConstants.TPM_RC_HANDLE, 1), undefineAfterClear.ResponseCode,
             "A clear deletes every owner-created NV Index, so nothing remains at the Index handle to undefine.");
 
         //The handles were released, not merely emptied: both accept a fresh definition of the same kind.
@@ -382,29 +385,9 @@ internal sealed class TpmInHouseSimulatorPersistenceTests
         Assert.IsTrue(redefineResult.IsSuccess, $"NV_DefineSpace after the clear failed: '{redefineResult.ResponseCode}'.");
 
         using CreatePrimaryResponse replacementPrimary = await CreateSigningPrimaryAsync(tpm, registry, pool).ConfigureAwait(false);
-        TpmResult<EvictControlResponse> repersistResult = await EvictControlAsync(
-            tpm, registry, pool, replacementPrimary.ObjectHandle.Value, PersistentHandle).ConfigureAwait(false);
+        TpmResult<EvictControlResponse> repersistResult = await TpmEvictControlHarness.EvictControlAsync(
+            tpm, registry, pool, replacementPrimary.ObjectHandle.Value, PersistentHandle, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(repersistResult.IsSuccess, $"EvictControl (re-persist) after the clear failed: '{repersistResult.ResponseCode}'.");
-    }
-
-    /// <summary>Issues TPM2_EvictControl for the given object and persistent handles, returning the result.</summary>
-    /// <param name="tpm">The TPM device.</param>
-    /// <param name="registry">The response codec registry.</param>
-    /// <param name="pool">The memory pool.</param>
-    /// <param name="objectHandle">The transient object to persist, or the persistent handle to evict.</param>
-    /// <param name="persistentHandle">The persistent handle to assign or evict.</param>
-    /// <param name="auth">The password authorizing <paramref name="authHandle"/>; empty (the default) authorizes with the Empty Buffer.</param>
-    /// <param name="authHandle">The <c>TPMI_RH_PROVISION</c> handle named in the command's @auth slot; defaults to the owner hierarchy.</param>
-    /// <returns>The EvictControl result.</returns>
-    private async Task<TpmResult<EvictControlResponse>> EvictControlAsync(
-        TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, uint objectHandle, uint persistentHandle,
-        ReadOnlyMemory<byte> auth = default, TpmRh authHandle = TpmRh.TPM_RH_OWNER)
-    {
-        using TpmPasswordSession authSession = TpmPasswordSession.Create(auth.Span, pool);
-        var input = new EvictControlInput(authHandle, objectHandle, persistentHandle);
-
-        return await TpmCommandExecutor.ExecuteAsync<EvictControlResponse>(
-            tpm, input, [authSession], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Defines a small DA-exempt NV Index authorized by its own auth value.</summary>
@@ -446,7 +429,7 @@ internal sealed class TpmInHouseSimulatorPersistenceTests
 
     /// <summary>
     /// Starts an HMAC session bound to the owner hierarchy through the production
-    /// <c>TPM2_StartAuthSession()</c> path (TPM 2.0 Library Part 1, clause 17.6.10, equation 20), deriving the
+    /// <c>TPM2_StartAuthSession()</c> path (TPM 2.0 Library Part 1, clause 16.6.10, equation 20), deriving the
     /// session key from the owner's Empty Buffer authValue - this file never rotates it away before calling
     /// this helper.
     /// </summary>
@@ -456,7 +439,7 @@ internal sealed class TpmInHouseSimulatorPersistenceTests
     /// <returns>The started session handle and its client-side wrapper (the caller disposes the wrapper and flushes the handle).</returns>
     private async Task<(uint SessionHandle, TpmSession Session)> StartOwnerBoundHmacSessionAsync(TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool)
     {
-        StartAuthSessionInput startInput = StartAuthSessionInput.CreateBoundUnsaltedHmacSession((uint)TpmRh.TPM_RH_OWNER, TpmAlgIdConstants.TPM_ALG_SHA256);
+        StartAuthSessionInput startInput = StartAuthSessionInput.CreateBoundUnsaltedHmacSession((uint)TpmRh.TPM_RH_OWNER, TpmAlgIdConstants.TPM_ALG_SHA256, TestEntropy.NewCounterStream(), pool);
 
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             tpm, startInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
@@ -465,7 +448,7 @@ internal sealed class TpmInHouseSimulatorPersistenceTests
         StartAuthSessionResponse startResponse = startResult.Value;
         TpmSession session = await TpmSession.CreateBoundAsync(
             new TpmHandle(startResponse.SessionHandle.Value), ReadOnlyMemory<byte>.Empty, startInput.NonceCaller,
-            startResponse.NonceTPM, TpmAlgIdConstants.TPM_ALG_SHA256, pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            startResponse.NonceTPM, TpmAlgIdConstants.TPM_ALG_SHA256, TestEntropy.NewCounterStream(), pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         session.SessionAttributes = TpmaSession.CONTINUE_SESSION;
 
@@ -508,7 +491,7 @@ internal sealed class TpmInHouseSimulatorPersistenceTests
     /// <returns>The operational simulator.</returns>
     private async Task<TpmSimulator> CreateOperationalAsync(BaseMemoryPool pool)
     {
-        var simulator = new TpmSimulator("tpm-in-house-persistence", signingBackend: BouncyCastleTpmEccSigningBackend.Create());
+        var simulator = new TpmSimulator("tpm-in-house-persistence", signingBackend: BouncyCastleTpmEccSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await BringOperationalAsync(simulator, pool).ConfigureAwait(false);
 

@@ -131,12 +131,13 @@ public readonly struct XAdESUnsignedSignatureProperties: IEquatable<XAdESUnsigne
     /// unrecognized <c>##other</c> occurrences), since the schema's own <c>xsd:choice maxOccurs="unbounded"</c>
     /// content model (XA-4.3.6-3) sets no numeric limit and every entry — recognized or not — is retained.
     /// Chosen generously above any legitimate signature's own property count;
-    /// <c>XAdESGrowthBoundsCostTests.UnsignedSignaturePropertiesFloodIsRefusedWithinTheCeiling</c> measures a
-    /// flood one entry past this bound refusing well inside its own loose ceiling.
+    /// <c>XAdESGrowthBoundsCostTests.UnsignedSignaturePropertiesFloodIsRefused</c> proves a flood one entry
+    /// past this bound is refused, with its throughput characterisation in
+    /// <c>Verifiable.Benchmarks</c>'s <c>XAdESGrowthBoundsBenchmarks</c>.
     /// </summary>
     public const int MaximumPropertyCount = 8192;
 
-    private static readonly (byte[] LocalName, bool IsDeprecated, XAdESUnsignedSignaturePropertyName Name)[] Names =
+    private static (byte[] LocalName, bool IsDeprecated, XAdESUnsignedSignaturePropertyName Name)[] Names { get; } =
     [
         ("CounterSignature"u8.ToArray(), false, XAdESUnsignedSignaturePropertyName.CounterSignature),
         ("SignatureTimeStamp"u8.ToArray(), false, XAdESUnsignedSignaturePropertyName.SignatureTimeStamp),

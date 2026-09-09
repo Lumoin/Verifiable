@@ -924,19 +924,16 @@ public static class XAdESSignatureFactsDelegates
         XmlNodeTable table, int elementIndex, BaseMemoryPool pool, bool isAttributeRevocationRefs,
         List<XAdESCrlReferenceFact> crlRefs, List<XAdESOcspReferenceFact> ocspRefs, out string? failureReason)
     {
+        //value is an out-parameter target, assigned by TryReadAttributeRevocationRefs/
+        //TryReadCompleteRevocationRefs below; a using declaration cannot target a variable assigned
+        //through an out parameter after declaration.
         XAdESCompleteRevocationRefs? value = null;
         try
         {
-            bool isRead;
-            XAdESReadError error;
-            if(isAttributeRevocationRefs)
-            {
-                isRead = XAdESCompleteRevocationRefs.TryReadAttributeRevocationRefs(table, elementIndex, pool, out value, out error);
-            }
-            else
-            {
-                isRead = XAdESCompleteRevocationRefs.TryReadCompleteRevocationRefs(table, elementIndex, pool, out value, out error);
-            }
+            XAdESReadError error = default;
+            bool isRead = isAttributeRevocationRefs
+                ? XAdESCompleteRevocationRefs.TryReadAttributeRevocationRefs(table, elementIndex, pool, out value, out error)
+                : XAdESCompleteRevocationRefs.TryReadCompleteRevocationRefs(table, elementIndex, pool, out value, out error);
 
             if(!isRead)
             {
@@ -1076,6 +1073,13 @@ public static class XAdESSignatureFactsDelegates
     }
 
 
+    /// <summary>
+    /// Dispatches one <c>UnsignedSignatureProperty</c> the caller's own switch did not recognize by name to
+    /// its XAdES v1.4.1 element shape. The four <see langword="ref"/> parameters are accumulators the
+    /// caller's enclosing scan loop owns across every property it dispatches (the running validation-data
+    /// counts, the archive- and validation-data-timestamp ordinals, and the "has content" flag); bundling
+    /// them into a carrier would be a wider refactor of the whole scan loop, not this dispatch alone.
+    /// </summary>
     private static bool TryDispatchUnrecognized(
         XmlNodeTable table, int elementIndex, BaseMemoryPool pool,
         Dictionary<string, int> unsignedCounts, ref XAdESValidationDataCounts validationDataCounts,

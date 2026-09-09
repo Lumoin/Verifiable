@@ -105,6 +105,10 @@ public static class DcqlDisclosure
     /// <param name="credential">The credential to evaluate (the holder's credential when producing, the disclosed credential when assessing).</param>
     /// <param name="metadataExtractor">The format adapter's metadata extractor (<see cref="DcqlCredentialMetadata.AvailablePaths"/> bounds the lattice top).</param>
     /// <param name="claimExtractor">The format adapter's claim extractor (used for claim-value constraint checks).</param>
+    /// <param name="timeProvider">
+    /// Clock for the fallback <see cref="DisclosureComputation{TCredential}"/>'s decision-record
+    /// timestamps, used when <paramref name="computation"/> is <see langword="null"/>.
+    /// </param>
     /// <param name="mandatoryPaths">
     /// Paths that must always be disclosed (the lattice bottom) — e.g. SD-JWT
     /// <c>iss</c>/<c>vct</c>. Unioned into the available paths so always-visible
@@ -131,12 +135,14 @@ public static class DcqlDisclosure
         TCredential credential,
         DcqlMetadataExtractor<TCredential> metadataExtractor,
         DcqlClaimExtractor<TCredential> claimExtractor,
+        TimeProvider timeProvider,
         IReadOnlySet<CredentialPath>? mandatoryPaths = null,
         DisclosureComputation<TCredential>? computation = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(credentialQuery);
         ArgumentNullException.ThrowIfNull(metadataExtractor);
+        ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(claimExtractor);
 
         DcqlCredentialMetadata metadata = metadataExtractor(credential);
@@ -160,7 +166,7 @@ public static class DcqlDisclosure
         var disclosureMatch = new DisclosureMatch<TCredential>
         {
             Credential = credential,
-            QueryRequirementId = credentialQuery.Id ?? string.Empty,
+            QueryRequirementId = result.CredentialQueryId.Value,
             RequiredPaths = DcqlPathResolver.ResolveAll(credentialQuery.RequiredPatterns(), allAvailablePaths),
             MatchedPaths = DcqlPathResolver.ResolveAll(matchedPatterns, allAvailablePaths),
             AllAvailablePaths = allAvailablePaths,
@@ -168,7 +174,7 @@ public static class DcqlDisclosure
             Format = metadata.Format
         };
 
-        DisclosureComputation<TCredential> engine = computation ?? new DisclosureComputation<TCredential>();
+        DisclosureComputation<TCredential> engine = computation ?? new DisclosureComputation<TCredential>([], timeProvider);
 
         DisclosureStrategyGraph<TCredential> graph =
             await engine.ComputeAsync([disclosureMatch], cancellationToken: cancellationToken).ConfigureAwait(false);

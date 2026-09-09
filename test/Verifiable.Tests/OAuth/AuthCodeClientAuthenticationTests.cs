@@ -11,6 +11,7 @@ using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Server;
+using Verifiable.Server;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -174,7 +175,8 @@ internal sealed class AuthCodeClientAuthenticationTests
                 clientKeys.PublicKey, alg, TestSetup.Base64UrlEncoder);
             string jwksJson = BuildJwksJson(jwk, SigningKeyId);
             DeclareServerSideAuthMethod(
-                host, material, ClientAuthenticationMethod.PrivateKeyJwt, clientJwks: jwksJson);
+                host, material, ClientAuthenticationMethod.PrivateKeyJwt,
+                clientJwks: jwksJson, assertionSigningAlgorithm: alg);
 
             host.Server.OAuth().ValidateClientCredentialsAsync =
                 PrivateKeyJwtClientAuthentication.BuildValidator(
@@ -206,6 +208,107 @@ internal sealed class AuthCodeClientAuthenticationTests
             clientKeys.PublicKey.Dispose();
             clientKeys.PrivateKey.Dispose();
         }
+    }
+
+
+    /// <summary>
+    /// RFC 7523 §3 over the real wire: a <c>private_key_jwt</c> assertion carries a <c>jti</c>, and a
+    /// store that records it but never resolves what it saved under <c>FlowKind.JtiReplay</c> cannot
+    /// maintain the used-<c>jti</c> set. <see cref="JtiReplayGuard"/> answers
+    /// <see cref="JtiReplayOutcome.StoreUnavailable"/>, the validator rejects the assertion, and the
+    /// token endpoint refuses with <c>invalid_client</c> — the silent no-op the half-wiring would
+    /// otherwise produce is caught rather than admitted.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523, Section 3</see>.
+    /// </summary>
+    [TestMethod]
+    public async Task PrivateKeyJwtAssertionFailsClosedWhenStoreCannotProveItself()
+    {
+        var clientKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        try
+        {
+            await using TestHostShell host = new(TimeProvider);
+            using VerifierKeyMaterial material = host.RegisterDpopClient(
+                ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+
+            await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+            HostedAuthorizationServer hosted = host.Host("default");
+            string segment = material.Registration.TenantId.Value;
+            Uri tokenEndpoint = new(
+                hosted.HttpBaseAddress!, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeToken, segment));
+
+            string alg = CryptoFormatConversions.DefaultTagToJwaConverter(clientKeys.PublicKey.Tag);
+            const string SigningKeyId = "confidential-client-key-1";
+            IReadOnlyDictionary<string, string> jwk = DpopJwkUtilities.ToJwk(
+                clientKeys.PublicKey, alg, TestSetup.Base64UrlEncoder);
+            string jwksJson = BuildJwksJson(jwk, SigningKeyId);
+            DeclareServerSideAuthMethod(
+                host, material, ClientAuthenticationMethod.PrivateKeyJwt,
+                clientJwks: jwksJson, assertionSigningAlgorithm: alg);
+
+            //The validator consults the shared (issuer, jti) guard on the assertion's jti, so a store
+            //that cannot prove it recorded the jti fails the assertion closed.
+            host.Server.OAuth().ValidateClientCredentialsAsync =
+                PrivateKeyJwtClientAuthentication.BuildValidator(
+                    additionalAcceptedAudiences: [tokenEndpoint.OriginalString],
+                    checkJtiReplayAsync: JtiReplayGuard.ConsultAsync);
+
+            (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
+                await host.CreateOAuthClientAndRegistrationAsync(
+                    material.Registration,
+                    RedirectUri.OriginalString,
+                    profile: PolicyProfile.Rfc6749WithPkce,
+                    TestContext.CancellationToken).ConfigureAwait(false);
+            registration = registration with
+            {
+                AuthenticationMethod = ClientAuthenticationMethod.PrivateKeyJwt,
+                AuthenticationKeyMaterial = clientKeys
+            };
+
+            using HttpClient browserClient = LoopbackTls.CreateSingleHopPinnedHttpClient(host.ServerCertificate);
+            (string flowId, _) = await AuthCodeFlowDriver.DriveParAuthorizeAndCallbackAsync(
+                hosted, client, registration, clientFlowStore, segment, RedirectUri, SubjectId, browserClient,
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+            HalfWireJtiReplayStore(host.Server);
+
+            AuthCodeFlowEndpointResult tokenResult = await client.AuthCode.ExchangeTokenAsync(
+                registration,
+                flowId,
+                new ExchangeContext(),
+                clientAssertionOptions: new ClientAssertionOptions
+                {
+                    SigningKeyId = SigningKeyId,
+                    HeaderSerializer = host.Server.OAuth().Codecs.JwtHeaderSerializer!,
+                    PayloadSerializer = host.Server.OAuth().Codecs.JwtPayloadSerializer!
+                },
+                TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.AreNotEqual(AuthCodeFlowEndpointOutcome.Ok, tokenResult.Outcome,
+                "The half-wired store must refuse the assertion.");
+            Assert.AreEqual(OAuthErrors.InvalidClient, tokenResult.ErrorCode,
+                $"RFC 7523 §3: a store that cannot prove it recorded the assertion jti fails closed. Description: {tokenResult.ErrorDescription}");
+        }
+        finally
+        {
+            clientKeys.PublicKey.Dispose();
+            clientKeys.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// Rewires the host's replay store so it saves normally but never resolves anything under
+    /// <c>FlowKind.JtiReplay</c>, while every other correlation kind still resolves through the host's
+    /// real resolver. This is the half-wired store the guard's post-save self-check must catch.
+    /// </summary>
+    /// <param name="server">The hosted server whose OAuth integration resolver is wrapped.</param>
+    private static void HalfWireJtiReplayStore(EndpointServer server)
+    {
+        ResolveCorrelationKeyDelegate original = server.OAuth().ResolveCorrelationKeyAsync!;
+        server.OAuth().ResolveCorrelationKeyAsync = (tenantId, flowKind, externalHandle, ctx, ct) =>
+            flowKind == FlowKind.JtiReplay
+                ? ValueTask.FromResult<string?>(null)
+                : original(tenantId, flowKind, externalHandle, ctx, ct);
     }
 
 
@@ -450,10 +553,20 @@ internal sealed class AuthCodeClientAuthenticationTests
     /// declared-client shape draft-ietf-oauth-client-id-metadata-document-02 §8.2 (CIMD-049) gates
     /// on, so a passing exchange proves the client attached the credential the server actually
     /// required. Uses the register-then-upgrade pattern the sibling grant suites use, because the
-    /// routing dictionaries are host-internal.
+    /// routing dictionaries are host-internal. Also declares <paramref name="method"/> on
+    /// <see cref="AuthorizationServerIntegration.ClientAuthenticationMethodsSupported"/> (RFC 8414,
+    /// Section 2) alongside <see cref="ClientAuthenticationMethod.None"/> — the token endpoint now
+    /// refuses a registration declaring a method it does not advertise before any validator runs,
+    /// so the advertisement must agree with what this test's registration declares. When
+    /// <paramref name="assertionSigningAlgorithm"/> is supplied it becomes the sole entry of
+    /// <see cref="AuthorizationServerIntegration.ClientAssertionSigningAlgorithmsSupported"/>.
     /// </summary>
     private static void DeclareServerSideAuthMethod(
-        TestHostShell host, VerifierKeyMaterial material, ClientAuthenticationMethod method, string? clientJwks = null)
+        TestHostShell host,
+        VerifierKeyMaterial material,
+        ClientAuthenticationMethod method,
+        string? clientJwks = null,
+        string? assertionSigningAlgorithm = null)
     {
         HostedAuthorizationServer hosted = host.Host("default");
         string segment = material.Registration.TenantId.Value;
@@ -469,6 +582,13 @@ internal sealed class AuthCodeClientAuthenticationTests
         hosted.Server.UpdateClient(previous, updated, new ExchangeContext());
 
         material.Registration = updated;
+
+        hosted.Server.OAuth().ClientAuthenticationMethodsSupported =
+            [ClientAuthenticationMethod.None, method];
+        if(assertionSigningAlgorithm is not null)
+        {
+            hosted.Server.OAuth().ClientAssertionSigningAlgorithmsSupported = [assertionSigningAlgorithm];
+        }
     }
 
 

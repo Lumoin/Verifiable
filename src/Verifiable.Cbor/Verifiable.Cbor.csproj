@@ -1,9 +1,9 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
    
   <PropertyGroup>
-    <Title>CBOR serialization for Verifiable credentials and COSE types.</Title>
-    <Description>System.Formats.Cbor serialization support for Verifiable.JCose types. Provides CBOR serialization for COSE keys, ECDSA-SD proof values, and related cryptographic structures. Designed for AOT compatibility and trimming safety.</Description>
-    <PackageTags>CBOR Serialization COSE Converters AOT VerifiableCredentials DataIntegrity</PackageTags>
+    <Title>CBOR serializers for COSE, CWT, mdoc and FIDO2/CTAP2.</Title>
+    <Description>CBOR serializers built on Lumoin.Veritas.Cbor: COSE envelopes and keys, CWT and SD-CWT selective disclosure, ISO/IEC 18013-5 mdoc DeviceResponse, FIDO2/CTAP2 wire structures, IETF status lists and CB-AdES (ETSI TS 119 152-1) COSE_Sign1 signatures. Designed for AOT compatibility and trimming safety.</Description>
+    <PackageTags>CBOR COSE CWT SD-CWT Mdoc FIDO2 CTAP2 CBAdES StatusList AOT VerifiableCredentials DataIntegrity</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
@@ -14,7 +14,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="System.Formats.Cbor" />
+    <PackageReference Include="Lumoin.Veritas.Cbor" />
   </ItemGroup>
   
 </Project>

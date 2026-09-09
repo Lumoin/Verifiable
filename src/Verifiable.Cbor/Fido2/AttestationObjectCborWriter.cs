@@ -1,4 +1,5 @@
-using System.Formats.Cbor;
+using System.Buffers;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Fido2;
 
 namespace Verifiable.Cbor.Fido2;
@@ -68,7 +69,8 @@ public static class AttestationObjectCborWriter
             throw new ArgumentException("The authenticator data must be at least the section 6.1 minimum layout.", nameof(authenticatorData));
         }
 
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.Ctap2Canonical);
         writer.WriteStartMap(3);
 
         writer.WriteTextString(FormatKey);
@@ -82,7 +84,7 @@ public static class AttestationObjectCborWriter
 
         writer.WriteEndMap();
 
-        byte[] encoded = writer.Encode();
+        byte[] encoded = buffer.WrittenSpan.ToArray();
 
         return new TaggedMemory<byte>(encoded, Fido2BufferTags.AttestationObjectPayload);
     }

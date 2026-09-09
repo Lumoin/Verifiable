@@ -99,7 +99,7 @@ namespace Verifiable.Core.Model.Did
         [EditorBrowsable(EditorBrowsableState.Never)]
         public override int GetHashCode()
         {
-            return Key.GetHashCode(StringComparison.InvariantCultureIgnoreCase);
+            return Key.GetHashCode(StringComparison.OrdinalIgnoreCase);
         }
     }
 }

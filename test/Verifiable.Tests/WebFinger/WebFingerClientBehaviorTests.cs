@@ -118,7 +118,7 @@ internal sealed class WebFingerClientBehaviorTests
 
         Assert.IsTrue(result.IsSuccessful);
         Assert.HasCount(1, transport.Calls);
-        Assert.IsFalse(transport.Calls[0].Headers.ContainsKey("Accept"),
+        Assert.IsFalse(transport.Calls[0].Headers.Contains(WellKnownHttpHeaderNames.Accept),
             "The client MUST NOT need to set Accept for resolution to succeed.");
     }
 
@@ -143,13 +143,13 @@ internal sealed class WebFingerClientBehaviorTests
     /// </summary>
     private sealed class FakeTransport
     {
-        private readonly Dictionary<string, (int Status, string? Body)> routes = new(StringComparer.Ordinal);
-        private readonly Exception? failure;
+        private Dictionary<string, (int Status, string? Body)> Routes { get; } = new(StringComparer.Ordinal);
+        private Exception? Failure { get; }
 
 
         private FakeTransport(Exception? failure)
         {
-            this.failure = failure;
+            this.Failure = failure;
         }
 
 
@@ -159,7 +159,7 @@ internal sealed class WebFingerClientBehaviorTests
         public static FakeTransport RespondingWith(string url, int status, string? body)
         {
             FakeTransport transport = new(failure: null);
-            transport.routes[url] = (status, body);
+            transport.Routes[url] = (status, body);
 
             return transport;
         }
@@ -172,12 +172,12 @@ internal sealed class WebFingerClientBehaviorTests
         {
             Calls.Add(request);
 
-            if(failure is not null)
+            if(Failure is not null)
             {
-                throw failure;
+                throw Failure;
             }
 
-            if(!routes.TryGetValue(request.Target.AbsoluteUri, out (int Status, string? Body) route))
+            if(!Routes.TryGetValue(request.Target.AbsoluteUri, out (int Status, string? Body) route))
             {
                 route = (404, null);
             }

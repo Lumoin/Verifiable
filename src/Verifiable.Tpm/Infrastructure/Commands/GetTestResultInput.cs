@@ -3,7 +3,7 @@ using Verifiable.Tpm.Spec.Constants;
 namespace Verifiable.Tpm.Infrastructure.Commands;
 
 /// <summary>
-/// Input for the TPM2_GetTestResult command (TPM 2.0 Library Part 1, clauses 10.3 and 10.4;
+/// Input for the TPM2_GetTestResult command (TPM 2.0 Library Part 1, clauses 9.3 and 9.4;
 /// Part 3, clause 10.4).
 /// </summary>
 /// <remarks>

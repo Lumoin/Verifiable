@@ -30,7 +30,7 @@ internal sealed class CaepInteropEventTests
 
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
-    private static readonly IsSecurityEventTokenJtiSeenDelegate NeverSeen =
+    private static IsSecurityEventTokenJtiSeenDelegate NeverSeen { get; } =
         static (jti, context, cancellationToken) => ValueTask.FromResult(false);
 
 

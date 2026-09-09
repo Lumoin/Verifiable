@@ -30,7 +30,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// in the signature's metadata.
 /// </para>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 11.3.4, Table 216 (v1.85).
+/// Specification reference: TPM 2.0 Library Part 2, clause 11.3.4, Table 217.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -41,28 +41,28 @@ public readonly struct Tpm2bSignatureMlDsa: IDisposable, IEquatable<Tpm2bSignatu
     /// </summary>
     public const int MaxMlDsaSigSize = 4627;
 
-    private readonly IMemoryOwner<byte>? memoryOwner;
-    private readonly ReadOnlyMemory<byte> buffer;
+    private IMemoryOwner<byte>? MemoryOwner { get; }
+    private ReadOnlyMemory<byte> RawBuffer { get; }
 
     /// <summary>
     /// Gets the signature data.
     /// </summary>
-    public ReadOnlySpan<byte> Buffer => buffer.Span;
+    public ReadOnlySpan<byte> Buffer => RawBuffer.Span;
 
     /// <summary>
     /// Gets the size of the signature.
     /// </summary>
-    public int Size => buffer.Length;
+    public int Size => RawBuffer.Length;
 
     /// <summary>
     /// Gets whether this buffer is empty.
     /// </summary>
-    public bool IsEmpty => buffer.IsEmpty;
+    public bool IsEmpty => RawBuffer.IsEmpty;
 
     private Tpm2bSignatureMlDsa(IMemoryOwner<byte>? owner, ReadOnlyMemory<byte> data)
     {
-        memoryOwner = owner;
-        buffer = data;
+        MemoryOwner = owner;
+        RawBuffer = data;
     }
 
     /// <summary>
@@ -71,8 +71,10 @@ public readonly struct Tpm2bSignatureMlDsa: IDisposable, IEquatable<Tpm2bSignatu
     /// <param name="signature">The signature data.</param>
     /// <param name="pool">The memory pool to allocate from.</param>
     /// <returns>The signature buffer.</returns>
-    public static Tpm2bSignatureMlDsa Create(ReadOnlySpan<byte> signature, BaseMemoryPool? pool = null)
+    public static Tpm2bSignatureMlDsa Create(ReadOnlySpan<byte> signature, BaseMemoryPool pool)
     {
+        ArgumentNullException.ThrowIfNull(pool);
+
         if(signature.Length > MaxMlDsaSigSize)
         {
             throw new ArgumentException($"Signature size {signature.Length} exceeds maximum {MaxMlDsaSigSize}.", nameof(signature));
@@ -83,7 +85,6 @@ public readonly struct Tpm2bSignatureMlDsa: IDisposable, IEquatable<Tpm2bSignatu
             return Empty;
         }
 
-        pool ??= BaseMemoryPool.Shared;
         var owner = pool.Rent(signature.Length);
         signature.CopyTo(owner.Memory.Span);
         return new Tpm2bSignatureMlDsa(owner, owner.Memory[..signature.Length]);
@@ -97,7 +98,7 @@ public readonly struct Tpm2bSignatureMlDsa: IDisposable, IEquatable<Tpm2bSignatu
     /// <summary>
     /// Gets the serialized size of this structure.
     /// </summary>
-    public int SerializedSize => sizeof(ushort) + buffer.Length;
+    public int SerializedSize => sizeof(ushort) + RawBuffer.Length;
 
     /// <summary>
     /// Writes this structure to a TPM writer.
@@ -105,8 +106,8 @@ public readonly struct Tpm2bSignatureMlDsa: IDisposable, IEquatable<Tpm2bSignatu
     /// <param name="writer">The writer.</param>
     public void WriteTo(ref TpmWriter writer)
     {
-        writer.WriteUInt16((ushort)buffer.Length);
-        writer.WriteBytes(buffer.Span);
+        writer.WriteUInt16((ushort)RawBuffer.Length);
+        writer.WriteBytes(RawBuffer.Span);
     }
 
     /// <summary>
@@ -115,8 +116,10 @@ public readonly struct Tpm2bSignatureMlDsa: IDisposable, IEquatable<Tpm2bSignatu
     /// <param name="reader">The reader.</param>
     /// <param name="pool">The memory pool to allocate from.</param>
     /// <returns>The parsed signature.</returns>
-    public static Tpm2bSignatureMlDsa Parse(ref TpmReader reader, BaseMemoryPool? pool = null)
+    public static Tpm2bSignatureMlDsa Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
+        ArgumentNullException.ThrowIfNull(pool);
+
         ushort size = reader.ReadUInt16();
 
         if(size == 0)
@@ -129,7 +132,6 @@ public readonly struct Tpm2bSignatureMlDsa: IDisposable, IEquatable<Tpm2bSignatu
             throw new InvalidOperationException($"ML-DSA signature size {size} exceeds maximum {MaxMlDsaSigSize}.");
         }
 
-        pool ??= BaseMemoryPool.Shared;
         var owner = pool.Rent(size);
         reader.ReadBytes(size).CopyTo(owner.Memory.Span);
         return new Tpm2bSignatureMlDsa(owner, owner.Memory[..size]);
@@ -138,11 +140,11 @@ public readonly struct Tpm2bSignatureMlDsa: IDisposable, IEquatable<Tpm2bSignatu
     /// <inheritdoc/>
     public void Dispose()
     {
-        memoryOwner?.Dispose();
+        MemoryOwner?.Dispose();
     }
 
     /// <inheritdoc/>
-    public bool Equals(Tpm2bSignatureMlDsa other) => buffer.Span.SequenceEqual(other.buffer.Span);
+    public bool Equals(Tpm2bSignatureMlDsa other) => RawBuffer.Span.SequenceEqual(other.RawBuffer.Span);
 
     /// <inheritdoc/>
     public override bool Equals(object? obj) => obj is Tpm2bSignatureMlDsa other && Equals(other);
@@ -151,7 +153,7 @@ public readonly struct Tpm2bSignatureMlDsa: IDisposable, IEquatable<Tpm2bSignatu
     public override int GetHashCode()
     {
         HashCode hash = new();
-        hash.AddBytes(buffer.Span);
+        hash.AddBytes(RawBuffer.Span);
         return hash.ToHashCode();
     }
 

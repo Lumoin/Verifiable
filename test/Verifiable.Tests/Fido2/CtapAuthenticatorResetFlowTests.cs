@@ -74,7 +74,7 @@ internal sealed class CtapAuthenticatorResetFlowTests
         CancellationToken cancellationToken = TestContext.CancellationToken;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("reset-capstone-a");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("reset-capstone-a",BaseMemoryPool.Shared);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         byte[] birthGetInfoBytes = await GetInfoBytesAsync(harness.Transceive, pool, cancellationToken).ConfigureAwait(false);
@@ -210,7 +210,7 @@ internal sealed class CtapAuthenticatorResetFlowTests
         CancellationToken cancellationToken = TestContext.CancellationToken;
         var timeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("reset-capstone-b", timeProvider: timeProvider);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("reset-capstone-b", BaseMemoryPool.Shared, timeProvider: timeProvider);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         byte[] userId = CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0xB0);
@@ -245,7 +245,7 @@ internal sealed class CtapAuthenticatorResetFlowTests
         survivingGaResponse.Credential.Id.Dispose();
         survivingGaResponse.User?.Id.Dispose();
 
-        simulator.PowerCycle();
+        simulator.PowerCycle(BaseMemoryPool.Shared);
 
         using(PooledMemory afterPowerCycle = await SendResetAsync(harness.Transceive, pool, cancellationToken).ConfigureAwait(false))
         {

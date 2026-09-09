@@ -12,6 +12,7 @@ using Verifiable.Json;
 using Verifiable.Microsoft;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Fido2;
 
@@ -87,20 +88,7 @@ internal sealed class Fido2RegistrationVerifierTests
         SelectAttestationVerifierDelegate selectVerifier = Fido2AttestationSelectors.FromFormats(
             (WellKnownWebAuthnAttestationFormats.None, NoneAttestation.Build()));
 
-        Fido2RegistrationOutcome outcome = await Fido2RegistrationVerifier.VerifyAsync(
-            WellKnownWebAuthnAttestationFormats.None,
-            attestationStatement: new byte[] { CanonicalEmptyMap },
-            authDataBytes,
-            clientDataJson,
-            ceremonyInput,
-            selectVerifier,
-            AlwaysUnique,
-            trustAnchors: [],
-            validationTime: TestClock.CanonicalEpoch,
-            CorrelationId,
-            BaseMemoryPool.Shared,
-            transports: ["internal", "hybrid"],
-            cancellationToken: TestContext.CancellationToken);
+        Fido2RegistrationOutcome outcome = await Fido2RegistrationVerifier.VerifyAsync(WellKnownWebAuthnAttestationFormats.None, attestationStatement: new byte[] { CanonicalEmptyMap }, authDataBytes, clientDataJson, ceremonyInput, selectVerifier, AlwaysUnique, trustAnchors: [], validationTime: TestClock.CanonicalEpoch, CorrelationId, BaseMemoryPool.Shared, transports: ["internal", "hybrid"], cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         Assert.IsInstanceOfType<NoneAttestationResult>(outcome.AttestationResult);
         Assert.IsTrue(outcome.IsAcceptable);
@@ -148,20 +136,7 @@ internal sealed class Fido2RegistrationVerifierTests
             (WellKnownWebAuthnAttestationFormats.None, NoneAttestation.Build()));
 
         string[] reportedTransports = ["usb", "vendor-proprietary-transport"];
-        Fido2RegistrationOutcome outcome = await Fido2RegistrationVerifier.VerifyAsync(
-            WellKnownWebAuthnAttestationFormats.None,
-            attestationStatement: new byte[] { CanonicalEmptyMap },
-            authDataBytes,
-            clientDataJson,
-            ceremonyInput,
-            selectVerifier,
-            AlwaysUnique,
-            trustAnchors: [],
-            validationTime: TestClock.CanonicalEpoch,
-            CorrelationId,
-            BaseMemoryPool.Shared,
-            transports: reportedTransports,
-            cancellationToken: TestContext.CancellationToken);
+        Fido2RegistrationOutcome outcome = await Fido2RegistrationVerifier.VerifyAsync(WellKnownWebAuthnAttestationFormats.None, attestationStatement: new byte[] { CanonicalEmptyMap }, authDataBytes, clientDataJson, ceremonyInput, selectVerifier, AlwaysUnique, trustAnchors: [], validationTime: TestClock.CanonicalEpoch, CorrelationId, BaseMemoryPool.Shared, transports: reportedTransports, cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         Assert.IsInstanceOfType<NoneAttestationResult>(outcome.AttestationResult);
         Assert.IsTrue(outcome.IsAcceptable);
@@ -203,19 +178,7 @@ internal sealed class Fido2RegistrationVerifierTests
         SelectAttestationVerifierDelegate selectVerifier = Fido2AttestationSelectors.FromFormats(
             (WellKnownWebAuthnAttestationFormats.Packed, BuildPackedVerifier(statement)));
 
-        Fido2RegistrationOutcome outcome = await Fido2RegistrationVerifier.VerifyAsync(
-            WellKnownWebAuthnAttestationFormats.Packed,
-            attestationStatement: ReadOnlyMemory<byte>.Empty,
-            authDataBytes,
-            clientDataJson,
-            ceremonyInput,
-            selectVerifier,
-            AlwaysUnique,
-            trustAnchors: [],
-            validationTime: TestClock.CanonicalEpoch,
-            CorrelationId,
-            BaseMemoryPool.Shared,
-            cancellationToken: TestContext.CancellationToken);
+        Fido2RegistrationOutcome outcome = await Fido2RegistrationVerifier.VerifyAsync(WellKnownWebAuthnAttestationFormats.Packed, attestationStatement: ReadOnlyMemory<byte>.Empty, authDataBytes, clientDataJson, ceremonyInput, selectVerifier, AlwaysUnique, trustAnchors: [], validationTime: TestClock.CanonicalEpoch, CorrelationId, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         Assert.IsInstanceOfType<SelfAttestationResult>(outcome.AttestationResult);
         Assert.IsTrue(outcome.IsAcceptable);
@@ -267,19 +230,7 @@ internal sealed class Fido2RegistrationVerifierTests
         SelectAttestationVerifierDelegate selectVerifier = Fido2AttestationSelectors.FromFormats(
             (WellKnownWebAuthnAttestationFormats.Packed, BuildPackedVerifier(statement)));
 
-        Fido2RegistrationOutcome outcome = await Fido2RegistrationVerifier.VerifyAsync(
-            WellKnownWebAuthnAttestationFormats.Packed,
-            attestationStatement: ReadOnlyMemory<byte>.Empty,
-            authDataBytes,
-            clientDataJson,
-            ceremonyInput,
-            selectVerifier,
-            AlwaysUnique,
-            trustAnchors: [rootPki],
-            validationTime: TestClock.CanonicalEpoch,
-            CorrelationId,
-            BaseMemoryPool.Shared,
-            cancellationToken: TestContext.CancellationToken);
+        Fido2RegistrationOutcome outcome = await Fido2RegistrationVerifier.VerifyAsync(WellKnownWebAuthnAttestationFormats.Packed, attestationStatement: ReadOnlyMemory<byte>.Empty, authDataBytes, clientDataJson, ceremonyInput, selectVerifier, AlwaysUnique, trustAnchors: [rootPki], validationTime: TestClock.CanonicalEpoch, CorrelationId, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         Assert.IsInstanceOfType<CertifiedAttestationResult>(outcome.AttestationResult);
         Assert.IsTrue(outcome.IsAcceptable);
@@ -418,19 +369,7 @@ internal sealed class Fido2RegistrationVerifierTests
         SelectAttestationVerifierDelegate selectVerifier = Fido2AttestationSelectors.FromFormats(
             (WellKnownWebAuthnAttestationFormats.None, NoneAttestation.Build()));
 
-        Fido2RegistrationOutcome outcome = await Fido2RegistrationVerifier.VerifyAsync(
-            WellKnownWebAuthnAttestationFormats.None,
-            attestationStatement: new byte[] { CanonicalEmptyMap },
-            authDataBytes,
-            clientDataJson,
-            ceremonyInput,
-            selectVerifier,
-            AlwaysDuplicate,
-            trustAnchors: [],
-            validationTime: TestClock.CanonicalEpoch,
-            CorrelationId,
-            BaseMemoryPool.Shared,
-            cancellationToken: TestContext.CancellationToken);
+        Fido2RegistrationOutcome outcome = await Fido2RegistrationVerifier.VerifyAsync(WellKnownWebAuthnAttestationFormats.None, attestationStatement: new byte[] { CanonicalEmptyMap }, authDataBytes, clientDataJson, ceremonyInput, selectVerifier, AlwaysDuplicate, trustAnchors: [], validationTime: TestClock.CanonicalEpoch, CorrelationId, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         Assert.IsInstanceOfType<NoneAttestationResult>(outcome.AttestationResult);
         Assert.IsFalse(outcome.IsAcceptable);
@@ -470,19 +409,7 @@ internal sealed class Fido2RegistrationVerifierTests
         SelectAttestationVerifierDelegate selectVerifier = Fido2AttestationSelectors.FromFormats(
             (WellKnownWebAuthnAttestationFormats.Packed, BuildPackedVerifier(statement)));
 
-        Fido2RegistrationOutcome outcome = await Fido2RegistrationVerifier.VerifyAsync(
-            WellKnownWebAuthnAttestationFormats.Packed,
-            attestationStatement: ReadOnlyMemory<byte>.Empty,
-            authDataBytes,
-            clientDataJson,
-            ceremonyInput,
-            selectVerifier,
-            AlwaysUnique,
-            trustAnchors: [],
-            validationTime: TestClock.CanonicalEpoch,
-            CorrelationId,
-            BaseMemoryPool.Shared,
-            cancellationToken: TestContext.CancellationToken);
+        Fido2RegistrationOutcome outcome = await Fido2RegistrationVerifier.VerifyAsync(WellKnownWebAuthnAttestationFormats.Packed, attestationStatement: ReadOnlyMemory<byte>.Empty, authDataBytes, clientDataJson, ceremonyInput, selectVerifier, AlwaysUnique, trustAnchors: [], validationTime: TestClock.CanonicalEpoch, CorrelationId, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         Assert.IsInstanceOfType<RejectedAttestationResult>(outcome.AttestationResult);
         Assert.AreEqual(Fido2AttestationErrors.InvalidSignature.Code, ((RejectedAttestationResult)outcome.AttestationResult).Error.Code);
@@ -519,19 +446,7 @@ internal sealed class Fido2RegistrationVerifierTests
         SelectAttestationVerifierDelegate selectVerifier = Fido2AttestationSelectors.FromFormats(
             (WellKnownWebAuthnAttestationFormats.None, NoneAttestation.Build()));
 
-        Fido2RegistrationOutcome outcome = await Fido2RegistrationVerifier.VerifyAsync(
-            WellKnownWebAuthnAttestationFormats.None,
-            attestationStatement: new byte[] { CanonicalEmptyMap },
-            authDataBytes,
-            clientDataJson,
-            ceremonyInput,
-            selectVerifier,
-            AlwaysUnique,
-            trustAnchors: [],
-            validationTime: TestClock.CanonicalEpoch,
-            CorrelationId,
-            BaseMemoryPool.Shared,
-            cancellationToken: TestContext.CancellationToken);
+        Fido2RegistrationOutcome outcome = await Fido2RegistrationVerifier.VerifyAsync(WellKnownWebAuthnAttestationFormats.None, attestationStatement: new byte[] { CanonicalEmptyMap }, authDataBytes, clientDataJson, ceremonyInput, selectVerifier, AlwaysUnique, trustAnchors: [], validationTime: TestClock.CanonicalEpoch, CorrelationId, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         Assert.IsInstanceOfType<NoneAttestationResult>(outcome.AttestationResult);
         Assert.IsFalse(outcome.IsAcceptable);
@@ -562,19 +477,7 @@ internal sealed class Fido2RegistrationVerifierTests
         SelectAttestationVerifierDelegate selectVerifier = Fido2AttestationSelectors.FromFormats(
             (WellKnownWebAuthnAttestationFormats.None, NoneAttestation.Build()));
 
-        Fido2RegistrationOutcome outcome = await Fido2RegistrationVerifier.VerifyAsync(
-            WellKnownWebAuthnAttestationFormats.None,
-            attestationStatement: new byte[] { CanonicalEmptyMap },
-            authDataBytes,
-            clientDataJson,
-            ceremonyInput,
-            selectVerifier,
-            AlwaysUnique,
-            trustAnchors: [],
-            validationTime: TestClock.CanonicalEpoch,
-            CorrelationId,
-            BaseMemoryPool.Shared,
-            cancellationToken: TestContext.CancellationToken);
+        Fido2RegistrationOutcome outcome = await Fido2RegistrationVerifier.VerifyAsync(WellKnownWebAuthnAttestationFormats.None, attestationStatement: new byte[] { CanonicalEmptyMap }, authDataBytes, clientDataJson, ceremonyInput, selectVerifier, AlwaysUnique, trustAnchors: [], validationTime: TestClock.CanonicalEpoch, CorrelationId, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         Assert.IsFalse(outcome.IsAcceptable);
         AssertOnlyClaimFails(outcome.Claims, Fido2ClaimIds.Fido2RegistrationChallenge);
@@ -603,19 +506,7 @@ internal sealed class Fido2RegistrationVerifierTests
         SelectAttestationVerifierDelegate selectVerifier = Fido2AttestationSelectors.FromFormats(
             (WellKnownWebAuthnAttestationFormats.None, NoneAttestation.Build()));
 
-        Fido2RegistrationOutcome outcome = await Fido2RegistrationVerifier.VerifyAsync(
-            WellKnownWebAuthnAttestationFormats.None,
-            attestationStatement: new byte[] { CanonicalEmptyMap },
-            authDataBytes,
-            clientDataJson,
-            ceremonyInput,
-            selectVerifier,
-            AlwaysUnique,
-            trustAnchors: [],
-            validationTime: TestClock.CanonicalEpoch,
-            CorrelationId,
-            BaseMemoryPool.Shared,
-            cancellationToken: TestContext.CancellationToken);
+        Fido2RegistrationOutcome outcome = await Fido2RegistrationVerifier.VerifyAsync(WellKnownWebAuthnAttestationFormats.None, attestationStatement: new byte[] { CanonicalEmptyMap }, authDataBytes, clientDataJson, ceremonyInput, selectVerifier, AlwaysUnique, trustAnchors: [], validationTime: TestClock.CanonicalEpoch, CorrelationId, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         Assert.IsFalse(outcome.IsAcceptable);
         AssertOnlyClaimFails(outcome.Claims, Fido2ClaimIds.Fido2RegistrationOrigin);
@@ -648,25 +539,14 @@ internal sealed class Fido2RegistrationVerifierTests
             ExpectedOrigins = new HashSet<string> { ValidOrigin },
             ExpectedRpIdHash = Fido2TestVectors.WrapRpIdHash(rpIdHash, BaseMemoryPool.Shared),
             UserVerification = UserVerificationRequirement.Required,
-            ExpectedPubKeyCredParams = [new PublicKeyCredentialParameters { Type = WellKnownPublicKeyCredentialTypes.PublicKey, Alg = WellKnownCoseAlgorithms.Rs256 }]
+            ExpectedPubKeyCredParams = [new PublicKeyCredentialParameters { Type = WellKnownPublicKeyCredentialTypes.PublicKey, Alg = WellKnownCoseAlgorithms.Rs256 }],
+            ExtensionProcessingPool = BaseMemoryPool.Shared
         };
 
         SelectAttestationVerifierDelegate selectVerifier = Fido2AttestationSelectors.FromFormats(
             (WellKnownWebAuthnAttestationFormats.None, NoneAttestation.Build()));
 
-        Fido2RegistrationOutcome outcome = await Fido2RegistrationVerifier.VerifyAsync(
-            WellKnownWebAuthnAttestationFormats.None,
-            attestationStatement: new byte[] { CanonicalEmptyMap },
-            authDataBytes,
-            clientDataJson,
-            ceremonyInput,
-            selectVerifier,
-            AlwaysUnique,
-            trustAnchors: [],
-            validationTime: TestClock.CanonicalEpoch,
-            CorrelationId,
-            BaseMemoryPool.Shared,
-            cancellationToken: TestContext.CancellationToken);
+        Fido2RegistrationOutcome outcome = await Fido2RegistrationVerifier.VerifyAsync(WellKnownWebAuthnAttestationFormats.None, attestationStatement: new byte[] { CanonicalEmptyMap }, authDataBytes, clientDataJson, ceremonyInput, selectVerifier, AlwaysUnique, trustAnchors: [], validationTime: TestClock.CanonicalEpoch, CorrelationId, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         Assert.IsInstanceOfType<NoneAttestationResult>(outcome.AttestationResult);
         Assert.IsFalse(outcome.IsAcceptable);
@@ -696,19 +576,7 @@ internal sealed class Fido2RegistrationVerifierTests
         //No format registered at all: the selector always returns null.
         SelectAttestationVerifierDelegate selectVerifier = Fido2AttestationSelectors.FromFormats();
 
-        Fido2RegistrationOutcome outcome = await Fido2RegistrationVerifier.VerifyAsync(
-            WellKnownWebAuthnAttestationFormats.AndroidKey,
-            attestationStatement: ReadOnlyMemory<byte>.Empty,
-            authDataBytes,
-            clientDataJson,
-            ceremonyInput,
-            selectVerifier,
-            AlwaysUnique,
-            trustAnchors: [],
-            validationTime: TestClock.CanonicalEpoch,
-            CorrelationId,
-            BaseMemoryPool.Shared,
-            cancellationToken: TestContext.CancellationToken);
+        Fido2RegistrationOutcome outcome = await Fido2RegistrationVerifier.VerifyAsync(WellKnownWebAuthnAttestationFormats.AndroidKey, attestationStatement: ReadOnlyMemory<byte>.Empty, authDataBytes, clientDataJson, ceremonyInput, selectVerifier, AlwaysUnique, trustAnchors: [], validationTime: TestClock.CanonicalEpoch, CorrelationId, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         Assert.IsInstanceOfType<RejectedAttestationResult>(outcome.AttestationResult);
         Assert.AreEqual(Fido2AttestationErrors.UnregisteredFormat.Code, ((RejectedAttestationResult)outcome.AttestationResult).Error.Code);
@@ -789,20 +657,7 @@ internal sealed class Fido2RegistrationVerifierTests
             ? [imposterRootPki]
             : suppliesValidTrustAnchor ? [rootPki] : [];
 
-        return await Fido2RegistrationVerifier.VerifyAsync(
-            WellKnownWebAuthnAttestationFormats.Packed,
-            attestationStatement: ReadOnlyMemory<byte>.Empty,
-            authDataBytes,
-            clientDataJson,
-            ceremonyInput,
-            selectVerifier,
-            AlwaysUnique,
-            trustAnchors,
-            validationTime: TestClock.CanonicalEpoch,
-            CorrelationId,
-            BaseMemoryPool.Shared,
-            acceptsUntrustedAttestationAsNone: acceptsUntrustedAttestationAsNone,
-            cancellationToken: TestContext.CancellationToken);
+        return await Fido2RegistrationVerifier.VerifyAsync(WellKnownWebAuthnAttestationFormats.Packed, attestationStatement: ReadOnlyMemory<byte>.Empty, authDataBytes, clientDataJson, ceremonyInput, selectVerifier, AlwaysUnique, trustAnchors, validationTime: TestClock.CanonicalEpoch, CorrelationId, BaseMemoryPool.Shared, acceptsUntrustedAttestationAsNone: acceptsUntrustedAttestationAsNone, cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
     }
 
 

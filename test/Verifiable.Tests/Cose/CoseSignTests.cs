@@ -1,10 +1,12 @@
-using System.Formats.Cbor;
+using System.Buffers;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Cbor;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Microsoft;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Cose;
 
@@ -292,7 +294,7 @@ internal sealed class CoseSignTests
 
         using EncodedCoseSign encoded = CoseSerialization.SerializeCoseSign(message, BaseMemoryPool.Shared);
 
-        var reader = new CborReader(encoded.AsReadOnlyMemory(), CborConformanceMode.Lax);
+        var reader = new CborReader(encoded.AsReadOnlyMemory(), CborOptions.Lax);
         reader.ReadTag();
         byte[] untaggedBytes = reader.ReadEncodedValue().ToArray();
 
@@ -306,11 +308,12 @@ internal sealed class CoseSignTests
     [TestMethod]
     public void ParseRejectsWrongTag()
     {
-        EncodedCoseProtectedHeader bodyProtectedHeader = BuildEmptyProtectedHeader();
+        using EncodedCoseProtectedHeader bodyProtectedHeader = BuildEmptyProtectedHeader();
 
         //Build a structurally valid COSE_Sign body but wrap it in the COSE_Sign1 tag (18)
         //instead of COSE_Sign's own tag (98) -- must fail closed, never silently accepted.
-        var bodyWriter = new CborWriter(CborConformanceMode.Canonical);
+        var bodyWriterBuffer = new ArrayBufferWriter<byte>();
+        var bodyWriter = new CborWriter(bodyWriterBuffer, CborOptions.RfcCanonical);
         bodyWriter.WriteStartArray(4);
         bodyWriter.WriteByteString(bodyProtectedHeader.AsReadOnlySpan());
         bodyWriter.WriteStartMap(0);
@@ -319,14 +322,13 @@ internal sealed class CoseSignTests
         bodyWriter.WriteStartArray(0);
         bodyWriter.WriteEndArray();
         bodyWriter.WriteEndArray();
-        byte[] untaggedBody = bodyWriter.Encode();
+        byte[] untaggedBody = bodyWriterBuffer.WrittenSpan.ToArray();
 
-        bodyProtectedHeader.Dispose();
-
-        var wrongTagWriter = new CborWriter(CborConformanceMode.Canonical);
-        wrongTagWriter.WriteTag((CborTag)CoseTags.Sign1);
+        var wrongTagWriterBuffer = new ArrayBufferWriter<byte>();
+        var wrongTagWriter = new CborWriter(wrongTagWriterBuffer, CborOptions.RfcCanonical);
+        wrongTagWriter.WriteTag(new CborTag((ulong)CoseTags.Sign1));
         wrongTagWriter.WriteEncodedValue(untaggedBody);
-        byte[] wrongTaggedBytes = wrongTagWriter.Encode();
+        byte[] wrongTaggedBytes = wrongTagWriterBuffer.WrittenSpan.ToArray();
 
         using CoseSignParseResult parseResult = CoseSerialization.ParseCoseSign(wrongTaggedBytes, BaseMemoryPool.Shared);
 
@@ -348,10 +350,11 @@ internal sealed class CoseSignTests
     [TestMethod]
     public void ParseRejectsEmptySignaturesArray()
     {
-        EncodedCoseProtectedHeader bodyProtectedHeader = BuildEmptyProtectedHeader();
+        using EncodedCoseProtectedHeader bodyProtectedHeader = BuildEmptyProtectedHeader();
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
-        writer.WriteTag((CborTag)CoseTags.Sign);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
+        writer.WriteTag(new CborTag((ulong)CoseTags.Sign));
         writer.WriteStartArray(4);
         writer.WriteByteString(bodyProtectedHeader.AsReadOnlySpan());
         writer.WriteStartMap(0);
@@ -360,9 +363,7 @@ internal sealed class CoseSignTests
         writer.WriteStartArray(0);
         writer.WriteEndArray();
         writer.WriteEndArray();
-        byte[] wireBytes = writer.Encode();
-
-        bodyProtectedHeader.Dispose();
+        byte[] wireBytes = writerBuffer.WrittenSpan.ToArray();
 
         using CoseSignParseResult parseResult = CoseSerialization.ParseCoseSign(wireBytes, BaseMemoryPool.Shared);
 
@@ -380,14 +381,15 @@ internal sealed class CoseSignTests
     [TestMethod]
     public void ParseCoseSignRejectsIndefiniteLengthChunkedBodyProtectedHeaderByteString()
     {
-        EncodedCoseProtectedHeader signerProtectedHeader = BuildAlgProtectedHeader(WellKnownCoseAlgorithms.Es256);
+        using EncodedCoseProtectedHeader signerProtectedHeader = BuildAlgProtectedHeader(WellKnownCoseAlgorithms.Es256);
 
-        var writer = new CborWriter(CborConformanceMode.Lax);
-        writer.WriteTag((CborTag)CoseTags.Sign);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Lax);
+        writer.WriteTag(new CborTag((ulong)CoseTags.Sign));
         writer.WriteStartArray(4);
-        writer.WriteStartIndefiniteLengthByteString();
+        writer.WriteStartIndefiniteByteString();
         writer.WriteByteString([0xA0]);
-        writer.WriteEndIndefiniteLengthByteString();
+        writer.WriteEndIndefiniteByteString();
         writer.WriteStartMap(0);
         writer.WriteEndMap();
         writer.WriteByteString(BuildTestPayload());
@@ -400,9 +402,7 @@ internal sealed class CoseSignTests
         writer.WriteEndArray();
         writer.WriteEndArray();
         writer.WriteEndArray();
-        byte[] wireBytes = writer.Encode();
-
-        signerProtectedHeader.Dispose();
+        byte[] wireBytes = writerBuffer.WrittenSpan.ToArray();
 
         using CoseSignParseResult parseResult = CoseSerialization.ParseCoseSign(wireBytes, BaseMemoryPool.Shared);
 
@@ -474,8 +474,7 @@ internal sealed class CoseSignTests
         byte[] sigStructure = CoseSerialization.BuildCoseSignatureSigStructure(
             message.ProtectedHeader.AsReadOnlySpan(), signer.ProtectedHeader.AsReadOnlySpan(), message.Payload.Span, []);
         byte[] kid11PublicKey = BuildKid11P256UncompressedPublicKeyBytes();
-        (bool isValid, _) = await MicrosoftCryptographicFunctions.VerifyP256Async(
-            sigStructure, signer.Signature.AsReadOnlyMemory(), kid11PublicKey, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        (bool isValid, _) = await MicrosoftCryptographicFunctions.VerifyP256Async(sigStructure, signer.Signature.AsReadOnlyMemory(), kid11PublicKey, cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch)).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "RFC 9052 Appendix C.1.1's own signature value must verify against the kid-\"11\" P-256 public key (RFC 9052 Appendix C.7.1).");
     }
@@ -514,15 +513,13 @@ internal sealed class CoseSignTests
         byte[] firstSigStructure = CoseSerialization.BuildCoseSignatureSigStructure(
             message.ProtectedHeader.AsReadOnlySpan(), message.Signatures[0].ProtectedHeader.AsReadOnlySpan(), message.Payload.Span, []);
         byte[] kid11PublicKey = BuildKid11P256UncompressedPublicKeyBytes();
-        (bool firstIsValid, _) = await MicrosoftCryptographicFunctions.VerifyP256Async(
-            firstSigStructure, message.Signatures[0].Signature.AsReadOnlyMemory(), kid11PublicKey, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        (bool firstIsValid, _) = await MicrosoftCryptographicFunctions.VerifyP256Async(firstSigStructure, message.Signatures[0].Signature.AsReadOnlyMemory(), kid11PublicKey, cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch)).ConfigureAwait(false);
         Assert.IsTrue(firstIsValid, "The first signer's own signature value must verify against the kid-\"11\" P-256 public key.");
 
         byte[] secondSigStructure = CoseSerialization.BuildCoseSignatureSigStructure(
             message.ProtectedHeader.AsReadOnlySpan(), message.Signatures[1].ProtectedHeader.AsReadOnlySpan(), message.Payload.Span, []);
         byte[] bilboP521PublicKey = BuildBilboP521UncompressedPublicKeyBytes();
-        (bool secondIsValid, _) = await MicrosoftCryptographicFunctions.VerifyP521Async(
-            secondSigStructure, message.Signatures[1].Signature.AsReadOnlyMemory(), bilboP521PublicKey, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        (bool secondIsValid, _) = await MicrosoftCryptographicFunctions.VerifyP521Async(secondSigStructure, message.Signatures[1].Signature.AsReadOnlyMemory(), bilboP521PublicKey, cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch)).ConfigureAwait(false);
         Assert.IsTrue(secondIsValid, "The second signer's own signature value must verify against Bilbo's P-521 public key (RFC 9052 Appendix C.7.1).");
     }
 
@@ -551,13 +548,14 @@ internal sealed class CoseSignTests
             payload,
             CoseSerialization.BuildCoseSignatureSigStructure,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //Independent oracle: hand-assemble the Sig_structure per RFC 9052 §4.4, without calling
         //CoseSerialization.BuildCoseSignatureSigStructure.
-        var oracleWriter = new CborWriter(CborConformanceMode.Canonical);
+        var oracleWriterBuffer = new ArrayBufferWriter<byte>();
+        var oracleWriter = new CborWriter(oracleWriterBuffer, CborOptions.RfcCanonical);
         oracleWriter.WriteStartArray(5);
         oracleWriter.WriteTextString("Signature");
         oracleWriter.WriteByteString(bodyProtectedHeader.AsReadOnlySpan());
@@ -565,14 +563,13 @@ internal sealed class CoseSignTests
         oracleWriter.WriteByteString([]);
         oracleWriter.WriteByteString(payload);
         oracleWriter.WriteEndArray();
-        byte[] oracleToBeSigned = oracleWriter.Encode();
+        byte[] oracleToBeSigned = oracleWriterBuffer.WrittenSpan.ToArray();
 
         byte[] delegateToBeSigned = CoseSerialization.BuildCoseSignatureSigStructure(
             bodyProtectedHeader.AsReadOnlySpan(), signerProtectedHeader.AsReadOnlySpan(), payload, []);
         Assert.IsTrue(oracleToBeSigned.AsSpan().SequenceEqual(delegateToBeSigned), "The delegate must produce exactly the independently assembled Sig_structure bytes.");
 
-        (bool isValid, _) = await MicrosoftCryptographicFunctions.VerifyP256Async(
-            oracleToBeSigned, component.Signature.AsReadOnlyMemory(), publicKey.AsReadOnlyMemory(), cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        (bool isValid, _) = await MicrosoftCryptographicFunctions.VerifyP256Async(oracleToBeSigned, component.Signature.AsReadOnlyMemory(), publicKey.AsReadOnlyMemory(), cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch)).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "The signature must verify against an independently assembled Sig_structure.");
     }
@@ -657,7 +654,8 @@ internal sealed class CoseSignTests
                 metered.Pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
 
         //bodyProtectedHeader alone remains caller-owned on this path -- it is not one of signers' own inputs,
-        //so SignAsync's failure-path contract never claims it.
+        //so SignAsync's failure-path contract never claims it; disposed explicitly here (not via a `using`
+        //declaration) because the balance assertion below must see it released before it runs.
         bodyProtectedHeader.Dispose();
 
         Assert.IsGreaterThan(0, metered.RentedCount, "metered.Pool must have been exercised, or the balance assertion below is vacuous.");
@@ -760,8 +758,9 @@ internal sealed class CoseSignTests
     /// </summary>
     private static byte[] BuildRfc9052AppendixC11Bytes()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
-        writer.WriteTag((CborTag)98);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
+        writer.WriteTag(new CborTag((ulong)98));
         writer.WriteStartArray(4);
         writer.WriteByteString([]);
         writer.WriteStartMap(0);
@@ -772,7 +771,7 @@ internal sealed class CoseSignTests
         writer.WriteEndArray();
         writer.WriteEndArray();
 
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -782,8 +781,9 @@ internal sealed class CoseSignTests
     /// </summary>
     private static byte[] BuildRfc9052AppendixC12Bytes()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
-        writer.WriteTag((CborTag)98);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
+        writer.WriteTag(new CborTag((ulong)98));
         writer.WriteStartArray(4);
         writer.WriteByteString([]);
         writer.WriteStartMap(0);
@@ -805,7 +805,7 @@ internal sealed class CoseSignTests
         writer.WriteEndArray();
         writer.WriteEndArray();
 
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -813,7 +813,7 @@ internal sealed class CoseSignTests
     /// The kid-"11" P-256 public key from RFC 9052 Appendix C.7.1 (the same key whose private
     /// half produced the Appendix C.1.1/C.1.2 first-signer signature values), as a SEC1
     /// uncompressed point (<c>0x04 || X || Y</c>) -- the encoding
-    /// <see cref="MicrosoftCryptographicFunctions.VerifyP256Async"/> accepts directly as
+    /// <see cref="MicrosoftCryptographicFunctionsAdapter.VerifyP256Async"/> accepts directly as
     /// <c>publicKeyMaterial</c>.
     /// </summary>
     private static byte[] BuildKid11P256UncompressedPublicKeyBytes()

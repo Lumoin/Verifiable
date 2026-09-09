@@ -35,9 +35,11 @@ namespace Verifiable.Core.Model.Dcql;
 /// // Configure a reusable builder.
 /// var builder = new DcqlQueryBuilder()
 ///     .WithSdJwtCredential("pid",
+///         ["urn:eudi:pid:1"],
 ///         [new ClaimsQuery { Path = DcqlClaimPattern.FromKeys(["given_name"]) },
 ///          new ClaimsQuery { Path = DcqlClaimPattern.FromKeys(["family_name"]) }])
 ///     .WithSdJwtCredential("email",
+///         ["https://credentials.example/email_credential"],
 ///         [new ClaimsQuery { Path = DcqlClaimPattern.FromKeys(["email"]) }])
 ///     .WithCredentialSet(true, [["pid"], ["email"]]);
 ///

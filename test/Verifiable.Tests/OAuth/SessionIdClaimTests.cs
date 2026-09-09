@@ -32,8 +32,8 @@ internal sealed class SessionIdClaimTests
 
     private const string ClientId = "https://client.example.com";
     private const string SubjectId = "subject-sid-1";
-    private static readonly Uri ClientBaseUri = new("https://client.example.com");
-    private static readonly Uri RedirectUri = new("https://client.example.com/callback");
+    private static Uri ClientBaseUri { get; } = new("https://client.example.com");
+    private static Uri RedirectUri { get; } = new("https://client.example.com/callback");
 
 
     /// <summary>The stamped session identifier appears verbatim as the ID Token <c>sid</c>.</summary>

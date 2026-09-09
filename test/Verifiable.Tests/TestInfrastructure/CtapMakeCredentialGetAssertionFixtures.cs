@@ -2,9 +2,11 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Time.Testing;
+using Verifiable.Cbor;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Cbor.Fido2;
 using Verifiable.Cryptography;
@@ -58,6 +60,7 @@ internal static class CtapMakeCredentialGetAssertionFixtures
     /// Builds a simulator wired with the shipped CBOR codecs, defaulting to the ES256-only credential
     /// backend and <paramref name="residentCredentialCapacity"/> resident credential slots.
     /// </summary>
+    /// <param name="pool">The memory pool the simulator's PIN/UV auth key-agreement material is minted from.</param>
     /// <param name="aaguid">
     /// The authenticator-wide AAGUID, or <see langword="null"/> (the default) to draw one from the
     /// simulator's own entropy source. A real-wire capstone supplies an explicit value so a
@@ -65,13 +68,18 @@ internal static class CtapMakeCredentialGetAssertionFixtures
     /// be minted with the SAME value BEFORE the simulator itself is constructed — the certificate and
     /// the simulator's own credential-minting AAGUID must agree for the RP-side cross-check to pass.
     /// </param>
+    /// <param name="timeProvider">
+    /// The simulator's clock, or <see langword="null"/> (the default) to resolve to
+    /// <see cref="TestClock.CanonicalEpoch"/> under a fresh <see cref="FakeTimeProvider"/> — the suite's one
+    /// instant unless a fixture needs a specific relationship to it — never the system clock.
+    /// </param>
     public static CtapAuthenticatorSimulator CreateSimulator(
-        string runId, FillEntropyDelegate? rng = null, int residentCredentialCapacity = 8, TimeProvider? timeProvider = null,
+        string runId, BaseMemoryPool pool, FillEntropyDelegate? rng = null, int residentCredentialCapacity = 8, TimeProvider? timeProvider = null,
         SimulateFingerprintCaptureDelegate? simulateFingerprintCapture = null, SimulateBuiltInUvDelegate? simulateBuiltInUv = null,
         CtapEnterpriseAttestationProvisioning? enterpriseAttestationProvisioning = null, Guid? aaguid = null,
         SimulateUserPresenceDelegate? simulateUserPresence = null) =>
         CreateSimulatorWithBackend(
-            runId, CtapCredentialSigningBackend.CreateEs256Default(), rng, residentCredentialCapacity, timeProvider, simulateFingerprintCapture, simulateBuiltInUv,
+            runId, pool, CtapCredentialSigningBackend.CreateEs256Default(), rng, residentCredentialCapacity, timeProvider, simulateFingerprintCapture, simulateBuiltInUv,
             enterpriseAttestationProvisioning, aaguid, simulateUserPresence);
 
 
@@ -84,9 +92,12 @@ internal static class CtapMakeCredentialGetAssertionFixtures
     /// is supplied — mc Step 9 can never resolve the certified format choice without provisioning
     /// material, so wiring the seam unconditionally is harmless for every non-capable-authenticator test.
     /// </summary>
+    /// <param name="pool">The memory pool the simulator's PIN/UV auth key-agreement material is minted from.</param>
     /// <param name="aaguid">The authenticator-wide AAGUID — see <see cref="CreateSimulator"/>.</param>
+    /// <param name="timeProvider">The simulator's clock — see <see cref="CreateSimulator"/>.</param>
     public static CtapAuthenticatorSimulator CreateSimulatorWithBackend(
         string runId,
+        BaseMemoryPool pool,
         CtapCredentialSigningBackend? backend,
         FillEntropyDelegate? rng = null,
         int residentCredentialCapacity = 8,
@@ -118,9 +129,10 @@ internal static class CtapMakeCredentialGetAssertionFixtures
             encodeGetAssertionExtensionOutputs: CtapGetAssertionExtensionOutputsCborWriter.Write,
             aaguid: aaguid,
             residentCredentialCapacity: residentCredentialCapacity,
-            rng: rng,
+            rng: rng ?? TestEntropy.NewCounterStream(),
             credentialSigningBackend: backend,
-            timeProvider: timeProvider,
+            timeProvider: timeProvider ?? new FakeTimeProvider(TestClock.CanonicalEpoch),
+            pinUvAuthKeyAgreementPool: pool,
             simulateFingerprintCapture: simulateFingerprintCapture,
             simulateBuiltInUv: simulateBuiltInUv,
             simulateUserPresence: simulateUserPresence,
@@ -140,16 +152,22 @@ internal static class CtapMakeCredentialGetAssertionFixtures
     /// <param name="runId">The stable identifier for this simulated authenticator and the custody bundle's own key.</param>
     /// <param name="custody">The state-custody seam bundle to load from, persist to, and wipe through.</param>
     /// <param name="aaguid">The authenticator-wide AAGUID — REQUIRED, see the summary.</param>
+    /// <param name="pool">The memory pool the simulator's PIN/UV auth key-agreement material is minted from.</param>
     /// <param name="firmwareVersion">The authenticator model's firmware version — part of the rehydration fingerprint alongside <paramref name="aaguid"/>.</param>
     /// <param name="signatureCounterCustody">
     /// The NV-counter-backed signature-counter custody seam bundle, or <see langword="null"/>
     /// (the default) to keep every credential's signature counter riding the whole-snapshot cache exactly as
     /// before — entirely independent of <paramref name="custody"/>.
     /// </param>
+    /// <param name="timeProvider">The simulator's clock, or <see langword="null"/> (the default) to resolve to <see cref="TestClock.CanonicalEpoch"/> under a fresh <see cref="FakeTimeProvider"/> — see <see cref="CreateSimulator"/>.</param>
+    /// <param name="rng">
+    /// The random-number backend the AAGUID and every minted credential identifier are drawn from, or
+    /// <see langword="null"/> (the default) for <see cref="TestEntropy.NewCounterStream"/>.
+    /// </param>
     /// <param name="cancellationToken">A cancellation token for the load attempt.</param>
     public static ValueTask<CtapAuthenticatorSimulator> CreateSimulatorWithCustodyAsync(
-        string runId, CtapStateCustody custody, Guid aaguid, int firmwareVersion = 1, CtapSignatureCounterCustody? signatureCounterCustody = null,
-        CancellationToken cancellationToken = default) =>
+        string runId, CtapStateCustody custody, Guid aaguid, BaseMemoryPool pool, int firmwareVersion = 1, CtapSignatureCounterCustody? signatureCounterCustody = null,
+        TimeProvider? timeProvider = null, FillEntropyDelegate? rng = null, CancellationToken cancellationToken = default) =>
         CtapAuthenticatorSimulator.CreateWithCustodyAsync(
             runId,
             custody,
@@ -171,6 +189,9 @@ internal static class CtapMakeCredentialGetAssertionFixtures
             encodeLargeBlobsResponse: CtapLargeBlobsResponseCborWriter.Write,
             encodeMakeCredentialExtensionOutputs: CtapMakeCredentialExtensionOutputsCborWriter.Write,
             encodeGetAssertionExtensionOutputs: CtapGetAssertionExtensionOutputsCborWriter.Write,
+            timeProvider: timeProvider ?? new FakeTimeProvider(TestClock.CanonicalEpoch),
+            pinUvAuthKeyAgreementPool: pool,
+            rng: rng ?? TestEntropy.NewCounterStream(),
             aaguid: aaguid,
             credentialSigningBackend: CtapCredentialSigningBackend.CreateEs256Default(),
             encodePackedCertifiedAttestationStatement: PackedAttestationStatementCborWriter.WriteCertified,
@@ -239,7 +260,8 @@ internal static class CtapMakeCredentialGetAssertionFixtures
         int? credProtect = null, bool? minPinLength = null, bool? largeBlobKey = null, bool? hmacSecret = null,
         CtapGetAssertionHmacSecretInput? hmacSecretMc = null)
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.Ctap2Canonical);
 
         int memberCount = (credProtect is not null ? 1 : 0) + (hmacSecret is not null ? 1 : 0)
             + (largeBlobKey is not null ? 1 : 0) + (minPinLength is not null ? 1 : 0) + (hmacSecretMc is not null ? 1 : 0);
@@ -291,7 +313,7 @@ internal static class CtapMakeCredentialGetAssertionFixtures
 
         writer.WriteEndMap();
 
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
     }
 
 
@@ -304,14 +326,15 @@ internal static class CtapMakeCredentialGetAssertionFixtures
     /// <returns>The encoded <c>extensions</c> map bytes.</returns>
     public static ReadOnlyMemory<byte> BuildGetAssertionExtensionsInput(bool largeBlobKey)
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.Ctap2Canonical);
 
         writer.WriteStartMap(1);
         writer.WriteTextString(WellKnownWebAuthnExtensionIdentifiers.LargeBlobKey);
         writer.WriteBoolean(largeBlobKey);
         writer.WriteEndMap();
 
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
     }
 
 
@@ -336,7 +359,8 @@ internal static class CtapMakeCredentialGetAssertionFixtures
     public static ReadOnlyMemory<byte> BuildGetAssertionHmacSecretExtensionsInput(
         CoseKey keyAgreement, ReadOnlyMemory<byte> saltEnc, ReadOnlyMemory<byte> saltAuth, int? pinUvAuthProtocol = null, bool? largeBlobKey = null)
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.Ctap2Canonical);
 
         int outerMemberCount = 1 + (largeBlobKey is not null ? 1 : 0);
         writer.WriteStartMap(outerMemberCount);
@@ -366,7 +390,7 @@ internal static class CtapMakeCredentialGetAssertionFixtures
 
         writer.WriteEndMap();
 
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
     }
 
 

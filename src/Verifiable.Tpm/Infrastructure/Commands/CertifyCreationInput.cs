@@ -18,7 +18,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// nonce, and signs it with the key referenced by <see cref="SignHandle"/>.
 /// </para>
 /// <para>
-/// Command structure (TPM 2.0 Part 3, Section 18.3, Table 88):
+/// Command structure (TPM 2.0 Library Part 3, clause 18.3, Table 99):
 /// </para>
 /// <list type="bullet">
 ///   <item><description>signHandle (TPMI_DH_OBJECT+): The signing key. Requires authorization (USER role).</description></item>
@@ -48,8 +48,8 @@ public sealed class CertifyCreationInput: ITpmCommandInput, IDisposable
     /// <inheritdoc/>
     /// <remarks>
     /// <c>qualifyingData</c> (<c>TPM2B_DATA</c>) is the first entry of the parameter area, ordered ahead of
-    /// <c>creationHash</c>, and carries an explicit size field (TPM 2.0 Library Part 3, clause 18.3, Table 91),
-    /// which is what TPM 2.0 Library Part 1, clause 19.1 requires of an encryptable parameter and what clause
+    /// <c>creationHash</c>, and carries an explicit size field (TPM 2.0 Library Part 3, clause 18.3, Table 99),
+    /// which is what TPM 2.0 Library Part 1, clause 18.1 requires of an encryptable parameter and what clause
     /// 16.4 restates ("for a command or response parameter to be encrypted, it must be the first parameter and
     /// it must be a TPM2B type"). Only that first parameter is ever encrypted, so the creation hash and ticket
     /// travel in the clear. A session without the <c>decrypt</c> attribute is unaffected; the attribute is what
@@ -235,13 +235,16 @@ public sealed class CertifyCreationInput: ITpmCommandInput, IDisposable
     /// <inheritdoc/>
     public int GetSerializedSize()
     {
-        //TPMT_SIG_SCHEME: scheme (UINT16) + hashAlg (UINT16).
-        const int TpmtSigSchemeSize = sizeof(ushort) + sizeof(ushort);
+        //TPMT_SIG_SCHEME (TPM 2.0 Library Part 2, clause 11.2.1.5, Table 183): scheme (UINT16) selector, plus a
+        //hashAlg (UINT16) detail pair only when the scheme is not TPM_ALG_NULL — Table 183's [scheme]details
+        //is absent entirely for the NULL scheme (clause 11.2.1.4, Table 182, whose "null" row carries an empty
+        //Type column against selector TPM_ALG_NULL), so a NULL SignatureScheme omits the trailing octets.
+        int schemeSize = sizeof(ushort) + (SignatureScheme == TpmAlgIdConstants.TPM_ALG_NULL ? 0 : sizeof(ushort));
 
         return (2 * sizeof(uint)) +                          //signHandle + objectHandle (TPMI_DH_OBJECT).
                sizeof(ushort) + QualifyingData.Length +      //TPM2B_DATA: size prefix + bytes.
                sizeof(ushort) + CreationHash.Length +        //TPM2B_DIGEST: size prefix + bytes.
-               TpmtSigSchemeSize +
+               schemeSize +
                CreationTicket.SerializedSize;
     }
 
@@ -262,7 +265,14 @@ public sealed class CertifyCreationInput: ITpmCommandInput, IDisposable
         writer.WriteUInt16((ushort)CreationHash.Length);
         writer.WriteBytes(CreationHash.Span);
         writer.WriteUInt16((ushort)SignatureScheme);
-        writer.WriteUInt16((ushort)SchemeHashAlg);
+
+        //Table 183's [scheme]details is present only for a non-NULL scheme — a NULL SignatureScheme selects no
+        //TPMU_SIG_SCHEME member at all, so SchemeHashAlg is not framed for it.
+        if(SignatureScheme != TpmAlgIdConstants.TPM_ALG_NULL)
+        {
+            writer.WriteUInt16((ushort)SchemeHashAlg);
+        }
+
         CreationTicket.WriteTo(ref writer);
     }
 

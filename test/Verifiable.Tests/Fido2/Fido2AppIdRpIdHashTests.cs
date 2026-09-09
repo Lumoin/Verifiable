@@ -202,7 +202,8 @@ internal sealed class Fido2AppIdRpIdHashTests
             ResponseUserHandle = responseUserHandle,
             StoredUserHandle = storedUserHandle,
             AppIdExtensionOutput = appIdExtensionOutput,
-            ExpectedAppIdHash = expectedAppIdHash is null ? null : Fido2TestVectors.WrapRpIdHash(expectedAppIdHash, BaseMemoryPool.Shared)
+            ExpectedAppIdHash = expectedAppIdHash is null ? null : Fido2TestVectors.WrapRpIdHash(expectedAppIdHash, BaseMemoryPool.Shared),
+            ExtensionProcessingPool = BaseMemoryPool.Shared
         };
 
         return await Fido2AssertionVerifier.VerifyAsync(

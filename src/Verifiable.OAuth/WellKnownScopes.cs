@@ -83,7 +83,7 @@ public static class WellKnownScopes
     /// This is an authentication scope, not an authorization scope. Its presence does
     /// not grant access to any resource — it only identifies the user via the ID Token.
     /// </remarks>
-    public static readonly string OpenId = Utf8Constants.ToInternedString(OpenIdUtf8);
+    public static string OpenId { get; } = Utf8Constants.ToInternedString(OpenIdUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Profile"/>.</summary>
     public static ReadOnlySpan<byte> ProfileUtf8 => "profile"u8;
@@ -96,7 +96,7 @@ public static class WellKnownScopes
     /// <c>picture</c>, <c>website</c>, <c>gender</c>, <c>birthdate</c>,
     /// <c>zoneinfo</c>, <c>locale</c>, <c>updated_at</c>.
     /// </summary>
-    public static readonly string Profile = Utf8Constants.ToInternedString(ProfileUtf8);
+    public static string Profile { get; } = Utf8Constants.ToInternedString(ProfileUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Email"/>.</summary>
     public static ReadOnlySpan<byte> EmailUtf8 => "email"u8;
@@ -105,7 +105,7 @@ public static class WellKnownScopes
     /// Requests the <c>email</c> and <c>email_verified</c> claims per
     /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#ScopeClaims">OIDC Core §5.4</see>.
     /// </summary>
-    public static readonly string Email = Utf8Constants.ToInternedString(EmailUtf8);
+    public static string Email { get; } = Utf8Constants.ToInternedString(EmailUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Address"/>.</summary>
     public static ReadOnlySpan<byte> AddressUtf8 => "address"u8;
@@ -114,7 +114,7 @@ public static class WellKnownScopes
     /// Requests the <c>address</c> structured claim per
     /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#ScopeClaims">OIDC Core §5.4</see>.
     /// </summary>
-    public static readonly string Address = Utf8Constants.ToInternedString(AddressUtf8);
+    public static string Address { get; } = Utf8Constants.ToInternedString(AddressUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Phone"/>.</summary>
     public static ReadOnlySpan<byte> PhoneUtf8 => "phone"u8;
@@ -123,7 +123,7 @@ public static class WellKnownScopes
     /// Requests the <c>phone_number</c> and <c>phone_number_verified</c> claims per
     /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#ScopeClaims">OIDC Core §5.4</see>.
     /// </summary>
-    public static readonly string Phone = Utf8Constants.ToInternedString(PhoneUtf8);
+    public static string Phone { get; } = Utf8Constants.ToInternedString(PhoneUtf8);
 
     //OAuth 2.0 authorization scopes.
 
@@ -140,7 +140,7 @@ public static class WellKnownScopes
     /// <c>grant_types_supported</c> before requesting it. Refresh token rotation is
     /// considered bad practice in FAPI 2.0 contexts.
     /// </remarks>
-    public static readonly string OfflineAccess = Utf8Constants.ToInternedString(OfflineAccessUtf8);
+    public static string OfflineAccess { get; } = Utf8Constants.ToInternedString(OfflineAccessUtf8);
 
     //OID4VP scopes.
 
@@ -151,7 +151,7 @@ public static class WellKnownScopes
     /// Requests a Verifiable Presentation via OID4VP per the
     /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html">OID4VP specification</see>.
     /// </summary>
-    public static readonly string VpToken = Utf8Constants.ToInternedString(VpTokenUtf8);
+    public static string VpToken { get; } = Utf8Constants.ToInternedString(VpTokenUtf8);
 
     //OID4VCI scopes.
 
@@ -163,7 +163,7 @@ public static class WellKnownScopes
     /// endpoint per the
     /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html">OID4VCI specification</see>.
     /// </summary>
-    public static readonly string CredentialIssuance = Utf8Constants.ToInternedString(CredentialIssuanceUtf8);
+    public static string CredentialIssuance { get; } = Utf8Constants.ToInternedString(CredentialIssuanceUtf8);
 
     //OpenID Shared Signals Framework scopes — CAEP Interoperability Profile §2.7.3.
 
@@ -193,7 +193,7 @@ public static class WellKnownScopes
     /// against the two profile scopes.
     /// </para>
     /// </remarks>
-    public static readonly string SsfRead = Utf8Constants.ToInternedString(SsfReadUtf8);
+    public static string SsfRead { get; } = Utf8Constants.ToInternedString(SsfReadUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="SsfManage"/>.</summary>
     public static ReadOnlySpan<byte> SsfManageUtf8 => "ssf.manage"u8;
@@ -209,7 +209,7 @@ public static class WellKnownScopes
     /// Subject to the same RFC 9728 scope-discovery precedence, and to the same
     /// library-own granular-postfix convention, as <see cref="SsfRead"/>.
     /// </remarks>
-    public static readonly string SsfManage = Utf8Constants.ToInternedString(SsfManageUtf8);
+    public static string SsfManage { get; } = Utf8Constants.ToInternedString(SsfManageUtf8);
 
 
     //Single-value identity predicates — parallel to WellKnownCurveValues.IsP256 etc.

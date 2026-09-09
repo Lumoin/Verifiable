@@ -4,8 +4,11 @@ using Microsoft.Extensions.Logging;
 using System;
 using System.CommandLine;
 using System.IO;
+using System.Security.Cryptography;
 using System.Threading.Tasks;
+using Lumoin.Base;
 using Verifiable.Core;
+using Verifiable.Cryptography;
 
 namespace Verifiable;
 
@@ -32,12 +35,27 @@ internal static class Program
 
     private static async Task<int> RunMcpServerAsync(string[] args)
     {
+        //The host's own composition root: the process-wide clock, constructed exactly once here and
+        //threaded into the provider registry below and every MCP tool invocation via DI, rather than a
+        //tool method or a provider function defaulting to the system clock on its own.
+        TimeProvider timeProvider = TimeProvider.System;
+
         //Wire the cryptographic provider once for every provider-dependent MCP tool — mirrors
         //RunCliAsync's own call below; previously missing here (a shipped gap the FIDO2 verbs need
         //closed since VerifyFido2Registration/VerifyFido2Assertion need the registry populated).
-        CryptoProviderStartup.EnsureRegistered();
+        CryptoProviderStartup.EnsureRegistered(timeProvider);
 
         var builder = Host.CreateApplicationBuilder(args);
+
+        //This host's own composition root: the same construction RunCliAsync's composition root makes,
+        //registered once so every MCP tool invocation resolves the SAME pool and entropy delegate through
+        //VerifiableMcpServer's constructor rather than a tool method naming a default of its own. The
+        //using declaration ties the pool's disposal to this method's own scope, which does not return
+        //until the host itself has stopped.
+        using var pool = new BaseMemoryPool(allowNativeDegradation: true);
+        builder.Services.AddSingleton(pool);
+        builder.Services.AddSingleton<FillEntropyDelegate>(RandomNumberGenerator.Fill);
+        builder.Services.AddSingleton(timeProvider);
 
         builder.Services.AddMcpServer()
             .WithStdioServerTransport()
@@ -55,9 +73,15 @@ internal static class Program
 
     private static async Task<int> RunCliAsync(string[] args)
     {
+        //The composition root's own choice of pool, entropy source, and clock — built once and threaded
+        //into every command action that needs one rather than left as a hidden default inside a library verb.
+        using var pool = new BaseMemoryPool(allowNativeDegradation: true);
+        FillEntropyDelegate rng = RandomNumberGenerator.Fill;
+        TimeProvider timeProvider = TimeProvider.System;
+
         //Wire the cryptographic provider once for every provider-dependent command.
         //This is the reusable seam future did/vc commands also build on.
-        CryptoProviderStartup.EnsureRegistered();
+        CryptoProviderStartup.EnsureRegistered(timeProvider);
 
         RootCommand rootCommand = new("A command line tool for security elements, DIDs and VCs");
 
@@ -169,7 +193,7 @@ internal static class Program
                     Console.WriteLine();
                 }
 
-                var saveResult = await VerifiableOperations.SaveTpmInfoToFileAsync(outputPath).ConfigureAwait(false);
+                var saveResult = await VerifiableOperations.SaveTpmInfoToFileAsync(pool, rng, outputPath).ConfigureAwait(false);
 
                 if(saveResult.IsSuccess)
                 {
@@ -191,7 +215,7 @@ internal static class Program
                     await Console.Error.WriteLineAsync().ConfigureAwait(false);
                 }
 
-                var jsonResult = await VerifiableOperations.GetTpmInfoAsJsonAsync().ConfigureAwait(false);
+                var jsonResult = await VerifiableOperations.GetTpmInfoAsJsonAsync(pool, rng).ConfigureAwait(false);
 
                 if(jsonResult.IsSuccess)
                 {
@@ -204,11 +228,11 @@ internal static class Program
             }
 
             //Human-readable format (default).
-            var infoResult = await VerifiableOperations.GetTpmInfoAsync().ConfigureAwait(false);
+            var infoResult = await VerifiableOperations.GetTpmInfoAsync(pool, rng).ConfigureAwait(false);
 
             if(infoResult.IsSuccess)
             {
-                TpmInfoFormatter.WriteToConsole(infoResult.Value!, reveal);
+                TpmInfoFormatter.WriteToConsole(infoResult.Value!, pool, reveal);
                 return 0;
             }
 
@@ -237,7 +261,7 @@ internal static class Program
             bool summaryOnly = parseResult.GetValue(summaryOnlyOption);
             bool chronological = parseResult.GetValue(chronologicalOption);
 
-            var log = TcgEventLogFormatter.TryReadEventLog(out string? error);
+            var log = TcgEventLogFormatter.TryReadEventLog(pool, out string? error);
 
             if(log is null)
             {
@@ -293,8 +317,8 @@ internal static class Program
             string? outputPath = parseResult.GetValue(cbomOutputOption);
 
             Result<string, string> result = observe
-                ? await VerifiableOperations.EmitObservedCbomAsync(includeEventProvenance: includeEvents).ConfigureAwait(false)
-                : VerifiableOperations.EmitDeclarativeCbom();
+                ? await VerifiableOperations.EmitObservedCbomAsync(pool, timeProvider, includeEventProvenance: includeEvents).ConfigureAwait(false)
+                : VerifiableOperations.EmitDeclarativeCbom(timeProvider);
 
             if(!result.IsSuccess)
             {
@@ -375,7 +399,7 @@ internal static class Program
             bool requireTeeEnforcedAuthorizations = parseResult.GetValue(registrationRequireTeeEnforcedAuthorizationsOption);
 
             var result = await VerifiableOperations.VerifyFido2RegistrationAsync(
-                attestationObjectPath, clientDataPath, rpId, origin, challenge, trustAnchorPaths, mdsBlobPath, mdsRootPath,
+                attestationObjectPath, clientDataPath, rpId, origin, challenge, trustAnchorPaths, mdsBlobPath, mdsRootPath, pool, timeProvider,
                 requireTeeEnforcedAuthorizations: requireTeeEnforcedAuthorizations,
                 userVerification: userVerification, authenticatorAttachment: authenticatorAttachment)
                 .ConfigureAwait(false);
@@ -440,7 +464,7 @@ internal static class Program
             string? userHandlePath = parseResult.GetValue(userHandleOption);
 
             var result = await VerifiableOperations.VerifyFido2AssertionAsync(
-                credentialRecordPath, authenticatorDataPath, signaturePath, clientDataPath, rpId, origin, challenge,
+                credentialRecordPath, authenticatorDataPath, signaturePath, clientDataPath, rpId, origin, challenge, pool, timeProvider,
                 storedSignCount, userVerification, userHandlePath)
                 .ConfigureAwait(false);
 
@@ -469,7 +493,7 @@ internal static class Program
             int? byteLength = parseResult.GetValue(challengeLengthOption);
             string? outputPath = parseResult.GetValue(challengeOutputOption);
 
-            var result = VerifiableOperations.CreateFido2Challenge(byteLength);
+            var result = VerifiableOperations.CreateFido2Challenge(pool, timeProvider, byteLength);
 
             if(!result.IsSuccess)
             {

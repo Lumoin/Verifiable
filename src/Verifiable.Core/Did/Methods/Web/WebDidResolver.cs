@@ -191,6 +191,9 @@ public static class WebDidResolver
             }
             catch
             {
+                //documentDeserializer is a caller-supplied delegate over untrusted fetched bytes; any failure
+                //to parse them (malformed JSON, an unexpected shape) is an invalid document from the
+                //resolver's perspective, cancellation excepted above.
                 return DidResolutionResult.Failure(DidResolutionErrors.InvalidDidDocument);
             }
 
@@ -238,9 +241,7 @@ public static class WebDidResolver
     //it be contained), so this is a presence check rather than a first-element constraint.
     private static bool HasContext(DidDocument document)
     {
-        System.Collections.Generic.List<object>? contexts = document.Context?.Contexts;
-
-        return contexts is not null && contexts.Count > 0;
+        return document.Context?.Entries is { Count: > 0 };
     }
 
 

@@ -38,8 +38,9 @@ namespace Verifiable.Core.Model.Did
     /// </summary>
     /// <param name="format">A well known key format. If it's a known type for <c>Verifiable</c>, it is enumerated in <see cref="KeyFormatFactory"/>.</param>
     /// <param name="keyMaterial">The key material from which to create the <see cref="KeyFormat"/>.</param>
+    /// <param name="pool">The memory pool the format's encoding is rented from.</param>
     /// <returns>The created <see cref="KeyFormat"/>.</returns>
-    public delegate KeyFormat KeyFormatCreator(Type format, PublicKeyMemory keyMaterial);
+    public delegate KeyFormat KeyFormatCreator(Type format, PublicKeyMemory keyMaterial, BaseMemoryPool pool);
 
     /// <summary>
     /// <para>Represents well-known key formats utilized in the context of decentralized identifiers (DIDs)
@@ -76,7 +77,7 @@ namespace Verifiable.Core.Model.Did
         /// <summary>
         /// Returns a delegate that creates a <see cref="KeyFormat"/> based on the provided <paramref name="format"/> and <paramref name="keyMaterial"/>.
         /// </summary>
-        public static KeyFormatCreator DefaultKeyFormatCreator { get; set; } = (Type format, PublicKeyMemory keyMaterial) =>
+        public static KeyFormatCreator DefaultKeyFormatCreator { get; set; } = (Type format, PublicKeyMemory keyMaterial, BaseMemoryPool pool) =>
         {
             Tag tag = keyMaterial.Tag;
             CryptoAlgorithm cryptoAlgorithm = tag.Get<CryptoAlgorithm>();
@@ -89,8 +90,8 @@ namespace Verifiable.Core.Model.Did
             return format switch
             {
                 //TODO: Here .DefaultAlgorithmToJwkConverter blindly assumes the key material is COMPRESSED.
-                Type pfa when format == WellKnownKeyFormats.PublicKeyJwk => new PublicKeyJwk { Header = CryptoFormatConversions.DefaultAlgorithmToJwkConverter(cryptoAlgorithm, purpose, keyMaterial.AsReadOnlySpan(), encoder) },
-                Type pfa when format == WellKnownKeyFormats.PublicKeyMultibase => new PublicKeyMultibase(CryptoFormatConversions.DefaultAlgorithmToBase58Converter(cryptoAlgorithm, purpose, keyMaterial.AsReadOnlySpan(), encoder)),
+                _ when format == WellKnownKeyFormats.PublicKeyJwk => new PublicKeyJwk { Header = CryptoFormatConversions.DefaultAlgorithmToJwkConverter(cryptoAlgorithm, purpose, keyMaterial.AsReadOnlySpan(), encoder) },
+                _ when format == WellKnownKeyFormats.PublicKeyMultibase => new PublicKeyMultibase(CryptoFormatConversions.DefaultAlgorithmToBase58Converter(cryptoAlgorithm, purpose, keyMaterial.AsReadOnlySpan(), encoder, pool)),
                 _ => throw new ArgumentException($"Unsupported format: \"{format}\".")
             };
         };

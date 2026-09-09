@@ -101,7 +101,7 @@ public readonly struct StatusWord : IEquatable<StatusWord>
     public static StatusWord AuthenticationFailed { get; } = new(0x6300);
 
 
-    private static List<StatusWord> words { get; } =
+    private static List<StatusWord> RegisteredWords { get; } =
     [
         Success, WrongData, FileNotFound, IncorrectP1P2, ReferencedDataNotFound,
         SecurityNotSatisfied, AuthenticationBlocked, InstructionNotSupported,
@@ -111,7 +111,7 @@ public readonly struct StatusWord : IEquatable<StatusWord>
     ];
 
     /// <summary>Gets all registered status word values.</summary>
-    public static IReadOnlyList<StatusWord> Words => words.AsReadOnly();
+    public static IReadOnlyList<StatusWord> Words => RegisteredWords.AsReadOnly();
 
 
     /// <summary>
@@ -127,16 +127,16 @@ public readonly struct StatusWord : IEquatable<StatusWord>
     {
         ArgumentNullException.ThrowIfNull(description);
 
-        for(int i = 0; i < words.Count; ++i)
+        for(int i = 0; i < RegisteredWords.Count; ++i)
         {
-            if(words[i].Value == value)
+            if(RegisteredWords[i].Value == value)
             {
                 throw new ArgumentException($"Status word 0x{value:X4} is already registered.", nameof(value));
             }
         }
 
         var newWord = new StatusWord(value);
-        words.Add(newWord);
+        RegisteredWords.Add(newWord);
         StatusWordNames.Register(value, description);
         return newWord;
     }
@@ -289,7 +289,7 @@ public readonly struct StatusWord : IEquatable<StatusWord>
 /// <summary>Provides human-readable names for <see cref="StatusWord"/> values.</summary>
 public static class StatusWordNames
 {
-    private static Dictionary<ushort, string> customNames { get; } = [];
+    private static Dictionary<ushort, string> CustomNames { get; } = [];
 
     /// <summary>Gets the name for the specified status word.</summary>
     public static string GetName(StatusWord statusWord) => GetName(statusWord.Value);
@@ -297,7 +297,7 @@ public static class StatusWordNames
     /// <summary>Gets the name for the specified status word value.</summary>
     public static string GetName(ushort value)
     {
-        if(customNames.TryGetValue(value, out string? customName))
+        if(CustomNames.TryGetValue(value, out string? customName))
         {
             return $"{customName} (0x{value:X4})";
         }
@@ -358,6 +358,6 @@ public static class StatusWordNames
     /// <summary>Registers a custom description for a vendor-specific status word.</summary>
     internal static void Register(ushort value, string description)
     {
-        customNames[value] = description;
+        CustomNames[value] = description;
     }
 }

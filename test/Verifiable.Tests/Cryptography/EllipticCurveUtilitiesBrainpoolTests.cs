@@ -24,7 +24,7 @@ namespace Verifiable.Tests.Cryptography;
 [TestClass]
 internal sealed class EllipticCurveUtilitiesBrainpoolTests
 {
-    private static readonly SecureRandom Random = new();
+    private static SecureRandom Random { get; } = new();
 
 
     [TestMethod]

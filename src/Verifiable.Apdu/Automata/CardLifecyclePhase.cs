@@ -17,8 +17,8 @@ public enum CardLifecyclePhase
 {
     /// <summary>
     /// The card is powered and serving commands, with no access protocol in progress. Every file is
-    /// readable without access control in this slice; gating protected files behind Secure Messaging
-    /// arrives with the SM-wrapped read responder.
+    /// readable without access control; gating protected files behind Secure Messaging is not modelled,
+    /// and arrives with the SM-wrapped read responder.
     /// </summary>
     Operational,
 

@@ -55,8 +55,8 @@ internal sealed class DidResolutionHttpBindingTests
     private const string GenesisTime = "2025-01-01T00:00:00Z";
     private const string KeyDid = "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK";
 
-    private static readonly EncodeDelegate Base58Encoder = DefaultCoderSelector.SelectEncoder(typeof(PublicKeyMultibase));
-    private static readonly DecodeDelegate Base58Decoder = DefaultCoderSelector.SelectDecoder(typeof(PublicKeyMultibase));
+    private static EncodeDelegate Base58Encoder { get; } = DefaultCoderSelector.SelectEncoder(typeof(PublicKeyMultibase));
+    private static DecodeDelegate Base58Decoder { get; } = DefaultCoderSelector.SelectDecoder(typeof(PublicKeyMultibase));
 
     private static JsonSerializerOptions JsonOptions { get; } = TestSetup.DefaultSerializationOptions;
 
@@ -497,7 +497,7 @@ internal sealed class DidResolutionHttpBindingTests
             SerializePresentation,
             SerializeProofOptions,
             Base58Decoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             BaseMemoryPool.Shared);
 
         return DidResolverComposition.Build(
@@ -548,16 +548,16 @@ internal sealed class DidResolutionHttpBindingTests
     //URL is a 404. The body is served as the transport-owned JSON-tagged buffer the guarded fetch returns.
     private sealed class RoutingTransport
     {
-        private readonly Dictionary<string, (int Status, byte[]? Body, string? ContentType)> routes;
+        private Dictionary<string, (int Status, byte[]? Body, string? ContentType)> Routes { get; }
 
         public RoutingTransport(Dictionary<string, (int Status, byte[]? Body, string? ContentType)> routes)
         {
-            this.routes = routes;
+            this.Routes = routes;
         }
 
         public OutboundTransportDelegate Delegate => (request, context, cancellationToken) =>
         {
-            if(!routes.TryGetValue(request.Target.AbsoluteUri, out (int Status, byte[]? Body, string? ContentType) route))
+            if(!Routes.TryGetValue(request.Target.AbsoluteUri, out (int Status, byte[]? Body, string? ContentType) route))
             {
                 route = (404, null, null);
             }
@@ -566,9 +566,9 @@ internal sealed class DidResolutionHttpBindingTests
                 ? TaggedMemory<byte>.Empty
                 : new TaggedMemory<byte>(route.Body, BufferTags.Json);
 
-            IReadOnlyDictionary<string, string> headers = route.ContentType is null
-                ? OutboundRequest.EmptyHeaders
-                : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["Content-Type"] = route.ContentType };
+            HttpHeaderSet headers = route.ContentType is null
+                ? HttpHeaderSet.Empty
+                : HttpHeaderSet.FromPairs((WellKnownHttpHeaderNames.ContentType, route.ContentType));
 
             return ValueTask.FromResult(new OutboundResponse { StatusCode = route.Status, Body = body, Headers = headers });
         };
@@ -581,13 +581,13 @@ internal sealed class DidResolutionHttpBindingTests
     //lifecycle.
     private sealed class DidResolutionHttpHost: IAsyncDisposable
     {
-        private readonly WebApplication app;
-        private readonly X509Certificate2 certificate;
+        private WebApplication App { get; }
+        private X509Certificate2 Certificate { get; }
 
         private DidResolutionHttpHost(WebApplication app, X509Certificate2 certificate, Uri baseAddress, HttpClient client)
         {
-            this.app = app;
-            this.certificate = certificate;
+            this.App = app;
+            this.Certificate = certificate;
             BaseAddress = baseAddress;
             Client = client;
         }
@@ -602,12 +602,12 @@ internal sealed class DidResolutionHttpBindingTests
             X509Certificate2 certificate = LoopbackTls.CreateServerCertificate("did-resolution-loopback-test-host");
 
             WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
-            builder.Logging.ClearProviders();
+            LoopbackKestrel.ConfigureLoopbackLogging(builder.Logging);
 
             //A single explicit HTTPS Listen call — no UseUrls — so there is no plaintext fallback on
             //this host at all.
             builder.WebHost.ConfigureKestrel(options =>
-                options.Listen(IPAddress.Loopback, port: 0, listenOptions => listenOptions.UseHttps(certificate)));
+                LoopbackKestrel.ConfigureLoopbackListener(options, certificate));
 
             WebApplication app = builder.Build();
             app.Run(application.ProcessRequestAsync);
@@ -629,9 +629,9 @@ internal sealed class DidResolutionHttpBindingTests
         public async ValueTask DisposeAsync()
         {
             Client.Dispose();
-            await app.StopAsync(System.Threading.CancellationToken.None).ConfigureAwait(false);
-            await app.DisposeAsync().ConfigureAwait(false);
-            certificate.Dispose();
+            await App.StopAsync(System.Threading.CancellationToken.None).ConfigureAwait(false);
+            await App.DisposeAsync().ConfigureAwait(false);
+            Certificate.Dispose();
         }
     }
 }

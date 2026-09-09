@@ -2,7 +2,7 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using System.Globalization;
 using System.Security.Cryptography;
 using Verifiable.Cryptography;
@@ -25,7 +25,7 @@ namespace Verifiable.Cbor;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Mirrors <see cref="CoseSerialization"/>'s shape: static methods, <see cref="CborConformanceMode.Canonical"/>
+/// Mirrors <see cref="CoseSerialization"/>'s shape: static methods, <see cref="CborConformanceMode.RfcCanonical"/>
 /// throughout — both to write deterministic (RFC 8949 §4.2) CBOR and, on the parse side, to get the
 /// framework's own definite-length/minimal-encoding validation for free, satisfying this library's
 /// own strict-conformance posture with less hand-written validation. Every <c>TryParse*</c> method
@@ -104,7 +104,7 @@ public static class CBAdESSerialization
     /// <param name="exception">The exception to classify.</param>
     /// <returns><see langword="true"/> when the exception should be swallowed and reported as a parse failure.</returns>
     private static bool IsFailClosedParseException(Exception exception) =>
-        exception is CborContentException or InvalidOperationException or ArgumentException
+        exception is CborException or InvalidOperationException or ArgumentException
             or IndexOutOfRangeException or OverflowException or FormatException;
 
 
@@ -291,7 +291,7 @@ public static class CBAdESSerialization
         CborTag tag = reader.ReadTag();
         if(tag != CborTag.DateTimeString)
         {
-            throw new CborContentException($"Expected CBOR tag {(ulong)CborTag.DateTimeString} (tdate, RFC 8949 section 3.4.1), but got tag {(ulong)tag}.");
+            throw new CborContentException($"Expected CBOR tag {CborTag.DateTimeString.Value} (tdate, RFC 8949 section 3.4.1), but got tag {tag.Value}.");
         }
 
         string rfc3339 = reader.ReadTextString();
@@ -330,7 +330,7 @@ public static class CBAdESSerialization
         CborTag tag = reader.ReadTag();
         if(tag != CborTag.Uri)
         {
-            throw new CborContentException($"Expected CBOR tag {(ulong)CborTag.Uri} (URI), but got tag {(ulong)tag}.");
+            throw new CborContentException($"Expected CBOR tag {CborTag.Uri.Value} (URI), but got tag {tag.Value}.");
         }
 
         return reader.ReadTextString();
@@ -352,10 +352,11 @@ public static class CBAdESSerialization
         ArgumentNullException.ThrowIfNull(objectIdentifier);
         ArgumentNullException.ThrowIfNull(pool);
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         WriteObjectIdentifier(writer, objectIdentifier);
 
-        return PooledMemory.FromBytes(writer.Encode(), pool, ComponentTag);
+        return PooledMemory.FromBytes(buffer.WrittenSpan, pool, ComponentTag);
     }
 
 
@@ -374,7 +375,7 @@ public static class CBAdESSerialization
     {
         try
         {
-            var reader = new CborReader(encoded, CborConformanceMode.Canonical);
+            var reader = new CborReader(encoded, CborOptions.RfcCanonical);
             result = ReadObjectIdentifier(reader);
             if(reader.BytesRemaining != 0)
             {
@@ -515,10 +516,11 @@ public static class CBAdESSerialization
         ArgumentNullException.ThrowIfNull(pkiObject);
         ArgumentNullException.ThrowIfNull(pool);
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         WritePkiObject(writer, pkiObject);
 
-        return PooledMemory.FromBytes(writer.Encode(), pool, ComponentTag);
+        return PooledMemory.FromBytes(buffer.WrittenSpan, pool, ComponentTag);
     }
 
 
@@ -537,7 +539,7 @@ public static class CBAdESSerialization
     {
         try
         {
-            var reader = new CborReader(encoded, CborConformanceMode.Canonical);
+            var reader = new CborReader(encoded, CborOptions.RfcCanonical);
             result = ReadPkiObject(reader);
             if(reader.BytesRemaining != 0)
             {
@@ -678,10 +680,11 @@ public static class CBAdESSerialization
                 nameof(container));
         }
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         WriteTimestampContainer(writer, container);
 
-        return PooledMemory.FromBytes(writer.Encode(), pool, ComponentTag);
+        return PooledMemory.FromBytes(buffer.WrittenSpan, pool, ComponentTag);
     }
 
 
@@ -701,7 +704,7 @@ public static class CBAdESSerialization
     {
         try
         {
-            var reader = new CborReader(encoded, CborConformanceMode.Canonical);
+            var reader = new CborReader(encoded, CborOptions.RfcCanonical);
             result = ReadTimestampContainer(reader);
             if(reader.BytesRemaining != 0)
             {
@@ -877,7 +880,8 @@ public static class CBAdESSerialization
         ArgumentNullException.ThrowIfNull(thumbprints);
         ArgumentNullException.ThrowIfNull(pool);
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteStartArray(thumbprints.Thumbprints.Count);
         foreach(AdESCertificateThumbprint thumbprint in thumbprints.Thumbprints)
         {
@@ -886,7 +890,7 @@ public static class CBAdESSerialization
 
         writer.WriteEndArray();
 
-        return PooledMemory.FromBytes(writer.Encode(), pool, ComponentTag);
+        return PooledMemory.FromBytes(buffer.WrittenSpan, pool, ComponentTag);
     }
 
 
@@ -916,7 +920,7 @@ public static class CBAdESSerialization
         List<AdESCertificateThumbprint>? thumbprints = null;
         try
         {
-            var reader = new CborReader(encoded, CborConformanceMode.Canonical);
+            var reader = new CborReader(encoded, CborOptions.RfcCanonical);
             int count = reader.ReadStartArrayExpectLengthRange(AdESCertificateThumbprints.MinimumThumbprintCount, int.MaxValue);
 
             thumbprints = new List<AdESCertificateThumbprint>(Math.Min(count, 64));
@@ -976,7 +980,8 @@ public static class CBAdESSerialization
         ArgumentNullException.ThrowIfNull(commitments);
         ArgumentNullException.ThrowIfNull(pool);
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteStartArray(commitments.Commitments.Count);
         foreach(AdESCommitment commitment in commitments.Commitments)
         {
@@ -985,7 +990,7 @@ public static class CBAdESSerialization
 
         writer.WriteEndArray();
 
-        return PooledMemory.FromBytes(writer.Encode(), pool, ComponentTag);
+        return PooledMemory.FromBytes(buffer.WrittenSpan, pool, ComponentTag);
     }
 
 
@@ -1005,7 +1010,7 @@ public static class CBAdESSerialization
     {
         try
         {
-            var reader = new CborReader(encoded, CborConformanceMode.Canonical);
+            var reader = new CborReader(encoded, CborOptions.RfcCanonical);
             int count = reader.ReadStartArrayExpectLengthRange(1, int.MaxValue);
             var commitments = new List<AdESCommitment>(Math.Min(count, 64));
             for(int i = 0; i < count; i++)
@@ -1154,7 +1159,8 @@ public static class CBAdESSerialization
                 nameof(place));
         }
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(memberCount);
 
         if(place.AddressCountry is not null)
@@ -1195,7 +1201,7 @@ public static class CBAdESSerialization
 
         writer.WriteEndMap();
 
-        return PooledMemory.FromBytes(writer.Encode(), pool, ComponentTag);
+        return PooledMemory.FromBytes(buffer.WrittenSpan, pool, ComponentTag);
     }
 
 
@@ -1215,7 +1221,7 @@ public static class CBAdESSerialization
     {
         try
         {
-            var reader = new CborReader(encoded, CborConformanceMode.Canonical);
+            var reader = new CborReader(encoded, CborOptions.RfcCanonical);
             result = ReadSignatureProductionPlace(reader);
             if(reader.BytesRemaining != 0)
             {
@@ -1323,7 +1329,8 @@ public static class CBAdESSerialization
                 nameof(attributes));
         }
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(memberCount);
 
         if(attributes.Certified is not null)
@@ -1364,7 +1371,7 @@ public static class CBAdESSerialization
 
         writer.WriteEndMap();
 
-        return PooledMemory.FromBytes(writer.Encode(), pool, ComponentTag);
+        return PooledMemory.FromBytes(buffer.WrittenSpan, pool, ComponentTag);
     }
 
 
@@ -1385,7 +1392,7 @@ public static class CBAdESSerialization
     {
         try
         {
-            var reader = new CborReader(encoded, CborConformanceMode.Canonical);
+            var reader = new CborReader(encoded, CborOptions.RfcCanonical);
             result = ReadSignerAttributes(reader);
             if(reader.BytesRemaining != 0)
             {
@@ -1662,7 +1669,8 @@ public static class CBAdESSerialization
             + (identifier.DigestIsPerSpecification ? 1 : 0)
             + (identifier.Qualifiers is not null ? 1 : 0);
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(memberCount);
 
         writer.WriteInt32(CBAdESWireKeys.SignaturePolicyIdentifierId);
@@ -1692,7 +1700,7 @@ public static class CBAdESSerialization
 
         writer.WriteEndMap();
 
-        return PooledMemory.FromBytes(writer.Encode(), pool, ComponentTag);
+        return PooledMemory.FromBytes(buffer.WrittenSpan, pool, ComponentTag);
     }
 
 
@@ -1831,7 +1839,7 @@ public static class CBAdESSerialization
         DigestValue? digest = null;
         try
         {
-            var reader = new CborReader(encoded, CborConformanceMode.Canonical);
+            var reader = new CborReader(encoded, CborOptions.RfcCanonical);
             int count = reader.ReadStartMapExpectLengthRange(2, 4);
 
             AdESObjectIdentifier? id = null;
@@ -2072,7 +2080,8 @@ public static class CBAdESSerialization
 
         int memberCount = 2 + (anyDigest ? 2 : 0) + (anyContentType ? 1 : 0);
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(memberCount);
 
         writer.WriteInt32(CBAdESDetachedObjects.MechanismIdentifierKey);
@@ -2124,7 +2133,7 @@ public static class CBAdESSerialization
 
         writer.WriteEndMap();
 
-        return PooledMemory.FromBytes(writer.Encode(), pool, ComponentTag);
+        return PooledMemory.FromBytes(buffer.WrittenSpan, pool, ComponentTag);
     }
 
 
@@ -2154,7 +2163,7 @@ public static class CBAdESSerialization
         List<CBAdESDetachedObjectEntry>? entries = null;
         try
         {
-            var reader = new CborReader(encoded, CborConformanceMode.Canonical);
+            var reader = new CborReader(encoded, CborOptions.RfcCanonical);
             int count = reader.ReadStartMapExpectLengthRange(2, 5);
 
             string? mechanismIdentifier = null;
@@ -2261,7 +2270,7 @@ public static class CBAdESSerialization
             CborTag tag = reader.ReadTag();
             if(tag != CborTag.Uri)
             {
-                throw new CborContentException($"Expected CBOR tag {(ulong)CborTag.Uri} (URI) for sigD's mId, but got tag {(ulong)tag}.");
+                throw new CborContentException($"Expected CBOR tag {CborTag.Uri.Value} (URI) for sigD's mId, but got tag {tag.Value}.");
             }
 
             mechanismIdentifier = reader.ReadTextString();
@@ -2340,10 +2349,11 @@ public static class CBAdESSerialization
         ArgumentNullException.ThrowIfNull(signaturePolicyStore);
         ArgumentNullException.ThrowIfNull(pool);
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         WriteSignaturePolicyStore(writer, signaturePolicyStore);
 
-        return PooledMemory.FromBytes(writer.Encode(), pool, ComponentTag);
+        return PooledMemory.FromBytes(buffer.WrittenSpan, pool, ComponentTag);
     }
 
 
@@ -2363,7 +2373,7 @@ public static class CBAdESSerialization
     {
         try
         {
-            var reader = new CborReader(encoded, CborConformanceMode.Canonical);
+            var reader = new CborReader(encoded, CborOptions.RfcCanonical);
             result = ReadSignaturePolicyStore(reader);
             if(reader.BytesRemaining != 0)
             {
@@ -2533,10 +2543,11 @@ public static class CBAdESSerialization
         ArgumentNullException.ThrowIfNull(validationData);
         ArgumentNullException.ThrowIfNull(pool);
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         WriteValidationData(writer, validationData);
 
-        return PooledMemory.FromBytes(writer.Encode(), pool, ComponentTag);
+        return PooledMemory.FromBytes(buffer.WrittenSpan, pool, ComponentTag);
     }
 
 
@@ -2556,7 +2567,7 @@ public static class CBAdESSerialization
     {
         try
         {
-            var reader = new CborReader(encoded, CborConformanceMode.Canonical);
+            var reader = new CborReader(encoded, CborOptions.RfcCanonical);
             result = ReadValidationData(reader);
             if(reader.BytesRemaining != 0)
             {
@@ -2824,10 +2835,11 @@ public static class CBAdESSerialization
         ArgumentNullException.ThrowIfNull(references);
         ArgumentNullException.ThrowIfNull(pool);
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         WriteReferences(writer, references);
 
-        return PooledMemory.FromBytes(writer.Encode(), pool, ComponentTag);
+        return PooledMemory.FromBytes(buffer.WrittenSpan, pool, ComponentTag);
     }
 
 
@@ -2851,7 +2863,7 @@ public static class CBAdESSerialization
 
         try
         {
-            var reader = new CborReader(encoded, CborConformanceMode.Canonical);
+            var reader = new CborReader(encoded, CborOptions.RfcCanonical);
             result = ReadReferences(reader, pool);
             if(reader.BytesRemaining != 0)
             {
@@ -3959,7 +3971,8 @@ public static class CBAdESSerialization
         ArgumentNullException.ThrowIfNull(unsignedHeaders);
         ArgumentNullException.ThrowIfNull(pool);
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteStartArray(unsignedHeaders.Count);
         for(int i = 0; i < unsignedHeaders.Count; i++)
         {
@@ -3968,7 +3981,7 @@ public static class CBAdESSerialization
 
         writer.WriteEndArray();
 
-        return PooledMemory.FromBytes(writer.Encode(), pool, ComponentTag);
+        return PooledMemory.FromBytes(buffer.WrittenSpan, pool, ComponentTag);
     }
 
 
@@ -3982,7 +3995,8 @@ public static class CBAdESSerialization
     /// <exception cref="NotSupportedException">Thrown when <paramref name="element"/> is an unknown arm.</exception>
     private static byte[] EncodeUnsignedHeaderElement(CBAdESUnsignedHeaderElement element)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         WriteUnsignedHeaderElementLabel(writer, element.Label);
 
@@ -4005,7 +4019,7 @@ public static class CBAdESSerialization
         };
 
         writer.WriteEndMap();
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
 
         static bool WriteSignatureTimestampArm(CborWriter writer, CBAdESUnsignedHeaderElementSignatureTimestamp signatureTimestamp)
         {
@@ -4113,7 +4127,7 @@ public static class CBAdESSerialization
         List<CBAdESUnsignedHeaderElement>? elements = null;
         try
         {
-            var reader = new CborReader(encoded, CborConformanceMode.Canonical);
+            var reader = new CborReader(encoded, CborOptions.RfcCanonical);
             int count = reader.ReadStartArrayExpectLengthRange(1, int.MaxValue);
 
             var items = new List<CBAdESUnsignedHeaderElement>(Math.Min(count, 64));
@@ -4178,7 +4192,7 @@ public static class CBAdESSerialization
     /// Disposal-safe: the switch assignment through <see cref="CborReader.ReadEndMap"/> runs inside a
     /// try/catch that disposes an already-constructed <c>result</c> before rethrowing, matching the family's
     /// dispose-on-throw idiom (<see cref="ReadReferences"/>, <see cref="ReadCertId"/>, <see cref="ReadCrlRef"/>,
-    /// <see cref="ReadOcspRef"/>). Under <see cref="CborConformanceMode.Canonical"/> a well-formed one-entry
+    /// <see cref="ReadOcspRef"/>). Under <see cref="CborConformanceMode.RfcCanonical"/> a well-formed one-entry
     /// map's own <see cref="CborReader.ReadEndMap"/> call cannot itself throw once every entry has been
     /// consumed, so this is defense-in-depth rather than a reachable path today.
     /// </remarks>
@@ -4186,7 +4200,7 @@ public static class CBAdESSerialization
         Justification = "The enclosing try/catch disposes an already-constructed result before rethrowing on any failure (defense-in-depth; unreachable under Canonical mode today); the trailing-bytes check disposes it on that failure path too, and on success ownership transfers to the caller.")]
     private static CBAdESUnsignedHeaderElement ReadUnsignedHeaderElement(byte[] elementBytes, BaseMemoryPool pool)
     {
-        var reader = new CborReader(elementBytes, CborConformanceMode.Canonical);
+        var reader = new CborReader(elementBytes, CborOptions.RfcCanonical);
         _ = reader.ReadStartMapExpectLength(1);
 
         CBAdESUnsignedHeaderElement? result = null;

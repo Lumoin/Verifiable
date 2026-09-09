@@ -1,4 +1,5 @@
-using System.Formats.Cbor;
+using System.Buffers;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Core.Model.Mdoc;
 
 namespace Verifiable.Cbor.Mdoc;
@@ -30,7 +31,8 @@ public static class MdocCborDeviceNameSpacesEncoder
     {
         ArgumentNullException.ThrowIfNull(nameSpaces);
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
 
         writer.WriteStartMap(nameSpaces.Entries.Count);
 
@@ -49,7 +51,7 @@ public static class MdocCborDeviceNameSpacesEncoder
 
         writer.WriteEndMap();
 
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
     }
 
 

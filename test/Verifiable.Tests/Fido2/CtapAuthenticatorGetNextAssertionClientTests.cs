@@ -32,7 +32,7 @@ internal sealed class CtapAuthenticatorGetNextAssertionClientTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[]? capturedRequest = null;
 
-        CredentialId credentialId = CredentialId.Create([0x11, 0x22, 0x33, 0x44], pool);
+        using CredentialId credentialId = CredentialId.Create([0x11, 0x22, 0x33, 0x44], pool);
         var scriptedResponse = new CtapGetAssertionResponse(
             new PublicKeyCredentialDescriptor { Type = WellKnownPublicKeyCredentialTypes.PublicKey, Id = credentialId },
             new byte[] { 0x01, 0x02 }, new byte[] { 0x03, 0x04 });
@@ -55,7 +55,6 @@ internal sealed class CtapAuthenticatorGetNextAssertionClientTests
         Assert.AreSequenceEqual(scriptedResponse.AuthData.ToArray(), decoded.AuthData.ToArray());
         Assert.AreSequenceEqual(scriptedResponse.Signature.ToArray(), decoded.Signature.ToArray());
 
-        credentialId.Dispose();
         decoded.Credential.Id.Dispose();
     }
 

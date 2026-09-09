@@ -21,7 +21,7 @@ public static class WellKnownClientDataTypes
     /// <remarks>
     /// <see href="https://www.w3.org/TR/webauthn-3/#dictionary-client-data">W3C Web Authentication Level 3, section 5.8.1: Client Data Used in WebAuthn Signatures.</see>
     /// </remarks>
-    public static readonly string Create = Utf8Constants.ToInternedString(CreateUtf8);
+    public static string Create { get; } = Utf8Constants.ToInternedString(CreateUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Get"/>.</summary>
     public static ReadOnlySpan<byte> GetUtf8 => "webauthn.get"u8;
@@ -33,7 +33,7 @@ public static class WellKnownClientDataTypes
     /// <remarks>
     /// <see href="https://www.w3.org/TR/webauthn-3/#dictionary-client-data">W3C Web Authentication Level 3, section 5.8.1: Client Data Used in WebAuthn Signatures.</see>
     /// </remarks>
-    public static readonly string Get = Utf8Constants.ToInternedString(GetUtf8);
+    public static string Get { get; } = Utf8Constants.ToInternedString(GetUtf8);
 
 
     /// <summary>

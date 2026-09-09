@@ -422,31 +422,13 @@ internal sealed class SiopRealWireFlowTests
     /// <summary>
     /// The wallet-side presentation step: parse the stored SD-JWT, sign a KB-JWT over its hash input
     /// with the holder key bound to the request's <c>nonce</c> and the verifier's Client ID, and
-    /// serialise the presentation with key binding per RFC 9901 §4.3. The same construction
+    /// serialise the presentation with key binding per RFC 9901 §4.3. Delegates to the shared
+    /// <see cref="SdJwtVpFixture.PresentWithKeyBindingAsync"/>, the same construction
     /// <see cref="SiopCombinedResponseFlowTests"/> uses for the in-process combined-response coverage.
     /// </summary>
-    private async ValueTask<string> PresentWithKeyBindingAsync(
-        string sdJwtWithoutKb, PrivateKeyMemory holderPrivateKey, string nonce, string audience)
-    {
-        using SdToken<string> token = SdJwtSerializer.ParseToken(
-            sdJwtWithoutKb, TestSetup.Base64UrlDecoder, Pool, TestSalts.TestSaltTag);
-
-        string hashInput = SdJwtSerializer.GetSdJwtForHashing(token, TestSetup.Base64UrlEncoder);
-
-        string compactKbJwt = await KbJwtIssuance.IssueAsync(
-            Encoding.UTF8.GetBytes(hashInput),
-            holderPrivateKey,
-            nonce,
-            audience,
-            TimeProvider.GetUtcNow(),
-            TestSetup.Base64UrlEncoder,
-            HeaderSerializer,
-            PayloadSerializer,
-            Pool,
-            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
-
-        using SdToken<string> tokenWithKb = token.WithKeyBinding(compactKbJwt, Pool);
-
-        return SdJwtSerializer.SerializeToken(tokenWithKb, TestSetup.Base64UrlEncoder);
-    }
+    private ValueTask<string> PresentWithKeyBindingAsync(
+        string sdJwtWithoutKb, PrivateKeyMemory holderPrivateKey, string nonce, string audience) =>
+        SdJwtVpFixture.PresentWithKeyBindingAsync(
+            sdJwtWithoutKb, holderPrivateKey, nonce, audience,
+            TimeProvider, HeaderSerializer, PayloadSerializer, Pool, TestContext.CancellationToken);
 }

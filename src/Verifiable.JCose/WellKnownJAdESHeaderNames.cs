@@ -55,7 +55,7 @@ public static class WellKnownJAdESHeaderNames
     /// new JAdES signatures (JA-5.2.1-09); a validating surface must still parse and process it
     /// (JA-5.2.1-10) since pre-cutover signatures remain valid to verify.
     /// </summary>
-    public static readonly string SigT = Utf8Constants.ToInternedString(SigTUtf8);
+    public static string SigT { get; } = Utf8Constants.ToInternedString(SigTUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="X5tHashO"/>.</summary>
     public static ReadOnlySpan<byte> X5tHashOUtf8 => "x5t#o"u8;
@@ -69,7 +69,7 @@ public static class WellKnownJAdESHeaderNames
     /// identification options a JAdES signature must carry at least one of, alongside <c>x5t#S256</c>,
     /// <c>x5c</c>, and <see cref="SigX5ts"/> (JA-5.1.7-04).
     /// </summary>
-    public static readonly string X5tHashO = Utf8Constants.ToInternedString(X5tHashOUtf8);
+    public static string X5tHashO { get; } = Utf8Constants.ToInternedString(X5tHashOUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="SigX5ts"/>.</summary>
     public static ReadOnlySpan<byte> SigX5tsUtf8 => "sigX5ts"u8;
@@ -83,7 +83,7 @@ public static class WellKnownJAdESHeaderNames
     /// <see cref="X5tHashO"/>/<c>sigX5ts</c>'s four disjunctive signing-certificate-identification options
     /// (JA-5.1.7-04).
     /// </summary>
-    public static readonly string SigX5ts = Utf8Constants.ToInternedString(SigX5tsUtf8);
+    public static string SigX5ts { get; } = Utf8Constants.ToInternedString(SigX5tsUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="SrCms"/>.</summary>
     public static ReadOnlySpan<byte> SrCmsUtf8 => "srCms"u8;
@@ -95,7 +95,7 @@ public static class WellKnownJAdESHeaderNames
     /// element expresses a URI-typed commitment type with optional qualifiers (JA-5.2.3-03, -M1). Carried in
     /// the JWS Protected Header (JA-5.2.3-04).
     /// </summary>
-    public static readonly string SrCms = Utf8Constants.ToInternedString(SrCmsUtf8);
+    public static string SrCms { get; } = Utf8Constants.ToInternedString(SrCmsUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="SigPl"/>.</summary>
     public static ReadOnlySpan<byte> SigPlUtf8 => "sigPl"u8;
@@ -107,7 +107,7 @@ public static class WellKnownJAdESHeaderNames
     /// map (informative analogy only) qualifying the signer, carried in the JWS Protected Header
     /// (JA-5.2.4-03/-06).
     /// </summary>
-    public static readonly string SigPl = Utf8Constants.ToInternedString(SigPlUtf8);
+    public static string SigPl { get; } = Utf8Constants.ToInternedString(SigPlUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="SrAts"/>.</summary>
     public static ReadOnlySpan<byte> SrAtsUtf8 => "srAts"u8;
@@ -119,7 +119,7 @@ public static class WellKnownJAdESHeaderNames
     /// claimed attributes, Attribute-Authority-certified attributes, and/or third-party-signed assertions
     /// (JA-5.2.5-M1), never empty (JA-5.2.5-18). Carried in the JWS Protected Header (JA-5.2.5-03).
     /// </summary>
-    public static readonly string SrAts = Utf8Constants.ToInternedString(SrAtsUtf8);
+    public static string SrAts { get; } = Utf8Constants.ToInternedString(SrAtsUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="AdoTst"/>.</summary>
     public static ReadOnlySpan<byte> AdoTstUtf8 => "adoTst"u8;
@@ -132,7 +132,7 @@ public static class WellKnownJAdESHeaderNames
     /// Payload (JA-5.2.6-03). A <c>tstContainer</c>-shaped value (clause 5.4.3) that shall never carry a
     /// <c>canonAlg</c> member (JA-5.2.6-08). Carried in the JWS Protected Header (JA-5.2.6-04).
     /// </summary>
-    public static readonly string AdoTst = Utf8Constants.ToInternedString(AdoTstUtf8);
+    public static string AdoTst { get; } = Utf8Constants.ToInternedString(AdoTstUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="SigPId"/>.</summary>
     public static ReadOnlySpan<byte> SigPIdUtf8 => "sigPId"u8;
@@ -144,7 +144,7 @@ public static class WellKnownJAdESHeaderNames
     /// policy identifier (by digest) or an implied-policy indication (JA-5.2.7.1-02), qualifying the
     /// signature. Carried in the JWS Protected Header (JA-5.2.7.1-03).
     /// </summary>
-    public static readonly string SigPId = Utf8Constants.ToInternedString(SigPIdUtf8);
+    public static string SigPId { get; } = Utf8Constants.ToInternedString(SigPIdUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="SigD"/>.</summary>
     public static ReadOnlySpan<byte> SigDUtf8 => "sigD"u8;
@@ -161,7 +161,7 @@ public static class WellKnownJAdESHeaderNames
     /// facts, no dereferencing) and <c>ObjectIdByURI</c>/<c>ObjectIdByURIHash</c> (5.2.8.3.2/5.2.8.3.3, which
     /// share the dereferencing obligation centralized at 5.2.8.3.1).
     /// </summary>
-    public static readonly string SigD = Utf8Constants.ToInternedString(SigDUtf8);
+    public static string SigD { get; } = Utf8Constants.ToInternedString(SigDUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="MId"/>.</summary>
     public static ReadOnlySpan<byte> MIdUtf8 => "mId"u8;
@@ -173,7 +173,7 @@ public static class WellKnownJAdESHeaderNames
     /// referencing/processing mechanism (JA-5.2.8.1-14) — <c>http://uri.etsi.org/19182/HttpHeaders</c>,
     /// <c>http://uri.etsi.org/19182/ObjectIdByURI</c>, or <c>http://uri.etsi.org/19182/ObjectIdByURIHash</c>.
     /// </summary>
-    public static readonly string MId = Utf8Constants.ToInternedString(MIdUtf8);
+    public static string MId { get; } = Utf8Constants.ToInternedString(MIdUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Pars"/>.</summary>
     public static ReadOnlySpan<byte> ParsUtf8 => "pars"u8;
@@ -184,7 +184,7 @@ public static class WellKnownJAdESHeaderNames
     /// ETSI TS 119 182-1 V1.2.1, clause 5.2.8.1</see> (JA-5.2.8.1-15). Always present; a non-empty string
     /// array whose per-mechanism contents reference the detached data objects (JA-5.2.8.1-16/-17).
     /// </summary>
-    public static readonly string Pars = Utf8Constants.ToInternedString(ParsUtf8);
+    public static string Pars { get; } = Utf8Constants.ToInternedString(ParsUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="HashM"/>.</summary>
     public static ReadOnlySpan<byte> HashMUtf8 => "hashM"u8;
@@ -196,7 +196,7 @@ public static class WellKnownJAdESHeaderNames
     /// 7518 (JA-5.2.8.1-19); presence is conditional on the referencing mechanism (JA-5.2.8.1-20) and paired
     /// with <see cref="HashV"/> — each requires the other when present (JA-5.2.8.1-21/-25).
     /// </summary>
-    public static readonly string HashM = Utf8Constants.ToInternedString(HashMUtf8);
+    public static string HashM { get; } = Utf8Constants.ToInternedString(HashMUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="HashV"/>.</summary>
     public static ReadOnlySpan<byte> HashVUtf8 => "hashV"u8;
@@ -208,7 +208,7 @@ public static class WellKnownJAdESHeaderNames
     /// array, one entry per <see cref="Pars"/> position (JA-5.2.8.1-23); presence is conditional on the
     /// referencing mechanism (JA-5.2.8.1-24) and paired with <see cref="HashM"/>.
     /// </summary>
-    public static readonly string HashV = Utf8Constants.ToInternedString(HashVUtf8);
+    public static string HashV { get; } = Utf8Constants.ToInternedString(HashVUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Ctys"/>.</summary>
     public static ReadOnlySpan<byte> CtysUtf8 => "ctys"u8;
@@ -221,7 +221,7 @@ public static class WellKnownJAdESHeaderNames
     /// the same semantics as <see cref="WellKnownJoseHeaderNames.Cty"/> per referenced object
     /// (JA-5.2.8.1-27/-28/-29).
     /// </summary>
-    public static readonly string Ctys = Utf8Constants.ToInternedString(CtysUtf8);
+    public static string Ctys { get; } = Utf8Constants.ToInternedString(CtysUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="EtsiU"/>.</summary>
     public static ReadOnlySpan<byte> EtsiUUtf8 => "etsiU"u8;
@@ -235,7 +235,7 @@ public static class WellKnownJAdESHeaderNames
     /// MODEL and dual-mode carriage are out of this file's scope; only the wire
     /// name is registered here.
     /// </summary>
-    public static readonly string EtsiU = Utf8Constants.ToInternedString(EtsiUUtf8);
+    public static string EtsiU { get; } = Utf8Constants.ToInternedString(EtsiUUtf8);
 
 
     /// <summary>Whether <paramref name="name"/> is <see cref="SigT"/>.</summary>

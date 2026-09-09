@@ -128,7 +128,7 @@ internal sealed class JAdESSignatureFactsTests
         using JAdESSignatureCreationResult creationResult = await JAdESSignatureCreation.SignAsync(
             headers, new JAdESAttachedPayloadInput(new byte[] { 0x01, 0x02, 0x03 }), unsignedHeaders: null,
             JAdESProtectedHeaderJson.Encode, JAdESEtsiUJson.Encode, TestSetup.Base64UrlEncoder,
-            privateKey, MicrosoftCryptographicFunctions.SignP256Async,
+            privateKey, MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             dereference: null, dereferenceContext: null, unknownMechanismHandler: null,
             BaseMemoryPool.Shared, cancellationToken: cancellationToken).ConfigureAwait(false);
 

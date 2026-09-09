@@ -86,19 +86,7 @@ internal sealed class TimeProviderInjectionRespectTests
         SelectAttestationVerifierDelegate selectVerifier = Fido2AttestationSelectors.FromFormats(
             (WellKnownWebAuthnAttestationFormats.None, NoneAttestation.Build()));
 
-        Fido2RegistrationOutcome outcomeViaTimeProvider = await Fido2RegistrationVerifier.VerifyAsync(
-            WellKnownWebAuthnAttestationFormats.None,
-            attestationStatement: new byte[] { Fido2RegistrationVerifierTests.CanonicalEmptyMap },
-            authDataBytes,
-            clientDataJson,
-            ceremonyInput,
-            selectVerifier,
-            Fido2RegistrationVerifierTests.AlwaysUnique,
-            trustAnchors: [],
-            timeProvider,
-            correlationId: "time-provider-injection-respect-registration-via-provider",
-            BaseMemoryPool.Shared,
-            cancellationToken: TestContext.CancellationToken);
+        Fido2RegistrationOutcome outcomeViaTimeProvider = await Fido2RegistrationVerifier.VerifyAsync(WellKnownWebAuthnAttestationFormats.None, attestationStatement: new byte[] { Fido2RegistrationVerifierTests.CanonicalEmptyMap }, authDataBytes, clientDataJson, ceremonyInput, selectVerifier, Fido2RegistrationVerifierTests.AlwaysUnique, trustAnchors: [], timeProvider, correlationId: "time-provider-injection-respect-registration-via-provider", BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken);
 
         Fido2RegistrationOutcome outcomeViaExplicitInstant = await Fido2RegistrationVerifier.VerifyAsync(
             WellKnownWebAuthnAttestationFormats.None,
@@ -190,7 +178,7 @@ internal sealed class TimeProviderInjectionRespectTests
         bool alreadyExpiredSignatureVerified = await FederationTestRing.VerifyAsync(
             node, alreadyExpired.CompactJws, TestContext.CancellationToken).ConfigureAwait(false);
 
-        EntityStatementValidator validator = EntityStatementValidator.Default();
+        EntityStatementValidator validator = EntityStatementValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         ClaimIssueResult notYetExpiredResult = await validator.ValidateAsync(
             new EntityStatementValidationContext

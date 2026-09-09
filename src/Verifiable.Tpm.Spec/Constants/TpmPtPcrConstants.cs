@@ -4,13 +4,13 @@ using System.Diagnostics.CodeAnalysis;
 namespace Verifiable.Tpm.Spec.Constants;
 
 /// <summary>
-/// TPM_PT_PCR constants (Table 31).
+/// TPM_PT_PCR constants (Table 29).
 /// </summary>
 /// <remarks>
 /// <para>
 /// Specification:
 /// <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>
-/// (Part 2: Structures, section "6 Constants", Table 31).
+/// (Part 2: Structures, section "6 Constants", Table 29).
 /// </para>
 /// </remarks>
 [SuppressMessage("Design", "CA1069:Enums values should not be duplicated", Justification = "TPM 2.0 specification allows duplicate values for compatibility and other reasons.")]

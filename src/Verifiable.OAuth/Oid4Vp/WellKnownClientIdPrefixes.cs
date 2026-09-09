@@ -24,28 +24,28 @@ public static class WellKnownClientIdPrefixes
     /// URI. Requests using this prefix cannot be signed — no trusted key is available.
     /// Not usable under HAIP 1.0.
     /// </summary>
-    public static readonly ClientIdPrefix RedirectUri = new("redirect_uri");
+    public static ClientIdPrefix RedirectUri { get; } = new("redirect_uri");
 
     /// <summary>
     /// The <c>decentralized_identifier</c> prefix. The Client Identifier is a DID.
     /// The JAR must be signed with a key from the DID Document's
     /// <c>verificationMethod</c> property.
     /// </summary>
-    public static readonly ClientIdPrefix DecentralizedIdentifier = new("decentralized_identifier");
+    public static ClientIdPrefix DecentralizedIdentifier { get; } = new("decentralized_identifier");
 
     /// <summary>
     /// The <c>verifier_attestation</c> prefix. The JAR header carries a Verifier
     /// Attestation JWT in the <c>jwt</c> JOSE header parameter. The JAR must be
     /// signed with the key in the attestation's <c>cnf</c> claim.
     /// </summary>
-    public static readonly ClientIdPrefix VerifierAttestation = new("verifier_attestation");
+    public static ClientIdPrefix VerifierAttestation { get; } = new("verifier_attestation");
 
     /// <summary>
     /// The <c>x509_san_dns</c> prefix. The Client Identifier is a DNS name that
     /// must match a DNS SAN entry in the leaf X.509 certificate carried in the
     /// <c>x5c</c> JOSE header of the signed JAR.
     /// </summary>
-    public static readonly ClientIdPrefix X509SanDns = new("x509_san_dns");
+    public static ClientIdPrefix X509SanDns { get; } = new("x509_san_dns");
 
     /// <summary>
     /// The <c>x509_hash</c> prefix. The Client Identifier is the base64url-encoded
@@ -54,14 +54,14 @@ public static class WellKnownClientIdPrefixes
     /// requests; HAIP additionally forbids a self-signed signing certificate and
     /// forbids carrying the trust anchor in <c>x5c</c>.
     /// </summary>
-    public static readonly ClientIdPrefix X509Hash = new("x509_hash");
+    public static ClientIdPrefix X509Hash { get; } = new("x509_hash");
 
     /// <summary>
     /// The <c>openid_federation</c> prefix. The Client Identifier is an OpenID
     /// Federation Entity Identifier. The Verifier metadata is obtained from the
     /// Trust Chain.
     /// </summary>
-    public static readonly ClientIdPrefix OpenIdFederation = new("openid_federation");
+    public static ClientIdPrefix OpenIdFederation { get; } = new("openid_federation");
 
 
     /// <summary>

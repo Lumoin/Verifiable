@@ -144,7 +144,7 @@ public readonly struct BufferKind: IEquatable<BufferKind>
     //security-envelope or credential roles. Domain-specific kinds (JWT/CWT headers and payloads,
     //Verifiable Credential / Presentation, ...) are added by the layer that owns those formats through
     //the Create(>=1000) seam — that extensibility is the whole point of the discriminator pattern.
-    private static List<BufferKind> s_kinds { get; } =
+    private static List<BufferKind> RegisteredKinds { get; } =
     [
         Unknown, Json, Cbor, XmlCanonical, XmlDigestInput, XmlDecodedContent
     ];
@@ -153,7 +153,7 @@ public readonly struct BufferKind: IEquatable<BufferKind>
     /// <summary>
     /// Gets all registered buffer kind values.
     /// </summary>
-    public static IReadOnlyList<BufferKind> All => s_kinds.AsReadOnly();
+    public static IReadOnlyList<BufferKind> All => RegisteredKinds.AsReadOnly();
 
 
     /// <summary>
@@ -170,16 +170,16 @@ public readonly struct BufferKind: IEquatable<BufferKind>
     /// </remarks>
     public static BufferKind Create(int kind)
     {
-        for(int i = 0; i < s_kinds.Count; ++i)
+        for(int i = 0; i < RegisteredKinds.Count; ++i)
         {
-            if(s_kinds[i].Kind == kind)
+            if(RegisteredKinds[i].Kind == kind)
             {
                 throw new ArgumentException($"Buffer kind code '{kind}' already exists.", nameof(kind));
             }
         }
 
         var newKind = new BufferKind(kind);
-        s_kinds.Add(newKind);
+        RegisteredKinds.Add(newKind);
 
         return newKind;
     }

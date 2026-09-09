@@ -18,8 +18,8 @@ internal sealed class Rfc7523AssertionValidationTests
     private const string Audience = "https://rs.example.com/";
     private const string Subject = "U019488227";
 
-    private static readonly DateTimeOffset Now = DateTimeOffset.FromUnixTimeSeconds(1_311_280_970);
-    private static readonly TimeSpan Skew = TimeSpan.FromSeconds(60);
+    private static DateTimeOffset Now { get; } = DateTimeOffset.FromUnixTimeSeconds(1_311_280_970);
+    private static TimeSpan Skew { get; } = TimeSpan.FromSeconds(60);
 
 
     private static JwtPayload ValidPayload() =>

@@ -22,7 +22,7 @@ public static class WellKnownPublicKeyCredentialTypes
     /// <see href="https://www.w3.org/TR/webauthn-3/#enum-credentialType">W3C Web Authentication
     /// Level 3, section 5.8.2: Credential Type Enumeration (enum <c>PublicKeyCredentialType</c>)</see>.
     /// </remarks>
-    public static readonly string PublicKey = Utf8Constants.ToInternedString(PublicKeyUtf8);
+    public static string PublicKey { get; } = Utf8Constants.ToInternedString(PublicKeyUtf8);
 
 
     /// <summary>

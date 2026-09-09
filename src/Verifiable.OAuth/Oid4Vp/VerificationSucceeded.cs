@@ -1,17 +1,21 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using Verifiable.Core.Dcql;
+using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Core.StatusList;
 using Verifiable.OAuth;
+using Verifiable.OAuth.Oid4Vp.Server;
 
 namespace Verifiable.OAuth.Oid4Vp;
 
 /// <summary>
-/// Carries the verified claims extracted from the vp_token.
+/// Carries the verified credentials extracted from the vp_token.
 /// Transitions from <see cref="ResponseReceived"/> to <see cref="PresentationVerified"/>.
 /// </summary>
-/// <param name="Claims">
-/// The verified and extracted claims, keyed by DCQL credential query identifier.
+/// <param name="Credentials">
+/// The verified credentials, keyed by the <see cref="CredentialQueryId"/> each answered — one
+/// entry per presented credential.
 /// </param>
 /// <param name="VerifiedAt">The UTC instant verification completed.</param>
 /// <param name="RedirectUri">
@@ -21,7 +25,7 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// </param>
 [DebuggerDisplay("VerificationSucceeded VerifiedAt={VerifiedAt}")]
 public sealed record VerificationSucceeded(
-    IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> Claims,
+    IReadOnlyDictionary<CredentialQueryId, VpCredentialClaims> Credentials,
     DateTimeOffset VerifiedAt,
     Uri? RedirectUri = null): FlowInput
 {
@@ -52,7 +56,7 @@ public sealed record VerificationSucceeded(
     /// never reaches this surface as a "valid" outcome.
     /// </para>
     /// </remarks>
-    public IReadOnlyDictionary<string, CredentialStatusOutcome>? CredentialStatuses { get; init; }
+    public IReadOnlyDictionary<CredentialQueryId, CredentialStatusOutcome>? CredentialStatuses { get; init; }
 
     /// <inheritdoc/>
     public bool Equals(VerificationSucceeded? other)
@@ -68,11 +72,11 @@ public sealed record VerificationSucceeded(
         }
 
         return VerifiedAt == other.VerifiedAt
-            && ReferenceEquals(Claims, other.Claims)
+            && ReferenceEquals(Credentials, other.Credentials)
             && ReferenceEquals(CredentialStatuses, other.CredentialStatuses)
             && RedirectUri == other.RedirectUri;
     }
 
     /// <inheritdoc/>
-    public override int GetHashCode() => HashCode.Combine(Claims, VerifiedAt, RedirectUri, CredentialStatuses);
+    public override int GetHashCode() => HashCode.Combine(Credentials, VerifiedAt, RedirectUri, CredentialStatuses);
 }

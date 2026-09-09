@@ -31,8 +31,8 @@ namespace Verifiable.Tests.Apdu;
 [TestClass]
 internal sealed class ApduCryptoEventSinkForwardingTests
 {
-    private static readonly byte[] ChipIdentifier = System.Text.Encoding.ASCII.GetBytes("L898902C<3");
-    private static readonly byte[] ChipChallenge = Convert.FromHexString("0001020304050607");
+    private static byte[] ChipIdentifier { get; } = System.Text.Encoding.ASCII.GetBytes("L898902C<3");
+    private static byte[] ChipChallenge { get; } = Convert.FromHexString("0001020304050607");
 
 
     public required TestContext TestContext { get; set; }

@@ -1,4 +1,3 @@
-using System.Collections.Immutable;
 using System.Diagnostics;
 
 namespace Verifiable.OAuth.Client;
@@ -10,35 +9,23 @@ namespace Verifiable.OAuth.Client;
 /// deferred credential polling.
 /// </summary>
 /// <remarks>
-/// No current consumer reads this slot — it ships with an empty default
-/// and the test transport populates it as zero entries. The slot
-/// exists so the committed-future work (DPoP, OID4VCI) doesn't
-/// require a transport-shape refactor.
+/// A thin view over <see cref="Headers"/> (an <see cref="HttpHeaderSet"/>) — the
+/// case-insensitive, multi-valued storage lives there.
 /// </remarks>
-[DebuggerDisplay("ResponseHeaders ({Values.Count} headers)")]
+[DebuggerDisplay("ResponseHeaders ({Headers.Count} headers)")]
 public sealed record ResponseHeaders
 {
-    /// <summary>The header name-to-value map.</summary>
-    public ImmutableDictionary<string, string> Values { get; init; } =
-        ImmutableDictionary<string, string>.Empty;
+    /// <summary>The underlying header set.</summary>
+    public required HttpHeaderSet Headers { get; init; }
 
     /// <summary>The empty header set.</summary>
-    public static ResponseHeaders Empty { get; } = new();
+    public static ResponseHeaders Empty { get; } = new() { Headers = HttpHeaderSet.Empty };
 
     /// <summary>
-    /// Returns the value for <paramref name="name"/> if present, otherwise
+    /// Returns the first value for <paramref name="name"/> if present, otherwise
     /// <see langword="null"/>. Name comparison is case-insensitive per
     /// RFC 9110 §5.1.
     /// </summary>
-    public string? TryGetSingle(string name)
-    {
-        foreach(KeyValuePair<string, string> pair in Values)
-        {
-            if(string.Equals(pair.Key, name, StringComparison.OrdinalIgnoreCase))
-            {
-                return pair.Value;
-            }
-        }
-        return null;
-    }
+    public string? TryGetSingle(string name) =>
+        Headers.TryGetValue(name, out string? value) ? value : null;
 }

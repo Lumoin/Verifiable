@@ -1,8 +1,9 @@
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Formats.Asn1;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using System.Text;
+using Verifiable.Cbor;
 using Verifiable.Cbor.Mdoc;
 using Verifiable.Cryptography;
 using Verifiable.Fido2;
@@ -194,7 +195,7 @@ internal static class Fido2TestVectors
     /// </summary>
     public static ReadCredentialPublicKeyDelegate TestCredentialPublicKeyReader { get; } = source =>
     {
-        var reader = new CborReader(source, CborConformanceMode.Lax);
+        var reader = new CborReader(source, CborOptions.Lax);
         CoseKey coseKey = MdocCborCoseKeyReader.ReadFromReader(reader, out IReadOnlyList<int> labels);
         int bytesConsumed = source.Length - reader.BytesRemaining;
 
@@ -215,7 +216,9 @@ internal static class Fido2TestVectors
     {
         ArgumentNullException.ThrowIfNull(entries);
 
-        var writer = new CborWriter(CborConformanceMode.Lax);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Lax);
+
         writer.WriteStartMap(entries.Length);
         foreach((int label, Action<CborWriter> writeValue) in entries)
         {
@@ -225,7 +228,7 @@ internal static class Fido2TestVectors
 
         writer.WriteEndMap();
 
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 

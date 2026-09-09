@@ -33,7 +33,7 @@ public static class Fido2ClaimIds
     /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-registering-a-new-credential">W3C Web
     /// Authentication Level 3, section 7.1: Registering a New Credential</see>, step 7.
     /// </remarks>
-    public static readonly ClaimId Fido2RegistrationClientDataType = ClaimId.Create(1200, "Fido2RegistrationClientDataType");
+    public static ClaimId Fido2RegistrationClientDataType { get; } = ClaimId.Create(1200, "Fido2RegistrationClientDataType");
 
     /// <summary>
     /// The registration client data <c>challenge</c> matches the expected challenge.
@@ -42,7 +42,7 @@ public static class Fido2ClaimIds
     /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-registering-a-new-credential">W3C Web
     /// Authentication Level 3, section 7.1: Registering a New Credential</see>, step 8.
     /// </remarks>
-    public static readonly ClaimId Fido2RegistrationChallenge = ClaimId.Create(1201, "Fido2RegistrationChallenge");
+    public static ClaimId Fido2RegistrationChallenge { get; } = ClaimId.Create(1201, "Fido2RegistrationChallenge");
 
     /// <summary>
     /// The registration client data <c>origin</c> is one of the expected origins.
@@ -51,7 +51,7 @@ public static class Fido2ClaimIds
     /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-registering-a-new-credential">W3C Web
     /// Authentication Level 3, section 7.1: Registering a New Credential</see>, step 9.
     /// </remarks>
-    public static readonly ClaimId Fido2RegistrationOrigin = ClaimId.Create(1202, "Fido2RegistrationOrigin");
+    public static ClaimId Fido2RegistrationOrigin { get; } = ClaimId.Create(1202, "Fido2RegistrationOrigin");
 
     /// <summary>
     /// The registration client data <c>crossOrigin</c> indicator is acceptable under the
@@ -61,7 +61,7 @@ public static class Fido2ClaimIds
     /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-registering-a-new-credential">W3C Web
     /// Authentication Level 3, section 7.1: Registering a New Credential</see>, step 10.
     /// </remarks>
-    public static readonly ClaimId Fido2RegistrationCrossOrigin = ClaimId.Create(1203, "Fido2RegistrationCrossOrigin");
+    public static ClaimId Fido2RegistrationCrossOrigin { get; } = ClaimId.Create(1203, "Fido2RegistrationCrossOrigin");
 
     /// <summary>
     /// The registration client data <c>topOrigin</c>, when present, is one of the expected top
@@ -71,7 +71,7 @@ public static class Fido2ClaimIds
     /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-registering-a-new-credential">W3C Web
     /// Authentication Level 3, section 7.1: Registering a New Credential</see>, step 11.
     /// </remarks>
-    public static readonly ClaimId Fido2RegistrationTopOrigin = ClaimId.Create(1204, "Fido2RegistrationTopOrigin");
+    public static ClaimId Fido2RegistrationTopOrigin { get; } = ClaimId.Create(1204, "Fido2RegistrationTopOrigin");
 
     /// <summary>
     /// The registration <c>authData.rpIdHash</c> matches the expected relying party ID hash.
@@ -80,7 +80,7 @@ public static class Fido2ClaimIds
     /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-registering-a-new-credential">W3C Web
     /// Authentication Level 3, section 7.1: Registering a New Credential</see>, step 14.
     /// </remarks>
-    public static readonly ClaimId Fido2RegistrationRpIdHash = ClaimId.Create(1205, "Fido2RegistrationRpIdHash");
+    public static ClaimId Fido2RegistrationRpIdHash { get; } = ClaimId.Create(1205, "Fido2RegistrationRpIdHash");
 
     /// <summary>
     /// The registration <c>authData</c> <c>UP</c> (user present) bit is set, unless the caller
@@ -90,7 +90,7 @@ public static class Fido2ClaimIds
     /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-registering-a-new-credential">W3C Web
     /// Authentication Level 3, section 7.1: Registering a New Credential</see>, step 15.
     /// </remarks>
-    public static readonly ClaimId Fido2RegistrationUserPresent = ClaimId.Create(1206, "Fido2RegistrationUserPresent");
+    public static ClaimId Fido2RegistrationUserPresent { get; } = ClaimId.Create(1206, "Fido2RegistrationUserPresent");
 
     /// <summary>
     /// The registration <c>authData</c> <c>UV</c> (user verified) bit is set when the relying
@@ -100,7 +100,7 @@ public static class Fido2ClaimIds
     /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-registering-a-new-credential">W3C Web
     /// Authentication Level 3, section 7.1: Registering a New Credential</see>, step 16.
     /// </remarks>
-    public static readonly ClaimId Fido2RegistrationUserVerified = ClaimId.Create(1207, "Fido2RegistrationUserVerified");
+    public static ClaimId Fido2RegistrationUserVerified { get; } = ClaimId.Create(1207, "Fido2RegistrationUserVerified");
 
     /// <summary>
     /// The registration <c>authData</c> backup flags are internally consistent: the <c>BS</c>
@@ -110,7 +110,7 @@ public static class Fido2ClaimIds
     /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-registering-a-new-credential">W3C Web
     /// Authentication Level 3, section 7.1: Registering a New Credential</see>, step 17.
     /// </remarks>
-    public static readonly ClaimId Fido2RegistrationBackupFlagsInvariant = ClaimId.Create(1208, "Fido2RegistrationBackupFlagsInvariant");
+    public static ClaimId Fido2RegistrationBackupFlagsInvariant { get; } = ClaimId.Create(1208, "Fido2RegistrationBackupFlagsInvariant");
 
     /// <summary>
     /// The registration attested credential public key's <c>alg</c> is one of the algorithms
@@ -120,7 +120,7 @@ public static class Fido2ClaimIds
     /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-registering-a-new-credential">W3C Web
     /// Authentication Level 3, section 7.1: Registering a New Credential</see>, step 20.
     /// </remarks>
-    public static readonly ClaimId Fido2RegistrationCredentialAlgorithm = ClaimId.Create(1209, "Fido2RegistrationCredentialAlgorithm");
+    public static ClaimId Fido2RegistrationCredentialAlgorithm { get; } = ClaimId.Create(1209, "Fido2RegistrationCredentialAlgorithm");
 
     /// <summary>
     /// The registration attested credential's <c>credentialId</c> length is within the
@@ -130,7 +130,7 @@ public static class Fido2ClaimIds
     /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-registering-a-new-credential">W3C Web
     /// Authentication Level 3, section 7.1: Registering a New Credential</see>, step 25.
     /// </remarks>
-    public static readonly ClaimId Fido2RegistrationCredentialIdLength = ClaimId.Create(1210, "Fido2RegistrationCredentialIdLength");
+    public static ClaimId Fido2RegistrationCredentialIdLength { get; } = ClaimId.Create(1210, "Fido2RegistrationCredentialIdLength");
 
     /// <summary>
     /// The registration attestation statement was assessed as trustworthy under the relying
@@ -140,7 +140,7 @@ public static class Fido2ClaimIds
     /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-registering-a-new-credential">W3C Web
     /// Authentication Level 3, section 7.1: Registering a New Credential</see>, step 24.
     /// </remarks>
-    public static readonly ClaimId Fido2RegistrationAttestationTrustworthy = ClaimId.Create(1211, "Fido2RegistrationAttestationTrustworthy");
+    public static ClaimId Fido2RegistrationAttestationTrustworthy { get; } = ClaimId.Create(1211, "Fido2RegistrationAttestationTrustworthy");
 
     /// <summary>
     /// The registration <c>credentialId</c> is not yet registered to any other user.
@@ -154,7 +154,7 @@ public static class Fido2ClaimIds
     /// storage can answer it; <see cref="Fido2RegistrationVerifier.VerifyAsync"/> merges this
     /// claim into the <see cref="ClaimIssueResult"/> it returns.
     /// </remarks>
-    public static readonly ClaimId Fido2RegistrationCredentialIdUnique = ClaimId.Create(1212, "Fido2RegistrationCredentialIdUnique");
+    public static ClaimId Fido2RegistrationCredentialIdUnique { get; } = ClaimId.Create(1212, "Fido2RegistrationCredentialIdUnique");
 
     /// <summary>
     /// The registration attestation's trust path did not reach a relying-party-configured anchor,
@@ -176,7 +176,7 @@ public static class Fido2ClaimIds
     /// attestation to self-attestation-equivalent, while this claim's step-29 clause downgrades to
     /// none-equivalent.
     /// </remarks>
-    public static readonly ClaimId Fido2RegistrationAttestationDowngraded = ClaimId.Create(1213, "Fido2RegistrationAttestationDowngraded");
+    public static ClaimId Fido2RegistrationAttestationDowngraded { get; } = ClaimId.Create(1213, "Fido2RegistrationAttestationDowngraded");
 
 
 
@@ -187,7 +187,7 @@ public static class Fido2ClaimIds
     /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-verifying-assertion">W3C Web
     /// Authentication Level 3, section 7.2: Verifying an Authentication Assertion</see>, step 10.
     /// </remarks>
-    public static readonly ClaimId Fido2AssertionClientDataType = ClaimId.Create(1220, "Fido2AssertionClientDataType");
+    public static ClaimId Fido2AssertionClientDataType { get; } = ClaimId.Create(1220, "Fido2AssertionClientDataType");
 
     /// <summary>
     /// The assertion client data <c>challenge</c> matches the expected challenge.
@@ -196,7 +196,7 @@ public static class Fido2ClaimIds
     /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-verifying-assertion">W3C Web
     /// Authentication Level 3, section 7.2: Verifying an Authentication Assertion</see>, step 11.
     /// </remarks>
-    public static readonly ClaimId Fido2AssertionChallenge = ClaimId.Create(1221, "Fido2AssertionChallenge");
+    public static ClaimId Fido2AssertionChallenge { get; } = ClaimId.Create(1221, "Fido2AssertionChallenge");
 
     /// <summary>
     /// The assertion client data <c>origin</c> is one of the expected origins.
@@ -205,7 +205,7 @@ public static class Fido2ClaimIds
     /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-verifying-assertion">W3C Web
     /// Authentication Level 3, section 7.2: Verifying an Authentication Assertion</see>, step 12.
     /// </remarks>
-    public static readonly ClaimId Fido2AssertionOrigin = ClaimId.Create(1222, "Fido2AssertionOrigin");
+    public static ClaimId Fido2AssertionOrigin { get; } = ClaimId.Create(1222, "Fido2AssertionOrigin");
 
     /// <summary>
     /// The assertion client data <c>crossOrigin</c> indicator is acceptable under the relying
@@ -215,7 +215,7 @@ public static class Fido2ClaimIds
     /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-verifying-assertion">W3C Web
     /// Authentication Level 3, section 7.2: Verifying an Authentication Assertion</see>, step 13.
     /// </remarks>
-    public static readonly ClaimId Fido2AssertionCrossOrigin = ClaimId.Create(1223, "Fido2AssertionCrossOrigin");
+    public static ClaimId Fido2AssertionCrossOrigin { get; } = ClaimId.Create(1223, "Fido2AssertionCrossOrigin");
 
     /// <summary>
     /// The assertion client data <c>topOrigin</c>, when present, is one of the expected top
@@ -225,7 +225,7 @@ public static class Fido2ClaimIds
     /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-verifying-assertion">W3C Web
     /// Authentication Level 3, section 7.2: Verifying an Authentication Assertion</see>, step 14.
     /// </remarks>
-    public static readonly ClaimId Fido2AssertionTopOrigin = ClaimId.Create(1224, "Fido2AssertionTopOrigin");
+    public static ClaimId Fido2AssertionTopOrigin { get; } = ClaimId.Create(1224, "Fido2AssertionTopOrigin");
 
     /// <summary>
     /// The assertion <c>authData.rpIdHash</c> matches the expected relying party ID hash.
@@ -234,7 +234,7 @@ public static class Fido2ClaimIds
     /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-verifying-assertion">W3C Web
     /// Authentication Level 3, section 7.2: Verifying an Authentication Assertion</see>, step 15.
     /// </remarks>
-    public static readonly ClaimId Fido2AssertionRpIdHash = ClaimId.Create(1225, "Fido2AssertionRpIdHash");
+    public static ClaimId Fido2AssertionRpIdHash { get; } = ClaimId.Create(1225, "Fido2AssertionRpIdHash");
 
     /// <summary>
     /// The assertion <c>authData</c> <c>UP</c> (user present) bit is set.
@@ -245,7 +245,7 @@ public static class Fido2ClaimIds
     /// Unlike registration's step 15, the assertion step carries no conditional-mediation
     /// exception — the specification text requires this bit unconditionally.
     /// </remarks>
-    public static readonly ClaimId Fido2AssertionUserPresent = ClaimId.Create(1226, "Fido2AssertionUserPresent");
+    public static ClaimId Fido2AssertionUserPresent { get; } = ClaimId.Create(1226, "Fido2AssertionUserPresent");
 
     /// <summary>
     /// The assertion <c>authData</c> <c>UV</c> (user verified) bit is set when the relying
@@ -255,7 +255,7 @@ public static class Fido2ClaimIds
     /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-verifying-assertion">W3C Web
     /// Authentication Level 3, section 7.2: Verifying an Authentication Assertion</see>, step 17.
     /// </remarks>
-    public static readonly ClaimId Fido2AssertionUserVerified = ClaimId.Create(1227, "Fido2AssertionUserVerified");
+    public static ClaimId Fido2AssertionUserVerified { get; } = ClaimId.Create(1227, "Fido2AssertionUserVerified");
 
     /// <summary>
     /// The assertion <c>authData</c> backup flags are internally consistent: the <c>BS</c>
@@ -265,7 +265,7 @@ public static class Fido2ClaimIds
     /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-verifying-assertion">W3C Web
     /// Authentication Level 3, section 7.2: Verifying an Authentication Assertion</see>, step 18.
     /// </remarks>
-    public static readonly ClaimId Fido2AssertionBackupFlagsInvariant = ClaimId.Create(1228, "Fido2AssertionBackupFlagsInvariant");
+    public static ClaimId Fido2AssertionBackupFlagsInvariant { get; } = ClaimId.Create(1228, "Fido2AssertionBackupFlagsInvariant");
 
     /// <summary>
     /// The asserted credential identifier is one of the relying party's allowed credentials, or
@@ -275,7 +275,7 @@ public static class Fido2ClaimIds
     /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-verifying-assertion">W3C Web
     /// Authentication Level 3, section 7.2: Verifying an Authentication Assertion</see>, step 5.
     /// </remarks>
-    public static readonly ClaimId Fido2AssertionAllowedCredentials = ClaimId.Create(1229, "Fido2AssertionAllowedCredentials");
+    public static ClaimId Fido2AssertionAllowedCredentials { get; } = ClaimId.Create(1229, "Fido2AssertionAllowedCredentials");
 
     /// <summary>
     /// The assertion's <c>signCount</c> does not regress against the stored counter — a
@@ -285,7 +285,7 @@ public static class Fido2ClaimIds
     /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-verifying-assertion">W3C Web
     /// Authentication Level 3, section 7.2: Verifying an Authentication Assertion</see>, step 22.
     /// </remarks>
-    public static readonly ClaimId Fido2AssertionSignCountRegression = ClaimId.Create(1230, "Fido2AssertionSignCountRegression");
+    public static ClaimId Fido2AssertionSignCountRegression { get; } = ClaimId.Create(1230, "Fido2AssertionSignCountRegression");
 
     /// <summary>
     /// The assertion's current backup eligibility and backup state are consistent with the
@@ -295,7 +295,7 @@ public static class Fido2ClaimIds
     /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-verifying-assertion">W3C Web
     /// Authentication Level 3, section 7.2: Verifying an Authentication Assertion</see>, step 19.
     /// </remarks>
-    public static readonly ClaimId Fido2AssertionBackupStateConsistency = ClaimId.Create(1231, "Fido2AssertionBackupStateConsistency");
+    public static ClaimId Fido2AssertionBackupStateConsistency { get; } = ClaimId.Create(1231, "Fido2AssertionBackupStateConsistency");
 
     /// <summary>
     /// The credential's owning user account is confirmed: a present <c>response.userHandle</c>
@@ -315,7 +315,7 @@ public static class Fido2ClaimIds
     /// <see cref="Fido2ClaimIds.Fido2AssertionAllowedCredentials"/>'s own discoverable-credential
     /// reading of that field.
     /// </remarks>
-    public static readonly ClaimId Fido2AssertionUserHandle = ClaimId.Create(1232, "Fido2AssertionUserHandle");
+    public static ClaimId Fido2AssertionUserHandle { get; } = ClaimId.Create(1232, "Fido2AssertionUserHandle");
 
     /// <summary>
     /// The assertion <c>authData</c> carries neither the <c>AT</c> flag nor an attested credential
@@ -334,7 +334,7 @@ public static class Fido2ClaimIds
     /// authenticator (or attacker) that replays a <c>makeCredential</c>-shaped <c>authData</c>
     /// structure into a <c>getAssertion</c> response.
     /// </remarks>
-    public static readonly ClaimId Fido2AssertionNoAttestedCredentialData = ClaimId.Create(1233, "Fido2AssertionNoAttestedCredentialData");
+    public static ClaimId Fido2AssertionNoAttestedCredentialData { get; } = ClaimId.Create(1233, "Fido2AssertionNoAttestedCredentialData");
 
     /// <summary>
     /// The stored credential record's <c>uvInitialized</c> was <see langword="false"/> and the
@@ -355,7 +355,7 @@ public static class Fido2ClaimIds
     /// logic and does not mutate the stored record itself; the relying party's own persistence
     /// code decides.
     /// </remarks>
-    public static readonly ClaimId Fido2AssertionUvInitializedUpgrade = ClaimId.Create(1234, "Fido2AssertionUvInitializedUpgrade");
+    public static ClaimId Fido2AssertionUvInitializedUpgrade { get; } = ClaimId.Create(1234, "Fido2AssertionUvInitializedUpgrade");
 
 
 
@@ -373,7 +373,7 @@ public static class Fido2ClaimIds
     /// Extensions</see>'s "Relying Parties MUST be prepared to handle cases where some or all of
     /// those extensions are ignored".
     /// </remarks>
-    public static readonly ClaimId Fido2RegistrationExtensionOutputs = ClaimId.Create(1240, "Fido2RegistrationExtensionOutputs");
+    public static ClaimId Fido2RegistrationExtensionOutputs { get; } = ClaimId.Create(1240, "Fido2RegistrationExtensionOutputs");
 
     /// <summary>
     /// The assertion ceremony's extension outputs were processed: every present identifier with a
@@ -389,7 +389,7 @@ public static class Fido2ClaimIds
     /// Extensions</see>'s "Relying Parties MUST be prepared to handle cases where some or all of
     /// those extensions are ignored".
     /// </remarks>
-    public static readonly ClaimId Fido2AssertionExtensionOutputs = ClaimId.Create(1241, "Fido2AssertionExtensionOutputs");
+    public static ClaimId Fido2AssertionExtensionOutputs { get; } = ClaimId.Create(1241, "Fido2AssertionExtensionOutputs");
 
     /// <summary>
     /// The registration ceremony's decoded <c>largeBlob</c> client extension output carried a
@@ -404,7 +404,7 @@ public static class Fido2ClaimIds
     /// Authentication Level 3, section 10.1.5: Large blob storage extension (largeBlob)</see> —
     /// client extension output <c>supported</c>, registration-only.
     /// </remarks>
-    public static readonly ClaimId Fido2RegistrationLargeBlobSupported = ClaimId.Create(1242, "Fido2RegistrationLargeBlobSupported");
+    public static ClaimId Fido2RegistrationLargeBlobSupported { get; } = ClaimId.Create(1242, "Fido2RegistrationLargeBlobSupported");
 
     /// <summary>
     /// The assertion ceremony's decoded <c>largeBlob</c> client extension output carried a
@@ -420,7 +420,7 @@ public static class Fido2ClaimIds
     /// Authentication Level 3, section 10.1.5: Large blob storage extension (largeBlob)</see> —
     /// client extension output <c>blob</c>, authentication-only, "present only if read succeeded".
     /// </remarks>
-    public static readonly ClaimId Fido2AssertionLargeBlobRead = ClaimId.Create(1243, "Fido2AssertionLargeBlobRead");
+    public static ClaimId Fido2AssertionLargeBlobRead { get; } = ClaimId.Create(1243, "Fido2AssertionLargeBlobRead");
 
     /// <summary>
     /// The assertion ceremony's decoded <c>largeBlob</c> client extension output carried a
@@ -434,7 +434,7 @@ public static class Fido2ClaimIds
     /// Authentication Level 3, section 10.1.5: Large blob storage extension (largeBlob)</see> —
     /// client extension output <c>written</c>, authentication-only.
     /// </remarks>
-    public static readonly ClaimId Fido2AssertionLargeBlobWritten = ClaimId.Create(1244, "Fido2AssertionLargeBlobWritten");
+    public static ClaimId Fido2AssertionLargeBlobWritten { get; } = ClaimId.Create(1244, "Fido2AssertionLargeBlobWritten");
 
     /// <summary>
     /// The registration ceremony's <c>appidExclude</c> client extension output acknowledged that
@@ -450,7 +450,7 @@ public static class Fido2ClaimIds
     /// sourced from an external, non-CR document); this claim is a feature-completeness
     /// acknowledgment, not the closure of a normative clause.
     /// </remarks>
-    public static readonly ClaimId Fido2RegistrationAppIdExclude = ClaimId.Create(1245, "Fido2RegistrationAppIdExclude");
+    public static ClaimId Fido2RegistrationAppIdExclude { get; } = ClaimId.Create(1245, "Fido2RegistrationAppIdExclude");
 
     /// <summary>
     /// The registration ceremony's <c>credProtect</c> authenticator extension output decoded to one of
@@ -462,7 +462,7 @@ public static class Fido2ClaimIds
     /// CTAP 2.3, section 12.1: Credential Protection (credProtect)</see> — authenticator extension
     /// output, registration-only.
     /// </remarks>
-    public static readonly ClaimId Fido2RegistrationCredProtect = ClaimId.Create(1246, "Fido2RegistrationCredProtect");
+    public static ClaimId Fido2RegistrationCredProtect { get; } = ClaimId.Create(1246, "Fido2RegistrationCredProtect");
 
     /// <summary>
     /// The registration ceremony's <c>minPinLength</c> authenticator extension output decoded to an
@@ -473,5 +473,5 @@ public static class Fido2ClaimIds
     /// CTAP 2.3, section 12.5: Minimum PIN Length Extension (minPinLength)</see> — authenticator
     /// extension output, registration-only.
     /// </remarks>
-    public static readonly ClaimId Fido2RegistrationMinPinLength = ClaimId.Create(1247, "Fido2RegistrationMinPinLength");
+    public static ClaimId Fido2RegistrationMinPinLength { get; } = ClaimId.Create(1247, "Fido2RegistrationMinPinLength");
 }

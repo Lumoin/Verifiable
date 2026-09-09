@@ -431,13 +431,13 @@ internal sealed class CtapNfcResponderDeferralTests
     /// </summary>
     private sealed class DeferralStub
     {
-        private readonly byte[] completedResponse;
+        private byte[] CompletedResponse { get; }
         private bool resolved;
 
         /// <summary>Initializes the stub with the envelope a poll returns once <see cref="Resolve"/> has been called.</summary>
         public DeferralStub(byte[] completedResponse)
         {
-            this.completedResponse = completedResponse;
+            this.CompletedResponse = completedResponse;
         }
 
         /// <summary>Gets the number of times <see cref="TransceiveAsync"/> was invoked.</summary>
@@ -465,7 +465,7 @@ internal sealed class CtapNfcResponderDeferralTests
         {
             PollCallCount++;
 
-            ReadOnlySpan<byte> data = resolved ? completedResponse : ReadOnlySpan<byte>.Empty;
+            ReadOnlySpan<byte> data = resolved ? CompletedResponse : ReadOnlySpan<byte>.Empty;
 
             return ValueTask.FromResult(PooledMemory.FromBytes(data, pool, CtapTags.ResponseEnvelope));
         }

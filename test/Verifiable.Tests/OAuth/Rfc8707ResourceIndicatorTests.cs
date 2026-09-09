@@ -42,8 +42,8 @@ internal sealed class Rfc8707ResourceIndicatorTests
     private const string ResourceB = "https://contacts.example.com/";
     private const string UngrantedResource = "https://unrelated.example.com/";
 
-    private static readonly Uri ClientBaseUri = new(ClientId);
-    private static readonly Uri RedirectUri = new("https://client.example.com/callback");
+    private static Uri ClientBaseUri { get; } = new(ClientId);
+    private static Uri RedirectUri { get; } = new("https://client.example.com/callback");
 
     private static ImmutableHashSet<CapabilityIdentifier> Capabilities { get; } =
         ImmutableHashSet.Create(

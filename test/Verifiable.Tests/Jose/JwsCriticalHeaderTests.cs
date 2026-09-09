@@ -24,12 +24,12 @@ internal sealed class JwsCriticalHeaderTests
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     /// <summary>Serialises a protected header to UTF-8 JSON bytes.</summary>
-    private static readonly JwtHeaderSerializer HeaderSerializer =
+    private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)header, TestSetup.DefaultSerializationOptions);
 
     /// <summary>Serialises a payload to UTF-8 JSON bytes.</summary>
-    private static readonly JwtPayloadSerializer PayloadSerializer =
+    private static JwtPayloadSerializer PayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)payload, TestSetup.DefaultSerializationOptions);
 
@@ -58,7 +58,7 @@ internal sealed class JwsCriticalHeaderTests
 
         bool crittedVerifies = await Jws.VerifyAsync(
             crittedJws, TestSetup.Base64UrlDecoder, Pool, publicKey,
-            MicrosoftCryptographicFunctions.VerifyP256Async, TestContext.CancellationToken).ConfigureAwait(false);
+            MicrosoftCryptographicFunctionsAdapter.VerifyP256Async, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsFalse(crittedVerifies, "a JWS naming an unrecognized critical extension must not verify (RFC 7515 §4.1.11).");
 
         //Control: the same payload and key without crit verifies, so the rejection above is the crit
@@ -68,7 +68,7 @@ internal sealed class JwsCriticalHeaderTests
 
         bool plainVerifies = await Jws.VerifyAsync(
             plainJws, TestSetup.Base64UrlDecoder, Pool, publicKey,
-            MicrosoftCryptographicFunctions.VerifyP256Async, TestContext.CancellationToken).ConfigureAwait(false);
+            MicrosoftCryptographicFunctionsAdapter.VerifyP256Async, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(plainVerifies, "a crit-free JWS with a valid signature verifies.");
     }
 

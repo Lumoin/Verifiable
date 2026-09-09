@@ -42,11 +42,11 @@ internal sealed class Oid4VpX509SanDnsResolverTests
     private static EncodeDelegate Encoder => TestSetup.Base64UrlEncoder;
     private static DecodeDelegate Decoder => TestSetup.Base64UrlDecoder;
 
-    private static readonly JwtHeaderSerializer JwtHeaderSerializer =
+    private static JwtHeaderSerializer JwtHeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)header, TestSetup.DefaultSerializationOptions);
 
-    private static readonly JwtPayloadSerializer JwtPayloadSerializer =
+    private static JwtPayloadSerializer JwtPayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)payload, TestSetup.DefaultSerializationOptions);
 

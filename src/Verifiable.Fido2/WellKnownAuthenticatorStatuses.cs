@@ -25,7 +25,7 @@ public static class WellKnownAuthenticatorStatuses
     /// Metadata Service v3.1, section 3.1.4.1: Certification Related Statuses</see>. No RP
     /// instruction is given for this value.
     /// </remarks>
-    public static readonly string NotFidoCertified = Utf8Constants.ToInternedString(NotFidoCertifiedUtf8);
+    public static string NotFidoCertified { get; } = Utf8Constants.ToInternedString(NotFidoCertifiedUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="FidoCertified"/>.</summary>
     public static ReadOnlySpan<byte> FidoCertifiedUtf8 => "FIDO_CERTIFIED"u8;
@@ -38,7 +38,7 @@ public static class WellKnownAuthenticatorStatuses
     /// <see href="https://fidoalliance.org/specs/mds/fido-metadata-service-v3.1-ps-20250521.html#sctn-cert-stats">FIDO
     /// Metadata Service v3.1, section 3.1.4.1: Certification Related Statuses</see>.
     /// </remarks>
-    public static readonly string FidoCertified = Utf8Constants.ToInternedString(FidoCertifiedUtf8);
+    public static string FidoCertified { get; } = Utf8Constants.ToInternedString(FidoCertifiedUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="UserVerificationBypass"/>.</summary>
     public static ReadOnlySpan<byte> UserVerificationBypassUtf8 => "USER_VERIFICATION_BYPASS"u8;
@@ -55,7 +55,7 @@ public static class WellKnownAuthenticatorStatuses
     /// values <see cref="DefaultTrustTerminating"/> treats as trust-terminating by default, a secure
     /// default this specification authorizes without itself requiring it.
     /// </remarks>
-    public static readonly string UserVerificationBypass = Utf8Constants.ToInternedString(UserVerificationBypassUtf8);
+    public static string UserVerificationBypass { get; } = Utf8Constants.ToInternedString(UserVerificationBypassUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="AttestationKeyCompromise"/>.</summary>
     public static ReadOnlySpan<byte> AttestationKeyCompromiseUtf8 => "ATTESTATION_KEY_COMPROMISE"u8;
@@ -70,7 +70,7 @@ public static class WellKnownAuthenticatorStatuses
     /// authenticator batch. If neither the batchCertificate nor the certificate field are set, the
     /// relying party should reject all new registrations of the compromised authenticator."
     /// </remarks>
-    public static readonly string AttestationKeyCompromise = Utf8Constants.ToInternedString(AttestationKeyCompromiseUtf8);
+    public static string AttestationKeyCompromise { get; } = Utf8Constants.ToInternedString(AttestationKeyCompromiseUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="UserKeyRemoteCompromise"/>.</summary>
     public static ReadOnlySpan<byte> UserKeyRemoteCompromiseUtf8 => "USER_KEY_REMOTE_COMPROMISE"u8;
@@ -85,7 +85,7 @@ public static class WellKnownAuthenticatorStatuses
     /// authenticator has identified weaknesses that allow registered keys to be compromised and
     /// should not be trusted."
     /// </remarks>
-    public static readonly string UserKeyRemoteCompromise = Utf8Constants.ToInternedString(UserKeyRemoteCompromiseUtf8);
+    public static string UserKeyRemoteCompromise { get; } = Utf8Constants.ToInternedString(UserKeyRemoteCompromiseUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="UserKeyPhysicalCompromise"/>.</summary>
     public static ReadOnlySpan<byte> UserKeyPhysicalCompromiseUtf8 => "USER_KEY_PHYSICAL_COMPROMISE"u8;
@@ -100,7 +100,7 @@ public static class WellKnownAuthenticatorStatuses
     /// SHOULD/MUST is given for this value either, but it is one of the values
     /// <see cref="DefaultTrustTerminating"/> treats as trust-terminating by default.
     /// </remarks>
-    public static readonly string UserKeyPhysicalCompromise = Utf8Constants.ToInternedString(UserKeyPhysicalCompromiseUtf8);
+    public static string UserKeyPhysicalCompromise { get; } = Utf8Constants.ToInternedString(UserKeyPhysicalCompromiseUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="UpdateAvailable"/>.</summary>
     public static ReadOnlySpan<byte> UpdateAvailableUtf8 => "UPDATE_AVAILABLE"u8;
@@ -118,7 +118,7 @@ public static class WellKnownAuthenticatorStatuses
     /// data only and is NOT in <see cref="DefaultTrustTerminating"/> — it is not itself an
     /// authenticator-trust-terminating status.
     /// </remarks>
-    public static readonly string UpdateAvailable = Utf8Constants.ToInternedString(UpdateAvailableUtf8);
+    public static string UpdateAvailable { get; } = Utf8Constants.ToInternedString(UpdateAvailableUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Revoked"/>.</summary>
     public static ReadOnlySpan<byte> RevokedUtf8 => "REVOKED"u8;
@@ -135,7 +135,7 @@ public static class WellKnownAuthenticatorStatuses
     /// a hard rejection as a deliberate, documented secure default (see
     /// <see cref="DefaultTrustTerminating"/>), not because the specification itself mandates it.
     /// </remarks>
-    public static readonly string Revoked = Utf8Constants.ToInternedString(RevokedUtf8);
+    public static string Revoked { get; } = Utf8Constants.ToInternedString(RevokedUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="SelfAssertionSubmitted"/>.</summary>
     public static ReadOnlySpan<byte> SelfAssertionSubmittedUtf8 => "SELF_ASSERTION_SUBMITTED"u8;
@@ -149,7 +149,7 @@ public static class WellKnownAuthenticatorStatuses
     /// Metadata Service v3.1, section 3.1.4.1: Certification Related Statuses</see>. No RP
     /// instruction is given for this value.
     /// </remarks>
-    public static readonly string SelfAssertionSubmitted = Utf8Constants.ToInternedString(SelfAssertionSubmittedUtf8);
+    public static string SelfAssertionSubmitted { get; } = Utf8Constants.ToInternedString(SelfAssertionSubmittedUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="FidoCertifiedL1"/>.</summary>
     public static ReadOnlySpan<byte> FidoCertifiedL1Utf8 => "FIDO_CERTIFIED_L1"u8;
@@ -159,7 +159,7 @@ public static class WellKnownAuthenticatorStatuses
     /// <see href="https://fidoalliance.org/specs/mds/fido-metadata-service-v3.1-ps-20250521.html#sctn-cert-stats">FIDO
     /// Metadata Service v3.1, section 3.1.4.1: Certification Related Statuses</see>.
     /// </remarks>
-    public static readonly string FidoCertifiedL1 = Utf8Constants.ToInternedString(FidoCertifiedL1Utf8);
+    public static string FidoCertifiedL1 { get; } = Utf8Constants.ToInternedString(FidoCertifiedL1Utf8);
 
     /// <summary>The UTF-8 source literal of <see cref="FidoCertifiedL1Plus"/>.</summary>
     public static ReadOnlySpan<byte> FidoCertifiedL1PlusUtf8 => "FIDO_CERTIFIED_L1plus"u8;
@@ -169,7 +169,7 @@ public static class WellKnownAuthenticatorStatuses
     /// <see href="https://fidoalliance.org/specs/mds/fido-metadata-service-v3.1-ps-20250521.html#sctn-cert-stats">FIDO
     /// Metadata Service v3.1, section 3.1.4.1: Certification Related Statuses</see>.
     /// </remarks>
-    public static readonly string FidoCertifiedL1Plus = Utf8Constants.ToInternedString(FidoCertifiedL1PlusUtf8);
+    public static string FidoCertifiedL1Plus { get; } = Utf8Constants.ToInternedString(FidoCertifiedL1PlusUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="FidoCertifiedL2"/>.</summary>
     public static ReadOnlySpan<byte> FidoCertifiedL2Utf8 => "FIDO_CERTIFIED_L2"u8;
@@ -179,7 +179,7 @@ public static class WellKnownAuthenticatorStatuses
     /// <see href="https://fidoalliance.org/specs/mds/fido-metadata-service-v3.1-ps-20250521.html#sctn-cert-stats">FIDO
     /// Metadata Service v3.1, section 3.1.4.1: Certification Related Statuses</see>.
     /// </remarks>
-    public static readonly string FidoCertifiedL2 = Utf8Constants.ToInternedString(FidoCertifiedL2Utf8);
+    public static string FidoCertifiedL2 { get; } = Utf8Constants.ToInternedString(FidoCertifiedL2Utf8);
 
     /// <summary>The UTF-8 source literal of <see cref="FidoCertifiedL2Plus"/>.</summary>
     public static ReadOnlySpan<byte> FidoCertifiedL2PlusUtf8 => "FIDO_CERTIFIED_L2plus"u8;
@@ -189,7 +189,7 @@ public static class WellKnownAuthenticatorStatuses
     /// <see href="https://fidoalliance.org/specs/mds/fido-metadata-service-v3.1-ps-20250521.html#sctn-cert-stats">FIDO
     /// Metadata Service v3.1, section 3.1.4.1: Certification Related Statuses</see>.
     /// </remarks>
-    public static readonly string FidoCertifiedL2Plus = Utf8Constants.ToInternedString(FidoCertifiedL2PlusUtf8);
+    public static string FidoCertifiedL2Plus { get; } = Utf8Constants.ToInternedString(FidoCertifiedL2PlusUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="FidoCertifiedL3"/>.</summary>
     public static ReadOnlySpan<byte> FidoCertifiedL3Utf8 => "FIDO_CERTIFIED_L3"u8;
@@ -199,7 +199,7 @@ public static class WellKnownAuthenticatorStatuses
     /// <see href="https://fidoalliance.org/specs/mds/fido-metadata-service-v3.1-ps-20250521.html#sctn-cert-stats">FIDO
     /// Metadata Service v3.1, section 3.1.4.1: Certification Related Statuses</see>.
     /// </remarks>
-    public static readonly string FidoCertifiedL3 = Utf8Constants.ToInternedString(FidoCertifiedL3Utf8);
+    public static string FidoCertifiedL3 { get; } = Utf8Constants.ToInternedString(FidoCertifiedL3Utf8);
 
     /// <summary>The UTF-8 source literal of <see cref="FidoCertifiedL3Plus"/>.</summary>
     public static ReadOnlySpan<byte> FidoCertifiedL3PlusUtf8 => "FIDO_CERTIFIED_L3plus"u8;
@@ -209,7 +209,7 @@ public static class WellKnownAuthenticatorStatuses
     /// <see href="https://fidoalliance.org/specs/mds/fido-metadata-service-v3.1-ps-20250521.html#sctn-cert-stats">FIDO
     /// Metadata Service v3.1, section 3.1.4.1: Certification Related Statuses</see>.
     /// </remarks>
-    public static readonly string FidoCertifiedL3Plus = Utf8Constants.ToInternedString(FidoCertifiedL3PlusUtf8);
+    public static string FidoCertifiedL3Plus { get; } = Utf8Constants.ToInternedString(FidoCertifiedL3PlusUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Fips140CertifiedL1"/>.</summary>
     public static ReadOnlySpan<byte> Fips140CertifiedL1Utf8 => "FIPS140_CERTIFIED_L1"u8;
@@ -219,7 +219,7 @@ public static class WellKnownAuthenticatorStatuses
     /// <see href="https://fidoalliance.org/specs/mds/fido-metadata-service-v3.1-ps-20250521.html#sctn-cert-stats">FIDO
     /// Metadata Service v3.1, section 3.1.4.1: Certification Related Statuses</see>.
     /// </remarks>
-    public static readonly string Fips140CertifiedL1 = Utf8Constants.ToInternedString(Fips140CertifiedL1Utf8);
+    public static string Fips140CertifiedL1 { get; } = Utf8Constants.ToInternedString(Fips140CertifiedL1Utf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Fips140CertifiedL2"/>.</summary>
     public static ReadOnlySpan<byte> Fips140CertifiedL2Utf8 => "FIPS140_CERTIFIED_L2"u8;
@@ -229,7 +229,7 @@ public static class WellKnownAuthenticatorStatuses
     /// <see href="https://fidoalliance.org/specs/mds/fido-metadata-service-v3.1-ps-20250521.html#sctn-cert-stats">FIDO
     /// Metadata Service v3.1, section 3.1.4.1: Certification Related Statuses</see>.
     /// </remarks>
-    public static readonly string Fips140CertifiedL2 = Utf8Constants.ToInternedString(Fips140CertifiedL2Utf8);
+    public static string Fips140CertifiedL2 { get; } = Utf8Constants.ToInternedString(Fips140CertifiedL2Utf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Fips140CertifiedL3"/>.</summary>
     public static ReadOnlySpan<byte> Fips140CertifiedL3Utf8 => "FIPS140_CERTIFIED_L3"u8;
@@ -239,7 +239,7 @@ public static class WellKnownAuthenticatorStatuses
     /// <see href="https://fidoalliance.org/specs/mds/fido-metadata-service-v3.1-ps-20250521.html#sctn-cert-stats">FIDO
     /// Metadata Service v3.1, section 3.1.4.1: Certification Related Statuses</see>.
     /// </remarks>
-    public static readonly string Fips140CertifiedL3 = Utf8Constants.ToInternedString(Fips140CertifiedL3Utf8);
+    public static string Fips140CertifiedL3 { get; } = Utf8Constants.ToInternedString(Fips140CertifiedL3Utf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Fips140CertifiedL4"/>.</summary>
     public static ReadOnlySpan<byte> Fips140CertifiedL4Utf8 => "FIPS140_CERTIFIED_L4"u8;
@@ -249,7 +249,7 @@ public static class WellKnownAuthenticatorStatuses
     /// <see href="https://fidoalliance.org/specs/mds/fido-metadata-service-v3.1-ps-20250521.html#sctn-cert-stats">FIDO
     /// Metadata Service v3.1, section 3.1.4.1: Certification Related Statuses</see>.
     /// </remarks>
-    public static readonly string Fips140CertifiedL4 = Utf8Constants.ToInternedString(Fips140CertifiedL4Utf8);
+    public static string Fips140CertifiedL4 { get; } = Utf8Constants.ToInternedString(Fips140CertifiedL4Utf8);
 
 
     /// <summary>

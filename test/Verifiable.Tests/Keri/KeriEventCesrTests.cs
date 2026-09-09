@@ -9,6 +9,8 @@ using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Keri;
 using Verifiable.Microsoft;
+using Microsoft.Extensions.Time.Testing;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Keri;
 
@@ -98,21 +100,21 @@ internal sealed class KeriEventCesrTests
     /// <summary>The in-memory placeholder version string the native decode reconstructs (kind CESR, length from the framing), as the specification shows it.</summary>
     private const string ExpectedVersion = "KERICAACAACESRAAJM.";
 
-    private static readonly string[] SigningKeys =
+    private static string[] SigningKeys { get; } =
     [
         "DBFiIgoCOpJ_zW_OO0GdffhHfEvJWb1HxpDx95bFvufu",
         "DG-YwInLUxzVDD5z8SqZmS2FppXSB-ZX_f2bJC_ZnsM5",
         "DGIAk2jkC3xuLIe-DI9rcA0naevtZiKuU9wz91L_qBAV"
     ];
 
-    private static readonly string[] NextKeyDigests =
+    private static string[] NextKeyDigests { get; } =
     [
         "ELeFYMmuJb0hevKjhv97joA5bTfuA8E697cMzi8eoaZB",
         "ENY9GYShOjeh7qZUpIipKRHgrWcoR2WkJ7Wgj4wZx1YT",
         "EGyJ7y3TlewCW97dgBN-4pckhCqsni-zHNZ_G8zVerPG"
     ];
 
-    private static readonly string[] Backers =
+    private static string[] Backers { get; } =
     [
         "BGKV6v93ue5L5wsgk75t6j8TcdgABMN9x-eIyPi96J3B",
         "BJfueFAYc7N_V-zmDEn2SPCoVFx3H20alWsNZKgsS1vt",
@@ -120,29 +122,29 @@ internal sealed class KeriEventCesrTests
         "BA4PSatfQMw1lYhQoZkSSvOCrE0Sdw1hmmniDL-yDtrB"
     ];
 
-    private static readonly string[] ConfigurationTraits = ["DID"];
+    private static string[] ConfigurationTraits { get; } = ["DID"];
 
-    private static readonly string[] RotationBackersToRemove = ["BA4PSatfQMw1lYhQoZkSSvOCrE0Sdw1hmmniDL-yDtrB"];
+    private static string[] RotationBackersToRemove { get; } = ["BA4PSatfQMw1lYhQoZkSSvOCrE0Sdw1hmmniDL-yDtrB"];
 
-    private static readonly string[] RotationBackersToAdd =
+    private static string[] RotationBackersToAdd { get; } =
     [
         "BO3cCAfQiqndZBBxwNk6RGkyA-OA1XbZhBj3s4-VIsCo",
         "BPowpltoeF14nMbU1ng89JSoYf3AmWhZ50KaCaVO6SIW"
     ];
 
     /// <summary>The fractionally weighted threshold <c>["1/2", "1/2", "1/2"]</c> the delegated event vectors carry, as weight strings and as a parsed threshold.</summary>
-    private static readonly string[] WeightedThresholdWeights = ["1/2", "1/2", "1/2"];
+    private static string[] WeightedThresholdWeights { get; } = ["1/2", "1/2", "1/2"];
 
-    private static readonly KeriThreshold HalfWeightThreshold = KeriThreshold.Parse(new List<string>(WeightedThresholdWeights));
+    private static KeriThreshold HalfWeightThreshold { get; } = KeriThreshold.Parse(new List<string>(WeightedThresholdWeights));
 
-    private static readonly string[] DelegatedInceptionKeys =
+    private static string[] DelegatedInceptionKeys { get; } =
     [
         "DEE-HCMSwqMDkEBzlmUNmVBAGIinGu7wZ5_hfY6bSMz3",
         "DHyJFyFzuD5vvUWv5jy6nwWI3wZmSnoePu29tBR-jXkv",
         "DN3JXVEvIjTbisPC4maYQWy6eQIRNdJsxqGFXYUm_ygr"
     ];
 
-    private static readonly string[] DelegatedInceptionBackers =
+    private static string[] DelegatedInceptionBackers { get; } =
     [
         "BFATArhqG_ktVCRLWt2Knbc7JDpaPAFJ4npNEmIW_gPX",
         "BOtF-I9geAUjX9NW1kLIq5qDRNgEXCuwpE4mKHkYuWsF",
@@ -150,26 +152,26 @@ internal sealed class KeriEventCesrTests
         "BCE6biH4a-Zg8LI3cMSx7JRoOvb8rRD62xbyl9N4M2g6"
     ];
 
-    private static readonly string[] DelegatedRotationKeys =
+    private static string[] DelegatedRotationKeys { get; } =
     [
         "DB1S8zOh4_qdFhxVHn7BDZb1ErWbBFvcVJX1suKSBctR",
         "DDCDFlbG4dCAX6oIbNffB1mkZqLAS_eHnYUUIPH7BeXB",
         "DP3GAMcSx7eCApzk1N7DceV42o1dZemAe0s3r_-Z0zs1"
     ];
 
-    private static readonly string[] DelegatedRotationBackersToRemove = ["BOtF-I9geAUjX9NW1kLIq5qDRNgEXCuwpE4mKHkYuWsF"];
+    private static string[] DelegatedRotationBackersToRemove { get; } = ["BOtF-I9geAUjX9NW1kLIq5qDRNgEXCuwpE4mKHkYuWsF"];
 
-    private static readonly string[] DelegatedRotationBackersToAdd = ["BOMrYd5izsqbqaq1WZYa3nbEeTYLPwccfqfhirybKKqx"];
+    private static string[] DelegatedRotationBackersToAdd { get; } = ["BOMrYd5izsqbqaq1WZYa3nbEeTYLPwccfqfhirybKKqx"];
 
 
     /// <summary>
     /// An algorithm-agile digest oracle independent of the production registry: a Blake3 request routes to the
     /// BouncyCastle backend, every other to the Microsoft backend.
     /// </summary>
-    private static readonly ComputeDigestDelegate AgileDigest = (input, outputByteLength, tag, pool, context, cancellationToken) =>
+    private static ComputeDigestDelegate AgileDigest { get; } = (input, outputByteLength, tag, pool, context, cancellationToken) =>
         tag.TryGet<CryptoAlgorithm>(out CryptoAlgorithm algorithm) && algorithm == CryptoAlgorithm.Blake3
-            ? BouncyCastleCryptographicFunctions.ComputeBlake3DigestAsync(input, outputByteLength, tag, pool, context, cancellationToken)
-            : MicrosoftCryptographicFunctions.ComputeDigestAsync(input, outputByteLength, tag, pool, context, cancellationToken);
+            ? BouncyCastleCryptographicFunctions.ComputeBlake3DigestAsync(input, outputByteLength, tag, pool, new FakeTimeProvider(TestClock.CanonicalEpoch), context, cancellationToken)
+            : MicrosoftCryptographicFunctions.ComputeDigestAsync(input, outputByteLength, tag, pool, new FakeTimeProvider(TestClock.CanonicalEpoch), context, cancellationToken);
 
 
     /// <summary>
@@ -287,7 +289,7 @@ internal sealed class KeriEventCesrTests
         Assert.AreEqual(KeriThreshold.Unweighted(2), rotation.NextThreshold);
         Assert.AreSequenceEqual(RotationBackersToRemove, (System.Collections.ICollection)rotation.BackersToRemove);
         Assert.AreSequenceEqual(RotationBackersToAdd, (System.Collections.ICollection)rotation.BackersToAdd);
-        Assert.IsEmpty((IReadOnlyList<string>)rotation.ConfigurationTraits);
+        Assert.IsEmpty(rotation.ConfigurationTraits);
 
         IReadOnlyList<KeriSeal> seals = KeriSealReader.ReadList(fields[KeriMessageFields.Anchors]);
         Assert.HasCount(1, seals);
@@ -324,7 +326,7 @@ internal sealed class KeriEventCesrTests
         Assert.IsTrue(dip.SigningThreshold.IsWeighted);
         Assert.AreSequenceEqual(DelegatedInceptionKeys, (System.Collections.ICollection)dip.SigningKeys);
         Assert.AreSequenceEqual(DelegatedInceptionBackers, (System.Collections.ICollection)dip.Backers);
-        Assert.IsEmpty((IReadOnlyList<string>)dip.ConfigurationTraits);
+        Assert.IsEmpty(dip.ConfigurationTraits);
 
         Assert.IsTrue(await KeriEventSaid.VerifyAsync(native.Memory, dip.Said, AgileDigest, BaseMemoryPool.Shared, CancellationToken.None));
     }
@@ -396,19 +398,19 @@ internal sealed class KeriEventCesrTests
     //A native serialization carried in a pooled buffer the test owns and disposes.
     private sealed class NativeEvent: IDisposable
     {
-        private readonly IMemoryOwner<byte> owner;
-        private readonly int length;
+        private IMemoryOwner<byte> Owner { get; }
+        private int Length { get; }
 
         public NativeEvent(IMemoryOwner<byte> owner, int length)
         {
-            this.owner = owner;
-            this.length = length;
+            this.Owner = owner;
+            this.Length = length;
         }
 
-        public ReadOnlyMemory<byte> Memory => owner.Memory[..length];
+        public ReadOnlyMemory<byte> Memory => Owner.Memory[..Length];
 
-        public ReadOnlySpan<byte> Span => owner.Memory.Span[..length];
+        public ReadOnlySpan<byte> Span => Owner.Memory.Span[..Length];
 
-        public void Dispose() => owner.Dispose();
+        public void Dispose() => Owner.Dispose();
     }
 }

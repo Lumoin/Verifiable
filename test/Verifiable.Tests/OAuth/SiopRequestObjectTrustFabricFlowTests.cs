@@ -62,28 +62,28 @@ internal sealed class SiopRequestObjectTrustFabricFlowTests
 
     private const string SiopNonce = "n-siop-trust-fabric-01";
 
-    private static readonly Uri RelyingPartyBaseUri = new("https://verifier.example.com");
+    private static Uri RelyingPartyBaseUri { get; } = new("https://verifier.example.com");
 
-    private static readonly ImmutableHashSet<CapabilityIdentifier> SiopCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> SiopCapabilities { get; } =
         ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.SiopSelfIssuedOp);
 
-    private static readonly string[] AllowedSiopAlgorithms = [WellKnownJwaValues.Es256];
+    private static string[] AllowedSiopAlgorithms { get; } = [WellKnownJwaValues.Es256];
 
-    private static readonly JwtHeaderSerializer HeaderSerializer =
+    private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)header, TestSetup.DefaultSerializationOptions);
 
-    private static readonly JwtPayloadSerializer PayloadSerializer =
+    private static JwtPayloadSerializer PayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)payload, TestSetup.DefaultSerializationOptions);
 
     //JarVerification.VerifyAsync materialises the protected header and payload through these
     //deserializers, the same JSON stack the OID4VP wallet flows wire.
-    private static readonly JwtHeaderDeserializer JarHeaderDeserializer =
+    private static JwtHeaderDeserializer JarHeaderDeserializer { get; } =
         static bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
             bytes, TestSetup.DefaultSerializationOptions)!;
 
-    private static readonly JwtPayloadDeserializer JarPayloadDeserializer =
+    private static JwtPayloadDeserializer JarPayloadDeserializer { get; } =
         static bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
             bytes, TestSetup.DefaultSerializationOptions)!;
 

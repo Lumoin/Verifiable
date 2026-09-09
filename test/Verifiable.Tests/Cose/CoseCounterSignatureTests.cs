@@ -1,5 +1,6 @@
+using System.Buffers;
 using System.Collections.Frozen;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using System.Linq;
 using Verifiable.Cbor;
 using Verifiable.Cryptography;
@@ -7,6 +8,7 @@ using Verifiable.JCose;
 using Verifiable.Microsoft;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Cose;
 
@@ -180,12 +182,13 @@ internal sealed class CoseCounterSignatureTests
 
         using CounterSignatureV2 counterSignature = await CoseCounterSign.CountersignFullAsync(
             countersignTarget, counterSignerProtectedHeader, null, ReadOnlyMemory<byte>.Empty,
-            CoseSerialization.BuildCountersignStructure, counterSignerPrivateKey, MicrosoftCryptographicFunctions.SignP256Async,
+            CoseSerialization.BuildCountersignStructure, counterSignerPrivateKey, MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //Independent oracle: hand-assemble the Countersign_structure per RFC 9338 §3.3 -- other_fields
         //present (COSE_Sign1 target) so context is "CounterSignatureV2".
-        var oracleWriter = new CborWriter(CborConformanceMode.Canonical);
+        var oracleWriterBuffer = new ArrayBufferWriter<byte>();
+        var oracleWriter = new CborWriter(oracleWriterBuffer, CborOptions.RfcCanonical);
         oracleWriter.WriteStartArray(6);
         oracleWriter.WriteTextString("CounterSignatureV2");
         oracleWriter.WriteByteString(targetProtected);
@@ -196,11 +199,9 @@ internal sealed class CoseCounterSignatureTests
         oracleWriter.WriteByteString(targetSignature);
         oracleWriter.WriteEndArray();
         oracleWriter.WriteEndArray();
-        byte[] oracleToBeSigned = oracleWriter.Encode();
+        byte[] oracleToBeSigned = oracleWriterBuffer.WrittenSpan.ToArray();
 
-        (bool isValid, _) = await MicrosoftCryptographicFunctions.VerifyP256Async(
-            oracleToBeSigned, counterSignature.Component.Signature.AsReadOnlyMemory(), counterSignerPublicKey.AsReadOnlyMemory(),
-            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        (bool isValid, _) = await MicrosoftCryptographicFunctions.VerifyP256Async(oracleToBeSigned, counterSignature.Component.Signature.AsReadOnlyMemory(), counterSignerPublicKey.AsReadOnlyMemory(), cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch)).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "The countersignature must verify against an independently assembled Countersign_structure.");
     }
@@ -237,7 +238,8 @@ internal sealed class CoseCounterSignatureTests
 
         byte[] actual = CoseSerialization.BuildCountersignStructure(input);
 
-        var oracleWriter = new CborWriter(CborConformanceMode.Canonical);
+        var oracleWriterBuffer = new ArrayBufferWriter<byte>();
+        var oracleWriter = new CborWriter(oracleWriterBuffer, CborOptions.RfcCanonical);
         oracleWriter.WriteStartArray(6);
         oracleWriter.WriteTextString("CounterSignatureV2");
         oracleWriter.WriteByteString(targetProtected);
@@ -248,13 +250,12 @@ internal sealed class CoseCounterSignatureTests
         oracleWriter.WriteByteString(targetSignature);
         oracleWriter.WriteEndArray();
         oracleWriter.WriteEndArray();
-        byte[] oracle = oracleWriter.Encode();
+        byte[] oracle = oracleWriterBuffer.WrittenSpan.ToArray();
 
         Assert.IsTrue(oracle.AsSpan().SequenceEqual(actual), "Must match the RFC 9338 Appendix A.2.1 target shape byte-for-byte.");
 
         byte[] bilboP521PublicKey = BuildBilboP521UncompressedPublicKeyBytes();
-        (bool isValid, _) = await MicrosoftCryptographicFunctions.VerifyP521Async(
-            actual, counterSignatureValue, bilboP521PublicKey, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        (bool isValid, _) = await MicrosoftCryptographicFunctions.VerifyP521Async(actual, counterSignatureValue, bilboP521PublicKey, cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch)).ConfigureAwait(false);
 
         Assert.IsTrue(isValid,
             "RFC 9338 Appendix A.2.1's own countersignature value must verify against Bilbo's P-521 public key " +
@@ -284,7 +285,8 @@ internal sealed class CoseCounterSignatureTests
 
         byte[] actual = CoseSerialization.BuildCountersignStructure(input);
 
-        var oracleWriter = new CborWriter(CborConformanceMode.Canonical);
+        var oracleWriterBuffer = new ArrayBufferWriter<byte>();
+        var oracleWriter = new CborWriter(oracleWriterBuffer, CborOptions.RfcCanonical);
         oracleWriter.WriteStartArray(5);
         oracleWriter.WriteTextString("CounterSignature");
         oracleWriter.WriteByteString(targetProtected);
@@ -292,7 +294,7 @@ internal sealed class CoseCounterSignatureTests
         oracleWriter.WriteByteString([]);
         oracleWriter.WriteByteString(targetSignature);
         oracleWriter.WriteEndArray();
-        byte[] oracle = oracleWriter.Encode();
+        byte[] oracle = oracleWriterBuffer.WrittenSpan.ToArray();
 
         Assert.IsTrue(oracle.AsSpan().SequenceEqual(actual), "other_fields must be omitted and the context text must be the plain (non-V2) form for a COSE_Signature target.");
     }
@@ -313,14 +315,15 @@ internal sealed class CoseCounterSignatureTests
 
         byte[] actual = CoseSerialization.BuildCountersignStructure(input);
 
-        var oracleWriter = new CborWriter(CborConformanceMode.Canonical);
+        var oracleWriterBuffer = new ArrayBufferWriter<byte>();
+        var oracleWriter = new CborWriter(oracleWriterBuffer, CborOptions.RfcCanonical);
         oracleWriter.WriteStartArray(4);
         oracleWriter.WriteTextString("CounterSignature0");
         oracleWriter.WriteByteString(targetProtected);
         oracleWriter.WriteByteString([]);
         oracleWriter.WriteByteString(targetSignature);
         oracleWriter.WriteEndArray();
-        byte[] oracle = oracleWriter.Encode();
+        byte[] oracle = oracleWriterBuffer.WrittenSpan.ToArray();
 
         Assert.IsTrue(oracle.AsSpan().SequenceEqual(actual), "Abbreviated countersignature over a COSE_Signature target must use the plain 'CounterSignature0' context with no sign_protected field.");
     }
@@ -343,7 +346,8 @@ internal sealed class CoseCounterSignatureTests
 
         byte[] actual = CoseSerialization.BuildCountersignStructure(input);
 
-        var oracleWriter = new CborWriter(CborConformanceMode.Canonical);
+        var oracleWriterBuffer = new ArrayBufferWriter<byte>();
+        var oracleWriter = new CborWriter(oracleWriterBuffer, CborOptions.RfcCanonical);
         oracleWriter.WriteStartArray(5);
         oracleWriter.WriteTextString("CounterSignature0V2");
         oracleWriter.WriteByteString(targetProtected);
@@ -353,7 +357,7 @@ internal sealed class CoseCounterSignatureTests
         oracleWriter.WriteByteString(targetSignature);
         oracleWriter.WriteEndArray();
         oracleWriter.WriteEndArray();
-        byte[] oracle = oracleWriter.Encode();
+        byte[] oracle = oracleWriterBuffer.WrittenSpan.ToArray();
 
         Assert.IsTrue(oracle.AsSpan().SequenceEqual(actual), "Abbreviated countersignature over a COSE_Sign1 target must use 'CounterSignature0V2' (other_fields present).");
     }
@@ -418,10 +422,11 @@ internal sealed class CoseCounterSignatureTests
     {
         byte[] untagged = BuildRfc9338AppendixA11CounterSignatureValueBytes();
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
-        writer.WriteTag((CborTag)CoseTags.CounterSignature);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
+        writer.WriteTag(new CborTag((ulong)CoseTags.CounterSignature));
         writer.WriteEncodedValue(untagged);
-        byte[] tagged = writer.Encode();
+        byte[] tagged = writerBuffer.WrittenSpan.ToArray();
 
         using CounterSignatureV2 fromTagged = CoseSerialization.ReadCounterSignatureV2(tagged, BaseMemoryPool.Shared);
         using CounterSignatureV2 fromUntagged = CoseSerialization.ReadCounterSignatureV2(untagged, BaseMemoryPool.Shared);
@@ -442,7 +447,7 @@ internal sealed class CoseCounterSignatureTests
 
         using EncodedCoseCounterSignature written = CoseSerialization.WriteCounterSignatureV2(counterSignature, BaseMemoryPool.Shared);
 
-        var reader = new CborReader(written.AsReadOnlyMemory(), CborConformanceMode.Lax);
+        var reader = new CborReader(written.AsReadOnlyMemory(), CborOptions.Lax);
         Assert.AreNotEqual(CborReaderState.Tag, reader.PeekState(), "The writer must never emit a leading CBOR tag.");
         Assert.AreEqual(CborReaderState.StartArray, reader.PeekState(), "The untagged form starts directly with the COSE_Signature-shaped array.");
     }
@@ -463,9 +468,10 @@ internal sealed class CoseCounterSignatureTests
         byte[] oracle = Convert.FromHexString(
             "00929663c8789bb28177ae28467e66377da12302d7f9594d2999afa5dfa531294f8896f2b6cdf1740014f4c7f1a358e3a6cf57f4ed6fb02fcf8f7aa989f5dfd07f0700a3a7d8f3c604ba70fa9411bd10c2591b483e1d2c31de003183e434d8fba18f17a4c7e3dfa003ac1cf3d30d44d2533c4989d3ac38c38b71481cc3430c9d65e7ddff");
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteByteString(oracle);
-        byte[] valueBytes = writer.Encode();
+        byte[] valueBytes = writerBuffer.WrittenSpan.ToArray();
 
         using CounterSignature0V2 counterSignature = CoseSerialization.ReadCounterSignature0V2(valueBytes, BaseMemoryPool.Shared);
         Assert.IsTrue(oracle.AsSpan().SequenceEqual(counterSignature.Value.AsReadOnlySpan()));
@@ -500,7 +506,8 @@ internal sealed class CoseCounterSignatureTests
         byte[] label7Value = [0xAA, 0xBB, 0xCC]; //An opaque V1 "CounterSignature" (label 7) value -- content is irrelevant; only carriage matters.
         byte[] label9Value = [0xDD, 0xEE]; //An opaque V1 "CounterSignature0" (label 9) value.
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartArray(3);
         writer.WriteByteString(protectedHeaderBytes);
         writer.WriteStartMap(2);
@@ -511,7 +518,7 @@ internal sealed class CoseCounterSignatureTests
         writer.WriteEndMap();
         writer.WriteByteString(signatureBytes);
         writer.WriteEndArray();
-        byte[] oracle = writer.Encode();
+        byte[] oracle = writerBuffer.WrittenSpan.ToArray();
 
         using CounterSignatureV2 counterSignature = CoseSerialization.ReadCounterSignatureV2(oracle, BaseMemoryPool.Shared);
 
@@ -543,9 +550,10 @@ internal sealed class CoseCounterSignatureTests
     [TestMethod]
     public void ParseCounterSignatureHeaderValueRejectsV1CounterSignature0Label()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteByteString([1, 2, 3, 4]);
-        byte[] valueBytes = writer.Encode();
+        byte[] valueBytes = writerBuffer.WrittenSpan.ToArray();
 
         using CoseCounterSignatureParseResult result = CoseSerialization.ParseCounterSignatureHeaderValue(
             CoseHeaderParameters.CounterSignature0, valueBytes, BaseMemoryPool.Shared);
@@ -568,10 +576,11 @@ internal sealed class CoseCounterSignatureTests
     public void ParseCounterSignatureHeaderValueAcceptsLabel11WithTag19()
     {
         byte[] untagged = BuildRfc9338AppendixA11CounterSignatureValueBytes();
-        var writer = new CborWriter(CborConformanceMode.Canonical);
-        writer.WriteTag((CborTag)CoseTags.CounterSignature);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
+        writer.WriteTag(new CborTag((ulong)CoseTags.CounterSignature));
         writer.WriteEncodedValue(untagged);
-        byte[] tagged = writer.Encode();
+        byte[] tagged = writerBuffer.WrittenSpan.ToArray();
 
         using CoseCounterSignatureParseResult result = CoseSerialization.ParseCounterSignatureHeaderValue(
             CoseHeaderParameters.CounterSignatureVersion2, tagged, BaseMemoryPool.Shared);
@@ -584,9 +593,10 @@ internal sealed class CoseCounterSignatureTests
     [TestMethod]
     public void ParseCounterSignatureHeaderValueAcceptsLabel12()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteByteString([9, 9, 9]);
-        byte[] valueBytes = writer.Encode();
+        byte[] valueBytes = writerBuffer.WrittenSpan.ToArray();
 
         using CoseCounterSignatureParseResult result = CoseSerialization.ParseCounterSignatureHeaderValue(
             CoseHeaderParameters.Countersignature0Version2, valueBytes, BaseMemoryPool.Shared);
@@ -641,26 +651,27 @@ internal sealed class CoseCounterSignatureTests
 
     /// <summary>
     /// RFC 9338 §4 / RFC 9052 §9: <see cref="CoseSerialization.ReadCounterSignatureV2"/> reads
-    /// under <see cref="CborConformanceMode.Canonical"/>, which rejects an indefinite-length-chunked bstr
+    /// under <see cref="CborConformanceMode.RfcCanonical"/>, which rejects an indefinite-length-chunked bstr
     /// outright rather than the <see cref="CborConformanceMode.Lax"/> behavior of silently concatenating its
     /// chunks.
     /// </summary>
     [TestMethod]
     public void ReadCounterSignatureV2RejectsIndefiniteLengthChunkedProtectedHeaderByteString()
     {
-        var writer = new CborWriter(CborConformanceMode.Lax);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Lax);
         writer.WriteStartArray(3);
-        writer.WriteStartIndefiniteLengthByteString();
+        writer.WriteStartIndefiniteByteString();
         writer.WriteByteString([0xA1, 0x01]);
         writer.WriteByteString([0x26]);
-        writer.WriteEndIndefiniteLengthByteString();
+        writer.WriteEndIndefiniteByteString();
         writer.WriteStartMap(0);
         writer.WriteEndMap();
         writer.WriteByteString([1, 2, 3, 4]);
         writer.WriteEndArray();
-        byte[] oracle = writer.Encode();
+        byte[] oracle = writerBuffer.WrittenSpan.ToArray();
 
-        Assert.ThrowsExactly<CborContentException>(() => CoseSerialization.ReadCounterSignatureV2(oracle, BaseMemoryPool.Shared));
+        Assert.ThrowsExactly<InvalidOperationException>(() => CoseSerialization.ReadCounterSignatureV2(oracle, BaseMemoryPool.Shared));
 
         using CoseCounterSignatureParseResult result = CoseSerialization.ParseCounterSignatureHeaderValue(
             CoseHeaderParameters.CounterSignatureVersion2, oracle, BaseMemoryPool.Shared);
@@ -672,14 +683,15 @@ internal sealed class CoseCounterSignatureTests
     [TestMethod]
     public void ReadCounterSignature0V2RejectsIndefiniteLengthChunkedByteString()
     {
-        var writer = new CborWriter(CborConformanceMode.Lax);
-        writer.WriteStartIndefiniteLengthByteString();
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Lax);
+        writer.WriteStartIndefiniteByteString();
         writer.WriteByteString([1, 2]);
         writer.WriteByteString([3, 4]);
-        writer.WriteEndIndefiniteLengthByteString();
-        byte[] oracle = writer.Encode();
+        writer.WriteEndIndefiniteByteString();
+        byte[] oracle = writerBuffer.WrittenSpan.ToArray();
 
-        Assert.ThrowsExactly<CborContentException>(() => CoseSerialization.ReadCounterSignature0V2(oracle, BaseMemoryPool.Shared));
+        Assert.ThrowsExactly<InvalidOperationException>(() => CoseSerialization.ReadCounterSignature0V2(oracle, BaseMemoryPool.Shared));
 
         using CoseCounterSignatureParseResult result = CoseSerialization.ParseCounterSignatureHeaderValue(
             CoseHeaderParameters.Countersignature0Version2, oracle, BaseMemoryPool.Shared);
@@ -702,12 +714,13 @@ internal sealed class CoseCounterSignatureTests
             kid: "second"u8.ToArray(),
             signature: Enumerable.Repeat((byte)0x5A, 96).ToArray());
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartArray(2);
         writer.WriteEncodedValue(firstElement);
         writer.WriteEncodedValue(secondElement);
         writer.WriteEndArray();
-        byte[] oracle = writer.Encode();
+        byte[] oracle = writerBuffer.WrittenSpan.ToArray();
 
         using CoseCounterSignatureParseResult result = CoseSerialization.ParseCounterSignatureHeaderValue(
             CoseHeaderParameters.CounterSignatureVersion2, oracle, BaseMemoryPool.Shared);
@@ -733,10 +746,11 @@ internal sealed class CoseCounterSignatureTests
     [TestMethod]
     public void ParseCounterSignatureHeaderValueRejectsAnEmptyArrayArmForLabel11()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartArray(0);
         writer.WriteEndArray();
-        byte[] oracle = writer.Encode();
+        byte[] oracle = writerBuffer.WrittenSpan.ToArray();
 
         using CoseCounterSignatureParseResult result = CoseSerialization.ParseCounterSignatureHeaderValue(
             CoseHeaderParameters.CounterSignatureVersion2, oracle, BaseMemoryPool.Shared);
@@ -891,7 +905,7 @@ internal sealed class CoseCounterSignatureTests
         await Assert.ThrowsExactlyAsync<OperationCanceledException>(async () =>
             await CoseCounterSign.CountersignFullAsync(
                 target, counterSignerProtectedHeader, null, ReadOnlyMemory<byte>.Empty, CoseSerialization.BuildCountersignStructure,
-                counterSignerPrivateKey, MicrosoftCryptographicFunctions.SignP256Async, metered.Pool, cancellationToken: cts.Token).ConfigureAwait(false)).ConfigureAwait(false);
+                counterSignerPrivateKey, MicrosoftCryptographicFunctionsAdapter.SignP256Async, metered.Pool, cancellationToken: cts.Token).ConfigureAwait(false)).ConfigureAwait(false);
 
         Assert.IsGreaterThan(0, metered.RentedCount, "metered.Pool must have been exercised, or the balance assertion below is vacuous.");
         Assert.AreEqual(0, metered.OutstandingCount, "The caller-supplied protected header must not leak when the call is cancelled before signing.");
@@ -930,7 +944,7 @@ internal sealed class CoseCounterSignatureTests
             "This is the content."u8.ToArray(),
             CoseSerialization.BuildCoseSignatureSigStructure,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             BaseMemoryPool.Shared,
             cancellationToken: cancellationToken).ConfigureAwait(false);
     }
@@ -943,7 +957,7 @@ internal sealed class CoseCounterSignatureTests
     /// <summary>
     /// Bilbo Baggins's P-521 public key from RFC 9052 Appendix C.7.1 (the same key whose private
     /// half produced RFC 9338 Appendix A.2.1's countersignature value), as a SEC1 uncompressed
-    /// point (<c>0x04 || X || Y</c>) -- the encoding <see cref="MicrosoftCryptographicFunctions.VerifyP521Async"/>
+    /// point (<c>0x04 || X || Y</c>) -- the encoding <see cref="MicrosoftCryptographicFunctionsAdapter.VerifyP521Async"/>
     /// accepts directly as <c>publicKeyMaterial</c>.
     /// </summary>
     private static byte[] BuildBilboP521UncompressedPublicKeyBytes()
@@ -968,7 +982,8 @@ internal sealed class CoseCounterSignatureTests
     /// </summary>
     private static byte[] BuildRfc9338AppendixA11CounterSignatureValueBytes()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartArray(3);
         writer.WriteByteString(Convert.FromHexString("a10126"));
         writer.WriteStartMap(1);
@@ -979,7 +994,7 @@ internal sealed class CoseCounterSignatureTests
             "5ac05e289d5d0e1b0a7f048a5d2b643813ded50bc9e49220f4f7278f85f19d4a77d655c9d3b51e805a74b099e1e085aacd97fc29d72f887e8802bb6650cceb2c"));
         writer.WriteEndArray();
 
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -992,7 +1007,8 @@ internal sealed class CoseCounterSignatureTests
     /// <param name="signature">The signature value bytes.</param>
     private static byte[] BuildCounterSignatureV2ElementBytes(string protectedHeaderHex, byte[] kid, byte[] signature)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartArray(3);
         writer.WriteByteString(Convert.FromHexString(protectedHeaderHex));
         writer.WriteStartMap(1);
@@ -1002,6 +1018,6 @@ internal sealed class CoseCounterSignatureTests
         writer.WriteByteString(signature);
         writer.WriteEndArray();
 
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 }

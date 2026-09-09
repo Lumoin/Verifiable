@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Linq;
-using System.Net;
 using System.Net.Http;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
@@ -74,8 +73,8 @@ internal sealed class WebVhCrossWireFlowTests
     private const string SecondTime = "2025-02-01T00:00:00Z";
     private const string WitnessTime = "2025-02-02T00:00:00Z";
 
-    private static readonly EncodeDelegate Base58Encoder = DefaultCoderSelector.SelectEncoder(typeof(PublicKeyMultibase));
-    private static readonly DecodeDelegate Base58Decoder = DefaultCoderSelector.SelectDecoder(typeof(PublicKeyMultibase));
+    private static EncodeDelegate Base58Encoder { get; } = DefaultCoderSelector.SelectEncoder(typeof(PublicKeyMultibase));
+    private static DecodeDelegate Base58Decoder { get; } = DefaultCoderSelector.SelectDecoder(typeof(PublicKeyMultibase));
 
     private static JsonSerializerOptions JsonOptions { get; } = TestSetup.DefaultSerializationOptions;
 
@@ -347,7 +346,7 @@ internal sealed class WebVhCrossWireFlowTests
             SerializePresentation,
             SerializeProofOptions,
             Base58Decoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             BaseMemoryPool.Shared);
 
         return DidResolverComposition.Build(
@@ -385,11 +384,11 @@ internal sealed class WebVhCrossWireFlowTests
     //so the test can prove a hop crossed the wire. This is node A — the publisher half of the cross-wire flow.
     private sealed class StaticContentHttpHost: IAsyncDisposable
     {
-        private readonly WebApplication app;
+        private WebApplication App { get; }
 
         private StaticContentHttpHost(WebApplication app, X509Certificate2 certificate, Uri baseAddress, StaticContentApplication application)
         {
-            this.app = app;
+            this.App = app;
             Certificate = certificate;
             BaseAddress = baseAddress;
             Application = application;
@@ -414,12 +413,12 @@ internal sealed class WebVhCrossWireFlowTests
             X509Certificate2 certificate = LoopbackTls.CreateServerCertificate("webvh-cross-wire-loopback-test-host");
 
             WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
-            builder.Logging.ClearProviders();
+            LoopbackKestrel.ConfigureLoopbackLogging(builder.Logging);
 
             //A single explicit HTTPS Listen call — no UseUrls — so there is no plaintext fallback on
             //this host at all.
             builder.WebHost.ConfigureKestrel(options =>
-                options.Listen(IPAddress.Loopback, port: 0, listenOptions => listenOptions.UseHttps(certificate)));
+                LoopbackKestrel.ConfigureLoopbackListener(options, certificate));
 
             WebApplication app = builder.Build();
 
@@ -439,8 +438,8 @@ internal sealed class WebVhCrossWireFlowTests
 
         public async ValueTask DisposeAsync()
         {
-            await app.StopAsync(CancellationToken.None).ConfigureAwait(false);
-            await app.DisposeAsync().ConfigureAwait(false);
+            await App.StopAsync(CancellationToken.None).ConfigureAwait(false);
+            await App.DisposeAsync().ConfigureAwait(false);
             Certificate.Dispose();
         }
     }
@@ -450,18 +449,18 @@ internal sealed class WebVhCrossWireFlowTests
     //a non-GET method. Every requested path is recorded so the cross-wire assertions can prove the socket was hit.
     private sealed class StaticContentApplication: IHttpApplication<HttpContext>
     {
-        private readonly ConcurrentDictionary<string, (byte[] Body, string ContentType)> content = new(StringComparer.Ordinal);
-        private readonly ConcurrentDictionary<string, int> requestCounts = new(StringComparer.Ordinal);
+        private ConcurrentDictionary<string, (byte[] Body, string ContentType)> Content { get; } = new(StringComparer.Ordinal);
+        private ConcurrentDictionary<string, int> RequestCounts { get; } = new(StringComparer.Ordinal);
         private int totalRequests;
 
         public int TotalRequests => Volatile.Read(ref totalRequests);
 
         public void Publish(string path, byte[] body, string contentType)
         {
-            content[path] = (body, contentType);
+            Content[path] = (body, contentType);
         }
 
-        public bool WasRequested(string path) => requestCounts.ContainsKey(path);
+        public bool WasRequested(string path) => RequestCounts.ContainsKey(path);
 
         public HttpContext CreateContext(IFeatureCollection contextFeatures) => new DefaultHttpContext(contextFeatures);
 
@@ -471,7 +470,7 @@ internal sealed class WebVhCrossWireFlowTests
             string path = context.Request.Path.HasValue ? context.Request.Path.Value! : string.Empty;
 
             Interlocked.Increment(ref totalRequests);
-            requestCounts.AddOrUpdate(path, 1, static (_, count) => count + 1);
+            RequestCounts.AddOrUpdate(path, 1, static (_, count) => count + 1);
 
             if(!HttpMethods.IsGet(context.Request.Method))
             {
@@ -480,7 +479,7 @@ internal sealed class WebVhCrossWireFlowTests
                 return;
             }
 
-            if(!content.TryGetValue(path, out (byte[] Body, string ContentType) served))
+            if(!Content.TryGetValue(path, out (byte[] Body, string ContentType) served))
             {
                 httpResponse.StatusCode = StatusCodes.Status404NotFound;
 

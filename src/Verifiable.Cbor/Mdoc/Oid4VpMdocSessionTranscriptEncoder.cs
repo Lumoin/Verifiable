@@ -1,4 +1,5 @@
-using System.Formats.Cbor;
+using System.Buffers;
+using Lumoin.Veritas.Cbor;
 using System.Text;
 using Verifiable.Cryptography;
 
@@ -68,6 +69,7 @@ public static class Oid4VpMdocSessionTranscriptEncoder
     /// alongside the <c>vp_token</c> so the verifier can reconstruct the
     /// transcript.
     /// </param>
+    /// <param name="pool">The memory pool the identifier digests are rented from.</param>
     /// <returns>The canonical CBOR encoding of <c>SessionTranscript</c>.</returns>
     /// <remarks>
     /// <paramref name="responseUri"/> is typed as <see cref="string"/>
@@ -84,11 +86,13 @@ public static class Oid4VpMdocSessionTranscriptEncoder
         string clientId,
         string responseUri,
         string authorizationRequestNonce,
-        ReadOnlySpan<byte> mdocGeneratedNonce)
+        ReadOnlySpan<byte> mdocGeneratedNonce,
+        BaseMemoryPool pool)
     {
         ArgumentException.ThrowIfNullOrEmpty(clientId);
         ArgumentException.ThrowIfNullOrEmpty(responseUri);
         ArgumentException.ThrowIfNullOrEmpty(authorizationRequestNonce);
+        ArgumentNullException.ThrowIfNull(pool);
 
         if(mdocGeneratedNonce.Length < MinimumMdocGeneratedNonceLength)
         {
@@ -97,10 +101,11 @@ public static class Oid4VpMdocSessionTranscriptEncoder
                 nameof(mdocGeneratedNonce));
         }
 
-        byte[] clientIdHash = HashIdentifierWithNonce(clientId, mdocGeneratedNonce);
-        byte[] responseUriHash = HashIdentifierWithNonce(responseUri, mdocGeneratedNonce);
+        byte[] clientIdHash = HashIdentifierWithNonce(clientId, mdocGeneratedNonce, pool);
+        byte[] responseUriHash = HashIdentifierWithNonce(responseUri, mdocGeneratedNonce, pool);
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteStartArray(3);
 
         writer.WriteNull(); //DeviceEngagementBytes — null per HTTP transport
@@ -115,7 +120,7 @@ public static class Oid4VpMdocSessionTranscriptEncoder
 
         writer.WriteEndArray();
 
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
     }
 
 
@@ -165,18 +170,19 @@ public static class Oid4VpMdocSessionTranscriptEncoder
     /// than a direct framework hash call, so the library never picks a
     /// hash implementation the consumer did not wire.
     /// </summary>
-    private static byte[] HashIdentifierWithNonce(string identifier, ReadOnlySpan<byte> mdocGeneratedNonce)
+    private static byte[] HashIdentifierWithNonce(string identifier, ReadOnlySpan<byte> mdocGeneratedNonce, BaseMemoryPool pool)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteStartArray(2);
         writer.WriteTextString(identifier);
         writer.WriteByteString(mdocGeneratedNonce);
         writer.WriteEndArray();
 
-        byte[] encoded = writer.Encode();
+        byte[] encoded = buffer.WrittenSpan.ToArray();
 
         using DigestValue digest = CryptographicKeyEvents.ComputeDigest(
-            encoded, WellKnownHashAlgorithms.Sha256SizeBytes, CryptoTags.Sha256Digest, BaseMemoryPool.Shared);
+            encoded, WellKnownHashAlgorithms.Sha256SizeBytes, CryptoTags.Sha256Digest, pool);
 
         //The pooled digest buffer may be larger than the requested length (pool implementations are free to
         //over-allocate); slice to the algorithm's exact output size before copying out.

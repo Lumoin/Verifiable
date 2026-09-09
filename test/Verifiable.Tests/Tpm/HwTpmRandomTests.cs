@@ -40,7 +40,7 @@ internal class HwTpmRandomTests
         if(TpmDevice.IsAvailable)
         {
             HasTpm = true;
-            Tpm = TpmDevice.Open();
+            Tpm = TpmDevice.Open(BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         }
     }
 

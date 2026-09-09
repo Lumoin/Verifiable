@@ -252,6 +252,11 @@ public sealed class OcspRevocationChecker
     /// response, or an affirmed <see cref="OcspCertificateStatus.Unknown"/> status), signalling the caller to
     /// try the next configured responder URI.
     /// </returns>
+    /// <remarks>
+    /// <strong>Manual disposal, not a <see langword="using"/> declaration.</strong> <c>response</c> is disposed
+    /// only when the <c>retained</c> flag is still <see langword="false"/> at the end — a <see langword="using"/>
+    /// declaration would dispose it unconditionally, including on the verified path this method returns it on.
+    /// </remarks>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the fetched response transfers to the returned result on the verified path; every other path disposes it here.")]
     private async ValueTask<RetainedOcspResponse> CheckAgainstResponderAsync(
         PkiCertificateMemory certificate, PkiCertificateMemory issuer, string responderUri, DateTimeOffset validationTime, BaseMemoryPool pool, CancellationToken cancellationToken)

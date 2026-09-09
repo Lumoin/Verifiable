@@ -7,6 +7,7 @@ using Verifiable.Apdu.Lds;
 using Verifiable.Cryptography;
 using Verifiable.Foundation.Automata;
 using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Apdu;
 
@@ -36,7 +37,7 @@ internal sealed class CardSimulatorReadTests
         using ElementaryFile efCom = EfCom.Write("0106", "040000", [0x61, 0x75], BaseMemoryPool.Shared);
         using ElementaryFile dataGroup1 = DataGroup1.Write(Td2MachineReadableZone, BaseMemoryPool.Shared);
 
-        using var card = new CardSimulator("passport", [efCom, dataGroup1]);
+        using var card = new CardSimulator("passport", [efCom, dataGroup1], rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         using ApduDevice device = ApduDevice.Create(card.TransceiveAsync);
 
         await AssertReadsBackAsync(device, efCom, chunkSize: 256).ConfigureAwait(false);
@@ -49,7 +50,7 @@ internal sealed class CardSimulatorReadTests
     {
         using ElementaryFile dataGroup1 = DataGroup1.Write(Td2MachineReadableZone, BaseMemoryPool.Shared);
 
-        using var card = new CardSimulator("passport-chunked", [dataGroup1]);
+        using var card = new CardSimulator("passport-chunked", [dataGroup1], rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         using ApduDevice device = ApduDevice.Create(card.TransceiveAsync);
 
         //Reading in 8-byte chunks forces many READ BINARYs at increasing offsets.
@@ -62,7 +63,7 @@ internal sealed class CardSimulatorReadTests
     {
         using ElementaryFile efCom = EfCom.Write("0106", "040000", [0x61, 0x75], BaseMemoryPool.Shared);
 
-        using var card = new CardSimulator("passport-errors", [efCom]);
+        using var card = new CardSimulator("passport-errors", [efCom], rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         using ApduDevice device = ApduDevice.Create(card.TransceiveAsync);
 
         //READ BINARY before any SELECT has no current EF.
@@ -82,7 +83,7 @@ internal sealed class CardSimulatorReadTests
         (StatusWord pastEnd, _) = await ReadBinaryAsync(device, offset: efCom.Length, length: 1).ConfigureAwait(false);
         Assert.AreEqual(0x6B00, pastEnd.Value, "Reading at or beyond the end of the file returns 6B00.");
 
-        //An instruction this slice does not model (READ RECORD).
+        //An instruction the simulator does not model (READ RECORD).
         using CommandApdu readRecord = CommandApdu.BuildCase2(
             0x00, InstructionCode.ReadRecord.Code, 0x00, 0x00, le: 0x08, useExtended: false, BaseMemoryPool.Shared);
         (StatusWord unsupported, _) = await TransmitAsync(device, readRecord).ConfigureAwait(false);
@@ -101,7 +102,7 @@ internal sealed class CardSimulatorReadTests
     {
         using ElementaryFile efCom = EfCom.Write("0106", "040000", [0x61, 0x75], BaseMemoryPool.Shared);
 
-        using var card = new CardSimulator("passport-trace", [efCom]);
+        using var card = new CardSimulator("passport-trace", [efCom], rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         var observer = new TestObserver<TraceEntry<CardSimulatorState, CardSimulatorInput>>();
         using IDisposable subscription = card.Subscribe(observer);
         using ApduDevice device = ApduDevice.Create(card.TransceiveAsync);

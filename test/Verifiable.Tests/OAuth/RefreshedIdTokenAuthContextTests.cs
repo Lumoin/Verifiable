@@ -67,7 +67,7 @@ internal sealed class RefreshedIdTokenAuthContextTests
     /// authentication (<c>SetAuthTime</c>/<c>SetAcr</c>) — the §12.2 "original" the refreshed
     /// id_token must carry.
     /// </summary>
-    private static readonly DateTimeOffset EstablishedAuthTime = TestClock.CanonicalEpoch.AddMinutes(-5);
+    private static DateTimeOffset EstablishedAuthTime { get; } = TestClock.CanonicalEpoch.AddMinutes(-5);
 
     private const string EstablishedAcr = "urn:example:acr:established-loa";
 
@@ -76,11 +76,11 @@ internal sealed class RefreshedIdTokenAuthContextTests
     /// refresh-redemption time — genuinely later and differently valued than the established
     /// original, so a regression that re-reads it on refresh produces an observably wrong id_token.
     /// </summary>
-    private static readonly DateTimeOffset ResolverRefreshAuthTime = TestClock.CanonicalEpoch.AddHours(3);
+    private static DateTimeOffset ResolverRefreshAuthTime { get; } = TestClock.CanonicalEpoch.AddHours(3);
 
     private const string ResolverRefreshAcr = "urn:example:acr:resolver-divergent-loa";
 
-    private static readonly IReadOnlyList<string> ResolverRefreshAmr = ["mfa", "hwk"];
+    private static IReadOnlyList<string> ResolverRefreshAmr { get; } = ["mfa", "hwk"];
 
 
     /// <summary>

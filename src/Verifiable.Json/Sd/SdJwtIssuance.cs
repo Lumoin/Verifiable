@@ -154,7 +154,8 @@ public static class SdJwtIssuance
     /// <param name="decoyOptions">
     /// Decoy-digest policy (RFC 9901 §4.2.5), invoked once per <c>_sd</c> location. When <see langword="null"/>,
     /// defaults to <see cref="DecoyDigestOptions.None"/> — no decoys, so the issued token is the minimal,
-    /// deterministic, spec-canonical form. Opt in (e.g. <see cref="DecoyDigestPolicy.Random(int, int)"/>) to
+    /// deterministic, spec-canonical form. Opt in (e.g.
+    /// <see cref="DecoyDigestPolicy.Random(int, int, Verifiable.Cryptography.FillEntropyDelegate)"/>) to
     /// obscure the selectively-disclosable claim count from an adversarial verifier.
     /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>

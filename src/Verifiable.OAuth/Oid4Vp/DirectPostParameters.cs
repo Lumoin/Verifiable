@@ -14,5 +14,5 @@ public static class DirectPostParameters
     /// <summary>
     /// The <c>response</c> parameter carrying the JWE-encrypted authorization response JWT.
     /// </summary>
-    public static readonly string Response = Utf8Constants.ToInternedString(ResponseUtf8);
+    public static string Response { get; } = Utf8Constants.ToInternedString(ResponseUtf8);
 }

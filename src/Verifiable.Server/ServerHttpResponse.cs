@@ -49,21 +49,25 @@ public sealed record ServerHttpResponse
     /// Additional response headers to emit alongside the standard
     /// <c>Content-Type</c> / <c>Location</c> slots. Used by RFC 9449 §8.1
     /// for the <c>DPoP-Nonce</c> challenge response and similar header-bound
-    /// protocol signals.
+    /// protocol signals. Keyed case-insensitively — RFC 9110 §5.1: "Field
+    /// names are case-insensitive" — so a name added under one casing
+    /// replaces, rather than duplicates, one already present under another.
     /// </summary>
     public ImmutableDictionary<string, string> Headers { get; init; } =
-        ImmutableDictionary<string, string>.Empty;
+        ImmutableDictionary.Create<string, string>(StringComparer.OrdinalIgnoreCase);
 
 
     /// <summary>
     /// Returns a copy of this response with <paramref name="name"/> set to
     /// <paramref name="value"/> in <see cref="Headers"/>, replacing any
-    /// previous value for the same header name.
+    /// previous value for the same header name (compared case-insensitively,
+    /// RFC 9110 §5.1).
     /// </summary>
     public ServerHttpResponse WithHeader(string name, string value)
     {
         ArgumentException.ThrowIfNullOrEmpty(name);
         ArgumentNullException.ThrowIfNull(value);
+
         return this with { Headers = Headers.SetItem(name, value) };
     }
 

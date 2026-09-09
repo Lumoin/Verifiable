@@ -29,7 +29,7 @@ internal sealed class SsfStreamManagementEndpointTests
     private const string TransmitterIssuer = "https://transmitter.example/";
     private const string ReceiverAudience = "https://receiver.example/ssf";
 
-    private static readonly string[] SupportedEvents =
+    private static string[] SupportedEvents { get; } =
     [
         CaepEventTypes.SessionRevoked,
         CaepEventTypes.CredentialChange
@@ -193,7 +193,7 @@ internal sealed class SsfStreamManagementEndpointTests
     public async Task SecondCreateConflictsAndMalformedBodiesAreRejected()
     {
         await using TestHostShell app = new(TimeProvider);
-        Dictionary<string, SsfStreamConfiguration> store = RegisterTransmitter(app, out VerifierKeyMaterial material);
+        RegisterTransmitter(app, out VerifierKeyMaterial material);
         using VerifierKeyMaterial _ = material;
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);

@@ -7,6 +7,8 @@ using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Keri;
 using Verifiable.Microsoft;
+using Microsoft.Extensions.Time.Testing;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Keri;
 
@@ -23,7 +25,7 @@ internal sealed class KeriRotationTests
     private const string InceptionSaid = Aid;
 
     //The current signing keys of the inception (not under test here; any valid keys).
-    private static readonly string[] InitialSigningKeys =
+    private static string[] InitialSigningKeys { get; } =
     [
         "DBFiIgoCOpJ_zW_OO0GdffhHfEvJWb1HxpDx95bFvufu",
         "DG-YwInLUxzVDD5z8SqZmS2FppXSB-ZX_f2bJC_ZnsM5",
@@ -31,7 +33,7 @@ internal sealed class KeriRotationTests
     ];
 
     //The pre-rotated next keys from the specification's inception example; these become the rotation's current keys.
-    private static readonly string[] NextKeys =
+    private static string[] NextKeys { get; } =
     [
         "DLv9BlDvjcZWkfPfWcYhNK-xQxz89h82_wA184Vxk8dj",
         "DCx3WypeBym3fCkVizTg18qEThSrVnB63dFq2oX5c3mz",
@@ -39,30 +41,30 @@ internal sealed class KeriRotationTests
     ];
 
     //The published next-key digests (the inception 'n' field) committing to NextKeys.
-    private static readonly string[] CommittedDigests =
+    private static string[] CommittedDigests { get; } =
     [
         "ELeFYMmuJb0hevKjhv97joA5bTfuA8E697cMzi8eoaZB",
         "ENY9GYShOjeh7qZUpIipKRHgrWcoR2WkJ7Wgj4wZx1YT",
         "EGyJ7y3TlewCW97dgBN-4pckhCqsni-zHNZ_G8zVerPG"
     ];
 
-    private static readonly string[] Backers =
+    private static string[] Backers { get; } =
     [
         "BGKV6v93ue5L5wsgk75t6j8TcdgABMN9x-eIyPi96J3B",
         "BJfueFAYc7N_V-zmDEn2SPCoVFx3H20alWsNZKgsS1vt"
     ];
 
-    private static readonly string[] Empty = [];
+    private static string[] Empty { get; } = [];
 
 
     /// <summary>
     /// An algorithm-agile digest oracle: a BLAKE3-tagged request routes to the BouncyCastle backend, every other
     /// request to the Microsoft backend. An independent oracle constructed in the test, not the production registry.
     /// </summary>
-    private static readonly ComputeDigestDelegate AgileDigest = (input, outputByteLength, tag, pool, context, cancellationToken) =>
+    private static ComputeDigestDelegate AgileDigest { get; } = (input, outputByteLength, tag, pool, context, cancellationToken) =>
         tag.TryGet<CryptoAlgorithm>(out CryptoAlgorithm algorithm) && algorithm == CryptoAlgorithm.Blake3
-            ? BouncyCastleCryptographicFunctions.ComputeBlake3DigestAsync(input, outputByteLength, tag, pool, context, cancellationToken)
-            : MicrosoftCryptographicFunctions.ComputeDigestAsync(input, outputByteLength, tag, pool, context, cancellationToken);
+            ? BouncyCastleCryptographicFunctions.ComputeBlake3DigestAsync(input, outputByteLength, tag, pool, new FakeTimeProvider(TestClock.CanonicalEpoch), context, cancellationToken)
+            : MicrosoftCryptographicFunctions.ComputeDigestAsync(input, outputByteLength, tag, pool, new FakeTimeProvider(TestClock.CanonicalEpoch), context, cancellationToken);
 
 
     /// <summary>

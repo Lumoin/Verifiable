@@ -48,28 +48,28 @@ public static class BearerTokenChallenge
     public static ReadOnlySpan<byte> RealmParameterUtf8 => "realm"u8;
 
     /// <summary>The <c>realm</c> challenge attribute name (RFC 6750 §3).</summary>
-    public static readonly string RealmParameter = Utf8Constants.ToInternedString(RealmParameterUtf8);
+    public static string RealmParameter { get; } = Utf8Constants.ToInternedString(RealmParameterUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="ErrorParameter"/>.</summary>
     public static ReadOnlySpan<byte> ErrorParameterUtf8 => "error"u8;
 
     /// <summary>The <c>error</c> challenge attribute name (RFC 6750 §3).</summary>
-    public static readonly string ErrorParameter = Utf8Constants.ToInternedString(ErrorParameterUtf8);
+    public static string ErrorParameter { get; } = Utf8Constants.ToInternedString(ErrorParameterUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="ErrorDescriptionParameter"/>.</summary>
     public static ReadOnlySpan<byte> ErrorDescriptionParameterUtf8 => "error_description"u8;
 
     /// <summary>The <c>error_description</c> challenge attribute name (RFC 6750 §3).</summary>
-    public static readonly string ErrorDescriptionParameter = Utf8Constants.ToInternedString(ErrorDescriptionParameterUtf8);
+    public static string ErrorDescriptionParameter { get; } = Utf8Constants.ToInternedString(ErrorDescriptionParameterUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="ScopeParameter"/>.</summary>
     public static ReadOnlySpan<byte> ScopeParameterUtf8 => "scope"u8;
 
     /// <summary>The <c>scope</c> challenge attribute name (RFC 6750 §3).</summary>
-    public static readonly string ScopeParameter = Utf8Constants.ToInternedString(ScopeParameterUtf8);
+    public static string ScopeParameter { get; } = Utf8Constants.ToInternedString(ScopeParameterUtf8);
 
     /// <summary>The all-absent instance <see cref="TryParse"/> yields when parsing fails.</summary>
-    private static readonly BearerTokenChallengeParameters EmptyParameters = new(
+    private static BearerTokenChallengeParameters EmptyParameters { get; } = new(
         Realm: null, Error: null, ErrorDescription: null, Scope: null, ResourceMetadata: null);
 
 

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography.Text;
 
 
@@ -29,7 +30,7 @@ public static class AuthorizationServerMetadataParameterNames
     /// <summary>
     /// URL of the authorization server's issuer identifier.
     /// </summary>
-    public static readonly string Issuer = Utf8Constants.ToInternedString(IssuerUtf8);
+    public static string Issuer { get; } = Utf8Constants.ToInternedString(IssuerUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="AuthorizationEndpoint"/>.</summary>
     public static ReadOnlySpan<byte> AuthorizationEndpointUtf8 => "authorization_endpoint"u8;
@@ -37,7 +38,7 @@ public static class AuthorizationServerMetadataParameterNames
     /// <summary>
     /// URL of the authorization server's authorization endpoint.
     /// </summary>
-    public static readonly string AuthorizationEndpoint = Utf8Constants.ToInternedString(AuthorizationEndpointUtf8);
+    public static string AuthorizationEndpoint { get; } = Utf8Constants.ToInternedString(AuthorizationEndpointUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="TokenEndpoint"/>.</summary>
     public static ReadOnlySpan<byte> TokenEndpointUtf8 => "token_endpoint"u8;
@@ -45,7 +46,7 @@ public static class AuthorizationServerMetadataParameterNames
     /// <summary>
     /// URL of the authorization server's token endpoint.
     /// </summary>
-    public static readonly string TokenEndpoint = Utf8Constants.ToInternedString(TokenEndpointUtf8);
+    public static string TokenEndpoint { get; } = Utf8Constants.ToInternedString(TokenEndpointUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="JwksUri"/>.</summary>
     public static ReadOnlySpan<byte> JwksUriUtf8 => "jwks_uri"u8;
@@ -53,7 +54,9 @@ public static class AuthorizationServerMetadataParameterNames
     /// <summary>
     /// URL of the authorization server's JWK Set document.
     /// </summary>
-    public static readonly string JwksUri = Utf8Constants.ToInternedString(JwksUriUtf8);
+    [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
+        Justification = "This member is the JSON claim NAME literal 'jwks_uri' (a wire key compared and serialised as a string), not a dereferenceable System.Uri.")]
+    public static string JwksUri { get; } = Utf8Constants.ToInternedString(JwksUriUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="RegistrationEndpoint"/>.</summary>
     public static ReadOnlySpan<byte> RegistrationEndpointUtf8 => "registration_endpoint"u8;
@@ -61,7 +64,7 @@ public static class AuthorizationServerMetadataParameterNames
     /// <summary>
     /// URL of the authorization server's dynamic client registration endpoint.
     /// </summary>
-    public static readonly string RegistrationEndpoint = Utf8Constants.ToInternedString(RegistrationEndpointUtf8);
+    public static string RegistrationEndpoint { get; } = Utf8Constants.ToInternedString(RegistrationEndpointUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="ScopesSupported"/>.</summary>
     public static ReadOnlySpan<byte> ScopesSupportedUtf8 => "scopes_supported"u8;
@@ -69,7 +72,7 @@ public static class AuthorizationServerMetadataParameterNames
     /// <summary>
     /// JSON array of supported scope values.
     /// </summary>
-    public static readonly string ScopesSupported = Utf8Constants.ToInternedString(ScopesSupportedUtf8);
+    public static string ScopesSupported { get; } = Utf8Constants.ToInternedString(ScopesSupportedUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="ResponseTypesSupported"/>.</summary>
     public static ReadOnlySpan<byte> ResponseTypesSupportedUtf8 => "response_types_supported"u8;
@@ -77,7 +80,7 @@ public static class AuthorizationServerMetadataParameterNames
     /// <summary>
     /// JSON array of supported response types.
     /// </summary>
-    public static readonly string ResponseTypesSupported = Utf8Constants.ToInternedString(ResponseTypesSupportedUtf8);
+    public static string ResponseTypesSupported { get; } = Utf8Constants.ToInternedString(ResponseTypesSupportedUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="GrantTypesSupported"/>.</summary>
     public static ReadOnlySpan<byte> GrantTypesSupportedUtf8 => "grant_types_supported"u8;
@@ -85,7 +88,7 @@ public static class AuthorizationServerMetadataParameterNames
     /// <summary>
     /// JSON array of supported grant types.
     /// </summary>
-    public static readonly string GrantTypesSupported = Utf8Constants.ToInternedString(GrantTypesSupportedUtf8);
+    public static string GrantTypesSupported { get; } = Utf8Constants.ToInternedString(GrantTypesSupportedUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="IdentityChainingRequestedTokenTypesSupported"/>.</summary>
     public static ReadOnlySpan<byte> IdentityChainingRequestedTokenTypesSupportedUtf8 => "identity_chaining_requested_token_types_supported"u8;
@@ -96,7 +99,7 @@ public static class AuthorizationServerMetadataParameterNames
     /// draft-ietf-oauth-identity-assertion-authz-grant-04 (21 May 2026) §7.1. An IdP that can mint an Identity
     /// Assertion JWT Authorization Grant advertises <c>urn:ietf:params:oauth:token-type:id-jag</c>.
     /// </summary>
-    public static readonly string IdentityChainingRequestedTokenTypesSupported = Utf8Constants.ToInternedString(IdentityChainingRequestedTokenTypesSupportedUtf8);
+    public static string IdentityChainingRequestedTokenTypesSupported { get; } = Utf8Constants.ToInternedString(IdentityChainingRequestedTokenTypesSupportedUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="AuthorizationGrantProfilesSupported"/>.</summary>
     public static ReadOnlySpan<byte> AuthorizationGrantProfilesSupportedUtf8 => "authorization_grant_profiles_supported"u8;
@@ -108,7 +111,7 @@ public static class AuthorizationServerMetadataParameterNames
     /// <c>urn:ietf:params:oauth:grant-profile:id-jag</c> and MUST also include
     /// <c>urn:ietf:params:oauth:grant-type:jwt-bearer</c> in <see cref="GrantTypesSupported"/>.
     /// </summary>
-    public static readonly string AuthorizationGrantProfilesSupported = Utf8Constants.ToInternedString(AuthorizationGrantProfilesSupportedUtf8);
+    public static string AuthorizationGrantProfilesSupported { get; } = Utf8Constants.ToInternedString(AuthorizationGrantProfilesSupportedUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="ResponseModesSupported"/>.</summary>
     public static ReadOnlySpan<byte> ResponseModesSupportedUtf8 => "response_modes_supported"u8;
@@ -119,7 +122,7 @@ public static class AuthorizationServerMetadataParameterNames
     /// JARM §4 adds the four JWT-secured values
     /// (<see cref="Jarm.JarmResponseModes"/>).
     /// </summary>
-    public static readonly string ResponseModesSupported = Utf8Constants.ToInternedString(ResponseModesSupportedUtf8);
+    public static string ResponseModesSupported { get; } = Utf8Constants.ToInternedString(ResponseModesSupportedUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="AuthorizationDetailsTypesSupported"/>.</summary>
     public static ReadOnlySpan<byte> AuthorizationDetailsTypesSupportedUtf8 => "authorization_details_types_supported"u8;
@@ -128,7 +131,7 @@ public static class AuthorizationServerMetadataParameterNames
     /// JSON array of the RFC 9396 authorization details type values the server supports, per
     /// <see href="https://www.rfc-editor.org/rfc/rfc9396#section-10">RFC 9396 §10</see>.
     /// </summary>
-    public static readonly string AuthorizationDetailsTypesSupported = Utf8Constants.ToInternedString(AuthorizationDetailsTypesSupportedUtf8);
+    public static string AuthorizationDetailsTypesSupported { get; } = Utf8Constants.ToInternedString(AuthorizationDetailsTypesSupportedUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="RevocationEndpoint"/>.</summary>
     public static ReadOnlySpan<byte> RevocationEndpointUtf8 => "revocation_endpoint"u8;
@@ -136,7 +139,7 @@ public static class AuthorizationServerMetadataParameterNames
     /// <summary>
     /// URL of the authorization server's token revocation endpoint (RFC 7009).
     /// </summary>
-    public static readonly string RevocationEndpoint = Utf8Constants.ToInternedString(RevocationEndpointUtf8);
+    public static string RevocationEndpoint { get; } = Utf8Constants.ToInternedString(RevocationEndpointUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="IntrospectionEndpoint"/>.</summary>
     public static ReadOnlySpan<byte> IntrospectionEndpointUtf8 => "introspection_endpoint"u8;
@@ -144,7 +147,7 @@ public static class AuthorizationServerMetadataParameterNames
     /// <summary>
     /// URL of the authorization server's token introspection endpoint (RFC 7662).
     /// </summary>
-    public static readonly string IntrospectionEndpoint = Utf8Constants.ToInternedString(IntrospectionEndpointUtf8);
+    public static string IntrospectionEndpoint { get; } = Utf8Constants.ToInternedString(IntrospectionEndpointUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="GlobalTokenRevocationEndpoint"/>.</summary>
     public static ReadOnlySpan<byte> GlobalTokenRevocationEndpointUtf8 => "global_token_revocation_endpoint"u8;
@@ -153,7 +156,7 @@ public static class AuthorizationServerMetadataParameterNames
     /// URL of the authorization server's Global Token Revocation endpoint
     /// (draft-parecki-oauth-global-token-revocation).
     /// </summary>
-    public static readonly string GlobalTokenRevocationEndpoint = Utf8Constants.ToInternedString(GlobalTokenRevocationEndpointUtf8);
+    public static string GlobalTokenRevocationEndpoint { get; } = Utf8Constants.ToInternedString(GlobalTokenRevocationEndpointUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="EndSessionEndpoint"/>.</summary>
     public static ReadOnlySpan<byte> EndSessionEndpointUtf8 => "end_session_endpoint"u8;
@@ -162,7 +165,7 @@ public static class AuthorizationServerMetadataParameterNames
     /// URL of the OP's RP-Initiated Logout end-session endpoint
     /// (<see href="https://openid.net/specs/openid-connect-rpinitiated-1_0.html">OIDC RP-Initiated Logout 1.0</see>).
     /// </summary>
-    public static readonly string EndSessionEndpoint = Utf8Constants.ToInternedString(EndSessionEndpointUtf8);
+    public static string EndSessionEndpoint { get; } = Utf8Constants.ToInternedString(EndSessionEndpointUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="UiLocalesSupported"/>.</summary>
     public static ReadOnlySpan<byte> UiLocalesSupportedUtf8 => "ui_locales_supported"u8;
@@ -175,7 +178,7 @@ public static class AuthorizationServerMetadataParameterNames
     /// it advertises the languages an OP would honour for the RP-Initiated Logout
     /// <c>ui_locales</c> request parameter.
     /// </summary>
-    public static readonly string UiLocalesSupported = Utf8Constants.ToInternedString(UiLocalesSupportedUtf8);
+    public static string UiLocalesSupported { get; } = Utf8Constants.ToInternedString(UiLocalesSupportedUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="AcrValuesSupported"/>.</summary>
     public static ReadOnlySpan<byte> AcrValuesSupportedUtf8 => "acr_values_supported"u8;
@@ -192,7 +195,7 @@ public static class AuthorizationServerMetadataParameterNames
     /// <see cref="Server.AuthorizationServerIntegration.ContributeDiscoveryFieldsAsync"/>,
     /// mirroring <see cref="UiLocalesSupported"/>.
     /// </summary>
-    public static readonly string AcrValuesSupported = Utf8Constants.ToInternedString(AcrValuesSupportedUtf8);
+    public static string AcrValuesSupported { get; } = Utf8Constants.ToInternedString(AcrValuesSupportedUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="BackchannelLogoutSupported"/>.</summary>
     public static ReadOnlySpan<byte> BackchannelLogoutSupportedUtf8 => "backchannel_logout_supported"u8;
@@ -202,7 +205,7 @@ public static class AuthorizationServerMetadataParameterNames
     /// <c>backchannel_logout_supported</c> per
     /// <see href="https://openid.net/specs/openid-connect-backchannel-1_0.html#BCSupport">OIDC Back-Channel Logout 1.0 §4</see>.
     /// </summary>
-    public static readonly string BackchannelLogoutSupported = Utf8Constants.ToInternedString(BackchannelLogoutSupportedUtf8);
+    public static string BackchannelLogoutSupported { get; } = Utf8Constants.ToInternedString(BackchannelLogoutSupportedUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="BackchannelLogoutSessionSupported"/>.</summary>
     public static ReadOnlySpan<byte> BackchannelLogoutSessionSupportedUtf8 => "backchannel_logout_session_supported"u8;
@@ -213,7 +216,7 @@ public static class AuthorizationServerMetadataParameterNames
     /// <c>backchannel_logout_session_supported</c> per
     /// <see href="https://openid.net/specs/openid-connect-backchannel-1_0.html#BCSupport">OIDC Back-Channel Logout 1.0 §4</see>.
     /// </summary>
-    public static readonly string BackchannelLogoutSessionSupported = Utf8Constants.ToInternedString(BackchannelLogoutSessionSupportedUtf8);
+    public static string BackchannelLogoutSessionSupported { get; } = Utf8Constants.ToInternedString(BackchannelLogoutSessionSupportedUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="PushedAuthorizationRequestEndpoint"/>.</summary>
     public static ReadOnlySpan<byte> PushedAuthorizationRequestEndpointUtf8 => "pushed_authorization_request_endpoint"u8;
@@ -221,7 +224,7 @@ public static class AuthorizationServerMetadataParameterNames
     /// <summary>
     /// URL of the authorization server's pushed authorization request endpoint (RFC 9126).
     /// </summary>
-    public static readonly string PushedAuthorizationRequestEndpoint = Utf8Constants.ToInternedString(PushedAuthorizationRequestEndpointUtf8);
+    public static string PushedAuthorizationRequestEndpoint { get; } = Utf8Constants.ToInternedString(PushedAuthorizationRequestEndpointUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="RequirePushedAuthorizationRequests"/>.</summary>
     public static ReadOnlySpan<byte> RequirePushedAuthorizationRequestsUtf8 => "require_pushed_authorization_requests"u8;
@@ -230,7 +233,7 @@ public static class AuthorizationServerMetadataParameterNames
     /// Whether the authorization server requires Pushed Authorization Requests (RFC 9126 §5).
     /// FAPI 2.0 §5.2.2 mandates this be <see langword="true"/>.
     /// </summary>
-    public static readonly string RequirePushedAuthorizationRequests = Utf8Constants.ToInternedString(RequirePushedAuthorizationRequestsUtf8);
+    public static string RequirePushedAuthorizationRequests { get; } = Utf8Constants.ToInternedString(RequirePushedAuthorizationRequestsUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="AuthorizationResponseIssParameterSupported"/>.</summary>
     public static ReadOnlySpan<byte> AuthorizationResponseIssParameterSupportedUtf8 => "authorization_response_iss_parameter_supported"u8;
@@ -239,7 +242,7 @@ public static class AuthorizationServerMetadataParameterNames
     /// Whether the authorization server supports the <c>iss</c> authorization response
     /// parameter (RFC 9207).
     /// </summary>
-    public static readonly string AuthorizationResponseIssParameterSupported = Utf8Constants.ToInternedString(AuthorizationResponseIssParameterSupportedUtf8);
+    public static string AuthorizationResponseIssParameterSupported { get; } = Utf8Constants.ToInternedString(AuthorizationResponseIssParameterSupportedUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="DpopSigningAlgValuesSupported"/>.</summary>
     public static ReadOnlySpan<byte> DpopSigningAlgValuesSupportedUtf8 => "dpop_signing_alg_values_supported"u8;
@@ -247,7 +250,7 @@ public static class AuthorizationServerMetadataParameterNames
     /// <summary>
     /// The JWS algorithms the authorization server accepts on DPoP proofs (RFC 9449 §5.1).
     /// </summary>
-    public static readonly string DpopSigningAlgValuesSupported = Utf8Constants.ToInternedString(DpopSigningAlgValuesSupportedUtf8);
+    public static string DpopSigningAlgValuesSupported { get; } = Utf8Constants.ToInternedString(DpopSigningAlgValuesSupportedUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="StatusListAggregationEndpoint"/>.</summary>
     public static ReadOnlySpan<byte> StatusListAggregationEndpointUtf8 => "status_list_aggregation_endpoint"u8;
@@ -255,7 +258,7 @@ public static class AuthorizationServerMetadataParameterNames
     /// <summary>
     /// URL of the Status List Aggregation endpoint (draft-ietf-oauth-status-list).
     /// </summary>
-    public static readonly string StatusListAggregationEndpoint = Utf8Constants.ToInternedString(StatusListAggregationEndpointUtf8);
+    public static string StatusListAggregationEndpoint { get; } = Utf8Constants.ToInternedString(StatusListAggregationEndpointUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="TokenEndpointAuthMethodsSupported"/>.</summary>
     public static ReadOnlySpan<byte> TokenEndpointAuthMethodsSupportedUtf8 => "token_endpoint_auth_methods_supported"u8;
@@ -268,7 +271,34 @@ public static class AuthorizationServerMetadataParameterNames
     /// <c>"tls_client_auth"</c>, <c>"self_signed_tls_client_auth"</c>,
     /// <c>"attest_jwt_client_auth"</c>.
     /// </summary>
-    public static readonly string TokenEndpointAuthMethodsSupported = Utf8Constants.ToInternedString(TokenEndpointAuthMethodsSupportedUtf8);
+    public static string TokenEndpointAuthMethodsSupported { get; } = Utf8Constants.ToInternedString(TokenEndpointAuthMethodsSupportedUtf8);
+
+    /// <summary>Returns <see langword="true"/> when <paramref name="value"/> is exactly
+    /// <c>token_endpoint_auth_methods_supported</c>.</summary>
+    public static bool IsTokenEndpointAuthMethodsSupported(string value) =>
+        string.Equals(value, TokenEndpointAuthMethodsSupported, StringComparison.Ordinal);
+
+    /// <summary>The UTF-8 source literal of <see cref="TokenEndpointAuthSigningAlgValuesSupported"/>.</summary>
+    public static ReadOnlySpan<byte> TokenEndpointAuthSigningAlgValuesSupportedUtf8 => "token_endpoint_auth_signing_alg_values_supported"u8;
+
+    /// <summary>
+    /// JSON array of the JWS signing algorithms the token endpoint accepts on the
+    /// client-assertion JWT for the <c>private_key_jwt</c> and <c>client_secret_jwt</c>
+    /// authentication methods (RFC 8414, Section 2): "OPTIONAL. JSON array containing a
+    /// list of the JWS signing algorithms ("alg" values) supported by the token endpoint
+    /// for the signature on the JWT [JWT] used to authenticate the client at the token
+    /// endpoint for the "private_key_jwt" and "client_secret_jwt" authentication methods.
+    /// This metadata entry MUST be present if either of these authentication methods are
+    /// specified in the "token_endpoint_auth_methods_supported" entry. No default
+    /// algorithms are implied if this entry is omitted. Servers SHOULD support "RS256".
+    /// The value "none" MUST NOT be used."
+    /// </summary>
+    public static string TokenEndpointAuthSigningAlgValuesSupported { get; } = Utf8Constants.ToInternedString(TokenEndpointAuthSigningAlgValuesSupportedUtf8);
+
+    /// <summary>Returns <see langword="true"/> when <paramref name="value"/> is exactly
+    /// <c>token_endpoint_auth_signing_alg_values_supported</c>.</summary>
+    public static bool IsTokenEndpointAuthSigningAlgValuesSupported(string value) =>
+        string.Equals(value, TokenEndpointAuthSigningAlgValuesSupported, StringComparison.Ordinal);
 
     /// <summary>The UTF-8 source literal of <see cref="CodeChallengeMethodsSupported"/>.</summary>
     public static ReadOnlySpan<byte> CodeChallengeMethodsSupportedUtf8 => "code_challenge_methods_supported"u8;
@@ -278,7 +308,7 @@ public static class AuthorizationServerMetadataParameterNames
     /// supports per RFC 7636 §6.2.1. Registered values: <c>"plain"</c> and
     /// <c>"S256"</c>.
     /// </summary>
-    public static readonly string CodeChallengeMethodsSupported = Utf8Constants.ToInternedString(CodeChallengeMethodsSupportedUtf8);
+    public static string CodeChallengeMethodsSupported { get; } = Utf8Constants.ToInternedString(CodeChallengeMethodsSupportedUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="ProtectedResources"/>.</summary>
     public static ReadOnlySpan<byte> ProtectedResourcesUtf8 => "protected_resources"u8;
@@ -289,7 +319,7 @@ public static class AuthorizationServerMetadataParameterNames
     /// when the set of legitimate protected resources is enumerable; an
     /// application contributes it through the discovery-fields seam.
     /// </summary>
-    public static readonly string ProtectedResources = Utf8Constants.ToInternedString(ProtectedResourcesUtf8);
+    public static string ProtectedResources { get; } = Utf8Constants.ToInternedString(ProtectedResourcesUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="PreAuthorizedGrantAnonymousAccessSupported"/>.</summary>
     public static ReadOnlySpan<byte> PreAuthorizedGrantAnonymousAccessSupportedUtf8 => "pre-authorized_grant_anonymous_access_supported"u8;
@@ -307,7 +337,7 @@ public static class AuthorizationServerMetadataParameterNames
     /// <see cref="Oid4Vci.PreAuthorizedCodeDenialReason.ClientAuthenticationRequired"/>); this
     /// parameter is the matching ADVERTISEMENT.
     /// </summary>
-    public static readonly string PreAuthorizedGrantAnonymousAccessSupported = Utf8Constants.ToInternedString(PreAuthorizedGrantAnonymousAccessSupportedUtf8);
+    public static string PreAuthorizedGrantAnonymousAccessSupported { get; } = Utf8Constants.ToInternedString(PreAuthorizedGrantAnonymousAccessSupportedUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="ClientIdMetadataDocumentSupported"/>.</summary>
     public static ReadOnlySpan<byte> ClientIdMetadataDocumentSupportedUtf8 => "client_id_metadata_document_supported"u8;
@@ -323,5 +353,5 @@ public static class AuthorizationServerMetadataParameterNames
     /// client_id URL as described in this specification." Registered in the IANA "OAuth
     /// Authorization Server Metadata" registry per §10.1.
     /// </summary>
-    public static readonly string ClientIdMetadataDocumentSupported = Utf8Constants.ToInternedString(ClientIdMetadataDocumentSupportedUtf8);
+    public static string ClientIdMetadataDocumentSupported { get; } = Utf8Constants.ToInternedString(ClientIdMetadataDocumentSupportedUtf8);
 }

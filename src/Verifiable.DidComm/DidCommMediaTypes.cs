@@ -29,7 +29,7 @@ public static class DidCommMediaTypes
     /// protective envelope. The media type a conformant implementation MUST report for a generic
     /// plaintext message (DIDComm v2.1 §DIDComm Plaintext Messages).
     /// </summary>
-    public static readonly string Plaintext = Utf8Constants.ToInternedString(PlaintextUtf8);
+    public static string Plaintext { get; } = Utf8Constants.ToInternedString(PlaintextUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Signed"/>.</summary>
     public static ReadOnlySpan<byte> SignedUtf8 => "application/didcomm-signed+json"u8;
@@ -38,7 +38,7 @@ public static class DidCommMediaTypes
     /// A DIDComm signed message (<c>application/didcomm-signed+json</c>) — a signed JWM that adds
     /// non-repudiation to the plaintext it wraps (DIDComm v2.1 §DIDComm Signed Messages).
     /// </summary>
-    public static readonly string Signed = Utf8Constants.ToInternedString(SignedUtf8);
+    public static string Signed { get; } = Utf8Constants.ToInternedString(SignedUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Encrypted"/>.</summary>
     public static ReadOnlySpan<byte> EncryptedUtf8 => "application/didcomm-encrypted+json"u8;
@@ -49,7 +49,7 @@ public static class DidCommMediaTypes
     /// one media type, because only the recipient should care about the difference
     /// (DIDComm v2.1 §DIDComm Encrypted Messages / §IANA Media Types).
     /// </summary>
-    public static readonly string Encrypted = Utf8Constants.ToInternedString(EncryptedUtf8);
+    public static string Encrypted { get; } = Utf8Constants.ToInternedString(EncryptedUtf8);
 
 
     /// <summary>Whether <paramref name="mediaType"/> is the plaintext media type.</summary>

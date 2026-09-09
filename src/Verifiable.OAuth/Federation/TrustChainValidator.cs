@@ -46,14 +46,12 @@ public sealed class TrustChainValidator
     /// extended with deployment-specific rules.
     /// </param>
     /// <param name="timeProvider">
-    /// Time provider for <see cref="ClaimIssueResult.CreationTimestampInUtc"/>
-    /// stamping. When <see langword="null"/>,
-    /// <see cref="TimeProvider.System"/> is used.
+    /// Time provider for <see cref="ClaimIssueResult.CreationTimestampInUtc"/> stamping.
     /// </param>
     public TrustChainValidator(
         string issuerId,
         IList<ClaimDelegate<TrustChainValidationContext>> validationRules,
-        TimeProvider? timeProvider = null)
+        TimeProvider timeProvider)
     {
         ArgumentException.ThrowIfNullOrEmpty(issuerId);
         ArgumentNullException.ThrowIfNull(validationRules);
@@ -67,7 +65,7 @@ public sealed class TrustChainValidator
     /// Builds a Trust Chain validator configured with the OpenID Federation
     /// 1.0 §4.3 / §10 baseline rule set.
     /// </summary>
-    public static TrustChainValidator Default(TimeProvider? timeProvider = null) =>
+    public static TrustChainValidator Default(TimeProvider timeProvider) =>
         new(WellKnownFederationAssessorIds.ValidateTrustChain,
             FederationValidationProfiles.TrustChainRules(),
             timeProvider);

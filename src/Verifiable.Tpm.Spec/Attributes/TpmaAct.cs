@@ -14,7 +14,7 @@ namespace Verifiable.Tpm.Spec.Attributes;
 /// Retrieval: <c>TPM2_GetCapability(capability == TPM_CAP_ACT, property == TPM_RH_ACT_x)</c>, where x is ACT number (0-F).
 /// </para>
 /// <para>
-/// Specification: <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2: Structures, section 8.12 (TPMA_ACT).
+/// Specification: <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2: Structures, clause 8.12 (TPMA_ACT).
 /// </para>
 /// </remarks>
 [Flags]

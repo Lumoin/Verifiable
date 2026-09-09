@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography.Text;
 
 namespace Verifiable.OAuth.Siop.Server;
@@ -30,7 +31,7 @@ public static class SiopVerifierContextKeys
     /// The transaction nonce the Self-Issued ID Token MUST echo (§9 REQUIRED).
     /// Value type: <see cref="string"/>.
     /// </summary>
-    public static readonly string Nonce = Utf8Constants.ToInternedString(NonceUtf8);
+    public static string Nonce { get; } = Utf8Constants.ToInternedString(NonceUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="ClientId"/>.</summary>
     public static ReadOnlySpan<byte> ClientIdUtf8 => "siop.clientId"u8;
@@ -40,7 +41,7 @@ public static class SiopVerifierContextKeys
     /// When absent, the preparation endpoint falls back to the resolved registration's
     /// <see cref="ClientRecord.ClientId"/>. Value type: <see cref="string"/>.
     /// </summary>
-    public static readonly string ClientId = Utf8Constants.ToInternedString(ClientIdUtf8);
+    public static string ClientId { get; } = Utf8Constants.ToInternedString(ClientIdUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="AllowedAlgorithms"/>.</summary>
     public static ReadOnlySpan<byte> AllowedAlgorithmsUtf8 => "siop.allowedAlgorithms"u8;
@@ -50,7 +51,7 @@ public static class SiopVerifierContextKeys
     /// allow-list; <c>none</c> is always rejected). Value type:
     /// <c>IReadOnlyList&lt;string&gt;</c>.
     /// </summary>
-    public static readonly string AllowedAlgorithms = Utf8Constants.ToInternedString(AllowedAlgorithmsUtf8);
+    public static string AllowedAlgorithms { get; } = Utf8Constants.ToInternedString(AllowedAlgorithmsUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="IdTokenType"/>.</summary>
     public static ReadOnlySpan<byte> IdTokenTypeUtf8 => "siop.idTokenType"u8;
@@ -59,7 +60,7 @@ public static class SiopVerifierContextKeys
     /// The requested <c>id_token_type</c> (§7), when the Relying Party constrains it. Value type:
     /// <see cref="string"/>.
     /// </summary>
-    public static readonly string IdTokenType = Utf8Constants.ToInternedString(IdTokenTypeUtf8);
+    public static string IdTokenType { get; } = Utf8Constants.ToInternedString(IdTokenTypeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="EncryptionKeyId"/>.</summary>
     public static ReadOnlySpan<byte> EncryptionKeyIdUtf8 => "siop.encryptionKeyId"u8;
@@ -71,7 +72,7 @@ public static class SiopVerifierContextKeys
     /// Relying Party sets this before dispatching the preparation request when it accepts encrypted
     /// responses. Value type: <see cref="string"/>.
     /// </summary>
-    public static readonly string EncryptionKeyId = Utf8Constants.ToInternedString(EncryptionKeyIdUtf8);
+    public static string EncryptionKeyId { get; } = Utf8Constants.ToInternedString(EncryptionKeyIdUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="AllowedEncAlgorithms"/>.</summary>
     public static ReadOnlySpan<byte> AllowedEncAlgorithmsUtf8 => "siop.allowedEncAlgorithms"u8;
@@ -81,7 +82,7 @@ public static class SiopVerifierContextKeys
     /// SIOP parallel of <c>encrypted_response_enc_values_supported</c>). The encrypted response's JWE
     /// <c>enc</c> header MUST be one of these values. Value type: <c>IReadOnlyList&lt;string&gt;</c>.
     /// </summary>
-    public static readonly string AllowedEncAlgorithms = Utf8Constants.ToInternedString(AllowedEncAlgorithmsUtf8);
+    public static string AllowedEncAlgorithms { get; } = Utf8Constants.ToInternedString(AllowedEncAlgorithmsUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="UseStaticDiscoveryAudience"/>.</summary>
     public static ReadOnlySpan<byte> UseStaticDiscoveryAudienceUtf8 => "siop.useStaticDiscoveryAudience"u8;
@@ -91,7 +92,7 @@ public static class SiopVerifierContextKeys
     /// (<c>https://self-issued.me/v2</c>) rather than the dynamically discovered issuer. The Relying
     /// Party sets this before dispatching the preparation request. Value type: <see cref="bool"/>.
     /// </summary>
-    public static readonly string UseStaticDiscoveryAudience = Utf8Constants.ToInternedString(UseStaticDiscoveryAudienceUtf8);
+    public static string UseStaticDiscoveryAudience { get; } = Utf8Constants.ToInternedString(UseStaticDiscoveryAudienceUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="RequestObjectAdditionalHeaderClaims"/>.</summary>
     public static ReadOnlySpan<byte> RequestObjectAdditionalHeaderClaimsUtf8 => "siop.requestObjectAdditionalHeaderClaims"u8;
@@ -112,7 +113,7 @@ public static class SiopVerifierContextKeys
     /// with those keys are ignored by the <see cref="SignSiopRequestObject"/> handler. Per SIOPv2 §9
     /// the appropriate header set depends on the client_id prefix the deployment uses.
     /// </remarks>
-    public static readonly string RequestObjectAdditionalHeaderClaims = Utf8Constants.ToInternedString(RequestObjectAdditionalHeaderClaimsUtf8);
+    public static string RequestObjectAdditionalHeaderClaims { get; } = Utf8Constants.ToInternedString(RequestObjectAdditionalHeaderClaimsUtf8);
 
 
     //Output key — set by the preparation endpoint, read by the application after dispatch.
@@ -126,7 +127,7 @@ public static class SiopVerifierContextKeys
     /// <see cref="AuthorizationServerIntegration.ResolveCorrelationKeyAsync"/> can map it back to
     /// the internal flow identifier. Value type: <see cref="string"/>.
     /// </summary>
-    public static readonly string RequestHandle = Utf8Constants.ToInternedString(RequestHandleUtf8);
+    public static string RequestHandle { get; } = Utf8Constants.ToInternedString(RequestHandleUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="RequestObject"/>.</summary>
     public static ReadOnlySpan<byte> RequestObjectUtf8 => "siop.requestObject"u8;
@@ -139,7 +140,7 @@ public static class SiopVerifierContextKeys
     /// <see cref="Verifiable.OAuth.Oid4Vp.Oid4VpContextKeys"/> compact-JAR slot. Value type:
     /// <see cref="string"/>.
     /// </summary>
-    public static readonly string RequestObject = Utf8Constants.ToInternedString(RequestObjectUtf8);
+    public static string RequestObject { get; } = Utf8Constants.ToInternedString(RequestObjectUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="GeneratedRequestUri"/>.</summary>
     public static ReadOnlySpan<byte> GeneratedRequestUriUtf8 => "siop.generatedRequestUri"u8;
@@ -150,5 +151,7 @@ public static class SiopVerifierContextKeys
     /// <see cref="AuthorizationServerIntegration.ResolveEndpointUriAsync"/>; read by the application
     /// after dispatch to carry in a QR code or deep link. Value type: <see cref="System.Uri"/>.
     /// </summary>
-    public static readonly string GeneratedRequestUri = Utf8Constants.ToInternedString(GeneratedRequestUriUtf8);
+    [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
+        Justification = "This member is the library's internal context-bag KEY NAME 'siop.generatedRequestUri' (compared as a string, never dereferenced), not the URL it identifies.")]
+    public static string GeneratedRequestUri { get; } = Utf8Constants.ToInternedString(GeneratedRequestUriUtf8);
 }

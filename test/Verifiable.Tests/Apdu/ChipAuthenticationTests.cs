@@ -30,8 +30,8 @@ internal sealed class ChipAuthenticationTests
     private const string TerminalEphemeralPrivateKey = "A73FB703AC1436A18E0CFA5ABB3F7BEC7A070E7A6788486BEE230C4A22762595";
 
     //The access-protocol (PACE) Secure Messaging session keys the MSE:Set KAT command travels under.
-    private static readonly byte[] TransportEncryptionKey = Convert.FromHexString("0123456789ABCDEF0123456789ABCDEF");
-    private static readonly byte[] TransportMacKey = Convert.FromHexString("FEDCBA9876543210FEDCBA9876543210");
+    private static byte[] TransportEncryptionKey { get; } = Convert.FromHexString("0123456789ABCDEF0123456789ABCDEF");
+    private static byte[] TransportMacKey { get; } = Convert.FromHexString("FEDCBA9876543210FEDCBA9876543210");
 
 
     public required TestContext TestContext { get; set; }

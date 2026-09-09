@@ -37,7 +37,7 @@ public static class GlobalTokenRevocationEndpoints
     /// The endpoint builder delegate. Pass this to
     /// <see cref="Verifiable.Server.ServerConfiguration.EndpointBuilders"/>.
     /// </summary>
-    public static readonly EndpointBuilderDelegate Builder = static (registration, context, ct) =>
+    public static EndpointBuilderDelegate Builder { get; } = static (registration, context, ct) =>
     {
         List<EndpointCandidate> candidates = [];
 
@@ -146,7 +146,7 @@ public static class GlobalTokenRevocationEndpoints
                 return outcome switch
                 {
                     GlobalTokenRevocationOutcome.Initiated =>
-                        ((FlowInput?)null, ServerHttpResponse.NoContent()),
+                        (null, ServerHttpResponse.NoContent()),
                     GlobalTokenRevocationOutcome.SubjectNotFound =>
                         (null, ServerHttpResponse.NotFound()),
                     GlobalTokenRevocationOutcome.Forbidden =>

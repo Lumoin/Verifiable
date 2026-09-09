@@ -9,17 +9,17 @@ using Verifiable.Cryptography;
 namespace Verifiable.Tpm.Infrastructure.Sessions;
 
 /// <summary>
-/// Session-based parameter encryption primitives (TPM 2.0 Library Part 1, Section 19).
+/// Session-based parameter encryption primitives (TPM 2.0 Library Part 1, clause 18).
 /// </summary>
 /// <remarks>
 /// <para>
 /// Parameter encryption protects the data portion of the first parameter of a command or response. The
 /// mandatory-to-implement method is XOR obfuscation (<see cref="XorAsync"/>); a block cipher in CFB mode is
 /// platform specific and is provided here for AES (<see cref="CfbAsync"/>). Both methods leave the size field
-/// of the parameter unprotected and do not change the parameter length (Part 1, Section 19.1).
+/// of the parameter unprotected and do not change the parameter length (Part 1, clause 18.1).
 /// </para>
 /// <para>
-/// The caller assembles <c>sessionValue</c> (Part 1, Section 19.1: <c>sessionKey</c>, or
+/// The caller assembles <c>sessionValue</c> (Part 1, clause 18.1: <c>sessionKey</c>, or
 /// <c>sessionKey ∥ authValue</c> when the session also authorizes an entity) and supplies the nonces in the
 /// command/response order. This type performs no nonce ordering or key assembly of its own.
 /// </para>
@@ -28,7 +28,7 @@ public static class TpmParameterEncryption
 {
     /// <summary>
     /// Applies XOR obfuscation in place over <paramref name="data"/> per TPM 2.0 Library Part 1,
-    /// Section 9.4.7.3, equation (4).
+    /// clause 8.4.7.3, equation (4).
     /// </summary>
     /// <param name="hashAlgorithm">The hash algorithm associated with the session (drives the KDF).</param>
     /// <param name="key">
@@ -36,7 +36,7 @@ public static class TpmParameterEncryption
     /// obfuscates plaintext and recovers it from obfuscated data.
     /// </param>
     /// <param name="contextU">
-    /// The first context field: <c>nonceNewer</c> (Part 1, Section 19.2). For a command this is the caller
+    /// The first context field: <c>nonceNewer</c> (Part 1, clause 18.2). For a command this is the caller
     /// nonce; for a response this is the TPM nonce.
     /// </param>
     /// <param name="contextV">
@@ -98,11 +98,11 @@ public static class TpmParameterEncryption
 
     /// <summary>
     /// Encrypts or decrypts <paramref name="data"/> in place with AES in CFB mode, deriving the key and IV per
-    /// TPM 2.0 Library Part 1, Section 19.3, equation (32).
+    /// TPM 2.0 Library Part 1, clause 18.3, equation (32).
     /// </summary>
     /// <param name="hashAlgorithm">The hash algorithm associated with the session (drives the KDF).</param>
     /// <param name="keyBits">The AES key size in bits (128, 192, or 256), from the session's TPMT_SYM_DEF.</param>
-    /// <param name="key">The <c>sessionValue</c> used as the KDF key (Part 1, Section 19.1).</param>
+    /// <param name="key">The <c>sessionValue</c> used as the KDF key (Part 1, clause 18.1).</param>
     /// <param name="contextU">The first context field: <c>nonceNewer</c> (nonceCaller for a command, nonceTPM for a response).</param>
     /// <param name="contextV">The second context field: <c>nonceOlder</c> (nonceTPM for a command, nonceCaller for a response).</param>
     /// <param name="data">The parameter data to encrypt or decrypt, modified in place.</param>
@@ -159,7 +159,7 @@ public static class TpmParameterEncryption
 
         try
         {
-            //Most-significant octets are the key; the remaining block-size octets are the IV (Part 1 §19.3).
+            //Most-significant octets are the key; the remaining block-size octets are the IV (Part 1, clause 18.3).
             AesCfb(keyIv.Memory.Span[..keySize], keyIv.Memory.Span.Slice(keySize, AesBlockSize), data.Span, encrypting);
         }
         finally
@@ -184,7 +184,7 @@ public static class TpmParameterEncryption
     /// <remarks>
     /// <para>
     /// CFB-128 with full-block feedback is built directly on the AES forward (encrypt) transform of the feedback
-    /// register so it handles arbitrary data lengths with no padding (Part 1, Section 19.1: the encrypted and
+    /// register so it handles arbitrary data lengths with no padding (Part 1, clause 18.1: the encrypted and
     /// plaintext sizes are equal), mirroring the reference TPM's <c>CryptSymmetricEncrypt</c> with
     /// <c>TPM_ALG_CFB</c>. The final partial block uses the leading octets of the keystream. ECB single-block
     /// encryption of the feedback register is used because it is supported on every platform, unlike the

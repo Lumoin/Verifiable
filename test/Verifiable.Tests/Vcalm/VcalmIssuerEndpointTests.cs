@@ -12,6 +12,7 @@ using Verifiable.Core.Model.Did.CryptographicSuites;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Did.Methods.Key;
 using Verifiable.Core.Resolvers;
+using Verifiable.Core.Validation;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Json;
@@ -50,14 +51,14 @@ internal sealed class VcalmIssuerEndpointTests
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private const string ClientId = "https://issuer.client.test";
-    private static readonly Uri ClientBaseUri = new("https://issuer.client.test");
+    private static Uri ClientBaseUri { get; } = new("https://issuer.client.test");
 
-    private static readonly ImmutableHashSet<CapabilityIdentifier> IssuerCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> IssuerCapabilities { get; } =
         ImmutableHashSet.Create(WellKnownVcalmCapabilities.VcalmIssuer);
 
     //The round-trip tests need the registration to allow both the issuer and the verifier roles so an
     //issued credential can be POSTed straight to /credentials/verify on the same tenant.
-    private static readonly ImmutableHashSet<CapabilityIdentifier> IssuerAndVerifierCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> IssuerAndVerifierCapabilities { get; } =
         ImmutableHashSet.Create(
             WellKnownVcalmCapabilities.VcalmIssuer, WellKnownVcalmCapabilities.VcalmVerifier);
 
@@ -83,7 +84,7 @@ internal sealed class VcalmIssuerEndpointTests
     private static ProofOptionsSerializeDelegate SerializeProofOptions { get; } =
         ProofOptionsSerializer.Create(JsonOptions);
 
-    private static readonly ExchangeContext EmptyContext = new();
+    private static ExchangeContext EmptyContext { get; } = new();
 
     //The configured issuer identity the instance secures credentials as, and its signing key. The
     //verification method id and DID are derived from the issuer key in RegisterIssuer.
@@ -285,6 +286,34 @@ internal sealed class VcalmIssuerEndpointTests
         Assert.AreEqual(VcalmProblemTypes.MalformedValueError,
             response.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(),
             $"A credential the signer cannot canonicalize ({reason}) is a §3.8.1 malformed-value 400, not a 500.");
+    }
+
+
+    /// <summary>
+    /// The §3.2.1 structural gate runs only <see cref="ContextValidationRules.ValidateCredentialContextAsync"/>
+    /// (the NORMATIVE pipeline), never <see cref="ContextValidationRules.ValidateCredentialContextStrictProfileAsync"/>'s
+    /// allowlist. A well-formed, resolvable use-case context IRI outside this library's own
+    /// <see cref="WellKnownContextAllowlists.Credentials20"/> — here the Citizenship vocabulary
+    /// context — carries no <see href="https://www.w3.org/TR/vc-data-model-2.0/#contexts">VC Data
+    /// Model 2.0 §4.3 Contexts</see> "Subsequent items in the ordered set MUST be composed of any
+    /// combination of URLs and objects" violation, so the credential still issues 201.
+    /// </summary>
+    [TestMethod]
+    public async Task UnknownWellFormedContextIriIssuesSuccessfully()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        IssuerContext ctx = await RegisterIssuerAsync(app).ConfigureAwait(false);
+
+        string credentialJson = "{\"@context\":[\"https://www.w3.org/ns/credentials/v2\",\""
+            + CanonicalizationTestUtilities.CitizenshipV4Rc1ContextUrl
+            + "\"],\"type\":[\"VerifiableCredential\"],\"issuer\":\"ISSUER\",\"credentialSubject\":{\"id\":\"did:example:s\"}}";
+        string body = "{\"credential\":" + credentialJson.Replace("ISSUER", ctx.IssuerDid, StringComparison.Ordinal) + "}";
+
+        using JsonDocument response = await PostIssueAsync(app, ctx.Segment, body, expectedStatus: 201).ConfigureAwait(false);
+
+        JsonElement vc = response.RootElement.GetProperty(VcalmParameterNames.VerifiableCredential);
+        Assert.IsTrue(vc.TryGetProperty(VcalmParameterNames.Proof, out _),
+            "A conformant credential carrying a use-case context outside this library's own allowlist still issues.");
     }
 
 
@@ -606,6 +635,7 @@ internal sealed class VcalmIssuerEndpointTests
         DidDocument issuerDidDocument = await KeyDidBuilder.BuildAsync(
             material.SigningPublicKey,
             MultikeyVerificationMethodTypeInfo.Instance,
+            BaseMemoryPool.Shared,
             includeDefaultContext: false,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -677,7 +707,7 @@ internal sealed class VcalmIssuerEndpointTests
             SerializePresentation = presentation => JsonSerializerExtensions.Serialize(presentation, JsonOptions),
             SerializeProofOptions = SerializeProofOptions,
             Decoder = TestSetup.Base58Decoder,
-            ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             MemoryPool = Pool
         };
     }
@@ -696,7 +726,7 @@ internal sealed class VcalmIssuerEndpointTests
             DeserializeCredential = DeserializeCredential,
             SerializeProofOptions = SerializeProofOptions,
             Encoder = TestSetup.Base58Encoder,
-            ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync
+            ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync
         };
 
 
@@ -728,7 +758,7 @@ internal sealed class VcalmIssuerEndpointTests
             DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             Pool,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -766,14 +796,14 @@ internal sealed class VcalmIssuerEndpointTests
     //host-material wrapper lets the cleanup loop dispose the RegisterClient material uniformly.
     private sealed class IssuerKeyMaterial: IDisposable
     {
-        private readonly VerifierKeyMaterial? hostMaterial;
+        private VerifierKeyMaterial? HostMaterial { get; }
         private bool isDisposed;
 
         public IssuerKeyMaterial(PublicKeyMemory signingPublicKey, PrivateKeyMemory signingPrivateKey, VerifierKeyMaterial? hostMaterial)
         {
             SigningPublicKey = signingPublicKey;
             SigningPrivateKey = signingPrivateKey;
-            this.hostMaterial = hostMaterial;
+            this.HostMaterial = hostMaterial;
         }
 
         public PublicKeyMemory SigningPublicKey { get; }
@@ -791,9 +821,9 @@ internal sealed class VcalmIssuerEndpointTests
             }
 
             isDisposed = true;
-            if(hostMaterial is not null)
+            if(HostMaterial is not null)
             {
-                hostMaterial.Dispose();
+                HostMaterial.Dispose();
             }
             else
             {

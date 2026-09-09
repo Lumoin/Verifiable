@@ -208,7 +208,7 @@ public readonly struct KeyUsageContext: IEquatable<KeyUsageContext>
     public static KeyUsageContext IntrospectionResponseSigning { get; } = new(12);
 
 
-    private static List<KeyUsageContext> contexts { get; } =
+    private static List<KeyUsageContext> RegisteredContexts { get; } =
     [
         None,
         AccessTokenIssuance,
@@ -229,7 +229,7 @@ public readonly struct KeyUsageContext: IEquatable<KeyUsageContext>
     /// <summary>
     /// Gets all registered usage context values.
     /// </summary>
-    public static IReadOnlyList<KeyUsageContext> Contexts => contexts.AsReadOnly();
+    public static IReadOnlyList<KeyUsageContext> Contexts => RegisteredContexts.AsReadOnly();
 
 
     /// <summary>
@@ -244,16 +244,16 @@ public readonly struct KeyUsageContext: IEquatable<KeyUsageContext>
     /// </remarks>
     public static KeyUsageContext Create(int code)
     {
-        for(int i = 0; i < contexts.Count; ++i)
+        for(int i = 0; i < RegisteredContexts.Count; ++i)
         {
-            if(contexts[i].Code == code)
+            if(RegisteredContexts[i].Code == code)
             {
                 throw new ArgumentException($"KeyUsageContext code {code} already exists.");
             }
         }
 
         var created = new KeyUsageContext(code);
-        contexts.Add(created);
+        RegisteredContexts.Add(created);
         return created;
     }
 

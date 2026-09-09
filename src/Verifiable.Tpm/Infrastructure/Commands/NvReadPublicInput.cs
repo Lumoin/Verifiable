@@ -21,7 +21,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// (those gates apply only to commands that access the Index's data area; this command reads only
 /// the public area and computes the Name). See
 /// <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0
-/// Library Specification</see>, Part 3, Section 31.6 (Table 234).
+/// Library Specification</see>, Part 3, clause 31.6 (Table 251).
 /// </para>
 /// </remarks>
 /// <param name="NvIndex">The handle of the NV Index whose public area and Name are read.</param>
@@ -29,6 +29,15 @@ public readonly record struct NvReadPublicInput(uint NvIndex): ITpmCommandInput
 {
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_NV_ReadPublic;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <c>nvIndex</c> carries Auth Index None (TPM 2.0 Library Part 3, clause 31.6, Table 251) — the first
+    /// session in an authorization area over this command is a companion, never an authorizer, so a decrypt or
+    /// encrypt session's own <c>nonceTPM</c> never folds into session 0's command HMAC (TPM 2.0 Library Part 1,
+    /// clause 16.6.5).
+    /// </remarks>
+    public bool IsFirstHandleAuthorized => false;
 
     /// <inheritdoc/>
     public int GetSerializedSize() => sizeof(uint); //nvIndex.

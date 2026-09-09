@@ -1,0 +1,15 @@
+name: "Verifiable CodeQL configuration"
+
+# The wire, marshaling and cryptographic paths of this library walk spans and loops
+# so that no enumerator or closure is allocated on a hot path. The four LINQ
+# "missed opportunity" suggestions from the quality suite therefore run against a
+# deliberate choice and are excluded; every other query of the suite stands.
+query-filters:
+  - exclude:
+      id: cs/linq/missed-where
+  - exclude:
+      id: cs/linq/missed-select
+  - exclude:
+      id: cs/linq/missed-all
+  - exclude:
+      id: cs/linq/missed-cast

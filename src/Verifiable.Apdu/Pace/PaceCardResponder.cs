@@ -290,6 +290,9 @@ public static class PaceCardResponder
         using IMemoryOwner<byte> zeroIv = pool.Rent(NonceLength);
         (Ciphertext cryptogram, _) = await encrypt(
             nonce, nonceKey.AsReadOnlyMemory(), zeroIv.Memory, CryptoTags.Aes128Cbc, pool, null, cancellationToken).ConfigureAwait(false);
+
+        //Not a using declaration: cryptogram comes out of a tuple deconstruction, a shape the using
+        //declaration syntax does not accept; the try/finally disposes it exactly once on every exit path.
         try
         {
             IMemoryOwner<byte> owner = pool.Rent(cryptogram.AsReadOnlySpan().Length);
@@ -315,6 +318,9 @@ public static class PaceCardResponder
 
         (DigestValue value, _) = await digest(
             new ReadOnlySequence<byte>(input), Sha1Length, Sha1DigestTag, pool, null, cancellationToken).ConfigureAwait(false);
+
+        //Not a using declaration: value comes out of a tuple deconstruction, a shape the using
+        //declaration syntax does not accept; the try/finally disposes it exactly once on every exit path.
         try
         {
             //The PACE password seed is secret, so it is re-homed to pinned memory.

@@ -50,7 +50,7 @@ internal sealed class ApduRecorderTests
         using var recorder = new ApduRecorder();
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
-        IDisposable subscription = device.Subscribe(recorder);
+        using IDisposable subscription = device.Subscribe(recorder);
 
         ApduResult<ApduResponse> r1 = await device.TransceiveAsync(
             new byte[] { 0x00, 0xA4, 0x04, 0x00 }, pool, TestContext.CancellationToken).ConfigureAwait(false);
@@ -177,6 +177,11 @@ internal sealed class ApduRecorderTests
         Assert.AreEqual("Verify", exchange.InstructionName);
         Assert.IsNotNull(exchange.StatusWord);
         Assert.IsTrue(exchange.StatusWord!.Value.IsSuccess);
-        Assert.IsGreaterThanOrEqualTo(0d, exchange.Elapsed.TotalMilliseconds, "Elapsed time should be non-negative.");
+
+        //Reads the production property into a local before asserting: this is a correctness check on
+        //ApduExchange.Elapsed's own tick-to-TimeSpan arithmetic over the recorder's captured ticks, never a
+        //wall-clock measurement of the test itself.
+        TimeSpan elapsed = exchange.Elapsed;
+        Assert.IsGreaterThanOrEqualTo(0d, elapsed.TotalMilliseconds, "Elapsed time should be non-negative.");
     }
 }

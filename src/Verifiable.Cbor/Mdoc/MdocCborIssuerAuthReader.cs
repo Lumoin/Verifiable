@@ -1,5 +1,5 @@
 using System.Buffers;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Core.Model.Mdoc;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -47,7 +47,8 @@ public static class MdocCborIssuerAuthReader
     /// </exception>
     [System.Diagnostics.CodeAnalysis.SuppressMessage(
         "Reliability", "CA2000:Dispose objects before losing scope",
-        Justification = "Ownership of wireOwner and parsedCose transfers to the returned MdocIssuerAuth; caller disposes the issuerAuth.")]
+        Justification = "Ownership of wireOwner and parsedCose transfers to the returned MdocIssuerAuth only " +
+            "on the success path; every other path disposes wireCarrier itself in the catch block below.")]
     public static MdocIssuerAuth Read(ReadOnlySpan<byte> encodedCoseSign1, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
@@ -58,23 +59,33 @@ public static class MdocCborIssuerAuthReader
         encodedCoseSign1.CopyTo(wireOwner.Memory.Span);
         EncodedCoseSign1 wireCarrier = new(wireOwner, CryptoTags.CoseEncodedSign1);
 
-        //Parse for payload inspection — this materializes pool-routed
-        //EncodedCoseProtectedHeader + Signature carriers we don't keep,
-        //so dispose after extracting the MSO from the payload.
-        using CoseSign1Message parsedCose = CoseSerialization.ParseCoseSign1(wireCarrier.AsReadOnlyMemory(), pool);
-
-        if(parsedCose.Payload.IsEmpty)
+        try
         {
-            wireCarrier.Dispose();
-            throw new CborContentException(
-                "COSE_Sign1 for issuerAuth must carry the MSO as its payload; got an empty/detached payload.");
+            //Parse for payload inspection — this materializes pool-routed
+            //EncodedCoseProtectedHeader + Signature carriers we don't keep,
+            //so dispose after extracting the MSO from the payload.
+            using CoseSign1Message parsedCose = CoseSerialization.ParseCoseSign1(wireCarrier.AsReadOnlyMemory(), pool);
+
+            if(parsedCose.Payload.IsEmpty)
+            {
+                throw new CborContentException(
+                    "COSE_Sign1 for issuerAuth must carry the MSO as its payload; got an empty/detached payload.");
+            }
+
+            //The payload is a Tag 24 wrapper around the MSO bytes per
+            //ISO/IEC 18013-5 §9.1.2.4. Unwrap once to get the inner MSO map.
+            EncodedCborItem wrapper = EncodedCborItem.Read(new CborReader(parsedCose.Payload.ToArray(), CborOptions.Lax, pool));
+            MdocMobileSecurityObject mso = MdocCborMsoReader.Read(wrapper.InnerBytes.Span);
+
+            return new MdocIssuerAuth(mso, wireCarrier);
         }
+        catch
+        {
+            //Every failure path releases the rented wire carrier — an unauthenticated wallet
+            //otherwise burns one pool buffer per malformed issuerAuth/MSO it can produce at will.
+            wireCarrier.Dispose();
 
-        //The payload is a Tag 24 wrapper around the MSO bytes per
-        //ISO/IEC 18013-5 §9.1.2.4. Unwrap once to get the inner MSO map.
-        EncodedCborItem wrapper = EncodedCborItem.Read(new CborReader(parsedCose.Payload.ToArray(), CborConformanceMode.Lax));
-        MdocMobileSecurityObject mso = MdocCborMsoReader.Read(wrapper.InnerBytes.Span);
-
-        return new MdocIssuerAuth(mso, wireCarrier);
+            throw;
+        }
     }
 }

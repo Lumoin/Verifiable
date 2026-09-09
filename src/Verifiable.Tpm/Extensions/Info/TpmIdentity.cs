@@ -66,14 +66,16 @@ public sealed class TpmIdentity
     public Version Firmware { get; }
 
     /// <summary>
-    /// Gets the year the firmware was built.
+    /// Gets the specification year the device reports (<c>TPM_PT_YEAR</c>); a Version 185 device reports
+    /// zero, since the year moved off the identity surface.
     /// </summary>
-    public int FirmwareYear { get; }
+    public int SpecYear { get; }
 
     /// <summary>
-    /// Gets the day of year the firmware was built (1-366).
+    /// Gets the specification errata version the device reports (<c>TPM_PT_ERRATA</c>; before Version 185
+    /// the same slot carried a day-of-year date as <c>TPM_PT_DAY_OF_YEAR</c>).
     /// </summary>
-    public int FirmwareDayOfYear { get; }
+    public int SpecErrata { get; }
 
     /// <summary>
     /// Gets the number of PCRs supported by this TPM.
@@ -102,7 +104,7 @@ public sealed class TpmIdentity
         int firmwareBuild,
         int firmwarePatch,
         int firmwareYear,
-        int firmwareDayOfYear,
+        int specErrata,
         int pcrCount,
         int maxInputBuffer,
         int maxNvBuffer)
@@ -113,8 +115,8 @@ public sealed class TpmIdentity
         ManufacturerId = manufacturerId;
         VendorString = vendorString;
         VendorTpmType = vendorTpmType;
-        FirmwareYear = firmwareYear;
-        FirmwareDayOfYear = firmwareDayOfYear;
+        SpecYear = firmwareYear;
+        SpecErrata = specErrata;
         PcrCount = pcrCount;
         MaxInputBuffer = maxInputBuffer;
         MaxNvBuffer = maxNvBuffer;

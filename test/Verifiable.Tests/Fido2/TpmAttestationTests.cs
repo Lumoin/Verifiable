@@ -610,31 +610,25 @@ internal sealed class TpmAttestationTests
         byte[]? authDataBytesOverride = null,
         int? algOverride = null)
     {
-        PkiCertificateMemory? overrideAikPki = aikCertificateOverride is not null
+        using PkiCertificateMemory? overrideAikPki = aikCertificateOverride is not null
             ? Fido2AttestationTestVectors.ToPkiCertificateMemory(aikCertificateOverride.RawData)
             : null;
-        try
-        {
-            IReadOnlyList<PkiCertificateMemory> x5c = x5cOverride
-                ?? (overrideAikPki is not null ? [overrideAikPki, scenario.RootPki] : [scenario.AikPki, scenario.RootPki]);
 
-            AttestationResult result = await RunAsync(
-                scenario,
-                pubAreaOverride ?? scenario.PubAreaBytes,
-                certInfoOverride ?? scenario.CertInfoBytes,
-                sigOverride ?? scenario.SignatureBytes,
-                x5c,
-                trustAnchorsOverride ?? [scenario.RootPki],
-                authenticatorDataOverride ?? scenario.AuthenticatorData,
-                authDataBytesOverride ?? scenario.AuthDataBytes,
-                algOverride ?? WellKnownCoseAlgorithms.Es256).ConfigureAwait(false);
+        IReadOnlyList<PkiCertificateMemory> x5c = x5cOverride
+            ?? (overrideAikPki is not null ? [overrideAikPki, scenario.RootPki] : [scenario.AikPki, scenario.RootPki]);
 
-            return result is RejectedAttestationResult rejected ? rejected.Error : null;
-        }
-        finally
-        {
-            overrideAikPki?.Dispose();
-        }
+        AttestationResult result = await RunAsync(
+            scenario,
+            pubAreaOverride ?? scenario.PubAreaBytes,
+            certInfoOverride ?? scenario.CertInfoBytes,
+            sigOverride ?? scenario.SignatureBytes,
+            x5c,
+            trustAnchorsOverride ?? [scenario.RootPki],
+            authenticatorDataOverride ?? scenario.AuthenticatorData,
+            authDataBytesOverride ?? scenario.AuthDataBytes,
+            algOverride ?? WellKnownCoseAlgorithms.Es256).ConfigureAwait(false);
+
+        return result is RejectedAttestationResult rejected ? rejected.Error : null;
     }
 
 

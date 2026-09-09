@@ -45,7 +45,7 @@ internal sealed class SdJwtPathExtractionTests
         SdDisclosure nameDisclosure = CreateDisclosure("salt1", "name", "John Doe");
 
         string encodedDisclosure = SdJwtSerializer.SerializeDisclosure(nameDisclosure, TestSetup.Base64UrlEncoder);
-        string digest = SdJwtPathExtraction.ComputeDisclosureDigest(encodedDisclosure, WellKnownHashAlgorithms.Sha256Iana, TestSetup.Base64UrlEncoder);
+        string digest = SdJwtPathExtraction.ComputeDisclosureDigest(encodedDisclosure, WellKnownHashAlgorithms.Sha256Iana, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
 
         string payloadJson = /*lang=json,strict*/ $$"""
         {
@@ -76,7 +76,7 @@ internal sealed class SdJwtPathExtractionTests
         SdDisclosure cityDisclosure = CreateDisclosure("salt2", "city", "Berlin");
 
         string encodedDisclosure = SdJwtSerializer.SerializeDisclosure(cityDisclosure, TestSetup.Base64UrlEncoder);
-        string digest = SdJwtPathExtraction.ComputeDisclosureDigest(encodedDisclosure, WellKnownHashAlgorithms.Sha256Iana, TestSetup.Base64UrlEncoder);
+        string digest = SdJwtPathExtraction.ComputeDisclosureDigest(encodedDisclosure, WellKnownHashAlgorithms.Sha256Iana, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
 
         string payloadJson = /*lang=json,strict*/ $$"""
         {
@@ -109,7 +109,7 @@ internal sealed class SdJwtPathExtractionTests
         SdDisclosure arrayElementDisclosure = CreateArrayElementDisclosure("salt3", "hidden-item");
 
         string encodedDisclosure = SdJwtSerializer.SerializeDisclosure(arrayElementDisclosure, TestSetup.Base64UrlEncoder);
-        string digest = SdJwtPathExtraction.ComputeDisclosureDigest(encodedDisclosure, WellKnownHashAlgorithms.Sha256Iana, TestSetup.Base64UrlEncoder);
+        string digest = SdJwtPathExtraction.ComputeDisclosureDigest(encodedDisclosure, WellKnownHashAlgorithms.Sha256Iana, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
 
         string payloadJson = /*lang=json,strict*/ $$"""
         {
@@ -199,7 +199,7 @@ internal sealed class SdJwtPathExtractionTests
         SdDisclosure disclosure = CreateDisclosure("salt", "selective", "value");
 
         string encodedDisclosure = SdJwtSerializer.SerializeDisclosure(disclosure, TestSetup.Base64UrlEncoder);
-        string digest = SdJwtPathExtraction.ComputeDisclosureDigest(encodedDisclosure, WellKnownHashAlgorithms.Sha256Iana, TestSetup.Base64UrlEncoder);
+        string digest = SdJwtPathExtraction.ComputeDisclosureDigest(encodedDisclosure, WellKnownHashAlgorithms.Sha256Iana, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
 
         string payloadJson = /*lang=json,strict*/ $$"""
         {
@@ -233,8 +233,8 @@ internal sealed class SdJwtPathExtractionTests
 
         string encoded1 = SdJwtSerializer.SerializeDisclosure(disclosure1, TestSetup.Base64UrlEncoder);
         string encoded2 = SdJwtSerializer.SerializeDisclosure(disclosure2, TestSetup.Base64UrlEncoder);
-        string digest1 = SdJwtPathExtraction.ComputeDisclosureDigest(encoded1, WellKnownHashAlgorithms.Sha256Iana, TestSetup.Base64UrlEncoder);
-        string digest2 = SdJwtPathExtraction.ComputeDisclosureDigest(encoded2, WellKnownHashAlgorithms.Sha256Iana, TestSetup.Base64UrlEncoder);
+        string digest1 = SdJwtPathExtraction.ComputeDisclosureDigest(encoded1, WellKnownHashAlgorithms.Sha256Iana, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        string digest2 = SdJwtPathExtraction.ComputeDisclosureDigest(encoded2, WellKnownHashAlgorithms.Sha256Iana, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
 
         string payloadJson = /*lang=json,strict*/ $$"""
         {

@@ -219,6 +219,8 @@ public sealed class XAdESSignaturePolicyStore: IDisposable
             scan = XmlSignatureModelGrammar.TryFindNextElementSibling(table, child, out int trailing);
             if(scan != ElementScanResult.EndOfChildren)
             {
+                //One disjunct per xsd:choice sibling this element can repeat; a named predicate per
+                //sibling would only rename the grammar, not simplify it.
                 bool isRepeat = scan == ElementScanResult.Found
                     && ((isSignaturePolicyDocument && XmlSignatureModelGrammar.IsElement(table, trailing, XAdESIdentifiers.XAdESNamespaceV141Utf8, "SignaturePolicyDocument"u8))
                         || (isSigPolDocLocalURI && XmlSignatureModelGrammar.IsElement(table, trailing, XAdESIdentifiers.XAdESNamespaceV141Utf8, "SigPolDocLocalURI"u8)));

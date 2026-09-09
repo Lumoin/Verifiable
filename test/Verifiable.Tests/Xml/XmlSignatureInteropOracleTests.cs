@@ -24,7 +24,7 @@ namespace Verifiable.Tests.Xml;
 [TestClass]
 internal sealed class XmlSignatureInteropOracleTests
 {
-    private static readonly IReadOnlyList<XmlSignatureInteropCase> Corpus = XmlSignatureInteropCorpusGenerator.Generate(BaseMemoryPool.Shared);
+    private static IReadOnlyList<XmlSignatureInteropCase> Corpus { get; } = XmlSignatureInteropCorpusGenerator.Generate(BaseMemoryPool.Shared);
 
 
     /// <summary>

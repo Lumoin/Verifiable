@@ -20,7 +20,7 @@ public static class ServerEventNames
     /// <summary>
     /// The PDA transitioned to a new state.
     /// </summary>
-    public static readonly string StateTransition = Utf8Constants.ToInternedString(StateTransitionUtf8);
+    public static string StateTransition { get; } = Utf8Constants.ToInternedString(StateTransitionUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="CorrelationResolved"/>.</summary>
     public static ReadOnlySpan<byte> CorrelationResolvedUtf8 => "server.correlation.resolved"u8;
@@ -29,7 +29,7 @@ public static class ServerEventNames
     /// The correlation key was resolved from an external handle to the
     /// internal flow identifier.
     /// </summary>
-    public static readonly string CorrelationResolved = Utf8Constants.ToInternedString(CorrelationResolvedUtf8);
+    public static string CorrelationResolved { get; } = Utf8Constants.ToInternedString(CorrelationResolvedUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="CorrelationNotFound"/>.</summary>
     public static ReadOnlySpan<byte> CorrelationNotFoundUtf8 => "server.correlation.not_found"u8;
@@ -37,7 +37,7 @@ public static class ServerEventNames
     /// <summary>
     /// The correlation key could not be resolved — flow not found.
     /// </summary>
-    public static readonly string CorrelationNotFound = Utf8Constants.ToInternedString(CorrelationNotFoundUtf8);
+    public static string CorrelationNotFound { get; } = Utf8Constants.ToInternedString(CorrelationNotFoundUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="FlowCreated"/>.</summary>
     public static ReadOnlySpan<byte> FlowCreatedUtf8 => "server.flow.created"u8;
@@ -45,5 +45,5 @@ public static class ServerEventNames
     /// <summary>
     /// A new flow was created with a fresh internal flow identifier.
     /// </summary>
-    public static readonly string FlowCreated = Utf8Constants.ToInternedString(FlowCreatedUtf8);
+    public static string FlowCreated { get; } = Utf8Constants.ToInternedString(FlowCreatedUtf8);
 }

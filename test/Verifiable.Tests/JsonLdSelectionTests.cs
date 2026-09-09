@@ -36,7 +36,7 @@ internal class JsonLdSelectionTests
 
     //Canonicalization here is in-memory; a default context yields the
     //secure-default SSRF policy and satisfies the policy-carrying parameter.
-    private static readonly ExchangeContext EmptyContext = new();
+    private static ExchangeContext EmptyContext { get; } = new();
 
     /// <summary>
     /// Test credential with various property types for comprehensive testing.
@@ -69,7 +69,7 @@ internal class JsonLdSelectionTests
     public void SelectFragmentWithRootPointerReturnsMinimalDocument()
     {
         //Per spec: Root pointer returns document skeleton with @context, id, type.
-        var pointer = Verifiable.JsonPointer.JsonPointer.Parse("");
+        var pointer = Lumoin.Veritas.JsonPointer.JsonPointer.Parse("");
 
         var selection = JsonLdSelection.SelectFragment(TestCredentialJson, pointer);
 
@@ -85,7 +85,7 @@ internal class JsonLdSelectionTests
     [TestMethod]
     public void SelectFragmentWithSimplePropertyReturnsPropertyAndPath()
     {
-        var pointer = Verifiable.JsonPointer.JsonPointer.Parse("/validFrom");
+        var pointer = Lumoin.Veritas.JsonPointer.JsonPointer.Parse("/validFrom");
 
         var selection = JsonLdSelection.SelectFragment(TestCredentialJson, pointer);
 
@@ -103,7 +103,7 @@ internal class JsonLdSelectionTests
     public void SelectFragmentWithNestedPropertyIncludesPathStructure()
     {
         //Per spec: Selection must include id and type along the path.
-        var pointer = Verifiable.JsonPointer.JsonPointer.Parse("/credentialSubject/givenName");
+        var pointer = Lumoin.Veritas.JsonPointer.JsonPointer.Parse("/credentialSubject/givenName");
 
         var selection = JsonLdSelection.SelectFragment(TestCredentialJson, pointer);
 
@@ -132,7 +132,7 @@ internal class JsonLdSelectionTests
     [TestMethod]
     public void SelectFragmentWithObjectPropertyIncludesFullObject()
     {
-        var pointer = Verifiable.JsonPointer.JsonPointer.Parse("/issuer");
+        var pointer = Lumoin.Veritas.JsonPointer.JsonPointer.Parse("/issuer");
 
         var selection = JsonLdSelection.SelectFragment(TestCredentialJson, pointer);
 
@@ -150,7 +150,7 @@ internal class JsonLdSelectionTests
     [TestMethod]
     public void SelectFragmentWithInvalidPointerThrowsArgumentException()
     {
-        var pointer = Verifiable.JsonPointer.JsonPointer.Parse("/nonExistentProperty");
+        var pointer = Lumoin.Veritas.JsonPointer.JsonPointer.Parse("/nonExistentProperty");
 
         Assert.Throws<ArgumentException>(() =>
             JsonLdSelection.SelectFragment(TestCredentialJson, pointer),
@@ -163,9 +163,9 @@ internal class JsonLdSelectionTests
     {
         var pointers = new[]
         {
-            Verifiable.JsonPointer.JsonPointer.Parse("/issuer"),
-            Verifiable.JsonPointer.JsonPointer.Parse("/validFrom"),
-            Verifiable.JsonPointer.JsonPointer.Parse("/credentialSubject/givenName")
+            Lumoin.Veritas.JsonPointer.JsonPointer.Parse("/issuer"),
+            Lumoin.Veritas.JsonPointer.JsonPointer.Parse("/validFrom"),
+            Lumoin.Veritas.JsonPointer.JsonPointer.Parse("/credentialSubject/givenName")
         };
 
         var selection = JsonLdSelection.SelectFragments(TestCredentialJson, pointers);
@@ -193,8 +193,8 @@ internal class JsonLdSelectionTests
         //Two pointers into credentialSubject should share the intermediate structure.
         var pointers = new[]
         {
-            Verifiable.JsonPointer.JsonPointer.Parse("/credentialSubject/givenName"),
-            Verifiable.JsonPointer.JsonPointer.Parse("/credentialSubject/familyName")
+            Lumoin.Veritas.JsonPointer.JsonPointer.Parse("/credentialSubject/givenName"),
+            Lumoin.Veritas.JsonPointer.JsonPointer.Parse("/credentialSubject/familyName")
         };
 
         var selection = JsonLdSelection.SelectFragments(TestCredentialJson, pointers);
@@ -222,7 +222,7 @@ internal class JsonLdSelectionTests
     public void TryEvaluateWithValidPointerReturnsTrue()
     {
         using var doc = JsonDocument.Parse(TestCredentialJson);
-        var pointer = Verifiable.JsonPointer.JsonPointer.Parse("/credentialSubject/givenName");
+        var pointer = Lumoin.Veritas.JsonPointer.JsonPointer.Parse("/credentialSubject/givenName");
 
         bool result = JsonLdSelection.TryEvaluate(doc.RootElement, pointer, out var element);
 
@@ -236,7 +236,7 @@ internal class JsonLdSelectionTests
     public void TryEvaluateWithInvalidPointerReturnsFalse()
     {
         using var doc = JsonDocument.Parse(TestCredentialJson);
-        var pointer = Verifiable.JsonPointer.JsonPointer.Parse("/nonExistent/path");
+        var pointer = Lumoin.Veritas.JsonPointer.JsonPointer.Parse("/nonExistent/path");
 
         bool result = JsonLdSelection.TryEvaluate(doc.RootElement, pointer, out var element);
 
@@ -249,7 +249,7 @@ internal class JsonLdSelectionTests
     public void TryEvaluateWithRootPointerReturnsRoot()
     {
         using var doc = JsonDocument.Parse(TestCredentialJson);
-        var pointer = Verifiable.JsonPointer.JsonPointer.Parse("");
+        var pointer = Lumoin.Veritas.JsonPointer.JsonPointer.Parse("");
 
         bool result = JsonLdSelection.TryEvaluate(doc.RootElement, pointer, out var element);
 
@@ -263,8 +263,8 @@ internal class JsonLdSelectionTests
     {
         var pointers = new[]
         {
-            Verifiable.JsonPointer.JsonPointer.Parse("/issuer"),
-            Verifiable.JsonPointer.JsonPointer.Parse("/type")
+            Lumoin.Veritas.JsonPointer.JsonPointer.Parse("/issuer"),
+            Lumoin.Veritas.JsonPointer.JsonPointer.Parse("/type")
         };
 
         var partition = await JsonLdSelection.PartitionStatements(
@@ -323,7 +323,7 @@ internal class JsonLdSelectionTests
     {
         var pointers = new[]
         {
-            Verifiable.JsonPointer.JsonPointer.Parse("/issuer")
+            Lumoin.Veritas.JsonPointer.JsonPointer.Parse("/issuer")
         };
 
         var partition = await JsonLdSelection.PartitionStatements(
@@ -352,8 +352,8 @@ internal class JsonLdSelectionTests
     {
         var pointers = new[]
         {
-            Verifiable.JsonPointer.JsonPointer.Parse("/issuer"),
-            Verifiable.JsonPointer.JsonPointer.Parse("/validFrom")
+            Lumoin.Veritas.JsonPointer.JsonPointer.Parse("/issuer"),
+            Lumoin.Veritas.JsonPointer.JsonPointer.Parse("/validFrom")
         };
 
         var partition = await JsonLdSelection.PartitionStatements(
@@ -392,9 +392,9 @@ internal class JsonLdSelectionTests
         //Select a subset of properties.
         var selectPointers = new[]
         {
-            Verifiable.JsonPointer.JsonPointer.Parse("/issuer"),
-            Verifiable.JsonPointer.JsonPointer.Parse("/validFrom"),
-            Verifiable.JsonPointer.JsonPointer.Parse("/credentialSubject/givenName")
+            Lumoin.Veritas.JsonPointer.JsonPointer.Parse("/issuer"),
+            Lumoin.Veritas.JsonPointer.JsonPointer.Parse("/validFrom"),
+            Lumoin.Veritas.JsonPointer.JsonPointer.Parse("/credentialSubject/givenName")
         };
 
         //Get selection document.

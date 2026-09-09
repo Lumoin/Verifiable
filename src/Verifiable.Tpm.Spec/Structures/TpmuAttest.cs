@@ -11,10 +11,10 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// <remarks>
 /// <para>
 /// The <c>quote</c> (<see cref="TpmsQuoteInfo"/>), <c>certify</c> (<see cref="TpmsCertifyInfo"/>), <c>creation</c>
-/// (<see cref="TpmsCreationInfo"/>), <c>time</c> (<see cref="TpmsTimeAttestInfo"/>), and <c>nv</c>
-/// (<see cref="TpmsNvCertifyInfo"/>) members are modelled. The remaining attestation bodies (command-audit,
-/// session-audit, NV-digest) share this union and can be added as the corresponding commands are implemented;
-/// until then their selectors are rejected by <see cref="Parse"/>.
+/// (<see cref="TpmsCreationInfo"/>), <c>time</c> (<see cref="TpmsTimeAttestInfo"/>), <c>nv</c>
+/// (<see cref="TpmsNvCertifyInfo"/>), and <c>sessionAudit</c> (<see cref="TpmsSessionAuditInfo"/>) members are
+/// modelled. The remaining attestation bodies (command-audit, NV-digest) share this union and can be added as the
+/// corresponding commands are implemented; their selectors are rejected by <see cref="Parse"/>.
 /// </para>
 /// <para>
 /// <b>Union members:</b>
@@ -25,9 +25,10 @@ namespace Verifiable.Tpm.Spec.Structures;
 ///   <item><description>TPM_ST_ATTEST_CREATION: TPMS_CREATION_INFO (see <see cref="Creation"/>).</description></item>
 ///   <item><description>TPM_ST_ATTEST_TIME: TPMS_TIME_ATTEST_INFO (see <see cref="Time"/>).</description></item>
 ///   <item><description>TPM_ST_ATTEST_NV: TPMS_NV_CERTIFY_INFO (see <see cref="Nv"/>).</description></item>
+///   <item><description>TPM_ST_ATTEST_SESSION_AUDIT: TPMS_SESSION_AUDIT_INFO (see <see cref="SessionAudit"/>).</description></item>
 /// </list>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 10.12.11, Table 177 (TPMU_ATTEST).
+/// Specification reference: TPM 2.0 Library Part 2, clause 10.11.11, Table 153 (TPMU_ATTEST).
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -66,9 +67,15 @@ public sealed class TpmuAttest: IDisposable
     public TpmsNvCertifyInfo? Nv { get; }
 
     /// <summary>
+    /// Gets the session-audit information when <see cref="Type"/> is TPM_ST_ATTEST_SESSION_AUDIT; otherwise
+    /// <see langword="null"/>.
+    /// </summary>
+    public TpmsSessionAuditInfo? SessionAudit { get; }
+
+    /// <summary>
     /// Initializes a new attestation body, with exactly one of the union members set.
     /// </summary>
-    private TpmuAttest(TpmStConstants type, TpmsQuoteInfo? quote, TpmsCertifyInfo? certify, TpmsCreationInfo? creation, TpmsTimeAttestInfo? time, TpmsNvCertifyInfo? nv)
+    private TpmuAttest(TpmStConstants type, TpmsQuoteInfo? quote, TpmsCertifyInfo? certify, TpmsCreationInfo? creation, TpmsTimeAttestInfo? time, TpmsNvCertifyInfo? nv, TpmsSessionAuditInfo? sessionAudit)
     {
         Type = type;
         Quote = quote;
@@ -76,6 +83,7 @@ public sealed class TpmuAttest: IDisposable
         Creation = creation;
         Time = time;
         Nv = nv;
+        SessionAudit = sessionAudit;
     }
 
     /// <summary>
@@ -87,7 +95,7 @@ public sealed class TpmuAttest: IDisposable
     {
         ArgumentNullException.ThrowIfNull(quote);
 
-        return new TpmuAttest(TpmStConstants.TPM_ST_ATTEST_QUOTE, quote, null, null, null, null);
+        return new TpmuAttest(TpmStConstants.TPM_ST_ATTEST_QUOTE, quote, null, null, null, null, null);
     }
 
     /// <summary>
@@ -99,7 +107,7 @@ public sealed class TpmuAttest: IDisposable
     {
         ArgumentNullException.ThrowIfNull(certify);
 
-        return new TpmuAttest(TpmStConstants.TPM_ST_ATTEST_CERTIFY, null, certify, null, null, null);
+        return new TpmuAttest(TpmStConstants.TPM_ST_ATTEST_CERTIFY, null, certify, null, null, null, null);
     }
 
     /// <summary>
@@ -111,7 +119,7 @@ public sealed class TpmuAttest: IDisposable
     {
         ArgumentNullException.ThrowIfNull(creation);
 
-        return new TpmuAttest(TpmStConstants.TPM_ST_ATTEST_CREATION, null, null, creation, null, null);
+        return new TpmuAttest(TpmStConstants.TPM_ST_ATTEST_CREATION, null, null, creation, null, null, null);
     }
 
     /// <summary>
@@ -120,7 +128,7 @@ public sealed class TpmuAttest: IDisposable
     /// <param name="time">The time information.</param>
     /// <returns>The attestation body.</returns>
     public static TpmuAttest ForTime(TpmsTimeAttestInfo time) =>
-        new(TpmStConstants.TPM_ST_ATTEST_TIME, null, null, null, time, null);
+        new(TpmStConstants.TPM_ST_ATTEST_TIME, null, null, null, time, null, null);
 
     /// <summary>
     /// Creates an attestation body for an NV-certify.
@@ -131,7 +139,19 @@ public sealed class TpmuAttest: IDisposable
     {
         ArgumentNullException.ThrowIfNull(nv);
 
-        return new TpmuAttest(TpmStConstants.TPM_ST_ATTEST_NV, null, null, null, null, nv);
+        return new TpmuAttest(TpmStConstants.TPM_ST_ATTEST_NV, null, null, null, null, nv, null);
+    }
+
+    /// <summary>
+    /// Creates an attestation body for a session audit.
+    /// </summary>
+    /// <param name="sessionAudit">The session-audit information. Ownership is transferred.</param>
+    /// <returns>The attestation body.</returns>
+    public static TpmuAttest ForSessionAudit(TpmsSessionAuditInfo sessionAudit)
+    {
+        ArgumentNullException.ThrowIfNull(sessionAudit);
+
+        return new TpmuAttest(TpmStConstants.TPM_ST_ATTEST_SESSION_AUDIT, null, null, null, null, null, sessionAudit);
     }
 
     /// <summary>
@@ -148,6 +168,7 @@ public sealed class TpmuAttest: IDisposable
             TpmStConstants.TPM_ST_ATTEST_CREATION => Creation!.SerializedSize,
             TpmStConstants.TPM_ST_ATTEST_TIME => TpmsTimeAttestInfo.SerializedSize,
             TpmStConstants.TPM_ST_ATTEST_NV => Nv!.SerializedSize,
+            TpmStConstants.TPM_ST_ATTEST_SESSION_AUDIT => SessionAudit!.SerializedSize,
             _ => throw new NotSupportedException($"Attestation type '{Type}' is not supported for serialization.")
         };
     }
@@ -190,6 +211,11 @@ public sealed class TpmuAttest: IDisposable
                 Nv!.WriteTo(ref writer);
                 break;
             }
+            case(TpmStConstants.TPM_ST_ATTEST_SESSION_AUDIT):
+            {
+                SessionAudit!.WriteTo(ref writer);
+                break;
+            }
             default:
             {
                 throw new NotSupportedException($"Attestation type '{Type}' is not supported for serialization.");
@@ -211,11 +237,12 @@ public sealed class TpmuAttest: IDisposable
 
         return type switch
         {
-            TpmStConstants.TPM_ST_ATTEST_QUOTE => new TpmuAttest(type, TpmsQuoteInfo.Parse(ref reader, pool), null, null, null, null),
-            TpmStConstants.TPM_ST_ATTEST_CERTIFY => new TpmuAttest(type, null, TpmsCertifyInfo.Parse(ref reader, pool), null, null, null),
-            TpmStConstants.TPM_ST_ATTEST_CREATION => new TpmuAttest(type, null, null, TpmsCreationInfo.Parse(ref reader, pool), null, null),
-            TpmStConstants.TPM_ST_ATTEST_TIME => new TpmuAttest(type, null, null, null, TpmsTimeAttestInfo.Parse(ref reader), null),
-            TpmStConstants.TPM_ST_ATTEST_NV => new TpmuAttest(type, null, null, null, null, TpmsNvCertifyInfo.Parse(ref reader, pool)),
+            TpmStConstants.TPM_ST_ATTEST_QUOTE => new TpmuAttest(type, TpmsQuoteInfo.Parse(ref reader, pool), null, null, null, null, null),
+            TpmStConstants.TPM_ST_ATTEST_CERTIFY => new TpmuAttest(type, null, TpmsCertifyInfo.Parse(ref reader, pool), null, null, null, null),
+            TpmStConstants.TPM_ST_ATTEST_CREATION => new TpmuAttest(type, null, null, TpmsCreationInfo.Parse(ref reader, pool), null, null, null),
+            TpmStConstants.TPM_ST_ATTEST_TIME => new TpmuAttest(type, null, null, null, TpmsTimeAttestInfo.Parse(ref reader), null, null),
+            TpmStConstants.TPM_ST_ATTEST_NV => new TpmuAttest(type, null, null, null, null, TpmsNvCertifyInfo.Parse(ref reader, pool), null),
+            TpmStConstants.TPM_ST_ATTEST_SESSION_AUDIT => new TpmuAttest(type, null, null, null, null, null, TpmsSessionAuditInfo.Parse(ref reader, pool)),
             _ => throw new NotSupportedException($"Attestation type '{type}' is not supported for parsing.")
         };
     }
@@ -231,6 +258,7 @@ public sealed class TpmuAttest: IDisposable
             Certify?.Dispose();
             Creation?.Dispose();
             Nv?.Dispose();
+            SessionAudit?.Dispose();
             disposed = true;
         }
     }
@@ -242,6 +270,7 @@ public sealed class TpmuAttest: IDisposable
         TpmStConstants.TPM_ST_ATTEST_CREATION => $"TPMU_ATTEST(CREATION, {Creation})",
         TpmStConstants.TPM_ST_ATTEST_TIME => $"TPMU_ATTEST(TIME, {Time})",
         TpmStConstants.TPM_ST_ATTEST_NV => $"TPMU_ATTEST(NV, {Nv})",
+        TpmStConstants.TPM_ST_ATTEST_SESSION_AUDIT => $"TPMU_ATTEST(SESSION_AUDIT, {SessionAudit})",
         _ => $"TPMU_ATTEST({Type})"
     };
 }

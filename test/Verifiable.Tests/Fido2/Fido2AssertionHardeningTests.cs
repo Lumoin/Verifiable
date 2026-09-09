@@ -393,7 +393,8 @@ internal sealed class Fido2AssertionHardeningTests
             StoredBackupEligible = storedBackupEligible,
             StoredBackupState = storedBackupState,
             ResponseUserHandle = responseUserHandle,
-            StoredUserHandle = storedUserHandle
+            StoredUserHandle = storedUserHandle,
+            ExtensionProcessingPool = BaseMemoryPool.Shared
         };
 
         return await Fido2AssertionVerifier.VerifyAsync(

@@ -57,6 +57,14 @@ public static class XAdESIncludeProcessing
     /// route; <see cref="XAdESProcessingFailure.InvalidCanonicalizationParameter"/> for a malformed or
     /// over-length <c>InclusiveNamespaces PrefixList</c>.</param>
     /// <returns><see langword="true"/> when the imprint input was computed.</returns>
+    /// <remarks>
+    /// <strong>Manual disposal, not <see langword="using"/> declarations.</strong> <c>canonicalOctets</c> is
+    /// bound through <see cref="XmlReferenceProcessing.TryCanonicalizeForAlgorithm"/>'s <see langword="out"/>
+    /// parameter inside the per-<c>Include</c> loop, so it is declared <see langword="null"/> and disposed
+    /// once per iteration; <c>readTargetReferences</c> accumulates one retrieved reference buffer per
+    /// <c>Include</c> across the whole call and is a list, not one disposable value, so it is disposed by the
+    /// outer <see langword="finally"/> once every <c>Include</c> has been processed.
+    /// </remarks>
     public static bool TryComputeImprintInput(
         XmlNodeTable table,
         IReadOnlyList<XAdESInclude> includes,

@@ -446,6 +446,8 @@ public static class TrustedListQualification
             bool sscdAsInCertificate = directiveQualifiers.Contains(ServiceQualifier.SscdStatusAsInCertificate.Value);
 
             //PRO-4.5.4-03 (a) (2): mutually inconsistent SSCD qualifiers make the device status unknowable.
+            //Each disjunct is its own named pairwise inconsistency from that clause; a named predicate per
+            //pair would only rename the citation, not simplify it.
             if((withSscd && noSscd) || (sscdAsInCertificate && withSscd) || (sscdAsInCertificate && noSscd))
             {
                 AddUnique(subStatuses, TrustedListQualificationSubStatus.WarningSscdQualifierInconsistency);
@@ -532,7 +534,9 @@ public static class TrustedListQualification
         bool legacyNoSscd = qualifierValues.Contains(ServiceQualifier.NoSscd.Value);
 
         //PRO-4.5.4-04 (c): mutually inconsistent QSCD qualifiers (including the TLv5 SSCD terminology
-        //appearing without its Regulation counterpart) make the device status unknowable.
+        //appearing without its Regulation counterpart) make the device status unknowable. Each disjunct
+        //is its own named inconsistency from that clause; a named predicate per case would only rename
+        //the citation, not simplify it.
         if((legacyWithSscd && !withQscd)
             || (legacyNoSscd && !noQscd)
             || (withQscd && noQscd)

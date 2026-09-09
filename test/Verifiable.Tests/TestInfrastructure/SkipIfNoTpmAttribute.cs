@@ -19,7 +19,7 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// [SkipIfNoTpm]
 /// public void TestRequiringRealTpm()
 /// {
-///     using TpmDevice tpm = TpmDevice.Open();
+///     using TpmDevice tpm = TpmDevice.Open(BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 ///     //Test code here.
 /// }
 /// </code>

@@ -1,5 +1,5 @@
 using System;
-using System.Collections.Generic;
+using Verifiable.Core.Transport;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Core.OutboundFetch;
@@ -21,35 +21,9 @@ public sealed record OutboundResponse
     /// <summary>The HTTP status code.</summary>
     public required int StatusCode { get; init; }
 
-    /// <summary>Response headers (case-insensitive lookup via <see cref="TryGetHeader"/>).</summary>
-    public IReadOnlyDictionary<string, string> Headers { get; init; } = OutboundRequest.EmptyHeaders;
+    /// <summary>Response headers. Defaults to <see cref="HttpHeaderSet.Empty"/>.</summary>
+    public HttpHeaderSet Headers { get; init; } = HttpHeaderSet.Empty;
 
     /// <summary>The response body. Defaults to empty.</summary>
     public TaggedMemory<byte> Body { get; init; } = TaggedMemory<byte>.Empty;
-
-
-    /// <summary>
-    /// Looks up a response header case-insensitively, independent of the backing
-    /// dictionary's comparer (the transport supplies the dictionary, so its
-    /// comparer is not assumed).
-    /// </summary>
-    /// <param name="name">The header name.</param>
-    /// <param name="value">The header value when found.</param>
-    /// <returns><see langword="true"/> when the header is present.</returns>
-    public bool TryGetHeader(string name, out string? value)
-    {
-        ArgumentException.ThrowIfNullOrEmpty(name);
-
-        foreach(KeyValuePair<string, string> header in Headers)
-        {
-            if(string.Equals(header.Key, name, StringComparison.OrdinalIgnoreCase))
-            {
-                value = header.Value;
-                return true;
-            }
-        }
-
-        value = null;
-        return false;
-    }
 }

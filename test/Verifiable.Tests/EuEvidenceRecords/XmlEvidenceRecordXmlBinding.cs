@@ -584,6 +584,8 @@ public static class XmlEvidenceRecordXmlBinding
     /// <param name="limits">The bounds to read under.</param>
     /// <param name="pool">The memory pool every carrier is rented from.</param>
     /// <returns>The status, the element when it was read, and the reason when it was not.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the decoded hash tree, time-stamp, and attribute list all transfer to the returned archive time-stamp on success; the finally block releases them on every other path.")]
     private static (XmlEvidenceRecordParseStatus Status, XmlEvidenceRecordArchiveTimeStamp? ArchiveTimeStamp, string? Reason) ReadArchiveTimeStamp(
         XElement element,
         int order,
@@ -884,7 +886,9 @@ public static class XmlEvidenceRecordXmlBinding
     /// <remarks>
     /// The length is checked against the algorithm rather than accepted as whatever decodes: clause 4.1.1 makes
     /// one algorithm govern every hash value of a chain, so a value of another length can never take part in the
-    /// comparison the walk is going to make.
+    /// comparison the walk is going to make. The <c>Trim</c>/<c>TryFromBase64String</c> call sits inside the
+    /// method's own <c>try</c>, so an exception from either is already caught and disposes <c>owner</c> before
+    /// rethrowing.
     /// </remarks>
     private static DigestValue? ReadDigestValue(string value, PkiDigestAlgorithm algorithm, BaseMemoryPool pool)
     {

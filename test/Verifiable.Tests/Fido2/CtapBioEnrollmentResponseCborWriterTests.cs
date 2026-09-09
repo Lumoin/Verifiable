@@ -1,5 +1,7 @@
 using System;
-using System.Formats.Cbor;
+using System.Buffers;
+using Lumoin.Veritas.Cbor;
+using Verifiable.Cbor;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
@@ -193,7 +195,9 @@ internal sealed class CtapBioEnrollmentResponseCborWriterTests
     [TestMethod]
     public void IgnoresUnrecognizedResponseMemberKey()
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(2);
         writer.WriteInt32(WellKnownCtapBioEnrollmentResponseKeys.Modality);
         writer.WriteInt32(WellKnownCtapBioEnrollmentModalities.Fingerprint);
@@ -201,7 +205,7 @@ internal sealed class CtapBioEnrollmentResponseCborWriterTests
         writer.WriteBoolean(true);
         writer.WriteEndMap();
 
-        CtapBioEnrollmentResponse decoded = CtapBioEnrollmentResponseCborReader.Read(writer.Encode());
+        CtapBioEnrollmentResponse decoded = CtapBioEnrollmentResponseCborReader.Read(writerBuffer.WrittenSpan.ToArray());
 
         Assert.AreEqual(WellKnownCtapBioEnrollmentModalities.Fingerprint, decoded.Modality);
     }
@@ -211,7 +215,9 @@ internal sealed class CtapBioEnrollmentResponseCborWriterTests
     [TestMethod]
     public void ThrowsWhenTemplateInfoEntryIsMissingTemplateId()
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(1);
         writer.WriteInt32(WellKnownCtapBioEnrollmentResponseKeys.TemplateInfos);
         writer.WriteStartArray(1);
@@ -222,6 +228,6 @@ internal sealed class CtapBioEnrollmentResponseCborWriterTests
         writer.WriteEndArray();
         writer.WriteEndMap();
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => CtapBioEnrollmentResponseCborReader.Read(writer.Encode()));
+        Assert.ThrowsExactly<Fido2FormatException>(() => CtapBioEnrollmentResponseCborReader.Read(writerBuffer.WrittenSpan.ToArray()));
     }
 }

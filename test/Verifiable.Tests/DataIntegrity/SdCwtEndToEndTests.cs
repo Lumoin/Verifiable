@@ -1,5 +1,6 @@
+using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using System.Security.Cryptography;
 using Verifiable.Cbor;
 using Verifiable.Cryptography;
@@ -129,9 +130,9 @@ internal class SdCwtEndToEndTests
         byte[] cborBytes = SdCwtSerializer.SerializeDisclosure(disclosure);
 
         //Act - Compute digests with different algorithms.
-        byte[] sha256Digest = SdCwtSerializer.ComputeDisclosureDigest(cborBytes, "sha-256");
-        byte[] sha384Digest = SdCwtSerializer.ComputeDisclosureDigest(cborBytes, "sha-384");
-        byte[] sha512Digest = SdCwtSerializer.ComputeDisclosureDigest(cborBytes, "sha-512");
+        byte[] sha256Digest = SdCwtSerializer.ComputeDisclosureDigest(cborBytes, "sha-256", BaseMemoryPool.Shared);
+        byte[] sha384Digest = SdCwtSerializer.ComputeDisclosureDigest(cborBytes, "sha-384", BaseMemoryPool.Shared);
+        byte[] sha512Digest = SdCwtSerializer.ComputeDisclosureDigest(cborBytes, "sha-512", BaseMemoryPool.Shared);
 
         //Assert - Verify digest lengths.
         Assert.HasCount(32, sha256Digest);
@@ -139,7 +140,7 @@ internal class SdCwtEndToEndTests
         Assert.HasCount(64, sha512Digest);
 
         //Verify deterministic.
-        byte[] sha256Digest2 = SdCwtSerializer.ComputeDisclosureDigest(cborBytes, "sha-256");
+        byte[] sha256Digest2 = SdCwtSerializer.ComputeDisclosureDigest(cborBytes, "sha-256", BaseMemoryPool.Shared);
         Assert.IsTrue(sha256Digest.SequenceEqual(sha256Digest2), "Digest should be deterministic.");
 
         TestContext.WriteLine($"SHA-256: {Convert.ToHexString(sha256Digest)}");
@@ -207,6 +208,9 @@ internal class SdCwtEndToEndTests
     public void SdClaimsHeaderRoundTrips()
     {
         //Arrange - Create multiple disclosures.
+        //disclosures is a collection of disposables, not one disposable value: a using declaration disposes
+        //one variable's own value, not a collection's elements, so the foreach below in the finally block
+        //is the release point.
         var disclosures = new List<SdDisclosure>
         {
             SdDisclosure.CreateProperty(TestSalts.FromBytes(RandomNumberGenerator.GetBytes(16)), "name", "Alice"),
@@ -217,19 +221,23 @@ internal class SdCwtEndToEndTests
         try
         {
             //Act - Write sd_claims header.
-            var writer = new CborWriter(CborConformanceMode.Canonical);
+            var buffer = new ArrayBufferWriter<byte>();
+            var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
             writer.WriteStartMap(1);
             SdCwtSerializer.WriteSdClaimsHeader(writer, disclosures);
             writer.WriteEndMap();
-            byte[] encoded = writer.Encode();
+            byte[] encoded = buffer.WrittenSpan.ToArray();
 
             //Parse back by reading the structure manually.
-            var reader = new CborReader(encoded, CborConformanceMode.Lax);
+            var reader = new CborReader(encoded, CborOptions.Lax);
             reader.ReadStartMap();
             int headerKey = reader.ReadInt32();
 
             //Read the array of disclosures.
             int? arrayLength = reader.ReadStartArray();
+            //parsed is a collection of disposables, not one disposable value: a using declaration disposes
+            //one variable's own value, not a collection's elements, so the foreach below in the finally
+            //block is the release point.
             var parsed = new List<SdDisclosure>();
             try
             {
@@ -275,6 +283,9 @@ internal class SdCwtEndToEndTests
     public void Example8CredentialDisclosuresSerializeCorrectly()
     {
         //Arrange - Create disclosures matching W3C Example 8 claims.
+        //disclosures is a collection of disposables, not one disposable value: a using declaration disposes
+        //one variable's own value, not a collection's elements, so the foreach below in the finally block
+        //is the release point.
         var disclosures = new List<(string Description, SdDisclosure Disclosure)>
         {
             ("issuer.id", SdDisclosure.CreateProperty(
@@ -316,7 +327,7 @@ internal class SdCwtEndToEndTests
             foreach((string description, SdDisclosure disclosure) in disclosures)
             {
                 byte[] cbor = SdCwtSerializer.SerializeDisclosure(disclosure);
-                byte[] digest = SdCwtSerializer.ComputeDisclosureDigest(cbor, "sha-256");
+                byte[] digest = SdCwtSerializer.ComputeDisclosureDigest(cbor, "sha-256", BaseMemoryPool.Shared);
 
                 TestContext.WriteLine($"\n{description}:");
                 TestContext.WriteLine($"  Salt: {Convert.ToHexString(disclosure.Salt.AsReadOnlySpan())}");

@@ -679,10 +679,20 @@ public static class CredentialEcdsaSd2023Extensions
 
             cancellationToken.ThrowIfCancellationRequested();
 
-            var isValid = await issuerPublicKey.VerifyAsync(
-                baseSignatureData.Memory[..signatureDataLength],
-                parsedProof.BaseSignature,
-                verificationDelegate).ConfigureAwait(false);
+            bool isValid;
+            try
+            {
+                isValid = await issuerPublicKey.VerifyAsync(
+                    baseSignatureData.Memory[..signatureDataLength],
+                    parsedProof.BaseSignature,
+                    verificationDelegate).ConfigureAwait(false);
+            }
+            catch
+            {
+                baseSignatureData.Dispose();
+
+                throw;
+            }
 
             if(!isValid)
             {
@@ -1293,10 +1303,20 @@ public static class CredentialEcdsaSd2023Extensions
 
             cancellationToken.ThrowIfCancellationRequested();
 
-            var baseSignatureValid = await issuerPublicKey.VerifyAsync(
-                baseSignatureData.Memory[..signatureDataLength],
-                parsedProof.BaseSignature,
-                verificationDelegate).ConfigureAwait(false);
+            bool baseSignatureValid;
+            try
+            {
+                baseSignatureValid = await issuerPublicKey.VerifyAsync(
+                    baseSignatureData.Memory[..signatureDataLength],
+                    parsedProof.BaseSignature,
+                    verificationDelegate).ConfigureAwait(false);
+            }
+            catch
+            {
+                baseSignatureData.Dispose();
+
+                throw;
+            }
 
             if(!baseSignatureValid)
             {
@@ -1324,10 +1344,25 @@ public static class CredentialEcdsaSd2023Extensions
                 var signature = parsedProof.Signatures[i];
 
                 var statementBytes = Encoding.UTF8.GetBytes(statement);
-                var sigValid = await ephemeralPublicKey.VerifyAsync(
-                    statementBytes,
-                    signature,
-                    verificationDelegate).ConfigureAwait(false);
+                bool sigValid;
+                try
+                {
+                    sigValid = await ephemeralPublicKey.VerifyAsync(
+                        statementBytes,
+                        signature,
+                        verificationDelegate).ConfigureAwait(false);
+                }
+                catch
+                {
+                    baseSignatureData.Dispose();
+                    ephemeralPublicKey.Dispose();
+                    foreach(NQuadSignedStatement disclosed in disclosedStatements)
+                    {
+                        disclosed.Signature.Dispose();
+                    }
+
+                    throw;
+                }
 
                 if(!sigValid)
                 {

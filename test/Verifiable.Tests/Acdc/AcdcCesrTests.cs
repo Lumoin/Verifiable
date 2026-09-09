@@ -20,7 +20,7 @@ namespace Verifiable.Tests.Acdc;
 internal sealed class AcdcCesrTests
 {
     /// <summary>The three CESR-native block SAIDs in order, the list the AGID is taken over.</summary>
-    private static readonly string[] BlockSaids =
+    private static string[] BlockSaids { get; } =
         [AcdcExampleVectors.CesrAggregateIssueeBlockSaid, AcdcExampleVectors.CesrAggregateScoreBlockSaid, AcdcExampleVectors.CesrAggregateNameBlockSaid];
 
     /// <summary>The reconstructed in-memory version string of the compact CESR acm (kind CESR, length from the framing).</summary>

@@ -63,6 +63,29 @@ internal sealed class VerifiableCredentialConverterTests
 
 
     /// <summary>
+    /// <see cref="VerifiableCredential.Context"/> round-trips an <c>@context</c> array mixing an IRI
+    /// with an inline definition byte-identically: <see cref="VerifiableCredentialConverter"/> delegates
+    /// the member to the same <see cref="Verifiable.Json.Converters.JsonLdContextConverter"/> a bare
+    /// <see cref="Verifiable.Core.Model.Common.Context"/> roundtrip uses.
+    /// </summary>
+    [TestMethod]
+    public void CredentialContextRoundTripsArrayWithInlineDefinitionByteIdentically()
+    {
+        // lang=json, strict
+        const string Json = """
+            {"@context":["https://www.w3.org/ns/credentials/v2",{"@vocab":"https://example.com/"}],"type":["VerifiableCredential"],"issuer":"did:example:issuer","credentialSubject":{"id":"did:example:subject"}}
+            """;
+
+        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(Json, Options)!;
+        Assert.HasCount(2, credential.Context!.Entries);
+        Assert.IsTrue(credential.Context.Entries[1].IsDefinition);
+
+        string reserialized = JsonSerializerExtensions.Serialize(credential, Options);
+        Assert.AreEqual(Json, reserialized, "Credential @context roundtrip must be byte-identical.");
+    }
+
+
+    /// <summary>
     /// A credential carrying a <c>proof</c> member deserializes as
     /// <see cref="DataIntegritySecuredCredential"/> even when the requested type is the open
     /// <see cref="VerifiableCredential"/>, so the proof is never silently dropped.

@@ -11,7 +11,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// <para>
 /// Carries the modulus (n) of an RSA public key in the <c>unique</c> member of an RSA
 /// <c>TPMT_PUBLIC</c>, and the signature octets of an RSA <c>TPMS_SIGNATURE_RSA</c> — Part 2 gives both the
-/// same buffer type. Table 193 bounds it by <c>MAX_RSA_KEY_BYTES</c>, the octet width of the largest RSA key
+/// same buffer type. Table 194 bounds it by <c>MAX_RSA_KEY_BYTES</c>, the octet width of the largest RSA key
 /// the TPM supports, which this library takes as 4096 bits.
 /// </para>
 /// <para>
@@ -31,14 +31,14 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// } TPM2B_PUBLIC_KEY_RSA;
 /// </code>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 11.2.4.5, Table 193.
+/// Specification reference: TPM 2.0 Library Part 2, clause 11.2.4.6, Table 194.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 public sealed class Tpm2bPublicKeyRsa: IDisposable, ITpmWireType
 {
     /// <summary>
-    /// Maximum RSA key size in bytes (4096 bits) — Table 193's <c>MAX_RSA_KEY_BYTES</c>.
+    /// Maximum RSA key size in bytes (4096 bits) — Table 194's <c>MAX_RSA_KEY_BYTES</c>.
     /// </summary>
     public const int MaxRsaKeyBytes = 512;
 
@@ -211,6 +211,72 @@ public sealed class Tpm2bPublicKeyRsa: IDisposable, ITpmWireType
         {
             storage.Dispose();
             throw;
+        }
+    }
+
+    /// <summary>
+    /// Adopts an already-filled pooled buffer as this structure's storage: ownership of
+    /// <paramref name="storage"/> transfers to the returned instance, with no second rental and no copy — the
+    /// zero-copy counterpart of <see cref="Create(ReadOnlySpan{byte}, BaseMemoryPool)"/> for a backend delegate
+    /// that rented the octets and wrote the RSAES/OAEP/raw result into them itself (the RSA_Encrypt/RSA_Decrypt
+    /// effects wrap <c>outData</c>/<c>message</c> this way, mirroring how the shipped OAEP transports already
+    /// wrap their own backend results, for example <c>Tpm2bEncryptedSecret.FromMarshaled</c>).
+    /// </summary>
+    /// <remarks>
+    /// A <paramref name="size"/> of zero yields the shared <see cref="Empty"/> singleton and releases
+    /// <paramref name="storage"/> here, since the singleton rents nothing and its <see cref="Dispose"/> is a
+    /// no-op. An argument that does not describe a valid buffer likewise releases <paramref name="storage"/>
+    /// before the exception leaves, so a rejected adoption never orphans the rental.
+    /// </remarks>
+    /// <param name="storage">The pooled buffer whose leading octets hold the value; ownership transfers to the returned instance or is released here.</param>
+    /// <param name="size">The number of valid octets at the head of <paramref name="storage"/>.</param>
+    /// <returns>The adopted value.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="storage"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="size"/> is negative, exceeds <paramref name="storage"/>'s length, or exceeds <see cref="MaxRsaKeyBytes"/>.</exception>
+    public static Tpm2bPublicKeyRsa FromMarshaled(IMemoryOwner<byte> storage, int size)
+    {
+        ArgumentNullException.ThrowIfNull(storage);
+
+        try
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(size);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(size, storage.Memory.Length);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(size, MaxRsaKeyBytes);
+        }
+        catch
+        {
+            storage.Dispose();
+            throw;
+        }
+
+        if(size == 0)
+        {
+            storage.Dispose();
+
+            return Empty;
+        }
+
+        return new Tpm2bPublicKeyRsa(storage, size);
+    }
+
+    /// <summary>
+    /// Zeroes the buffer octets in place ahead of disposal. The content is ordinarily public key material (see
+    /// the type remarks), but the same wire structure also carries a recovered plaintext as
+    /// <c>TPM2_RSA_Decrypt()</c>'s <c>message</c> response (TPM 2.0 Library Part 3, clause 14.3, Table 47) and
+    /// a plaintext being wrapped as <c>TPM2_RSA_Encrypt()</c>'s <c>message</c> parameter (clause 14.2, Table 44)
+    /// — the terminal owner of either clears it here before releasing the rental, rather than leaving the
+    /// plaintext octets in a freed pooled buffer. The zeroing covers the whole rental rather than the valid
+    /// prefix, so an adoption through <see cref="FromMarshaled"/> of a rental wider than <see cref="Size"/>
+    /// leaves nothing behind either. A no-op for <see cref="Empty"/>, which owns no storage.
+    /// </summary>
+    /// <exception cref="ObjectDisposedException">This instance has already been disposed.</exception>
+    public void Clear()
+    {
+        ObjectDisposedException.ThrowIf(disposed, this);
+
+        if(Storage is not null)
+        {
+            Storage.Memory.Span.Clear();
         }
     }
 

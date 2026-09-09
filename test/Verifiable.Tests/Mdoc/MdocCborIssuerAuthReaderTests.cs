@@ -1,9 +1,11 @@
-using System.Formats.Cbor;
+using System.Buffers;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Mdoc;
 using Verifiable.Core.Model.Mdoc;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
+using Verifiable.Tests.TestInfrastructure;
 using static Verifiable.Tests.TestInfrastructure.MdocTestFixtures;
 
 namespace Verifiable.Tests.Mdoc;
@@ -54,8 +56,18 @@ internal sealed class MdocCborIssuerAuthReaderTests
         //MdocCborIssuerAuthReader covers the zero-byte-string case below.
         byte[] issuerAuthBytes = WrapInCoseSign1WithDetachedPayload();
 
-        Assert.ThrowsExactly<InvalidOperationException>(() =>
-            MdocCborIssuerAuthReader.Read(issuerAuthBytes, BaseMemoryPool.Shared));
+        Exception? caught = null;
+        try
+        {
+            MdocCborIssuerAuthReader.Read(issuerAuthBytes, BaseMemoryPool.Shared);
+        }
+        catch(Exception ex)
+        {
+            caught = ex;
+        }
+
+        Assert.IsTrue(caught is CborContentException or InvalidOperationException,
+            $"Expected the CBOR reader's own detached-payload state fault; got {caught?.GetType().Name}.");
     }
 
 
@@ -81,8 +93,76 @@ internal sealed class MdocCborIssuerAuthReaderTests
         //surfaces the missing Tag 18.
         byte[] arbitrary = [0x80]; //CBOR empty array
 
-        Assert.ThrowsExactly<InvalidOperationException>(() =>
-            MdocCborIssuerAuthReader.Read(arbitrary, BaseMemoryPool.Shared));
+        Exception? caught = null;
+        try
+        {
+            MdocCborIssuerAuthReader.Read(arbitrary, BaseMemoryPool.Shared);
+        }
+        catch(Exception ex)
+        {
+            caught = ex;
+        }
+
+        Assert.IsTrue(caught is CborContentException or InvalidOperationException,
+            $"Expected the CBOR reader's own wrong-major-type fault; got {caught?.GetType().Name}.");
+    }
+
+
+    /// <summary>
+    /// An MSO whose <c>status</c> member refuses on read (an empty Status map, here) throws after
+    /// the rented COSE_Sign1 wire carrier already exists; the carrier must still return to the
+    /// pool rather than leak on that failure path — an unauthenticated wallet can otherwise repeat
+    /// the malformed presentation at will and burn one pool buffer per attempt.
+    /// </summary>
+    [TestMethod]
+    public void ReadIssuerAuthReturnsWireCarrierToPoolWhenMsoStatusRefuses()
+    {
+        byte[] msoBytes = BuildMsoWithEmptyStatusMap();
+        byte[] issuerAuthBytes = WrapInCoseSign1WithTag24Payload(msoBytes);
+
+        using var metered = new MeteredHousePool();
+
+        Assert.ThrowsExactly<CborContentException>(() =>
+            MdocCborIssuerAuthReader.Read(issuerAuthBytes, metered.Pool));
+
+        Assert.IsGreaterThan(0, metered.RentedCount, "metered.Pool must have been exercised, or the balance assertion below is vacuous.");
+        Assert.AreEqual(0, metered.OutstandingCount, "A refused MSO status read must not leak the rented COSE_Sign1 wire carrier.");
+    }
+
+
+    /// <summary>Builds an MSO map carrying the six required members plus an empty <c>status</c> map, which Section 6.3 refuses.</summary>
+    private static byte[] BuildMsoWithEmptyStatusMap()
+    {
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
+
+        writer.WriteStartMap(7);
+
+        writer.WriteTextString(MdocMsoWellKnownKeys.DeviceKeyInfo);
+        WriteDeviceKeyInfo(writer);
+
+        writer.WriteTextString(MdocMsoWellKnownKeys.DigestAlgorithm);
+        writer.WriteTextString(MdocMsoWellKnownKeys.DigestAlgorithmSha256);
+
+        writer.WriteTextString(MdocMsoWellKnownKeys.DocType);
+        writer.WriteTextString("org.iso.18013.5.1.mDL");
+
+        writer.WriteTextString(MdocMsoWellKnownKeys.ValidityInfo);
+        WriteValidityInfo(writer);
+
+        writer.WriteTextString(MdocMsoWellKnownKeys.ValueDigests);
+        WriteValueDigests(writer, "org.iso.18013.5.1");
+
+        writer.WriteTextString(MdocMsoWellKnownKeys.Version);
+        writer.WriteTextString(MdocMsoWellKnownKeys.Version10);
+
+        writer.WriteTextString(MdocMsoWellKnownKeys.Status);
+        writer.WriteStartMap(0);
+        writer.WriteEndMap();
+
+        writer.WriteEndMap();
+
+        return buffer.WrittenSpan.ToArray();
     }
 
 
@@ -116,8 +196,9 @@ internal sealed class MdocCborIssuerAuthReaderTests
     private static byte[] WrapInCoseSign1WithDetachedPayload()
     {
         //CBOR Tag 18, [protected (bstr empty-map), unprotected (empty map), nil payload, empty sig].
-        var writer = new CborWriter(CborConformanceMode.Canonical);
-        writer.WriteTag((CborTag)18);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
+        writer.WriteTag(new CborTag(18));
         writer.WriteStartArray(4);
         writer.WriteByteString(new byte[] { 0xA0 });
         writer.WriteStartMap(0);
@@ -126,7 +207,7 @@ internal sealed class MdocCborIssuerAuthReaderTests
         writer.WriteByteString([]);
         writer.WriteEndArray();
 
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
     }
 
 
@@ -175,7 +256,8 @@ internal static class MdocCborMsoReaderTestFixtures
     /// </summary>
     public static byte[] BuildSampleMso()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
 
         writer.WriteStartMap(6);
 
@@ -199,6 +281,6 @@ internal static class MdocCborMsoReaderTestFixtures
 
         writer.WriteEndMap();
 
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
     }
 }

@@ -458,7 +458,7 @@ public static class ManagedCmsVerification
                 WellKnownOids.Sha256 => CryptoAlgorithm.RsaSha256,
                 WellKnownOids.Sha384 => CryptoAlgorithm.RsaSha384,
                 WellKnownOids.Sha512 => CryptoAlgorithm.RsaSha512,
-                _ => (CryptoAlgorithm?)null
+                _ => null
             }
             : null;
         if(algorithm is null)

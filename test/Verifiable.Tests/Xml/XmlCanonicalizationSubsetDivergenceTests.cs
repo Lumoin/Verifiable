@@ -229,7 +229,9 @@ internal sealed class XmlCanonicalizationSubsetDivergenceTests
     /// once the returned canonical octets and the table are disposed, observed through the house pool's
     /// own rent and return counters. The returned <see cref="PooledMemory"/> holds a live lease from the
     /// supplied pool, so the outstanding count stays above zero until it is disposed — the distinction
-    /// between a pooled result and an unpooled copy.
+    /// between a pooled result and an unpooled copy. <c>table</c> and the two results are disposed
+    /// explicitly, in two stages, rather than via <see langword="using"/> declarations, because the
+    /// outstanding-count assertion between the stages must observe the state at each specific point.
     /// </summary>
     [TestMethod]
     public void CanonicalizationReturnsEveryRentedBuffer()

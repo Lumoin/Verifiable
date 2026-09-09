@@ -299,6 +299,8 @@ public sealed class XAdESSignerRoleV2: IDisposable
 
             if(scan == ElementScanResult.Found)
             {
+                //One disjunct per xsd:sequence child this element can repeat; a named predicate per child
+                //would only rename the grammar, not simplify it.
                 bool isRepeat = (hasClaimedRoles && XmlSignatureModelGrammar.IsElement(table, child, XAdESIdentifiers.XAdESNamespaceV132Utf8, "ClaimedRoles"u8))
                     || (hasCertifiedRolesV2 && XmlSignatureModelGrammar.IsElement(table, child, XAdESIdentifiers.XAdESNamespaceV132Utf8, "CertifiedRolesV2"u8))
                     || (hasSignedAssertions && XmlSignatureModelGrammar.IsElement(table, child, XAdESIdentifiers.XAdESNamespaceV132Utf8, "SignedAssertions"u8));
@@ -425,6 +427,8 @@ public sealed class XAdESSignerRoleV2: IDisposable
         scan = XmlSignatureModelGrammar.TryFindNextElementSibling(table, choiceChild, out int trailing);
         if(scan != ElementScanResult.EndOfChildren)
         {
+            //One disjunct per xsd:choice sibling this element can repeat; a named predicate per sibling
+            //would only rename the grammar, not simplify it.
             bool isRepeat = scan == ElementScanResult.Found
                 && ((isX509 && XmlSignatureModelGrammar.IsElement(table, trailing, XAdESIdentifiers.XAdESNamespaceV132Utf8, "X509AttributeCertificate"u8))
                     || (isOther && XmlSignatureModelGrammar.IsElement(table, trailing, XAdESIdentifiers.XAdESNamespaceV132Utf8, "OtherAttributeCertificate"u8)));

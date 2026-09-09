@@ -42,11 +42,11 @@ internal sealed class AuthZenEvaluationMatrixTests
     private const string Carol = "carol@example.com";
 
     //The policy's editor set: editors may perform any action; everyone may read.
-    private static readonly ImmutableHashSet<string> Editors = [Alice, Bob];
+    private static ImmutableHashSet<string> Editors { get; } = [Alice, Bob];
 
     //The Policy Decision Point as a single delegate — the same rule the oracle
     //table below was authored against.
-    private static readonly EvaluateAccessDelegate Policy = (request, _, _, _) =>
+    private static EvaluateAccessDelegate Policy { get; } = (request, _, _, _) =>
     {
         bool permit = string.Equals(request.Action.Name, "read", StringComparison.Ordinal)
             || Editors.Contains(request.Subject.Id);
@@ -56,7 +56,7 @@ internal sealed class AuthZenEvaluationMatrixTests
 
     //The oracle: the full subject x action matrix with hand-authored expected
     //decisions. Built from our typed model, not raw JSON or foreign vectors.
-    private static readonly EvaluationCase[] Cases =
+    private static EvaluationCase[] Cases { get; } =
     [
         new("editor alice read",   Request(Alice, "read"),   Expected: true),
         new("editor alice create", Request(Alice, "create"), Expected: true),

@@ -663,6 +663,9 @@ internal sealed class QualifiedCertificateMintingTests
     /// identifier without <c>requiresQualifiedSignatureCreationDevice</c> set is refused by
     /// <see cref="QualifiedCertificateMinting.MintQualifiedCertificateAsync"/>'s own cross-check.
     /// </summary>
+    /// <summary><c>leafPublicKey</c>/<c>leafPrivateKey</c> are tuple-deconstruction targets, disposed in the
+    /// <see langword="finally"/> block below because a <see langword="using"/> declaration cannot target
+    /// one.</summary>
     [TestMethod]
     public async Task MintQualifiedCertificateAsyncRefusesQscdFlavouredPolicyWithoutDeviceFlag()
     {
@@ -696,6 +699,9 @@ internal sealed class QualifiedCertificateMintingTests
     /// (QCP-n, non-QSCD-flavoured) policy identifier is refused by
     /// <see cref="QualifiedCertificateMinting.MintQualifiedCertificateAsync"/>'s own cross-check.
     /// </summary>
+    /// <summary><c>leafPublicKey</c>/<c>leafPrivateKey</c> are tuple-deconstruction targets, disposed in the
+    /// <see langword="finally"/> block below because a <see langword="using"/> declaration cannot target
+    /// one.</summary>
     [TestMethod]
     public async Task MintQualifiedCertificateAsyncRefusesDeviceFlagUnderNonQscdFlavouredPolicy()
     {
@@ -754,6 +760,10 @@ internal sealed class QualifiedCertificateMintingTests
 
     /// <summary>Mints a root and an intermediate Certification Authority signed by it, for a leaf-minting test that needs an issuer.</summary>
     /// <returns>The intermediate's certificate and signing key. The caller owns and disposes both.</returns>
+    /// <remarks><c>rootPublicKey</c>/<c>rootPrivateKey</c> and <c>intermediatePublicKey</c>/
+    /// <c>intermediatePrivateKey</c> are tuple-deconstruction targets; <c>using</c> cannot target one, so
+    /// each is disposed explicitly at its own release point (<c>intermediatePrivateKey</c> alone transfers
+    /// to the caller).</remarks>
     private static async ValueTask<(PkiCertificateMemory Certificate, PrivateKeyMemory PrivateKey)> MintIssuingAuthorityAsync(CancellationToken cancellationToken)
     {
         (PublicKeyMemory rootPublicKey, PrivateKeyMemory rootPrivateKey) = CreateP256KeyPair();

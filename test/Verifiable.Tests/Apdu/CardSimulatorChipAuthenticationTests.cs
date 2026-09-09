@@ -8,6 +8,8 @@ using Verifiable.Apdu.Bac;
 using Verifiable.Apdu.Lds;
 using Verifiable.Apdu.SecureMessaging;
 using Verifiable.Cryptography;
+using Microsoft.Extensions.Time.Testing;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Apdu;
 
@@ -75,7 +77,7 @@ internal sealed class CardSimulatorChipAuthenticationTests
         using ChipAuthenticationKey chipKey = CreateChipKey(ChipStaticPrivateKey, keyId);
 
         using var card = new CardSimulator(
-            "passport-chip-auth", [efCom, dataGroup1, dataGroup14File], chipAuthenticationKeys: [chipKey]);
+            "passport-chip-auth", [efCom, dataGroup1, dataGroup14File], chipAuthenticationKeys: [chipKey], rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         using ApduDevice device = ApduDevice.Create(card.TransceiveAsync);
 
         (SecureMessagingSession bacSession, SymmetricKeyMemory accessEncryptionKey, SymmetricKeyMemory accessMacKey) =
@@ -125,7 +127,7 @@ internal sealed class CardSimulatorChipAuthenticationTests
         using ElementaryFile dataGroup1 = DataGroup1.Write(Td2MachineReadableZone, BaseMemoryPool.Shared);
 
         //The card announces a Chip Authentication key in DG14 but holds no matching private key.
-        using var card = new CardSimulator("passport-chip-auth-nokey", [efCom, dataGroup1, dataGroup14File]);
+        using var card = new CardSimulator("passport-chip-auth-nokey", [efCom, dataGroup1, dataGroup14File], rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         using ApduDevice device = ApduDevice.Create(card.TransceiveAsync);
 
         (SecureMessagingSession bacSession, SymmetricKeyMemory accessEncryptionKey, SymmetricKeyMemory accessMacKey) =

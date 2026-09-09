@@ -12,6 +12,8 @@ using Verifiable.Tpm.Infrastructure.Sessions;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
+using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -20,7 +22,7 @@ namespace Verifiable.Tests.Tpm;
 /// in-process, with no external assets — through the same production command path the production code uses (the
 /// <see cref="TpmDeviceExtensions"/> policy commands, <see cref="TpmCommandExecutor"/>, and the real
 /// command/response codecs). The command compares a live-marshaled <c>TPMS_TIME_INFO</c> against a caller operand
-/// (TPM 2.0 Library Part 3, Section 23.10).
+/// (TPM 2.0 Library Part 3, clause 23.10).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -41,7 +43,7 @@ internal sealed class TpmInHouseSimulatorPolicyCounterTimerTests
     /// <summary>The policy session hash algorithm used throughout.</summary>
     private const TpmAlgIdConstants SessionAlg = TpmAlgIdConstants.TPM_ALG_SHA256;
 
-    /// <summary>The byte offset of <c>resetCount</c> in the marshaled TPMS_TIME_INFO (Part 2, Section 10.11.1/10.11.6).</summary>
+    /// <summary>The byte offset of <c>resetCount</c> in the marshaled TPMS_TIME_INFO (Part 2, clause 10.10.1/10.10.6).</summary>
     private const ushort ResetCountOffset = 16;
 
     /// <summary>The fixed secret sealed and recovered by the flagship flow test.</summary>
@@ -61,7 +63,7 @@ internal sealed class TpmInHouseSimulatorPolicyCounterTimerTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -77,7 +79,7 @@ internal sealed class TpmInHouseSimulatorPolicyCounterTimerTests
         byte[] authPolicy = new byte[size];
         Span<byte> zero = stackalloc byte[size];
         zero.Clear();
-        _ = TpmPolicyDigest.ExtendForCounterTimer(zero, operandB, ResetCountOffset, (ushort)TpmEoConstants.TPM_EO_EQ, SessionAlg, authPolicy);
+        _ = TpmPolicyDigest.ExtendForCounterTimer(zero, operandB, ResetCountOffset, (ushort)TpmEoConstants.TPM_EO_EQ, SessionAlg, authPolicy, pool);
 
         uint policyHandle = 0;
         uint itemHandle = 0;
@@ -127,7 +129,7 @@ internal sealed class TpmInHouseSimulatorPolicyCounterTimerTests
                 digest.PolicyDigest.AsReadOnlySpan().SequenceEqual(authPolicy),
                 "The simulator's policyDigest after PolicyCounterTimer must match the independently predicted ExtendForCounterTimer value.");
 
-            using TpmPolicySession policySession = TpmPolicySession.ForSession(policyHandle, SessionAlg, pool);
+            using TpmPolicySession policySession = TpmPolicySession.ForSession(policyHandle, SessionAlg, TestEntropy.NewCounterStream(), pool);
             UnsealInput unsealInput = UnsealInput.ForItem(loaded.ObjectHandle);
 
             TpmResult<UnsealResponse> unsealResult = await TpmCommandExecutor.ExecuteAsync<UnsealResponse>(
@@ -157,7 +159,7 @@ internal sealed class TpmInHouseSimulatorPolicyCounterTimerTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         //An 8-octet Time value of all-0xFF octets (~584 million years in milliseconds) can never equal the live
         //Time this simulator's fixed per-command quantum could accumulate within a test run.
@@ -187,7 +189,7 @@ internal sealed class TpmInHouseSimulatorPolicyCounterTimerTests
 
     /// <summary>
     /// Verifies a straddling offset — one that spans two (here, three: resetCount, restartCount, and Safe) adjacent
-    /// TPMS_TIME_INFO fields in a single window — is accepted with no alignment enforcement (Part 3, Section 23.10:
+    /// TPMS_TIME_INFO fields in a single window — is accepted with no alignment enforcement (Part 3, clause 23.10:
     /// "The TPM does not check for alignment of the offset with a TPMS_TIME_INFO structure member").
     /// </summary>
     [TestMethod]
@@ -195,7 +197,7 @@ internal sealed class TpmInHouseSimulatorPolicyCounterTimerTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         //offset 19, size 6 spans: resetCount's last octet (19), all four octets of restartCount (20-23), and Safe
         //(24) — straddling two field boundaries in one window. A fresh simulator's single Startup(CLEAR) is its
@@ -227,7 +229,7 @@ internal sealed class TpmInHouseSimulatorPolicyCounterTimerTests
             byte[] predicted = new byte[size];
             Span<byte> zero = stackalloc byte[size];
             zero.Clear();
-            _ = TpmPolicyDigest.ExtendForCounterTimer(zero, operandB, Offset, (ushort)TpmEoConstants.TPM_EO_EQ, SessionAlg, predicted);
+            _ = TpmPolicyDigest.ExtendForCounterTimer(zero, operandB, Offset, (ushort)TpmEoConstants.TPM_EO_EQ, SessionAlg, predicted, pool);
 
             Assert.IsTrue(
                 digest.PolicyDigest.AsReadOnlySpan().SequenceEqual(predicted),
@@ -240,7 +242,7 @@ internal sealed class TpmInHouseSimulatorPolicyCounterTimerTests
     }
 
     /// <summary>
-    /// Verifies a TRIAL session skips the comparison entirely (Part 3, Section 23.10: a trial session "will not
+    /// Verifies a TRIAL session skips the comparison entirely (Part 3, clause 23.10: a trial session "will not
     /// perform any validation") and folds the digest unconditionally, even fed an operand that could never satisfy
     /// a real comparison — proving the fold, not the check, is what a trial session exercises.
     /// </summary>
@@ -249,7 +251,7 @@ internal sealed class TpmInHouseSimulatorPolicyCounterTimerTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         //An operand that can never satisfy a real comparison against the live Time field, fed to a trial session
         //where it must still fold successfully without ever being checked.
@@ -280,7 +282,7 @@ internal sealed class TpmInHouseSimulatorPolicyCounterTimerTests
             byte[] predicted = new byte[size];
             Span<byte> zero = stackalloc byte[size];
             zero.Clear();
-            _ = TpmPolicyDigest.ExtendForCounterTimer(zero, neverMatchingOperand, Offset, (ushort)TpmEoConstants.TPM_EO_EQ, SessionAlg, predicted);
+            _ = TpmPolicyDigest.ExtendForCounterTimer(zero, neverMatchingOperand, Offset, (ushort)TpmEoConstants.TPM_EO_EQ, SessionAlg, predicted, pool);
 
             Assert.IsTrue(
                 digest.PolicyDigest.AsReadOnlySpan().SequenceEqual(predicted),
@@ -294,7 +296,7 @@ internal sealed class TpmInHouseSimulatorPolicyCounterTimerTests
 
     /// <summary>
     /// Verifies <c>offset &gt; 25</c> (the marshaled TPMS_TIME_INFO's total size) is rejected with
-    /// <c>TPM_RC_VALUE</c>, and that this range check runs even for a TRIAL session (Part 3, Section 23.10: "the
+    /// <c>TPM_RC_VALUE</c>, and that this range check runs even for a TRIAL session (Part 3, clause 23.10: "the
     /// offset checks are made even for a trial policy").
     /// </summary>
     [TestMethod]
@@ -302,7 +304,7 @@ internal sealed class TpmInHouseSimulatorPolicyCounterTimerTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         byte[] operandB = [0x00];
 
         uint sessionHandle = 0;
@@ -319,7 +321,7 @@ internal sealed class TpmInHouseSimulatorPolicyCounterTimerTests
                 sessionHandle, operandB, offset: 26, TpmEoConstants.TPM_EO_EQ, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsFalse(policyResult.IsSuccess, "An offset beyond the 25-octet TPMS_TIME_INFO must be rejected.");
-            Assert.AreEqual(TpmRcConstants.TPM_RC_VALUE, policyResult.ResponseCode, "offset > 25 must reject with TPM_RC_VALUE, even for a trial session.");
+            Assert.AreEqual(HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_VALUE, 1), policyResult.ResponseCode, "offset > 25 must reject with TPM_RC_VALUE, even for a trial session.");
         }
         finally
         {
@@ -336,7 +338,7 @@ internal sealed class TpmInHouseSimulatorPolicyCounterTimerTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         //offset 24 (Safe, the last legal octet) plus a 4-octet operand overflows the 25-octet structure by 3.
         byte[] operandB = [0x00, 0x00, 0x00, 0x00];
@@ -374,7 +376,7 @@ internal sealed class TpmInHouseSimulatorPolicyCounterTimerTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         byte[] operandB = [0x00, 0x00, 0x00, 0x00];
         const TpmEoConstants UndefinedOperation = (TpmEoConstants)0x0100;
 
@@ -392,7 +394,9 @@ internal sealed class TpmInHouseSimulatorPolicyCounterTimerTests
                 sessionHandle, operandB, ResetCountOffset, UndefinedOperation, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsFalse(policyResult.IsSuccess, "An undefined TPM_EO must be rejected, not silently accepted.");
-            Assert.AreEqual(TpmRcConstants.TPM_RC_VALUE, policyResult.ResponseCode, "An undefined TPM_EO must reject with TPM_RC_VALUE at unmarshal.");
+            Assert.AreEqual(
+                HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_VALUE, 2), policyResult.ResponseCode,
+                "Table 158: operation is TPM2_PolicyCounterTimer()'s third parameter (index 2); an undefined TPM_EO must reject with parameter-encoded TPM_RC_VALUE there at unmarshal.");
         }
         finally
         {
@@ -410,7 +414,7 @@ internal sealed class TpmInHouseSimulatorPolicyCounterTimerTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         byte[] operandB = [0x00, 0x00, 0x00, 0x00];
         const TpmEoConstants UndefinedOperation = (TpmEoConstants)0x0100;
 
@@ -428,7 +432,9 @@ internal sealed class TpmInHouseSimulatorPolicyCounterTimerTests
                 sessionHandle, operandB, ResetCountOffset, UndefinedOperation, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsFalse(policyResult.IsSuccess, "A trial session must reject an undefined TPM_EO too, not silently fold it.");
-            Assert.AreEqual(TpmRcConstants.TPM_RC_VALUE, policyResult.ResponseCode, "A trial session's undefined TPM_EO must also reject with TPM_RC_VALUE at unmarshal.");
+            Assert.AreEqual(
+                HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_VALUE, 2), policyResult.ResponseCode,
+                "Table 158: operation is TPM2_PolicyCounterTimer()'s third parameter (index 2); a trial session's undefined TPM_EO must also reject with parameter-encoded TPM_RC_VALUE there at unmarshal.");
         }
         finally
         {
@@ -515,7 +521,7 @@ internal sealed class TpmInHouseSimulatorPolicyCounterTimerTests
     /// <returns>The operational simulator.</returns>
     private async Task<TpmSimulator> CreateOperationalAsync(BaseMemoryPool pool)
     {
-        var simulator = new TpmSimulator("tpm-in-house-policy-countertimer", signingBackend: BouncyCastleTpmEccSigningBackend.Create());
+        var simulator = new TpmSimulator("tpm-in-house-policy-countertimer", signingBackend: BouncyCastleTpmEccSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await BringOperationalAsync(simulator, pool).ConfigureAwait(false);
 

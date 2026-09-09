@@ -12,7 +12,7 @@ namespace Verifiable.Core.Did.Methods.Keri
         public KeriDidMethod(string didString): base(didString)
         {
             ArgumentNullException.ThrowIfNull(didString);
-            if(!didString.StartsWith("did:keri:", StringComparison.InvariantCulture))
+            if(!didString.StartsWith("did:keri:", StringComparison.Ordinal))
             {
                 throw new ArgumentException("The DID string must start with 'did:keri:'", nameof(didString));
             }

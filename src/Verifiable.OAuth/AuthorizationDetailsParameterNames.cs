@@ -21,7 +21,7 @@ public static class AuthorizationDetailsParameterNames
     /// <c>type</c> — REQUIRED (RFC 9396 §2). The authorization details type that determines
     /// the object's allowable contents; see <see cref="AuthorizationDetailsTypeValues"/>.
     /// </summary>
-    public static readonly string Type = Utf8Constants.ToInternedString(TypeUtf8);
+    public static string Type { get; } = Utf8Constants.ToInternedString(TypeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Locations"/>.</summary>
     public static ReadOnlySpan<byte> LocationsUtf8 => "locations"u8;
@@ -31,7 +31,7 @@ public static class AuthorizationDetailsParameterNames
     /// authorization applies to. OID4VCI 1.0 §5.1.1: MUST be set to the Credential Issuer
     /// Identifier when the Credential Issuer metadata carries <c>authorization_servers</c>.
     /// </summary>
-    public static readonly string Locations = Utf8Constants.ToInternedString(LocationsUtf8);
+    public static string Locations { get; } = Utf8Constants.ToInternedString(LocationsUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Actions"/>.</summary>
     public static ReadOnlySpan<byte> ActionsUtf8 => "actions"u8;
@@ -40,7 +40,7 @@ public static class AuthorizationDetailsParameterNames
     /// <c>actions</c> — OPTIONAL common field (RFC 9396 §2.2). An array of strings naming the
     /// kinds of actions to be taken at the resource.
     /// </summary>
-    public static readonly string Actions = Utf8Constants.ToInternedString(ActionsUtf8);
+    public static string Actions { get; } = Utf8Constants.ToInternedString(ActionsUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="DataTypes"/>.</summary>
     public static ReadOnlySpan<byte> DataTypesUtf8 => "datatypes"u8;
@@ -49,7 +49,7 @@ public static class AuthorizationDetailsParameterNames
     /// <c>datatypes</c> — OPTIONAL common field (RFC 9396 §2.2). An array of strings naming the
     /// kinds of data being requested from the resource.
     /// </summary>
-    public static readonly string DataTypes = Utf8Constants.ToInternedString(DataTypesUtf8);
+    public static string DataTypes { get; } = Utf8Constants.ToInternedString(DataTypesUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Identifier"/>.</summary>
     public static ReadOnlySpan<byte> IdentifierUtf8 => "identifier"u8;
@@ -58,7 +58,7 @@ public static class AuthorizationDetailsParameterNames
     /// <c>identifier</c> — OPTIONAL common field (RFC 9396 §2.2). A string identifying a
     /// specific resource available at the API.
     /// </summary>
-    public static readonly string Identifier = Utf8Constants.ToInternedString(IdentifierUtf8);
+    public static string Identifier { get; } = Utf8Constants.ToInternedString(IdentifierUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Privileges"/>.</summary>
     public static ReadOnlySpan<byte> PrivilegesUtf8 => "privileges"u8;
@@ -67,7 +67,7 @@ public static class AuthorizationDetailsParameterNames
     /// <c>privileges</c> — OPTIONAL common field (RFC 9396 §2.2). An array of strings naming the
     /// types or levels of privilege being requested at the resource.
     /// </summary>
-    public static readonly string Privileges = Utf8Constants.ToInternedString(PrivilegesUtf8);
+    public static string Privileges { get; } = Utf8Constants.ToInternedString(PrivilegesUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="AuthorizationDetailsTypes"/>.</summary>
     public static ReadOnlySpan<byte> AuthorizationDetailsTypesUtf8 => "authorization_details_types"u8;
@@ -82,7 +82,7 @@ public static class AuthorizationDetailsParameterNames
     /// parameter advertising the server's supported types is
     /// <see cref="AuthorizationServerMetadataParameterNames.AuthorizationDetailsTypesSupported"/>.
     /// </summary>
-    public static readonly string AuthorizationDetailsTypes = Utf8Constants.ToInternedString(AuthorizationDetailsTypesUtf8);
+    public static string AuthorizationDetailsTypes { get; } = Utf8Constants.ToInternedString(AuthorizationDetailsTypesUtf8);
 
 
     /// <summary>
@@ -110,5 +110,5 @@ public static class AuthorizationDetailsTypeValues
     /// <c>credential_configuration_id</c>, per
     /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html">OID4VCI 1.0 §5.1.1</see>.
     /// </summary>
-    public static readonly string OpenIdCredential = Utf8Constants.ToInternedString(OpenIdCredentialUtf8);
+    public static string OpenIdCredential { get; } = Utf8Constants.ToInternedString(OpenIdCredentialUtf8);
 }

@@ -352,12 +352,9 @@ public class VerificationMethodConverter: JsonConverter<VerificationMethod>
             writer.WriteString("revoked"u8, vm.Revoked);
         }
 
-        if(vm.KeyFormat is not null)
+        if(vm.KeyFormat is not null && !KeyFormatWriter(writer, vm.KeyFormat))
         {
-            if(!KeyFormatWriter(writer, vm.KeyFormat))
-            {
-                JsonThrowHelper.ThrowJsonException($"No handler for key format type '{vm.KeyFormat.GetType().Name}'.");
-            }
+            JsonThrowHelper.ThrowJsonException($"No handler for key format type '{vm.KeyFormat.GetType().Name}'.");
         }
 
         writer.WriteEndObject();

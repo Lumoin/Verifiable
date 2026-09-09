@@ -18,7 +18,7 @@ public static class JarmServerMetadataParameterNames
     /// The <c>authorization_signing_alg_values_supported</c> parameter — the JWS
     /// <c>alg</c> values the authorization endpoint supports for signing the response.
     /// </summary>
-    public static readonly string AuthorizationSigningAlgValuesSupported = Utf8Constants.ToInternedString(AuthorizationSigningAlgValuesSupportedUtf8);
+    public static string AuthorizationSigningAlgValuesSupported { get; } = Utf8Constants.ToInternedString(AuthorizationSigningAlgValuesSupportedUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="AuthorizationEncryptionAlgValuesSupported"/>.</summary>
     public static ReadOnlySpan<byte> AuthorizationEncryptionAlgValuesSupportedUtf8 => "authorization_encryption_alg_values_supported"u8;
@@ -27,7 +27,7 @@ public static class JarmServerMetadataParameterNames
     /// The <c>authorization_encryption_alg_values_supported</c> parameter — the JWE
     /// <c>alg</c> values the authorization endpoint supports for encrypting the response.
     /// </summary>
-    public static readonly string AuthorizationEncryptionAlgValuesSupported = Utf8Constants.ToInternedString(AuthorizationEncryptionAlgValuesSupportedUtf8);
+    public static string AuthorizationEncryptionAlgValuesSupported { get; } = Utf8Constants.ToInternedString(AuthorizationEncryptionAlgValuesSupportedUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="AuthorizationEncryptionEncValuesSupported"/>.</summary>
     public static ReadOnlySpan<byte> AuthorizationEncryptionEncValuesSupportedUtf8 => "authorization_encryption_enc_values_supported"u8;
@@ -36,7 +36,7 @@ public static class JarmServerMetadataParameterNames
     /// The <c>authorization_encryption_enc_values_supported</c> parameter — the JWE
     /// <c>enc</c> values the authorization endpoint supports for encrypting the response.
     /// </summary>
-    public static readonly string AuthorizationEncryptionEncValuesSupported = Utf8Constants.ToInternedString(AuthorizationEncryptionEncValuesSupportedUtf8);
+    public static string AuthorizationEncryptionEncValuesSupported { get; } = Utf8Constants.ToInternedString(AuthorizationEncryptionEncValuesSupportedUtf8);
 
 
     /// <summary>Returns <see langword="true"/> when <paramref name="value"/> is exactly

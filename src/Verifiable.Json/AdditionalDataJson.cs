@@ -18,8 +18,9 @@ namespace Verifiable.Json;
 /// <see cref="JsonDocument"/> (random property access), and <see cref="AddFromReader"/>
 /// for converters that stream a <see cref="Utf8JsonReader"/>. Both materialize values
 /// through the same narrowing rules (<see cref="JsonElementConversion"/> /
-/// <see cref="ManualJsonReader"/>) and skip JSON <c>null</c> so the bucket never carries
-/// null entries, matching the historical per-converter behaviour.
+/// <see cref="ManualJsonReader"/>) and both store a JSON <c>null</c> value as a bucket
+/// entry: the null is data belonging to the member, not an absent member, so it is kept
+/// under its property name rather than dropped.
 /// </para>
 /// </remarks>
 internal static class AdditionalDataJson
@@ -54,36 +55,28 @@ internal static class AdditionalDataJson
     /// <summary>
     /// Adds one unknown property (read from a buffered <see cref="JsonElement"/>) to the
     /// lazily-created bucket, materializing the value via
-    /// <see cref="JsonElementConversion.Convert"/>. JSON <c>null</c> values are skipped.
+    /// <see cref="JsonElementConversion.Convert"/>. This is the entry point every
+    /// production converter with an open-world bucket calls. A JSON <c>null</c> value is
+    /// stored as the entry's value: it is data belonging to the member, not an absent
+    /// member, so it is kept under its property name rather than dropped.
     /// </summary>
     internal static void AddFromElement(ref Dictionary<string, object>? bucket, string name, JsonElement value)
     {
-        var converted = JsonElementConversion.Convert(value);
-        if(converted is null)
-        {
-            return;
-        }
-
         bucket ??= new Dictionary<string, object>(StringComparer.Ordinal);
-        bucket[name] = converted;
+        bucket[name] = JsonElementConversion.Convert(value)!;
     }
 
 
     /// <summary>
     /// Adds one unknown property (read from a streaming <see cref="Utf8JsonReader"/>
     /// positioned on the value token) to the lazily-created bucket, materializing the
-    /// value via <see cref="ManualJsonReader.ReadValue"/>. JSON <c>null</c> values are
-    /// skipped.
+    /// value via <see cref="ManualJsonReader.ReadValue"/>. A JSON <c>null</c> value is
+    /// stored as the entry's value: it is data belonging to the member, not an absent
+    /// member.
     /// </summary>
     internal static void AddFromReader(ref Dictionary<string, object>? bucket, string name, ref Utf8JsonReader reader)
     {
-        var converted = ManualJsonReader.ReadValue(ref reader);
-        if(converted is null)
-        {
-            return;
-        }
-
         bucket ??= new Dictionary<string, object>(StringComparer.Ordinal);
-        bucket[name] = converted;
+        bucket[name] = ManualJsonReader.ReadValue(ref reader)!;
     }
 }

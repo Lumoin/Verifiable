@@ -1,6 +1,7 @@
 using Verifiable.Core.Assessment;
 using Verifiable.OAuth.Federation;
 using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Federation;
 
@@ -39,7 +40,7 @@ internal sealed class TrustChainValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        TrustChainValidator validator = TrustChainValidator.Default();
+        TrustChainValidator validator = TrustChainValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch));
         ClaimIssueResult result = await validator.ValidateAsync(
             context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -85,7 +86,7 @@ internal sealed class TrustChainValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        TrustChainValidator validator = TrustChainValidator.Default();
+        TrustChainValidator validator = TrustChainValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch));
         ClaimIssueResult result = await validator.ValidateAsync(
             context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -126,7 +127,7 @@ internal sealed class TrustChainValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        TrustChainValidator validator = TrustChainValidator.Default();
+        TrustChainValidator validator = TrustChainValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch));
         ClaimIssueResult result = await validator.ValidateAsync(
             context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -171,7 +172,7 @@ internal sealed class TrustChainValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        ClaimIssueResult result = await TrustChainValidator.Default().ValidateAsync(
+        ClaimIssueResult result = await TrustChainValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch)).ValidateAsync(
             context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
         Claim starts = result.Claims.Single(c => c.Id.Code == WellKnownFederationClaimIds.ChainStartsAtSubject.Code);
@@ -214,7 +215,7 @@ internal sealed class TrustChainValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        ClaimIssueResult result = await TrustChainValidator.Default().ValidateAsync(
+        ClaimIssueResult result = await TrustChainValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch)).ValidateAsync(
             context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
         Claim noCycles = result.Claims.Single(c => c.Id.Code == WellKnownFederationClaimIds.ChainNoCycles.Code);
@@ -259,7 +260,7 @@ internal sealed class TrustChainValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        ClaimIssueResult result = await TrustChainValidator.Default().ValidateAsync(
+        ClaimIssueResult result = await TrustChainValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch)).ValidateAsync(
             context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
         Claim maxPath = result.Claims.Single(c => c.Id.Code == WellKnownFederationClaimIds.ChainWithinMaxPathLength.Code);
@@ -301,7 +302,7 @@ internal sealed class TrustChainValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        ClaimIssueResult result = await TrustChainValidator.Default().ValidateAsync(
+        ClaimIssueResult result = await TrustChainValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch)).ValidateAsync(
             context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
         Claim expMin = result.Claims.Single(c => c.Id.Code == WellKnownFederationClaimIds.ChainExpIsMinOfLinks.Code);
@@ -419,7 +420,7 @@ internal sealed class TrustChainValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        ClaimIssueResult result = await TrustChainValidator.Default().ValidateAsync(
+        ClaimIssueResult result = await TrustChainValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch)).ValidateAsync(
             context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
         return result.Claims.Single(c => c.Id.Code == WellKnownFederationClaimIds.ChainSatisfiesNamingConstraints.Code);
@@ -461,7 +462,7 @@ internal sealed class TrustChainValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        ClaimIssueResult result = await TrustChainValidator.Default().ValidateAsync(
+        ClaimIssueResult result = await TrustChainValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch)).ValidateAsync(
             context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
         Claim linked = result.Claims.Single(c => c.Id.Code == WellKnownFederationClaimIds.ChainProperlyLinked.Code);

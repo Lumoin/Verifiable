@@ -26,7 +26,7 @@ namespace Verifiable.Tests.Cryptography;
 internal sealed class EmrtdSecureMessagingCryptoTests
 {
     /// <summary>The 8-byte all-zero IV that ICAO Doc 9303 3DES Secure Messaging uses for every CBC operation.</summary>
-    private static readonly byte[] ZeroIv = new byte[8];
+    private static byte[] ZeroIv { get; } = new byte[8];
 
     /// <summary>The KSEnc session encryption key from Appendix D.3/D.4.</summary>
     private const string Ksenc = "979EC13B1CBFE9DCD01AB0FED307EAE5";
@@ -76,6 +76,9 @@ internal sealed class EmrtdSecureMessagingCryptoTests
     }
 
 
+    /// <summary><c>ciphertext</c> and <c>recovered</c> are tuple-deconstruction targets, disposed in their
+    /// own <see langword="finally"/> blocks because a <see langword="using"/> declaration cannot target
+    /// one.</summary>
     [TestMethod]
     public async Task TripleDesCbcRoundTripsThroughEncryptAndDecrypt()
     {
@@ -167,6 +170,8 @@ internal sealed class EmrtdSecureMessagingCryptoTests
     }
 
 
+    /// <summary><c>result</c> is a tuple-deconstruction target, disposed in the <see langword="finally"/>
+    /// block because a <see langword="using"/> declaration cannot target one.</summary>
     private async Task AssertEncrypt(string keyHex, string plaintextHex, string expectedCiphertextHex)
     {
         SymmetricEncryptDelegate encrypt = ResolveEncrypt();
@@ -187,6 +192,8 @@ internal sealed class EmrtdSecureMessagingCryptoTests
     }
 
 
+    /// <summary><c>result</c> is a tuple-deconstruction target, disposed in the <see langword="finally"/>
+    /// block because a <see langword="using"/> declaration cannot target one.</summary>
     private async Task AssertDecrypt(string keyHex, string ciphertextHex, string expectedPlaintextHex)
     {
         SymmetricDecryptDelegate decrypt = ResolveDecrypt();
@@ -205,6 +212,8 @@ internal sealed class EmrtdSecureMessagingCryptoTests
     }
 
 
+    /// <summary><c>result</c> is a tuple-deconstruction target, disposed in the <see langword="finally"/>
+    /// block because a <see langword="using"/> declaration cannot target one.</summary>
     private async Task AssertMac(string keyHex, string messageHex, string expectedMacHex)
     {
         ComputeBlockCipherMacDelegate compute = ResolveCompute();
@@ -225,6 +234,8 @@ internal sealed class EmrtdSecureMessagingCryptoTests
     }
 
 
+    /// <summary><c>result</c> is a tuple-deconstruction target, disposed in the <see langword="finally"/>
+    /// block because a <see langword="using"/> declaration cannot target one.</summary>
     private async Task AssertMacNotEqual(string keyHex, string messageHex, string unexpectedMacHex)
     {
         ComputeBlockCipherMacDelegate compute = ResolveCompute();

@@ -11,6 +11,8 @@ using Verifiable.Tpm.Infrastructure.Sessions;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
+using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -33,9 +35,9 @@ namespace Verifiable.Tests.Tpm;
 /// </para>
 /// <para>
 /// The simulator runs both sides, so its credential-protection crypto is self-consistent by construction: the
-/// seed is transported by RSA-OAEP to the EK's public modulus (TPM 2.0 Library Part 1, Annex B.4, B.10.3,
-/// B.10.4), and the credential blob is the real AK-Name-bound outer wrap (<c>KDFa</c>-derived AES-CFB
-/// encryption and an outer HMAC over the ciphertext and the AK's Name, Part 1, clause 24) — identical to the
+/// seed is transported by RSA-OAEP to the EK's public modulus (TPM 2.0 Library Part 1, clause 43.4, 20.3.2.3,
+/// 21.3), and the credential blob is the real AK-Name-bound outer wrap (<c>KDFa</c>-derived AES-CFB
+/// encryption and an outer HMAC over the ciphertext and the AK's Name, Part 1, clause 21) — identical to the
 /// ECC arm. The negative test confirms the binding is to the AK's <i>Name</i>: a credential bound to one AK
 /// cannot be activated against a different object, even with the same EK.
 /// </para>
@@ -68,7 +70,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialActivationTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse ek = await CreateStandardRsaEndorsementKeyAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -98,11 +100,11 @@ internal sealed class TpmInHouseSimulatorRsaCredentialActivationTests
                     //Device side: the AK is the activate object (ADMIN role, password), the EK recovers the seed
                     //(USER role) — but the EK's userWithAuth is CLEAR, so its session must be the satisfied policy
                     //session rather than a password. Both handles are transient objects, so the executor needs their
-                    //Names to compute cpHash for the policy session (Part 1, clause 16.7, equation 15).
+                    //Names to compute cpHash for the policy session (Part 1, clause 15.7, equation 15).
                     using ActivateCredentialInput activateInput = ActivateCredentialInput.Create(
                         ak.ObjectHandle, ek.ObjectHandle, made.CredentialBlob.Span, made.Secret.Span, pool);
                     using TpmPasswordSession activateAuth = TpmPasswordSession.CreateEmpty(pool);
-                    using TpmPolicySession keySession = TpmPolicySession.ForSession(policyHandle, SessionAlg, pool);
+                    using TpmPolicySession keySession = TpmPolicySession.ForSession(policyHandle, SessionAlg, TestEntropy.NewCounterStream(), pool);
                     ReadOnlyMemory<byte>[] handleNames = [ak.Name.Span.ToArray(), ek.Name.Span.ToArray()];
 
                     TpmResult<ActivateCredentialResponse> activateResult = await TpmCommandExecutor.ExecuteAsync<ActivateCredentialResponse>(
@@ -132,7 +134,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialActivationTests
 
     /// <summary>
     /// Verifies that a credential wrapped to one AK's Name cannot be activated against a different AK, even
-    /// through the same RSA EK: the outer HMAC is re-keyed on the activate object's Name (Part 1, clause 24), so
+    /// through the same RSA EK: the outer HMAC is re-keyed on the activate object's Name (Part 1, clause 21), so
     /// a mismatched object fails the integrity check regardless of the seed-transport algorithm.
     /// </summary>
     [TestMethod]
@@ -140,7 +142,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialActivationTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse ek = await CreateStandardRsaEndorsementKeyAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -172,7 +174,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialActivationTests
                     using ActivateCredentialInput activateInput = ActivateCredentialInput.Create(
                         otherAk.ObjectHandle, ek.ObjectHandle, made.CredentialBlob.Span, made.Secret.Span, pool);
                     using TpmPasswordSession activateAuth = TpmPasswordSession.CreateEmpty(pool);
-                    using TpmPolicySession keySession = TpmPolicySession.ForSession(policyHandle, SessionAlg, pool);
+                    using TpmPolicySession keySession = TpmPolicySession.ForSession(policyHandle, SessionAlg, TestEntropy.NewCounterStream(), pool);
                     ReadOnlyMemory<byte>[] handleNames = [otherAk.Name.Span.ToArray(), ek.Name.Span.ToArray()];
 
                     TpmResult<ActivateCredentialResponse> activateResult = await TpmCommandExecutor.ExecuteAsync<ActivateCredentialResponse>(
@@ -181,7 +183,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialActivationTests
                     Assert.IsFalse(
                         activateResult.IsSuccess,
                         "A credential bound to one attestation key's Name must not be activatable against a different object.");
-                    Assert.AreEqual(TpmRcConstants.TPM_RC_INTEGRITY, activateResult.ResponseCode);
+                    Assert.AreEqual(HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_INTEGRITY, 0), activateResult.ResponseCode, "A credential bound to a different attestation key's Name must be refused with TPM_RC_INTEGRITY at credentialBlob, parameter 1 of Table 26.");
                 }
                 finally
                 {
@@ -275,7 +277,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialActivationTests
     /// <returns>The operational simulator.</returns>
     private async Task<TpmSimulator> CreateOperationalAsync(BaseMemoryPool pool)
     {
-        var simulator = new TpmSimulator("tpm-in-house-rsa-credactivation", rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create());
+        var simulator = new TpmSimulator("tpm-in-house-rsa-credactivation", rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await BringOperationalAsync(simulator, pool).ConfigureAwait(false);
 

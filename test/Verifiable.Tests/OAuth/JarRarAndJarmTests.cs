@@ -35,32 +35,32 @@ internal sealed class JarRarAndJarmTests
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private const string ClientId = "https://wallet.client.test";
-    private static readonly Uri ClientBaseUri = new("https://wallet.client.test");
-    private static readonly Uri RedirectUri = new("https://client.example.com/callback");
+    private static Uri ClientBaseUri { get; } = new("https://wallet.client.test");
+    private static Uri RedirectUri { get; } = new("https://client.example.com/callback");
     private const string SubjectId = "urn:uuid:end-user-42";
     private const string ConfigurationId = "UniversityDegree_dc_sd_jwt";
     private const string RequestState = "state-jar-rar-01";
 
-    private static readonly string[] AllowedAlgorithms = [WellKnownJwaValues.Es256];
+    private static string[] AllowedAlgorithms { get; } = [WellKnownJwaValues.Es256];
 
-    private static readonly ImmutableHashSet<CapabilityIdentifier> JarCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> JarCapabilities { get; } =
         ImmutableHashSet.Create(
             WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
             WellKnownCapabilityIdentifiers.OAuthPushedAuthorization,
             WellKnownCapabilityIdentifiers.OAuthDirectAuthorization,
             WellKnownCapabilityIdentifiers.OAuthJwtSecuredAuthorizationRequest);
 
-    private static readonly JwtHeaderSerializer HeaderSerializer =
+    private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)header,
             TestSetup.DefaultSerializationOptions);
 
-    private static readonly JwtPayloadSerializer PayloadSerializer =
+    private static JwtPayloadSerializer PayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)payload,
             TestSetup.DefaultSerializationOptions);
 
-    private static readonly JwtPayloadDeserializer PayloadDeserializer =
+    private static JwtPayloadDeserializer PayloadDeserializer { get; } =
         static bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
             bytes, TestSetup.DefaultSerializationOptions)
             ?? throw new FormatException("Payload JSON parsed to null.");
@@ -317,6 +317,51 @@ internal sealed class JarRarAndJarmTests
             host, material, jtilessJar).ConfigureAwait(false);
         Assert.AreEqual((int)HttpStatusCode.Found, jtilessFirst.StatusCode, jtilessFirst.Body);
         Assert.AreEqual((int)HttpStatusCode.Found, jtilessSecond.StatusCode, jtilessSecond.Body);
+    }
+
+
+    /// <summary>
+    /// RFC 9101 §10.2 / RFC 9700 §4 over the real dispatch wire: a store that saves the JAR
+    /// <c>jti</c> but never resolves what it recorded under <c>FlowKind.JtiReplay</c> cannot maintain
+    /// the used-<c>jti</c> set, so <see cref="JtiReplayGuard"/> answers
+    /// <see cref="JtiReplayOutcome.StoreUnavailable"/> and the by-value JAR consumer refuses the very
+    /// FIRST presentation with <c>server_error</c> — the silent no-op the half-wiring would otherwise
+    /// produce is caught rather than admitted.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-10.2">RFC 9101, Section 10.2</see>.
+    /// </summary>
+    [TestMethod]
+    public async Task JarByValueFailsClosedWhenStoreCannotProveItself()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = RegisterJarClient(host);
+        HalfWireJtiReplayStore(host.Server);
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, Pool);
+        Dictionary<string, object> claims = BuildJarClaims(material, pkce);
+        claims[WellKnownJwtClaimNames.Jti] = "jar-jti-store-proof-01";
+        string compactJar = await SignJarAsync(material, claims).ConfigureAwait(false);
+
+        ServerHttpResponse response = await DispatchJarByValueAsync(
+            host, material, compactJar).ConfigureAwait(false);
+
+        Assert.AreEqual((int)HttpStatusCode.InternalServerError, response.StatusCode, response.Body);
+        Assert.Contains(OAuthErrors.ServerError, response.Body);
+    }
+
+
+    /// <summary>
+    /// Rewires the host's replay store so it saves normally but never resolves anything under
+    /// <c>FlowKind.JtiReplay</c>, while every other correlation kind still resolves through the host's
+    /// real resolver. This is the half-wired store the guard's post-save self-check must catch.
+    /// </summary>
+    /// <param name="server">The hosted server whose OAuth integration resolver is wrapped.</param>
+    private static void HalfWireJtiReplayStore(EndpointServer server)
+    {
+        ResolveCorrelationKeyDelegate original = server.OAuth().ResolveCorrelationKeyAsync!;
+        server.OAuth().ResolveCorrelationKeyAsync = (tenantId, flowKind, externalHandle, ctx, ct) =>
+            flowKind == FlowKind.JtiReplay
+                ? ValueTask.FromResult<string?>(null)
+                : original(tenantId, flowKind, externalHandle, ctx, ct);
     }
 
 

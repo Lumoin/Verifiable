@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
-using System.Reflection;
+using System.Text.RegularExpressions;
 using Verifiable.Core.Assessment.EArchiving;
 using Verifiable.Cryptography.Pki;
+using Verifiable.Tests.Foundation;
 
 namespace Verifiable.Tests.EuEArk;
 
@@ -446,22 +448,32 @@ internal sealed class PreservationVocabularyTests
     }
 
 
+    /// <summary>Matches a <c>public static string</c> get-only property assigned a string literal.</summary>
+    private static Regex StringPropertyPattern { get; } = new(
+        @"public\s+static\s+string\s+(\w+)\s*\{\s*get;\s*\}\s*=\s*""((?:[^""\\]|\\.)*)""\s*;",
+        RegexOptions.Compiled);
+
+
     /// <summary>
-    /// Every result code the vocabulary declares, found by reflection so a code added without a test row still
-    /// takes part in the counts and the partition.
+    /// Every result code the vocabulary declares, found by a source scan of the declaring file so a code
+    /// added without a test row still takes part in the counts and the partition, with no reflection over the
+    /// loaded type.
     /// </summary>
     /// <returns>The seventeen code values.</returns>
     private static List<string> EveryResultCode()
     {
+        string repositoryRoot = SourceHygieneScanner.FindRepositoryRoot();
+        string text = File.ReadAllText(Path.Combine(repositoryRoot, "src/Verifiable.Cryptography/Pki/PreservationResultWellKnown.cs"));
+
         List<string> codes = [];
-        foreach(PropertyInfo property in typeof(PreservationResultWellKnown).GetProperties(BindingFlags.Public | BindingFlags.Static))
+        foreach(Match match in StringPropertyPattern.Matches(text))
         {
-            if(property.PropertyType != typeof(string) || property.Name.EndsWith("Namespace", StringComparison.Ordinal))
+            if(match.Groups[1].Value.EndsWith("Namespace", StringComparison.Ordinal))
             {
                 continue;
             }
 
-            codes.Add((string)property.GetValue(null)!);
+            codes.Add(match.Groups[2].Value);
         }
 
         return codes;

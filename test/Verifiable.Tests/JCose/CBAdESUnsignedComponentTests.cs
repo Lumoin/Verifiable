@@ -252,15 +252,9 @@ internal sealed class CBAdESUnsignedComponentTests
     [TestMethod]
     public async Task ConstructingCrlReferenceWithNullHashAlgorithmThrows()
     {
-        DigestValue digest = await CreateDigestAsync(WellKnownCoseAlgorithms.Sha256, "crl reference digest"u8.ToArray(), TestContext.CancellationToken).ConfigureAwait(false);
-        try
-        {
-            Assert.ThrowsExactly<ArgumentNullException>(() => new CBAdESCrlReference(null!, digest));
-        }
-        finally
-        {
-            digest.Dispose();
-        }
+        using DigestValue digest = await CreateDigestAsync(WellKnownCoseAlgorithms.Sha256, "crl reference digest"u8.ToArray(), TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.ThrowsExactly<ArgumentNullException>(() => new CBAdESCrlReference(null!, digest));
     }
 
 
@@ -284,15 +278,9 @@ internal sealed class CBAdESUnsignedComponentTests
     [TestMethod]
     public async Task ConstructingOcspReferenceWithNullHashAlgorithmThrows()
     {
-        DigestValue digest = await CreateDigestAsync(WellKnownCoseAlgorithms.Sha256, "ocsp reference digest"u8.ToArray(), TestContext.CancellationToken).ConfigureAwait(false);
-        try
-        {
-            Assert.ThrowsExactly<ArgumentNullException>(() => new CBAdESOcspReference(null!, digest, CreateOcspIdentifierFixture()));
-        }
-        finally
-        {
-            digest.Dispose();
-        }
+        using DigestValue digest = await CreateDigestAsync(WellKnownCoseAlgorithms.Sha256, "ocsp reference digest"u8.ToArray(), TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.ThrowsExactly<ArgumentNullException>(() => new CBAdESOcspReference(null!, digest, CreateOcspIdentifierFixture()));
     }
 
 
@@ -316,16 +304,10 @@ internal sealed class CBAdESUnsignedComponentTests
     [TestMethod]
     public async Task ConstructingOcspReferenceWithNullOcspIdentifierThrows()
     {
-        DigestValue digest = await CreateDigestAsync(WellKnownCoseAlgorithms.Sha256, "ocsp reference digest"u8.ToArray(), TestContext.CancellationToken).ConfigureAwait(false);
+        using DigestValue digest = await CreateDigestAsync(WellKnownCoseAlgorithms.Sha256, "ocsp reference digest"u8.ToArray(), TestContext.CancellationToken).ConfigureAwait(false);
         var hashAlgorithm = new AdESDigestAlgorithmIntegerIdentifier(WellKnownCoseAlgorithms.Sha256);
-        try
-        {
-            Assert.ThrowsExactly<ArgumentNullException>(() => new CBAdESOcspReference(hashAlgorithm, digest, null!));
-        }
-        finally
-        {
-            digest.Dispose();
-        }
+
+        Assert.ThrowsExactly<ArgumentNullException>(() => new CBAdESOcspReference(hashAlgorithm, digest, null!));
     }
 
 

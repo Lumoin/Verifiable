@@ -18,6 +18,7 @@ using Verifiable.Tpm.Spec.Attributes;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -27,8 +28,8 @@ namespace Verifiable.Tests.Tpm;
 /// teardown must genuinely RETURN those rentals to the pool — proven with real pool telemetry
 /// (<see cref="MeteredHousePool"/>) over the real wire, never with internal hooks. The startup trio also
 /// proves the normative session flush: "Session contexts in TPM RAM are flushed on any TPM2_Startup()"
-/// (TPM 2.0 Library Part 1, clause 28.5) and "on TPM Resume or TPM Restart, authorization sessions in TPM
-/// memory will be terminated" (clause 17.6.17).
+/// (TPM 2.0 Library Part 1, clause 27.5) and "on TPM Resume or TPM Restart, authorization sessions in TPM
+/// memory will be terminated" (clause 16.6.18).
 /// </summary>
 [TestClass]
 internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
@@ -67,7 +68,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     /// <summary>
     /// The wire form the stripped-form proof installs: <see cref="StrippedAuthValue"/> with two trailing zero
     /// octets appended — DERIVED from the stripped form, so the equivalence the test proves (TPM 2.0 Library
-    /// Part 1, clause 17.6.4.3) is structural in the fixture rather than an eyeball match of two literals.
+    /// Part 1, clause 16.6.4.3) is structural in the fixture rather than an eyeball match of two literals.
     /// </summary>
     private static byte[] PaddedAuthValue { get; } = [.. StrippedAuthValue, 0x00, 0x00];
 
@@ -87,11 +88,16 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     private static byte[] SealAuth { get; } = [0x71, 0x72, 0x73, 0x74];
 
     /// <summary>
-    /// How many pooled carriers a loaded sealed object owns: its Name, its recovered sealed data, and its
-    /// userAuth. The Name is rented separately from the one <c>TPM2_Load()</c>'s response frames, because the
-    /// two owners' lifetimes do not nest.
+    /// How many pooled carriers a loaded sealed object owns: its Name, its recovered sealed data, its
+    /// userAuth, its protection seed (the sensitive area's obfuscation value, TPM 2.0 Library Part 2,
+    /// clause 12.3.2, Table 240), the raw storage of its retained public area plus the parsed <c>unique</c>
+    /// that area carries (<c>H_nameAlg(seedValue ‖ data)</c>, Part 2, clause 12.2.3.1, equation (8); Part 1, clause 24.5.3.2, equation (48) — the
+    /// caller's <c>inPublic</c>, which <c>TPM2_ReadPublic()</c> answers with, Part 3, clause 12.4.1; a
+    /// policy-free sealed template parses no further carrier), and its Qualified Name (Part 1, clause 23.5).
+    /// The Name is rented separately from the one <c>TPM2_Load()</c>'s response frames, because the two
+    /// owners' lifetimes do not nest.
     /// </summary>
-    private const int LoadedSealedObjectCarrierCount = 3;
+    private const int LoadedSealedObjectCarrierCount = 7;
 
     /// <summary>The real password the parent-authValue carrier-balance proofs create the storage parent with.</summary>
     private const string ParentPassword = "secmem-parent-auth-proof";
@@ -127,7 +133,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
 
     /// <summary>
     /// An authValue one octet wider than a SHA-256 Name algorithm's digest, DERIVED from the limit it
-    /// violates (TPM 2.0 Library Part 1, clause 17.6.4.2) — the refused-seal balance proof's fixture. A
+    /// violates (TPM 2.0 Library Part 1, clause 16.6.4.2) — the refused-seal balance proof's fixture. A
     /// non-zero fill keeps the wire length at 33 regardless of trailing-zero handling.
     /// </summary>
     private static byte[] OverWideSealAuth { get; } = CreateOverWideSealAuth();
@@ -148,8 +154,8 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     /// <summary>
     /// TPM Resume terminates active sessions: a bound HMAC session started before
     /// <c>Shutdown(STATE)</c>/<c>Startup(STATE)</c> is gone afterwards — flushing its handle answers
-    /// <c>TPM_RC_HANDLE</c>, exactly as a never-started handle does. TPM 2.0 Library Part 1, clause 28.5
-    /// ("Session contexts in TPM RAM are flushed on any TPM2_Startup()") and clause 17.6.17 ("on TPM Resume
+    /// <c>TPM_RC_HANDLE</c>, exactly as a never-started handle does. TPM 2.0 Library Part 1, clause 27.5
+    /// ("Session contexts in TPM RAM are flushed on any TPM2_Startup()") and clause 16.6.18 ("on TPM Resume
     /// or TPM Restart, authorization sessions in TPM memory will be terminated"); the reference's
     /// <c>SessionStartup()</c> clears the RAM slots unconditionally for every startup type.
     /// </summary>
@@ -158,7 +164,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-secmem-resume-flush").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         uint sessionHandle = await StartBoundToOwnerSessionAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -172,22 +178,22 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
             flushResult.IsTpmError,
             "A TPM Resume terminates every session in TPM memory, so flushing the pre-resume session handle must be refused.");
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_HANDLE, flushResult.ResponseCode,
+            HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_HANDLE, 0), flushResult.ResponseCode,
             "A TPM Resume terminates every session in TPM memory, so flushing the pre-resume session handle must answer TPM_RC_HANDLE.");
     }
 
     /// <summary>
     /// TPM Restart terminates active sessions: the same proof as
     /// <see cref="StartupResumeTerminatesActiveSessions"/> for the <c>Shutdown(STATE)</c>/<c>Startup(CLEAR)</c>
-    /// sequence — clause 17.6.17 names Restart explicitly alongside Resume (TPM 2.0 Library Part 1, clauses
-    /// 28.5 and 17.6.17).
+    /// sequence — clause 16.6.18 names Restart explicitly alongside Resume (TPM 2.0 Library Part 1, clause
+    /// 27.5).
     /// </summary>
     [TestMethod]
     public async Task StartupRestartTerminatesActiveSessions()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-secmem-restart-flush").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         uint sessionHandle = await StartBoundToOwnerSessionAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -201,7 +207,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
             flushResult.IsTpmError,
             "A TPM Restart terminates every session in TPM memory, so flushing the pre-restart session handle must be refused.");
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_HANDLE, flushResult.ResponseCode,
+            HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_HANDLE, 0), flushResult.ResponseCode,
             "A TPM Restart terminates every session in TPM memory, so flushing the pre-restart session handle must answer TPM_RC_HANDLE.");
     }
 
@@ -210,14 +216,14 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     /// bound-entity value) to the pool: the pool's outstanding-rental count returns to its pre-session
     /// baseline once <c>Shutdown(CLEAR)</c>/<c>Startup(CLEAR)</c> completes. The flush itself is
     /// pre-existing behaviour; the accounting is what the owned carriers add (TPM 2.0 Library Part 1,
-    /// clause 28.5).
+    /// clause 27.5).
     /// </summary>
     [TestMethod]
     public async Task StartupResetReturnsSessionCarrierRentalsToPool()
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-secmem-reset-pool").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         long baseline = trackingPool.OutstandingCount;
@@ -241,6 +247,9 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     /// bound session's key and bound-entity value — leaves outstanding rentals, and the teardown walk brings
     /// the pool back to exact balance. Real pool telemetry, no test hook in production code.
     /// </summary>
+    /// <summary><c>simulator</c> is disposed explicitly, not via a <see langword="using"/> declaration,
+    /// because the outstanding-count assertion right after it must see every durable carrier already
+    /// returned.</summary>
     [TestMethod]
     public async Task DisposeReturnsEveryDurableCarrierRentalToPool()
     {
@@ -248,7 +257,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
         TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-secmem-teardown").ConfigureAwait(false);
         try
         {
-            using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+            using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
             TpmResponseRegistry registry = CreateRegistry();
 
             using(CreatePrimaryResponse primary = await CreateEccDecryptKeyAsync(tpm, registry, trackingPool.Pool).ConfigureAwait(false))
@@ -280,7 +289,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     /// <c>TPM2_EvictControl()</c>'s persist arm installs a genuine deep COPY: after the transient original is
     /// flushed (disposing ITS private-key carrier), the persistent instance's own key still decrypts a salted
     /// <c>TPM2_StartAuthSession()</c>'s salt — proving the two instances never co-owned a buffer. The
-    /// persistent copy is then evicted cleanly (TPM 2.0 Library Part 3, clause 28.5; Part 1, clause 17.6.13's
+    /// persistent copy is then evicted cleanly (TPM 2.0 Library Part 3, clause 28.5; Part 1, clause 16.6.13's
     /// salted-session seed recovery is what forces the simulator to USE the persistent key's bytes).
     /// </summary>
     [TestMethod]
@@ -288,14 +297,15 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-secmem-persist-copy").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse tpmKey = await CreateEccDecryptKeyAsync(tpm, registry, pool).ConfigureAwait(false);
         uint transientHandle = tpmKey.ObjectHandle.Value;
         ReadOnlyMemory<byte> point = ExtractEccPoint(tpmKey);
 
-        TpmResult<EvictControlResponse> persistResult = await EvictControlAsync(tpm, registry, pool, transientHandle, PersistentHandle).ConfigureAwait(false);
+        TpmResult<EvictControlResponse> persistResult = await TpmEvictControlHarness.EvictControlAsync(
+            tpm, registry, pool, transientHandle, PersistentHandle, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(persistResult.IsSuccess, $"EvictControl (persist) failed: '{persistResult.ResponseCode}'.");
 
         TpmResult<FlushContextResponse> flushResult = await FlushAsync(tpm, registry, pool, transientHandle).ConfigureAwait(false);
@@ -306,7 +316,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
         TpmEccSigningBackend eccBackend = BouncyCastleTpmEccSigningBackend.Create();
         (StartAuthSessionInput startInput, IMemoryOwner<byte> salt, _) = await StartAuthSessionInputExtensions.CreateSaltedHmacSession(
             PersistentHandle, point, TpmEccCurveConstants.TPM_ECC_NIST_P256, TpmKeyNameAlg, SessionAlg,
-            eccBackend.GenerateKey, eccBackend.ComputeSharedSecret, pool, TestContext.CancellationToken).ConfigureAwait(false);
+            eccBackend.GenerateKey, eccBackend.ComputeSharedSecret, TestEntropy.NewCounterStream(), pool, TestContext.CancellationToken).ConfigureAwait(false);
 
         uint saltedSessionHandle;
         using(salt)
@@ -322,7 +332,8 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
         TpmResult<FlushContextResponse> sessionFlush = await FlushAsync(tpm, registry, pool, saltedSessionHandle).ConfigureAwait(false);
         Assert.IsTrue(sessionFlush.IsSuccess, $"FlushContext (salted session) failed: '{sessionFlush.ResponseCode}'.");
 
-        TpmResult<EvictControlResponse> evictResult = await EvictControlAsync(tpm, registry, pool, PersistentHandle, PersistentHandle).ConfigureAwait(false);
+        TpmResult<EvictControlResponse> evictResult = await TpmEvictControlHarness.EvictControlAsync(
+            tpm, registry, pool, PersistentHandle, PersistentHandle, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(evictResult.IsSuccess, $"EvictControl (evict persistent copy) failed: '{evictResult.ResponseCode}'.");
     }
 
@@ -337,7 +348,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-secmem-rotation").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         long baseline = trackingPool.OutstandingCount;
@@ -364,7 +375,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-secmem-trace-loud").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         var observer = new TestObserver<TraceEntry<TpmSimulatorState, TpmSimulatorInput>>();
@@ -395,7 +406,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     /// <summary>
     /// An authorization value installed WITH trailing zero octets authorizes in its stripped form: "Trailing
     /// octets of zero are to be removed from any string before it is used as an authValue" (TPM 2.0 Library
-    /// Part 1, clause 17.6.4.3; the reference strips supplied session auths through
+    /// Part 1, clause 16.6.4.3; the reference strips supplied session auths through
     /// <c>MemoryRemoveTrailingZeros</c> and every stored auth through <c>EntityGetAuthValue</c>). The stored
     /// carrier keeps the wire-exact octets; every compare takes stripped views of BOTH sides.
     /// </summary>
@@ -404,7 +415,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-secmem-strip-equiv").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         //Defined with the zero-padded wire form; authorized below with the stripped form it derives from.
@@ -420,7 +431,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
             tpm, writeInput, [strippedAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(
             writeResult.IsSuccess,
-            $"The stripped form of a trailing-zero-padded authValue must authorize (clause 17.6.4.3), but NV_Write failed: '{writeResult.ResponseCode}'.");
+            $"The stripped form of a trailing-zero-padded authValue must authorize (clause 16.6.4.3), but NV_Write failed: '{writeResult.ResponseCode}'.");
     }
 
     /// <summary>
@@ -435,7 +446,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-secmem-refused-define").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         long baseline = trackingPool.OutstandingCount;
@@ -444,7 +455,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
             tpm, registry, trackingPool.Pool, NvIndexHandle, TeardownIndexAuth,
             DefaultIndexAttributes | TpmaNv.TPMA_NV_PLATFORMCREATE).ConfigureAwait(false);
         Assert.IsTrue(defineResult.IsTpmError, "An owner-authorized definition claiming TPMA_NV_PLATFORMCREATE must be refused.");
-        Assert.AreEqual(TpmRcConstants.TPM_RC_ATTRIBUTES, defineResult.ResponseCode);
+        Assert.AreEqual(HmacKeyHarness.HandleEncodedRc(TpmRcConstants.TPM_RC_ATTRIBUTES, 0), defineResult.ResponseCode, "Table 245: authHandle is TPM2_NV_DefineSpace()'s sole handle (handle 1); an owner-authorized definition claiming TPMA_NV_PLATFORMCREATE is handle-encoded TPM_RC_ATTRIBUTES at index 0.");
 
         Assert.AreEqual(
             baseline, trackingPool.OutstandingCount,
@@ -462,7 +473,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-secmem-refused-rotation").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         //Defined with an EMPTY authValue (the dispose-immune shared carrier), so the only rental the refused
@@ -491,7 +502,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     /// <summary>
     /// A command-HMAC MISMATCH returns the queued request's parse-rented carrier to the pool: a
     /// <c>TPM2_HierarchyChangeAuth()</c> authorized over an HMAC session whose client folded a WRONG ownerAuth
-    /// fails session verification (TPM 2.0 Library Part 1, clause 17.6; Part 3, clause 5.6, check 9), the
+    /// fails session verification (TPM 2.0 Library Part 1, clause 16.6; Part 3, clause 5.6, check 9), the
     /// rotation never installs, and the mismatch rejection must release the pinned rental the parser took for
     /// <c>newAuth</c> — the one reject path that runs after the request rode the verification queue.
     /// </summary>
@@ -500,13 +511,13 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-secmem-hmac-mismatch").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         //A real ownerAuth first, so the mismatch is a genuine wrong-secret disagreement rather than two empty folds.
         await RotateOwnerAuthAsync(tpm, registry, trackingPool.Pool, currentAuth: default, newAuth: FirstRotationAuth).ConfigureAwait(false);
 
-        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(SessionAlg);
+        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(SessionAlg, TestEntropy.NewCounterStream(), BaseMemoryPool.Shared);
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             tpm, startInput, [], null, trackingPool.Pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession (unbound) failed: '{startResult.ResponseCode}'.");
@@ -514,10 +525,10 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
         uint sessionHandle = started.SessionHandle.Value;
 
         //An unbound, unsalted session's HMAC keys on sessionKey (the Empty Buffer) ‖ the authorized entity's
-        //authValue (Part 1, clause 17.6.9) — folding a wrong ownerAuth guarantees the mismatch. The client
+        //authValue (Part 1, clause 16.6.9) — folding a wrong ownerAuth guarantees the mismatch. The client
         //session lives OUTSIDE the measured window: its constructor adopts the response's nonceTPM carrier,
         //so its own rentals would otherwise blur the one balance this test proves.
-        using TpmSession session = new(new TpmHandle(sessionHandle), started.NonceTPM, SessionAlg, trackingPool.Pool);
+        using TpmSession session = new(new TpmHandle(sessionHandle), started.NonceTPM, SessionAlg, TestEntropy.NewCounterStream(), trackingPool.Pool);
         session.SetAuthValue(WrongSessionAuth, trackingPool.Pool);
         session.SessionAttributes = TpmaSession.CONTINUE_SESSION;
 
@@ -531,7 +542,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
             Assert.IsTrue(result.IsTpmError, "A session whose command HMAC does not verify must refuse the whole command.");
             Assert.AreEqual(
                 TpmRcConstants.TPM_RC_BAD_AUTH, result.BaseError,
-                "TPM_RH_LOCKOUT is the sole permanent entity whose authValue is dictionary-attack protected (Part 1, clause 17.8.1), so a wrong ownerAuth is a plain session-encoded TPM_RC_BAD_AUTH.");
+                "TPM_RH_LOCKOUT is the sole permanent entity whose authValue is dictionary-attack protected (Part 1, clause 16.8.1), so a wrong ownerAuth is a plain session-encoded TPM_RC_BAD_AUTH.");
         }
 
         Assert.AreEqual(
@@ -545,7 +556,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     /// <summary>
     /// A REFUSED <c>TPM2_CreatePrimary()</c> returns the parse-rented userAuth carrier to the pool: an
     /// over-wide authValue (33 octets against a SHA-256 Name algorithm) is refused with <c>TPM_RC_SIZE</c>
-    /// (TPM 2.0 Library Part 1, clause 17.6.4.2), and the refusing width-gate arm must release the pinned
+    /// (TPM 2.0 Library Part 1, clause 16.6.4.2), and the refusing width-gate arm must release the pinned
     /// rental the parser took for <c>inSensitive.userAuth</c> — every refusing arm disposes the in-flight
     /// input it received, never orphans it.
     /// </summary>
@@ -554,7 +565,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-secmem-refused-primary").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         long baseline = trackingPool.OutstandingCount;
@@ -566,7 +577,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
             TpmResult<CreatePrimaryResponse> result = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
                 tpm, input, [ownerAuth], null, trackingPool.Pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
             Assert.IsTrue(result.IsTpmError, "A 33-octet authValue against a SHA-256 Name algorithm must be refused.");
-            Assert.AreEqual(TpmRcConstants.TPM_RC_SIZE, result.ResponseCode);
+            Assert.AreEqual(HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SIZE, 0), result.ResponseCode, "Table 191: inSensitive is TPM2_CreatePrimary()'s first parameter (parameter 1); a 33-octet authValue against a SHA-256 Name algorithm is parameter-encoded TPM_RC_SIZE at index 0.");
         }
 
         Assert.AreEqual(
@@ -577,7 +588,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     /// <summary>
     /// A REFUSED plain-password <c>TPM2_Create()</c> seal returns BOTH parse-rented carriers (the secret and
     /// the userAuth) to the pool: an over-wide authValue against a SHA-256 Name algorithm is refused with
-    /// <c>TPM_RC_SIZE</c> (TPM 2.0 Library Part 1, clause 17.6.4.2), and the refusal must release both
+    /// <c>TPM_RC_SIZE</c> (TPM 2.0 Library Part 1, clause 16.6.4.2), and the refusal must release both
     /// pinned rentals through the request's own disposal.
     /// </summary>
     [TestMethod]
@@ -585,7 +596,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-secmem-refused-seal").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         uint parentHandle;
@@ -604,7 +615,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
             TpmResult<CreateResponse> result = await TpmCommandExecutor.ExecuteAsync<CreateResponse>(
                 tpm, createInput, [parentAuth], null, trackingPool.Pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
             Assert.IsTrue(result.IsTpmError, "A 33-octet authValue against a SHA-256 Name algorithm must be refused.");
-            Assert.AreEqual(TpmRcConstants.TPM_RC_SIZE, result.ResponseCode);
+            Assert.AreEqual(HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SIZE, 0), result.ResponseCode, "Table 18: inSensitive is TPM2_Create()'s first parameter (parameter 1); a 33-octet authValue against a SHA-256 Name algorithm is parameter-encoded TPM_RC_SIZE at index 0.");
         }
 
         Assert.AreEqual(
@@ -623,7 +634,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-secmem-sealed-balance").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         uint parentHandle;
@@ -662,7 +673,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-secmem-refused-parent-auth").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         uint parentHandle;
@@ -702,7 +713,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-secmem-sealed-parent-auth").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         uint parentHandle;
@@ -741,7 +752,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-secmem-refused-load").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         uint parentHandle;
@@ -792,7 +803,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-secmem-success-load").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         uint parentHandle;
@@ -842,15 +853,15 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     /// <summary>
     /// A REFUSED <c>TPM2_EvictControl()</c> under a WRONG owner password returns the supplied owner password
     /// carrier to the pool: the owner-hierarchy auth slot (TPM 2.0 Library Part 3, clause 28.5) is DA-exempt
-    /// (Part 1, clause 17.8.1), so the refusal is a bare, uncharged <c>TPM_RC_BAD_AUTH</c> whose disposing
-    /// arm must still release the parse-rented carrier.
+    /// (Part 1, clause 16.8.1), so the refusal is a session-index-encoded, uncharged <c>TPM_RC_BAD_AUTH</c>
+    /// whose disposing arm must still release the parse-rented carrier.
     /// </summary>
     [TestMethod]
     public async Task RefusedEvictControlWithWrongOwnerPasswordReturnsTheSuppliedPasswordCarrierToPool()
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-secmem-refused-evict").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         //The primary is minted BEFORE the owner rotation: TPM2_CreatePrimary's own hierarchy slot verifies the
@@ -870,8 +881,8 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
                 tpm, registry, trackingPool.Pool, transientHandle, PersistentHandle, WrongPasswordSlotAuthBytes).ConfigureAwait(false);
             Assert.IsTrue(result.IsTpmError, "A wrong owner password must be refused.");
             Assert.AreEqual(
-                TpmRcConstants.TPM_RC_BAD_AUTH, result.ResponseCode,
-                "A wrong owner password is a bare, uncharged TPM_RC_BAD_AUTH — the owner hierarchy is DA-exempt.");
+                HmacKeyHarness.SessionEncodedRc(TpmRcConstants.TPM_RC_BAD_AUTH, 0), result.ResponseCode,
+                "A wrong owner password fails the owner authorization, session 1 of TPM2_EvictControl's own command table, uncharged — the owner hierarchy is DA-exempt.");
         }
 
         Assert.AreEqual(
@@ -889,7 +900,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-secmem-success-evict").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         //The primary is minted BEFORE the owner rotation: TPM2_CreatePrimary's own hierarchy slot verifies the
@@ -922,7 +933,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     /// <summary>
     /// A REFUSED <c>TPM2_CreatePrimary()</c> under a WRONG owner-hierarchy password returns the supplied
     /// hierarchy password carrier to the pool: the owner-hierarchy auth slot (TPM 2.0 Library Part 3, clause
-    /// 24.1) is DA-exempt (Part 1, clause 17.8.1), so the refusal is a bare, uncharged
+    /// 24.1) is DA-exempt (Part 1, clause 16.8.1), so the refusal is a session-index-encoded, uncharged
     /// <c>TPM_RC_BAD_AUTH</c>.
     /// </summary>
     [TestMethod]
@@ -930,7 +941,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-secmem-refused-primary-hierarchy").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         await RotateHierarchyAuthAsync(
@@ -947,8 +958,8 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
                 tpm, input, [wrongHierarchyAuth], null, trackingPool.Pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
             Assert.IsTrue(result.IsTpmError, "A wrong owner-hierarchy password must be refused.");
             Assert.AreEqual(
-                TpmRcConstants.TPM_RC_BAD_AUTH, result.ResponseCode,
-                "A wrong owner-hierarchy password is a bare, uncharged TPM_RC_BAD_AUTH.");
+                HmacKeyHarness.SessionEncodedRc(TpmRcConstants.TPM_RC_BAD_AUTH, 0), result.ResponseCode,
+                "A wrong owner-hierarchy password fails the primaryHandle authorization, session 1 of TPM2_CreatePrimary()'s own command table, uncharged.");
         }
 
         Assert.AreEqual(
@@ -966,7 +977,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-secmem-success-primary-hierarchy").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         await RotateHierarchyAuthAsync(
@@ -1000,7 +1011,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
 
     /// <summary>
     /// A REFUSED <c>TPM2_Sign()</c> under a WRONG key password returns the supplied key password carrier to
-    /// the pool: the signing key's slot (Auth Index 1, Auth Role USER — TPM 2.0 Library Part 3, clause 20.2)
+    /// the pool: the signing key's slot (Auth Index 1, Auth Role USER — TPM 2.0 Library Part 3, clause 20.5)
     /// now compares the supplied password against the key's retained authValue.
     /// </summary>
     [TestMethod]
@@ -1008,7 +1019,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-secmem-refused-sign").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse key = await CreateEccSigningKeyWithPasswordAsync(
@@ -1035,7 +1046,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
 
     /// <summary>
     /// A SUCCESSFUL <c>TPM2_Sign()</c> under the key's REAL password returns the supplied key password
-    /// carrier to the pool: the key-slot compare (TPM 2.0 Library Part 3, clause 20.2) is the supplied
+    /// carrier to the pool: the key-slot compare (TPM 2.0 Library Part 3, clause 20.5) is the supplied
     /// password carrier's terminal use.
     /// </summary>
     [TestMethod]
@@ -1043,7 +1054,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-secmem-success-sign").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse key = await CreateEccSigningKeyWithPasswordAsync(
@@ -1069,7 +1080,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     /// <summary>
     /// A REFUSED <c>TPM2_CertifyCreation()</c> under a WRONG sign password returns the supplied sign
     /// password carrier to the pool: the signing key's slot (Auth Index 1, Auth Role USER — TPM 2.0 Library
-    /// Part 3, clause 18.3, Table 91) now compares the supplied password against the key's retained
+    /// Part 3, clause 18.3, Table 99) now compares the supplied password against the key's retained
     /// authValue.
     /// </summary>
     [TestMethod]
@@ -1077,7 +1088,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-secmem-refused-certifycreation").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse subject = await CreateEccSigningKeyWithPasswordAsync(
@@ -1107,14 +1118,14 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
 
     /// <summary>
     /// A SUCCESSFUL <c>TPM2_CertifyCreation()</c> under the sign key's REAL password returns the supplied
-    /// sign password carrier to the pool (TPM 2.0 Library Part 3, clause 18.3, Table 91).
+    /// sign password carrier to the pool (TPM 2.0 Library Part 3, clause 18.3, Table 99).
     /// </summary>
     [TestMethod]
     public async Task SuccessfulCertifyCreationWithSignPasswordReturnsTheSuppliedPasswordCarrierToPool()
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-secmem-success-certifycreation").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse subject = await CreateEccSigningKeyWithPasswordAsync(
@@ -1150,7 +1161,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-secmem-refused-quote").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse ak = await CreateEccSigningKeyWithPasswordAsync(
@@ -1184,7 +1195,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-secmem-success-quote").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse ak = await CreateEccSigningKeyWithPasswordAsync(
@@ -1218,7 +1229,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-secmem-refused-certify").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse subjectObject = await CreateEccSigningKeyWithPasswordAsync(
@@ -1255,7 +1266,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-secmem-success-certify").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse subjectObject = await CreateEccSigningKeyWithPasswordAsync(
@@ -1284,7 +1295,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     /// <summary>
     /// A REFUSED <c>TPM2_GetTime()</c> under a WRONG password at the signing key's slot (index 1) returns
     /// both supplied password carriers to the pool: the sign slot (Auth Index 2, Auth Role USER — TPM 2.0
-    /// Library Part 3, clause 18.7, Table 99) now compares the supplied password against the key's retained
+    /// Library Part 3, clause 18.7, Table 107) now compares the supplied password against the key's retained
     /// authValue, session-index-encoded at its own slot regardless of the privacy-administrator slot's
     /// standing.
     /// </summary>
@@ -1293,7 +1304,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-secmem-refused-gettime").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         await RotateHierarchyAuthAsync(
@@ -1324,14 +1335,14 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     /// <summary>
     /// A SUCCESSFUL <c>TPM2_GetTime()</c> under BOTH slots' REAL passwords — the rotated Endorsement
     /// hierarchy at slot 0 and the signing key at slot 1 — returns both supplied password carriers to the
-    /// pool (TPM 2.0 Library Part 3, clause 18.7, Table 99).
+    /// pool (TPM 2.0 Library Part 3, clause 18.7, Table 107).
     /// </summary>
     [TestMethod]
     public async Task SuccessfulGetTimeWithBothSlotPasswordsReturnsTheSuppliedPasswordCarriersToPool()
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-secmem-success-gettime").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         await RotateHierarchyAuthAsync(
@@ -1372,7 +1383,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-secmem-refused-nvcertify").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse ak = await CreateEccSigningKeyWithPasswordAsync(
@@ -1389,8 +1400,8 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
                 tpm, nvCertifyInput, [signAuth, indexAuth], null, trackingPool.Pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
             Assert.IsTrue(result.IsTpmError, "An nvIndex handle that was never defined must be refused.");
             Assert.AreEqual(
-                TpmRcConstants.TPM_RC_HANDLE, result.ResponseCode,
-                "An undefined nvIndex handle is a bare TPM_RC_HANDLE, refused before either slot's credential is compared (TPM 2.0 Library Part 3, clause 31.16).");
+                HmacKeyHarness.HandleEncodedRc(TpmRcConstants.TPM_RC_HANDLE, 2), result.ResponseCode,
+                "An undefined nvIndex handle designates nvIndex, handle 3 of Table 271, refused before either slot's credential is compared (TPM 2.0 Library Part 3, clause 31.16).");
         }
 
         Assert.AreEqual(
@@ -1413,7 +1424,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-secmem-success-nvcertify").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         TpmResult<NvDefineSpaceResponse> defineResult = await DefineIndexAsync(
@@ -1454,15 +1465,15 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     /// <summary>
     /// A REFUSED <c>TPM2_PolicyNV()</c> under a WRONG password at the authorizing Index itself returns the
     /// supplied index password carrier to the pool: the index arm (TPM 2.0 Library Part 3, clause 23.9) of a
-    /// DA-protected Index refuses with a bare (never session-encoded) <c>TPM_RC_AUTH_FAIL</c>, matching every
-    /// other NV command's authorization family.
+    /// DA-protected Index refuses with the session-index-encoded <c>TPM_RC_AUTH_FAIL</c>, matching every other
+    /// NV command's authorization family.
     /// </summary>
     [TestMethod]
     public async Task RefusedPolicyNvWithWrongIndexPasswordReturnsTheSuppliedPasswordCarrierToPool()
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-secmem-refused-policynv").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         TpmResult<NvDefineSpaceResponse> defineResult = await DefineIndexAsync(
@@ -1484,8 +1495,8 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
                 tpm, policyNvInput, [wrongIndexAuth], null, trackingPool.Pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
             Assert.IsTrue(result.IsTpmError, "A wrong index password must be refused.");
             Assert.AreEqual(
-                TpmRcConstants.TPM_RC_AUTH_FAIL, result.ResponseCode,
-                "A wrong password against a DA-protected Index is a bare TPM_RC_AUTH_FAIL — the NV family never session-encodes.");
+                HmacKeyHarness.SessionEncodedRc(TpmRcConstants.TPM_RC_AUTH_FAIL, 0), result.ResponseCode,
+                "A wrong password against a DA-protected Index fails the nvIndex authorization, session 1 of TPM2_PolicyNV()'s own command table.");
         }
 
         Assert.AreEqual(
@@ -1506,7 +1517,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-secmem-success-policynv").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         TpmResult<NvDefineSpaceResponse> defineResult = await DefineIndexAsync(
@@ -1552,7 +1563,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-secmem-refused-activate").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse ek = await CreateEccStorageParentWithPasswordAsync(
@@ -1592,7 +1603,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-secmem-success-activate").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse ek = await CreateEccStorageParentWithPasswordAsync(
@@ -1625,7 +1636,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     /// A REFUSED over-session <c>TPM2_ActivateCredential()</c> under a WRONG password at the activate
     /// object's slot (index 0) returns the supplied activate password carrier to the pool: slot 1 carries a
     /// real (non-<c>TPM_RS_PW</c>) HMAC session folding the key's CORRECT password, which routes the parse
-    /// to the over-session form (<c>OnActivateCredentialOverSessions</c>) — proving the activate-slot compare
+    /// to the over-session form — proving the activate-slot compare
     /// (TPM 2.0 Library Part 3, clause 12.5) is inserted identically ahead of that form's own policy checks.
     /// </summary>
     [TestMethod]
@@ -1633,7 +1644,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-secmem-refused-activate-oversession").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse ek = await CreateEccStorageParentWithPasswordAsync(
@@ -1644,7 +1655,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
         (byte[] credentialBlob, byte[] secret) = await MakeCredentialBytesAsync(
             tpm, registry, trackingPool.Pool, ek.ObjectHandle, ak.Name.Span.ToArray()).ConfigureAwait(false);
 
-        StartAuthSessionInput keyStartInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(SessionAlg);
+        StartAuthSessionInput keyStartInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(SessionAlg, TestEntropy.NewCounterStream(), BaseMemoryPool.Shared);
         TpmResult<StartAuthSessionResponse> keyStartResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             tpm, keyStartInput, [], null, trackingPool.Pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(keyStartResult.IsSuccess, $"StartAuthSession (key slot) failed: '{keyStartResult.ResponseCode}'.");
@@ -1653,7 +1664,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
 
         try
         {
-            using TpmSession keySession = new(new TpmHandle(keySessionHandle), keyStarted.NonceTPM, SessionAlg, trackingPool.Pool);
+            using TpmSession keySession = new(new TpmHandle(keySessionHandle), keyStarted.NonceTPM, SessionAlg, TestEntropy.NewCounterStream(), trackingPool.Pool);
             keySession.SetAuthValue(PasswordSlotAuthBytes, trackingPool.Pool);
             keySession.SessionAttributes = TpmaSession.CONTINUE_SESSION;
 
@@ -1695,7 +1706,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-secmem-flushed-primary").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         long baseline = trackingPool.OutstandingCount;
@@ -1725,17 +1736,12 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
 
     /// <summary>
     /// A <c>TPM2_Create()</c> frame truncated INSIDE <c>inSensitive</c> — the authValue half present, the
-    /// sensitive-data half missing — throws out of the wire parser, and the throw must still return the
-    /// already-rented authValue carrier to the pool: the structure parser rents the auth half first, so a
-    /// failing data read is the one window in which that rental has no other owner.
+    /// sensitive-data half missing — is answered on the wire with <c>TPM_RC_INSUFFICIENT</c> (TPM 2.0 Library
+    /// Part 3, clause 5.8.2, Table 2), and the refusal must still return the already-rented authValue carrier
+    /// to the pool: the structure parser rents the auth half first, so a failing data read is the one window
+    /// in which that rental has no other owner.
+    /// <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Part 3, clause 5.8.2, Table 2</see>.
     /// </summary>
-    /// <remarks>
-    /// The throw itself is the simulator's current transport-level answer to a truncation inside a
-    /// structure parser (a truncation between parameters answers <c>TPM_RC_INSUFFICIENT</c>); converting
-    /// the in-structure form to the response code of TPM 2.0 Library Part 3, clause 5.8.2 is a separate
-    /// parse-robustness change, and this test's expected shape converts with it. The pool-balance half of
-    /// the proof is the invariant either way.
-    /// </remarks>
     [TestMethod]
     public async Task TruncatedSealCreateParseReturnsTheAuthRentalToPool()
     {
@@ -1745,12 +1751,20 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
         long baseline = trackingPool.OutstandingCount;
 
         byte[] command = BuildSealCreateFrameTruncatedAfterAuth();
-        _ = await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(
-            async () => await simulator.SubmitAsync(command, trackingPool.Pool, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+        TpmResult<TpmResponse> submitResult = await simulator.SubmitAsync(command, trackingPool.Pool, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(submitResult.IsSuccess, "The truncated frame must reach the simulator and be answered, never thrown out of it.");
+        using(TpmResponse response = submitResult.Value)
+        {
+            var reader = new TpmReader(response.AsReadOnlySpan());
+            TpmHeader responseHeader = TpmHeader.Parse(ref reader);
+            Assert.AreEqual(
+                HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_INSUFFICIENT, 0), (TpmRcConstants)responseHeader.Code,
+                "Table 18: inSensitive is TPM2_Create()'s first parameter (index 0); a frame truncated inside it must be refused with parameter-encoded TPM_RC_INSUFFICIENT there.");
+        }
 
         Assert.AreEqual(
             baseline, trackingPool.OutstandingCount,
-            "The truncated-frame throw must return the parse-rented authValue carrier to the pool.");
+            "The truncated-frame refusal must return the parse-rented authValue carrier to the pool.");
     }
 
     /// <summary>
@@ -1793,7 +1807,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     /// <summary>
     /// A TPM Resume flushes loaded objects: "An object context is only removed from TPM memory with
     /// TPM2_FlushContext(), deletion of the associated hierarchy seed, or TPM2_Startup()" (TPM 2.0 Library
-    /// Part 1, clause 28.4) — the object half of the rule the session trio above proves, realized as the
+    /// Part 1, clause 27.4) — the object half of the rule the session trio above proves, realized as the
     /// reference's unconditional <c>ObjectStartup()</c> slot clear. A transient key loaded before
     /// <c>Shutdown(STATE)</c>/<c>Startup(STATE)</c> is gone afterwards: flushing its handle answers
     /// <c>TPM_RC_HANDLE</c>, exactly as a never-loaded handle does.
@@ -1803,7 +1817,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-secmem-resume-objects").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         uint transientHandle;
@@ -1819,7 +1833,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
             flushResult.IsTpmError,
             "A TPM Resume removes every object context from TPM memory, so flushing the pre-resume transient handle must be refused.");
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_HANDLE, flushResult.ResponseCode,
+            HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_HANDLE, 0), flushResult.ResponseCode,
             "A TPM Resume removes every object context from TPM memory, so flushing the pre-resume transient handle must answer TPM_RC_HANDLE.");
 
         //With every RAM slot free again, transient handle assignment restarts where a fresh TPM's does: the
@@ -1834,14 +1848,14 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     /// A TPM Reset's object flush genuinely RETURNS the flushed objects' carrier rentals to the pool: a
     /// transient storage parent's retained private key and a loaded sealed object's data and authValue all
     /// ride owned carriers, and the pool's outstanding-rental count returns to its pre-scenario baseline once
-    /// <c>Shutdown(CLEAR)</c>/<c>Startup(CLEAR)</c> completes (TPM 2.0 Library Part 1, clause 28.4).
+    /// <c>Shutdown(CLEAR)</c>/<c>Startup(CLEAR)</c> completes (TPM 2.0 Library Part 1, clause 27.4).
     /// </summary>
     [TestMethod]
     public async Task StartupResetReturnsObjectCarrierRentalsToPool()
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-secmem-reset-objects").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         long baseline = trackingPool.OutstandingCount;
@@ -1869,9 +1883,9 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     }
 
     /// <summary>
-    /// A persistent object SURVIVES a TPM Resume while every RAM object context is flushed: clause 28.4's
+    /// A persistent object SURVIVES a TPM Resume while every RAM object context is flushed: clause 27.4's
     /// removal rule names object contexts in TPM memory, and a persisted copy is NV-resident (TPM 2.0 Library
-    /// Part 1, clause 28.4; Part 3, clause 28.5). After persisting a key, flushing the transient original, and
+    /// Part 1, clause 27.4; Part 3, clause 28.5). After persisting a key, flushing the transient original, and
     /// resuming, a salted <c>TPM2_StartAuthSession()</c> against the persistent handle still recovers its salt
     /// with the persisted private key — the same wire proof the deep-copy test uses, now across a power cycle.
     /// </summary>
@@ -1880,14 +1894,15 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-secmem-persist-resume").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse tpmKey = await CreateEccDecryptKeyAsync(tpm, registry, pool).ConfigureAwait(false);
         uint transientHandle = tpmKey.ObjectHandle.Value;
         ReadOnlyMemory<byte> point = ExtractEccPoint(tpmKey);
 
-        TpmResult<EvictControlResponse> persistResult = await EvictControlAsync(tpm, registry, pool, transientHandle, PersistentHandle).ConfigureAwait(false);
+        TpmResult<EvictControlResponse> persistResult = await TpmEvictControlHarness.EvictControlAsync(
+            tpm, registry, pool, transientHandle, PersistentHandle, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(persistResult.IsSuccess, $"EvictControl (persist) failed: '{persistResult.ResponseCode}'.");
 
         TpmResult<FlushContextResponse> flushResult = await FlushAsync(tpm, registry, pool, transientHandle).ConfigureAwait(false);
@@ -1898,7 +1913,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
         TpmEccSigningBackend eccBackend = BouncyCastleTpmEccSigningBackend.Create();
         (StartAuthSessionInput startInput, IMemoryOwner<byte> salt, _) = await StartAuthSessionInputExtensions.CreateSaltedHmacSession(
             PersistentHandle, point, TpmEccCurveConstants.TPM_ECC_NIST_P256, TpmKeyNameAlg, SessionAlg,
-            eccBackend.GenerateKey, eccBackend.ComputeSharedSecret, pool, TestContext.CancellationToken).ConfigureAwait(false);
+            eccBackend.GenerateKey, eccBackend.ComputeSharedSecret, TestEntropy.NewCounterStream(), pool, TestContext.CancellationToken).ConfigureAwait(false);
 
         uint saltedSessionHandle;
         using(salt)
@@ -1914,7 +1929,8 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
         TpmResult<FlushContextResponse> sessionFlush = await FlushAsync(tpm, registry, pool, saltedSessionHandle).ConfigureAwait(false);
         Assert.IsTrue(sessionFlush.IsSuccess, $"FlushContext (salted session) failed: '{sessionFlush.ResponseCode}'.");
 
-        TpmResult<EvictControlResponse> evictResult = await EvictControlAsync(tpm, registry, pool, PersistentHandle, PersistentHandle).ConfigureAwait(false);
+        TpmResult<EvictControlResponse> evictResult = await TpmEvictControlHarness.EvictControlAsync(
+            tpm, registry, pool, PersistentHandle, PersistentHandle, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(evictResult.IsSuccess, $"EvictControl (evict persistent copy) failed: '{evictResult.ResponseCode}'.");
     }
 
@@ -1929,7 +1945,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-secmem-stclear-reset").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         await DefineWriteAndVerifyIndexAsync(tpm, registry, pool, DefaultIndexAttributes | TpmaNv.TPMA_NV_CLEAR_STCLEAR).ConfigureAwait(false);
@@ -1952,7 +1968,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-secmem-stclear-restart").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         await DefineWriteAndVerifyIndexAsync(tpm, registry, pool, DefaultIndexAttributes | TpmaNv.TPMA_NV_CLEAR_STCLEAR).ConfigureAwait(false);
@@ -1976,7 +1992,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-secmem-stclear-resume").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         await DefineWriteAndVerifyIndexAsync(tpm, registry, pool, DefaultIndexAttributes | TpmaNv.TPMA_NV_CLEAR_STCLEAR).ConfigureAwait(false);
@@ -2003,7 +2019,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-secmem-orderly-reset").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         await DefineWriteAndVerifyIndexAsync(tpm, registry, pool, DefaultIndexAttributes | TpmaNv.TPMA_NV_ORDERLY).ConfigureAwait(false);
@@ -2028,7 +2044,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-secmem-orderly-restart").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         await DefineWriteAndVerifyIndexAsync(tpm, registry, pool, DefaultIndexAttributes | TpmaNv.TPMA_NV_ORDERLY).ConfigureAwait(false);
@@ -2046,7 +2062,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     /// <summary>
     /// A COUNTER Index is exempt from the startup <c>TPMA_NV_WRITTEN</c> pass even when it carries
     /// <c>TPMA_NV_ORDERLY</c>: a counter is restored or advanced across a startup, never cleared (TPM 2.0
-    /// Library Part 1, clause 37.2.4.2; the reference's <c>NvSetStartupAttributes</c> guards the whole pass
+    /// Library Part 1, clause 34.2.4.2; the reference's <c>NvSetStartupAttributes</c> guards the whole pass
     /// with <c>IsNvCounterIndex</c>). An incremented orderly counter still reads its value after a TPM
     /// Reset — the exemption arm <c>TPMA_NV_CLEAR_STCLEAR</c> can never exercise, since that bit is refused
     /// on a counter at definition.
@@ -2056,7 +2072,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-secmem-orderly-counter").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         TpmResult<NvDefineSpaceResponse> defineResult = await DefineIndexAsync(
@@ -2092,7 +2108,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-secmem-bind-loud").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         //A real ownerAuth first, so the bind borrow references a disposable carrier rather than the
@@ -2135,7 +2151,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-secmem-unseal-loud").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse parent = await CreateEccDecryptKeyAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -2177,21 +2193,22 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     }
 
     /// <summary>
-    /// A loaded sealed object's Name (<c>nameAlg ‖ H_nameAlg(TPMT_PUBLIC)</c>, TPM 2.0 Library Part 1, clause 14, Table 6)
+    /// A loaded sealed object's Name (<c>nameAlg ‖ H_nameAlg(TPMT_PUBLIC)</c>, TPM 2.0 Library Part 1, clause 13, Table 9)
     /// is an owned pooled <c>TPM2B_NAME</c> carrier the object holds for as long as it is loaded, rented by the
     /// <c>TPM2_Load()</c> effect SEPARATELY from the one the response frames — so <c>TPM2_FlushContext()</c>
-    /// (Part 3, clause 28.4) must return it along with the object's data and authValue carriers. The exact
-    /// residue is asserted, not merely its return: a loaded object holds exactly three rentals — Name, sealed
-    /// data, and userAuth — so a Name that was aliased from the framed response instead of separately rented
-    /// would show as two, and a Name left out of the object's disposal would show as one still outstanding
-    /// after the flush.
+    /// (Part 3, clause 28.4) must return it along with the object's other carriers. The exact residue is
+    /// asserted, not merely its return: a loaded object holds exactly <see cref="LoadedSealedObjectCarrierCount"/>
+    /// rentals — Name, sealed data, userAuth, protection seed, the public area's raw storage and its parsed
+    /// <c>unique</c>, and Qualified Name — so a Name that
+    /// was aliased from the framed response instead of separately rented would show as one fewer, and a Name
+    /// left out of the object's disposal would show as one still outstanding after the flush.
     /// </summary>
     [TestMethod]
     public async Task FlushedSealedObjectReturnsTheNameCarrierToPool()
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-secmem-sealed-name").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse parent = await CreateEccDecryptKeyAsync(tpm, registry, trackingPool.Pool).ConfigureAwait(false);
@@ -2206,7 +2223,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
 
         Assert.AreEqual(
             baseline + LoadedSealedObjectCarrierCount, trackingPool.OutstandingCount,
-            "A loaded sealed object must hold exactly its Name, sealed-data, and userAuth rentals once every client-side and response-side carrier has been released.");
+            "A loaded sealed object must hold exactly its Name, sealed-data, userAuth, protection-seed, public-area (raw storage plus its parsed unique), and Qualified Name rentals once every client-side and response-side carrier has been released.");
 
         TpmResult<FlushContextResponse> flushResult = await FlushAsync(tpm, registry, trackingPool.Pool, itemHandle).ConfigureAwait(false);
         Assert.IsTrue(flushResult.IsSuccess, $"FlushContext (sealed item) failed: '{flushResult.ResponseCode}'.");
@@ -2229,7 +2246,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-secmem-sealed-name-loud").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse parent = await CreateEccDecryptKeyAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -2243,10 +2260,10 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
             itemHandle = loaded.ObjectHandle.Value;
         }
 
-        SealedObjectState? capturedObject = null;
+        KeyedHashObjectState? capturedObject = null;
         foreach(TraceEntry<TpmSimulatorState, TpmSimulatorInput> entry in observer.Received)
         {
-            if(entry.StateAfter.LoadedSealedObjects.TryGetValue(TpmiDhObject.FromValue(itemHandle), out SealedObjectState? loadedState))
+            if(entry.StateAfter.LoadedKeyedHashObjects.TryGetValue(TpmiDhObject.FromValue(itemHandle), out KeyedHashObjectState? loadedState))
             {
                 capturedObject = loadedState;
                 break;
@@ -2273,7 +2290,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     /// <returns>The started session's handle.</returns>
     private async Task<uint> StartBoundToOwnerSessionAsync(TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool)
     {
-        StartAuthSessionInput startInput = StartAuthSessionInput.CreateBoundUnsaltedHmacSession((uint)TpmRh.TPM_RH_OWNER, SessionAlg);
+        StartAuthSessionInput startInput = StartAuthSessionInput.CreateBoundUnsaltedHmacSession((uint)TpmRh.TPM_RH_OWNER, SessionAlg, TestEntropy.NewCounterStream(), pool);
 
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             tpm, startInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
@@ -2631,23 +2648,6 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     private static TpmRcConstants SessionEncodedRc(TpmRcConstants baseRc, int sessionIndex) =>
         (TpmRcConstants)((uint)baseRc + (uint)TpmRcConstants.TPM_RC_S + (0x100u * (uint)(sessionIndex + 1)));
 
-    /// <summary>Issues TPM2_EvictControl for the given object and persistent handles, returning the result.</summary>
-    /// <param name="tpm">The TPM device.</param>
-    /// <param name="registry">The response codec registry.</param>
-    /// <param name="pool">The memory pool.</param>
-    /// <param name="objectHandle">The transient object to persist, or the persistent handle to evict.</param>
-    /// <param name="persistentHandle">The persistent handle to assign or evict.</param>
-    /// <returns>The EvictControl result.</returns>
-    private async Task<TpmResult<EvictControlResponse>> EvictControlAsync(
-        TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, uint objectHandle, uint persistentHandle)
-    {
-        using TpmPasswordSession ownerAuth = TpmPasswordSession.CreateEmpty(pool);
-        var input = new EvictControlInput(TpmRh.TPM_RH_OWNER, objectHandle, persistentHandle);
-
-        return await TpmCommandExecutor.ExecuteAsync<EvictControlResponse>(
-            tpm, input, [ownerAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
-    }
-
     /// <summary>Flushes the given handle, returning the result for the caller to assert.</summary>
     /// <param name="tpm">The TPM device.</param>
     /// <param name="registry">The response codec registry.</param>
@@ -2678,7 +2678,7 @@ internal sealed class TpmInHouseSimulatorSecureMemoryLifecycleTests
     /// <returns>The operational simulator.</returns>
     private async Task<TpmSimulator> CreateOperationalAsync(BaseMemoryPool pool, string tpmId)
     {
-        var simulator = new TpmSimulator(tpmId, signingBackend: BouncyCastleTpmEccSigningBackend.Create());
+        var simulator = new TpmSimulator(tpmId, signingBackend: BouncyCastleTpmEccSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(TpmRcConstants.TPM_RC_SUCCESS, await SubmitSessionlessAsync(simulator, pool, new StartupInput(TpmSuConstants.TPM_SU_CLEAR)).ConfigureAwait(false));

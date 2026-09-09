@@ -32,14 +32,14 @@ internal sealed class DidCommEncryptedAuthcryptCompressedKeyTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly BaseMemoryPool Pool = BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool { get; } = BaseMemoryPool.Shared;
 
     //A non-network resolution context; it only satisfies the SSRF-policy-carrying parameter.
-    private static readonly ExchangeContext Context = new();
+    private static ExchangeContext Context { get; } = new();
 
     //The protected-header serializer: the headers are a Dictionary<string, object> the JWE layer hands to
     //this delegate to produce the UTF-8 JSON bytes.
-    private static readonly JwtHeaderSerializer HeaderSerializer =
+    private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)header,
             TestSetup.DefaultSerializationOptions);
@@ -154,7 +154,7 @@ internal sealed class DidCommEncryptedAuthcryptCompressedKeyTests
             HeaderSerializer,
             TestSetup.Base64UrlEncoder,
             CryptoFormatConversions.DefaultTagToEpkCrvConverter,
-            MicrosoftEntropyFunctions.GenerateNonce,
+            MicrosoftEntropyFunctionsAdapter.GenerateNonce,
             MicrosoftKeyAgreementFunctions.Ecdh1PuMultiRecipientAgreementEncryptP256Async,
             ConcatKdf.DefaultAuthenticatedKeyDerivationDelegate,
             MicrosoftKeyAgreementFunctions.AesKeyWrapAsync,
@@ -249,7 +249,7 @@ internal sealed class DidCommEncryptedAuthcryptCompressedKeyTests
             HeaderSerializer,
             TestSetup.Base64UrlEncoder,
             CryptoFormatConversions.DefaultTagToEpkCrvConverter,
-            MicrosoftEntropyFunctions.GenerateNonce,
+            MicrosoftEntropyFunctionsAdapter.GenerateNonce,
             encryptAgreement,
             ConcatKdf.DefaultAuthenticatedKeyDerivationDelegate,
             MicrosoftKeyAgreementFunctions.AesKeyWrapAsync,

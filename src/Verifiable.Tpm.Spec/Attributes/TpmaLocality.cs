@@ -12,7 +12,7 @@ namespace Verifiable.Tpm.Spec.Attributes;
 /// which localities are approved by a policy.
 /// </para>
 /// <para>
-/// Specification: <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2: Structures, section 8.5 (TPMA_LOCALITY).
+/// Specification: <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2: Structures, clause 8.5 (TPMA_LOCALITY).
 /// </para>
 /// </remarks>
 [Flags]

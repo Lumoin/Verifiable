@@ -150,8 +150,8 @@ public static class SdCwtIssuance
     /// Decoy-digest policy (RFC 9901 §4.2.5; the SD-CWT draft inherits the concept), invoked once per
     /// <c>redacted_claim_keys</c> location. When <see langword="null"/>, defaults to
     /// <see cref="DecoyDigestOptions.None"/> — no decoys, so the issued token is the minimal, deterministic
-    /// form. Opt in (e.g. <see cref="DecoyDigestPolicy.Random(int, int)"/>) to obscure the
-    /// selectively-disclosable claim count from an adversarial verifier.
+    /// form. Opt in (e.g. <see cref="DecoyDigestPolicy.Random(int, int, Verifiable.Cryptography.FillEntropyDelegate)"/>)
+    /// to obscure the selectively-disclosable claim count from an adversarial verifier.
     /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The issuance result and the redacted CBOR payload that was signed.</returns>

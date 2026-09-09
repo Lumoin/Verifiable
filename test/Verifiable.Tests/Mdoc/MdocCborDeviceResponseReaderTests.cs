@@ -1,5 +1,5 @@
 using System.Buffers;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Mdoc;
 using Verifiable.Core.Model.Mdoc;
@@ -23,8 +23,8 @@ namespace Verifiable.Tests.Mdoc;
 [TestClass]
 internal sealed class MdocCborDeviceResponseReaderTests
 {
-    private static readonly string PidDocType = EudiPid.AttestationType;
-    private static readonly string PidNamespace = EudiPid.Mdoc.Namespace;
+    private static string PidDocType { get; } = EudiPid.AttestationType;
+    private static string PidNamespace { get; } = EudiPid.Mdoc.Namespace;
     private const string VerifierClientId = "https://verifier.example/oid4vp/client";
     private const string VerifierResponseUri = "https://verifier.example/oid4vp/response";
     private const string AuthorizationRequestNonce = "auth-req-nonce-reader-01";
@@ -50,7 +50,7 @@ internal sealed class MdocCborDeviceResponseReaderTests
             ReadOnlyMemory<byte> nonceMemory =
                 mdocGeneratedNonce.Memory[..Oid4VpMdocSessionTranscriptEncoder.MinimumMdocGeneratedNonceLength];
             ReadOnlyMemory<byte> sessionTranscript = Oid4VpMdocSessionTranscriptEncoder.Encode(
-                VerifierClientId, VerifierResponseUri, AuthorizationRequestNonce, nonceMemory.Span);
+                VerifierClientId, VerifierResponseUri, AuthorizationRequestNonce, nonceMemory.Span, BaseMemoryPool.Shared);
 
             using MdocPresentationDocument intermediate = new(
                 docType: issued.DocType,
@@ -95,7 +95,7 @@ internal sealed class MdocCborDeviceResponseReaderTests
             Assert.IsTrue(isIssuerVerified, "Issuer signature must verify against the wire-reconstructed issuerAuth.");
 
             //Digest binding (M.4) over the wire-reconstructed items.
-            MdocDigestBindingResult binding = MdocMsoDigestBindingValidator.Validate(parsedDocument.IssuerSigned);
+            MdocDigestBindingResult binding = MdocMsoDigestBindingValidator.Validate(parsedDocument.IssuerSigned,BaseMemoryPool.Shared);
             Assert.IsTrue(binding.IsValid, $"Digest binding must hold on the wire-reconstructed items; got {binding}.");
 
             //Device signature (M.3b) over the verifier-reconstructed SessionTranscript.
@@ -105,7 +105,7 @@ internal sealed class MdocCborDeviceResponseReaderTests
             ReadOnlyMemory<byte> reconstructedNonce = reconstructedNonceOwner.Memory
                 [..Oid4VpMdocSessionTranscriptEncoder.MinimumMdocGeneratedNonceLength];
             ReadOnlyMemory<byte> reconstructedTranscript = Oid4VpMdocSessionTranscriptEncoder.Encode(
-                VerifierClientId, VerifierResponseUri, AuthorizationRequestNonce, reconstructedNonce.Span);
+                VerifierClientId, VerifierResponseUri, AuthorizationRequestNonce, reconstructedNonce.Span, BaseMemoryPool.Shared);
 
             Assert.IsNotNull(parsedDocument.DeviceSigned);
             bool isDeviceVerified = await parsedDocument.DeviceSigned!.VerifyAsync(
@@ -148,27 +148,27 @@ internal sealed class MdocCborDeviceResponseReaderTests
     [TestMethod]
     public void ReadRejectsMalformedDeviceResponse()
     {
-        //A verifier parses untrusted bytes; malformed input must fail cleanly with a CBOR
-        //shape/encoding error rather than returning garbage or leaking. The concrete exception
-        //type depends on the failure mode — a wrong-type root (a bare uint here) surfaces as
-        //InvalidOperationException, a truncated/garbled encoding as CborContentException — so
-        //the test pins the "rejected cleanly" property, not a single framework exception type.
+        //A verifier parses untrusted bytes; MdocCborDeviceResponseReader.Read normalizes every
+        //CBOR-reader rejection to FormatException at its own public boundary (the seam
+        //ParseMdocDeviceResponseDelegate contract), regardless of which framework exception the
+        //reader itself raised for a particular malformed shape — a wrong-type root (a bare uint
+        //here) as InvalidOperationException, a truncated/garbled encoding as CborContentException.
         byte[] notAMap = [0x01, 0x02, 0x03];
 
-        Exception? caught = null;
+        FormatException? caught = null;
         try
         {
             using MdocParsedDeviceResponse _ = MdocCborDeviceResponseReader.Read(
                 notAMap, BaseMemoryPool.Shared);
         }
-        catch(Exception ex)
+        catch(FormatException ex)
         {
             caught = ex;
         }
 
-        Assert.IsNotNull(caught, "Malformed DeviceResponse bytes must be rejected.");
-        Assert.IsTrue(caught is CborContentException or InvalidOperationException,
-            $"Expected a CBOR shape/encoding error; got {caught.GetType().Name}: {caught.Message}.");
+        Assert.IsNotNull(caught, "Malformed DeviceResponse bytes must be rejected as FormatException.");
+        Assert.IsTrue(caught.InnerException is CborContentException or InvalidOperationException,
+            $"Expected the CBOR reader's own shape/encoding error as InnerException; got {caught.InnerException?.GetType().Name}.");
     }
 
 
@@ -201,8 +201,8 @@ internal sealed class MdocCborDeviceResponseReaderTests
     //Family anchor: not a clean single-call TestClock.CanonicalEpoch offset
     //(2026-06-01T12:00:00Z is 7 days 4 hours after this signed instant), so
     //the one-year window anchors itself.
-    private static readonly DateTimeOffset SampleValiditySigned = new(2026, 5, 25, 8, 0, 0, TimeSpan.Zero);
-    private static readonly DateTimeOffset SampleValidityValidUntil = SampleValiditySigned.AddYears(1);
+    private static DateTimeOffset SampleValiditySigned { get; } = new(2026, 5, 25, 8, 0, 0, TimeSpan.Zero);
+    private static DateTimeOffset SampleValidityValidUntil { get; } = SampleValiditySigned.AddYears(1);
 
 
     private static MdocValidityInfo SampleValidity() =>
@@ -235,9 +235,10 @@ internal sealed class MdocCborDeviceResponseReaderTests
 
     private static byte[] CborText(string value)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteTextString(value);
 
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
     }
 }

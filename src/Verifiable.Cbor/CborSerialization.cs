@@ -3,7 +3,7 @@ using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using System.Linq;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -43,7 +43,8 @@ public static class CoseSerialization
     /// </remarks>
     public static BuildSigStructureDelegate BuildSigStructure { get; } = static (protectedHeader, payload, externalAad) =>
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteStartArray(4);
         writer.WriteTextString("Signature1");
         writer.WriteByteString(protectedHeader);
@@ -51,7 +52,7 @@ public static class CoseSerialization
         writer.WriteByteString(payload);
         writer.WriteEndArray();
 
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
     };
 
 
@@ -65,8 +66,9 @@ public static class CoseSerialization
     /// </remarks>
     public static SerializeCoseSign1Delegate SerializeCoseSign1 { get; } = static (message, pool) =>
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
-        writer.WriteTag((CborTag)CoseTags.Sign1);
+        using var buffer = new SlabBufferWriter(pool);
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
+        writer.WriteTag(new CborTag((ulong)CoseTags.Sign1));
         writer.WriteStartArray(4);
 
         //Protected header (already serialized).
@@ -99,15 +101,9 @@ public static class CoseSerialization
 
         //Route the encoded bytes through the pool so the wire form carries
         //CBOM provenance and OTel observes the allocation.
-        int size = writer.BytesWritten;
-        IMemoryOwner<byte> owner = pool.Rent(size);
-        int written = writer.Encode(owner.Memory.Span);
-        if(written != size)
-        {
-            owner.Dispose();
-            throw new InvalidOperationException(
-                $"CborWriter.Encode wrote {written} bytes, expected {size}.");
-        }
+        using IMemoryOwner<byte> encoded = buffer.Detach();
+        IMemoryOwner<byte> owner = pool.Rent(encoded.Memory.Length);
+        encoded.Memory.Span.CopyTo(owner.Memory.Span);
 
         return new EncodedCoseSign1(owner, CryptoTags.CoseEncodedSign1);
     };
@@ -120,13 +116,13 @@ public static class CoseSerialization
         Justification = "Ownership of protectedHeaderCarrier and signatureCarrier transfers to the returned CoseSign1Message; the caller disposes the message.")]
     public static ParseCoseSign1Delegate ParseCoseSign1 { get; } = static (coseSign1Bytes, pool) =>
     {
-        var reader = new CborReader(coseSign1Bytes, CborConformanceMode.Lax);
+        var reader = new CborReader(coseSign1Bytes, CborOptions.Lax);
 
         //Read and validate tag.
         CborTag tag = reader.ReadTag();
-        if((int)tag != CoseTags.Sign1)
+        if((int)tag.Value != CoseTags.Sign1)
         {
-            throw new InvalidOperationException($"Expected COSE_Sign1 tag (18), got {(int)tag}.");
+            throw new InvalidOperationException($"Expected COSE_Sign1 tag (18), got {(int)tag.Value}.");
         }
 
         //Read array.
@@ -196,12 +192,12 @@ public static class CoseSerialization
         Justification = "Ownership of protectedHeaderCarrier and signatureCarrier transfers to the returned CoseSign1Message; the caller disposes the message.")]
     public static ParseCoseSign1Delegate ParseCoseSign1AllowingNilPayload { get; } = static (coseSign1Bytes, pool) =>
     {
-        var reader = new CborReader(coseSign1Bytes, CborConformanceMode.Lax);
+        var reader = new CborReader(coseSign1Bytes, CborOptions.Lax);
 
         CborTag tag = reader.ReadTag();
-        if((int)tag != CoseTags.Sign1)
+        if((int)tag.Value != CoseTags.Sign1)
         {
-            throw new InvalidOperationException($"Expected COSE_Sign1 tag ({CoseTags.Sign1}), got {(int)tag}.");
+            throw new InvalidOperationException($"Expected COSE_Sign1 tag ({CoseTags.Sign1}), got {(int)tag.Value}.");
         }
 
         int? arrayLength = reader.ReadStartArray();
@@ -280,7 +276,8 @@ public static class CoseSerialization
     /// </remarks>
     public static BuildCoseSignatureSigStructureDelegate BuildCoseSignatureSigStructure { get; } = static (bodyProtectedHeader, signProtectedHeader, payload, externalAad) =>
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteStartArray(5);
         writer.WriteTextString("Signature");
         writer.WriteByteString(bodyProtectedHeader);
@@ -289,7 +286,7 @@ public static class CoseSerialization
         writer.WriteByteString(payload);
         writer.WriteEndArray();
 
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
     };
 
 
@@ -315,8 +312,9 @@ public static class CoseSerialization
     /// </remarks>
     public static SerializeCoseSignDelegate SerializeCoseSign { get; } = static (message, pool) =>
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
-        writer.WriteTag((CborTag)CoseTags.Sign);
+        using var buffer = new SlabBufferWriter(pool);
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
+        writer.WriteTag(new CborTag((ulong)CoseTags.Sign));
         writer.WriteStartArray(4);
 
         //Body-layer protected header (already serialized).
@@ -351,15 +349,9 @@ public static class CoseSerialization
 
         //Route the encoded bytes through the pool so the wire form carries CBOM provenance
         //and OTel observes the allocation.
-        int size = writer.BytesWritten;
-        IMemoryOwner<byte> owner = pool.Rent(size);
-        int written = writer.Encode(owner.Memory.Span);
-        if(written != size)
-        {
-            owner.Dispose();
-            throw new InvalidOperationException(
-                $"CborWriter.Encode wrote {written} bytes, expected {size}.");
-        }
+        using IMemoryOwner<byte> encoded = buffer.Detach();
+        IMemoryOwner<byte> owner = pool.Rent(encoded.Memory.Length);
+        encoded.Memory.Span.CopyTo(owner.Memory.Span);
 
         return new EncodedCoseSign(owner, CryptoTags.CoseEncodedSign);
 
@@ -410,7 +402,7 @@ public static class CoseSerialization
 
         try
         {
-            var reader = new CborReader(coseSignBytes, CborConformanceMode.Lax);
+            var reader = new CborReader(coseSignBytes, CborOptions.Lax);
 
             //RFC 9052 §4.1: "The signature structure can be encoded as either tagged or
             //untagged, depending on the context" -- a tag, when present, must be the
@@ -419,20 +411,20 @@ public static class CoseSerialization
             if(reader.PeekState() == CborReaderState.Tag)
             {
                 CborTag tag = reader.ReadTag();
-                if((int)tag != CoseTags.Sign)
+                if((int)tag.Value != CoseTags.Sign)
                 {
-                    throw new CborContentException($"Expected COSE_Sign tag ({CoseTags.Sign}), got {(int)tag}.");
+                    throw new CborContentException($"Expected COSE_Sign tag ({CoseTags.Sign}), got {(int)tag.Value}.");
                 }
             }
 
             reader.ReadStartArrayExpectLength(4);
 
             //RFC 9338 §4 / RFC 9052 §9: every bstr in a deterministically encoded COSE structure is
-            //definite-length; CborReader.ReadDefiniteLengthByteString (distinct from ReadByteString, which
-            //this Lax-mode reader would otherwise let silently concatenate an indefinite-length chunked
+            //definite-length; CborReader.ReadByteStringMemory (distinct from ReadByteString, which
+            //this Lax-mode reader would otherwise let silently assemble an indefinite-length chunked
             //bstr's chunks rather than reject it) hand-enforces that, the same strictness this method
             //already hand-enforces for arrays and maps.
-            ReadOnlyMemory<byte> bodyProtectedHeaderBytes = reader.ReadDefiniteLengthByteString();
+            ReadOnlyMemory<byte> bodyProtectedHeaderBytes = reader.ReadByteStringMemory();
             bodyProtectedHeaderCarrier = EncodedCoseProtectedHeader.FromBytes(bodyProtectedHeaderBytes.Span, pool);
 
             Dictionary<int, object>? bodyUnprotectedHeader = ReadUnprotectedHeaderMap(reader);
@@ -445,7 +437,7 @@ public static class CoseSerialization
             }
             else
             {
-                payload = reader.ReadDefiniteLengthByteString();
+                payload = reader.ReadByteStringMemory();
             }
 
             int? signatureCount = reader.ReadStartArray();
@@ -464,12 +456,12 @@ public static class CoseSerialization
             {
                 reader.ReadStartArrayExpectLength(3);
 
-                ReadOnlyMemory<byte> signerProtectedHeaderBytes = reader.ReadDefiniteLengthByteString();
+                ReadOnlyMemory<byte> signerProtectedHeaderBytes = reader.ReadByteStringMemory();
                 signerProtectedHeaderCarrier = EncodedCoseProtectedHeader.FromBytes(signerProtectedHeaderBytes.Span, pool);
 
                 Dictionary<int, object>? signerUnprotectedHeader = ReadUnprotectedHeaderMap(reader);
 
-                ReadOnlyMemory<byte> signatureBytes = reader.ReadDefiniteLengthByteString();
+                ReadOnlyMemory<byte> signatureBytes = reader.ReadByteStringMemory();
                 IMemoryOwner<byte> signatureOwner = pool.Rent(signatureBytes.Length);
                 signatureBytes.CopyTo(signatureOwner.Memory);
                 signatureCarrier = new Signature(signatureOwner, CryptoTags.AlgorithmAgnosticSignature);
@@ -562,7 +554,7 @@ public static class CoseSerialization
     /// <param name="exception">The exception to classify.</param>
     /// <returns><see langword="true"/> when the exception represents malformed input.</returns>
     private static bool IsFailClosedCoseSignParseException(Exception exception) =>
-        exception is CborContentException or InvalidOperationException or ArgumentException
+        exception is CborException or InvalidOperationException or ArgumentException
             or IndexOutOfRangeException or OverflowException or FormatException;
 
 
@@ -629,7 +621,8 @@ public static class CoseSerialization
 
         int elementCount = 4 + (input.SignProtected.HasValue ? 1 : 0) + (input.OtherFieldsSignature.HasValue ? 1 : 0);
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteStartArray(elementCount);
         writer.WriteTextString(context);
         writer.WriteByteString(input.BodyProtected.Span);
@@ -648,7 +641,7 @@ public static class CoseSerialization
         }
         writer.WriteEndArray();
 
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
     };
 
 
@@ -668,12 +661,12 @@ public static class CoseSerialization
     /// present) but never emits it — see <see cref="WriteCounterSignatureV2"/>.
     /// </para>
     /// <para>
-    /// Reads under <see cref="CborConformanceMode.Canonical"/>, not <see cref="CborConformanceMode.Lax"/>:
+    /// Reads under <see cref="CborConformanceMode.RfcCanonical"/>, not <see cref="CborConformanceMode.Lax"/>:
     /// <see href="https://www.rfc-editor.org/rfc/rfc9338#section-4">RFC 9338 §4</see>'s determinism MUST
     /// (narrowing RFC 8949 §4.2 via RFC 9052 §9) means an indefinite-length map or byte string here is
     /// malformed input, not a lenient-but-legal alternate encoding — the same definite-length strictness
     /// <see cref="ParseCoseSign"/> enforces under its own (necessarily Lax, for reasons that method's own
-    /// remarks give) reader via <see cref="CborReader.ReadDefiniteLengthByteString"/> in place of the
+    /// remarks give) reader via <see cref="CborReader.ReadByteStringMemory"/> in place of the
     /// general <see cref="CborReader.ReadByteString"/>.
     /// </para>
     /// <para>
@@ -685,7 +678,7 @@ public static class CoseSerialization
     {
         ArgumentNullException.ThrowIfNull(pool);
 
-        var reader = new CborReader(valueBytes, CborConformanceMode.Canonical);
+        var reader = new CborReader(valueBytes, CborOptions.RfcCanonical);
 
         //Tag 19 (COSE_Countersignature_Tagged) is read-tolerated, never required -- it wraps a single
         //COSE_Countersignature only (RFC 9338 §3.1); the [+ COSE_Countersignature] array arm this delegate
@@ -693,9 +686,9 @@ public static class CoseSerialization
         if(reader.PeekState() == CborReaderState.Tag)
         {
             CborTag tag = reader.ReadTag();
-            if((int)tag != CoseTags.CounterSignature)
+            if((int)tag.Value != CoseTags.CounterSignature)
             {
-                throw new CborContentException($"Expected COSE_Countersignature tag ({CoseTags.CounterSignature}), got {(int)tag}.");
+                throw new CborContentException($"Expected COSE_Countersignature tag ({CoseTags.CounterSignature}), got {(int)tag.Value}.");
             }
         }
 
@@ -821,7 +814,7 @@ public static class CoseSerialization
     /// <returns>The decoded sequence, holding at least one element.</returns>
     private static CounterSignatureV2Sequence ReadCounterSignatureV2Sequence(ReadOnlyMemory<byte> valueBytes, BaseMemoryPool pool)
     {
-        var reader = new CborReader(valueBytes, CborConformanceMode.Canonical);
+        var reader = new CborReader(valueBytes, CborOptions.RfcCanonical);
         int? count = reader.ReadStartArray();
         if(count is null || count.Value == 0)
         {
@@ -829,7 +822,7 @@ public static class CoseSerialization
                 "COSE header label 11's [+ COSE_Countersignature] array arm requires at least one element (RFC 9338 §2 Table 1).");
         }
 
-        List<CounterSignatureV2>? elements = new(count.Value);
+        List<CounterSignatureV2> elements = new(count.Value);
 
         try
         {
@@ -845,19 +838,15 @@ public static class CoseSerialization
                 throw new CborContentException("Trailing bytes after the [+ COSE_Countersignature] array.");
             }
 
-            CounterSignatureV2Sequence result = new(elements);
-            elements = null;
-
-            return result;
+            //Nothing between this call and the return below can throw, so elements needs no
+            //catch-side double-dispose guard.
+            return new CounterSignatureV2Sequence(elements);
         }
         catch
         {
-            if(elements is not null)
+            foreach(CounterSignatureV2 element in elements)
             {
-                foreach(CounterSignatureV2 element in elements)
-                {
-                    element.Dispose();
-                }
+                element.Dispose();
             }
 
             throw;
@@ -878,7 +867,7 @@ public static class CoseSerialization
     /// <returns>The decoded single countersignature, or a sequence of two or more.</returns>
     private static CoseCounterSignature ReadCounterSignatureV2SingleOrSequence(ReadOnlyMemory<byte> valueBytes, BaseMemoryPool pool)
     {
-        var probe = new CborReader(valueBytes, CborConformanceMode.Canonical);
+        var probe = new CborReader(valueBytes, CborOptions.RfcCanonical);
         if(probe.PeekState() != CborReaderState.Tag)
         {
             probe.ReadStartArray();
@@ -905,7 +894,8 @@ public static class CoseSerialization
         ArgumentNullException.ThrowIfNull(counterSignature);
         ArgumentNullException.ThrowIfNull(pool);
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        using var buffer = new SlabBufferWriter(pool);
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteStartArray(3);
         writer.WriteByteString(counterSignature.Component.ProtectedHeader.AsReadOnlySpan());
         WriteCounterSignatureUnprotectedHeaderMap(writer, counterSignature.Component.UnprotectedHeader);
@@ -914,14 +904,9 @@ public static class CoseSerialization
 
         //Route the encoded bytes through the pool so the wire form carries CBOM provenance
         //and OTel observes the allocation, mirroring SerializeCoseSign.
-        int size = writer.BytesWritten;
-        IMemoryOwner<byte> owner = pool.Rent(size);
-        int written = writer.Encode(owner.Memory.Span);
-        if(written != size)
-        {
-            owner.Dispose();
-            throw new InvalidOperationException($"CborWriter.Encode wrote {written} bytes, expected {size}.");
-        }
+        using IMemoryOwner<byte> encoded = buffer.Detach();
+        IMemoryOwner<byte> owner = pool.Rent(encoded.Memory.Length);
+        encoded.Memory.Span.CopyTo(owner.Memory.Span);
 
         return new EncodedCoseCounterSignature(owner, CryptoTags.CoseEncodedCounterSignature);
 
@@ -959,7 +944,7 @@ public static class CoseSerialization
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Reads under <see cref="CborConformanceMode.Canonical"/>, not <see cref="CborConformanceMode.Lax"/>:
+    /// Reads under <see cref="CborConformanceMode.RfcCanonical"/>, not <see cref="CborConformanceMode.Lax"/>:
     /// <see href="https://www.rfc-editor.org/rfc/rfc9338#section-4">RFC 9338 §4</see>'s determinism MUST
     /// (narrowing RFC 8949 §4.2 via RFC 9052 §9) rules out an indefinite-length-chunked bstr here, which
     /// <see cref="CborConformanceMode.Lax"/> would otherwise silently accept by concatenating its chunks.
@@ -973,7 +958,7 @@ public static class CoseSerialization
     {
         ArgumentNullException.ThrowIfNull(pool);
 
-        var reader = new CborReader(valueBytes, CborConformanceMode.Canonical);
+        var reader = new CborReader(valueBytes, CborOptions.RfcCanonical);
         byte[] signatureBytes = reader.ReadByteString();
 
         if(reader.BytesRemaining != 0)
@@ -997,17 +982,13 @@ public static class CoseSerialization
         ArgumentNullException.ThrowIfNull(counterSignature);
         ArgumentNullException.ThrowIfNull(pool);
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        using var buffer = new SlabBufferWriter(pool);
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteByteString(counterSignature.Value.AsReadOnlySpan());
 
-        int size = writer.BytesWritten;
-        IMemoryOwner<byte> owner = pool.Rent(size);
-        int written = writer.Encode(owner.Memory.Span);
-        if(written != size)
-        {
-            owner.Dispose();
-            throw new InvalidOperationException($"CborWriter.Encode wrote {written} bytes, expected {size}.");
-        }
+        using IMemoryOwner<byte> encoded = buffer.Detach();
+        IMemoryOwner<byte> owner = pool.Rent(encoded.Memory.Length);
+        encoded.Memory.Span.CopyTo(owner.Memory.Span);
 
         return new EncodedCoseCounterSignature(owner, CryptoTags.CoseEncodedCounterSignature);
     };
@@ -1075,7 +1056,8 @@ public static class CoseSerialization
     /// </summary>
     public static SerializeProtectedHeaderDelegate SerializeProtectedHeader { get; } = static header =>
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(header.Count);
 
         foreach(var kvp in header.OrderBy(x => x.Key))
@@ -1086,7 +1068,7 @@ public static class CoseSerialization
 
         writer.WriteEndMap();
 
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
     };
 
 
@@ -1095,7 +1077,7 @@ public static class CoseSerialization
     /// </summary>
     public static ParseProtectedHeaderDelegate ParseProtectedHeader { get; } = static headerBytes =>
     {
-        var reader = new CborReader(headerBytes.ToArray(), CborConformanceMode.Lax);
+        var reader = new CborReader(headerBytes.ToArray(), CborOptions.Lax);
         var result = new Dictionary<int, object>();
 
         int? mapLength = reader.ReadStartMap();

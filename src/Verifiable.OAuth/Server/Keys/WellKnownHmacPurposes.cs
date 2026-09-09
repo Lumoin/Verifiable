@@ -14,5 +14,5 @@ public static class WellKnownHmacPurposes
     public static ReadOnlySpan<byte> DpopNonceUtf8 => "DpopNonce"u8;
 
     /// <summary>DPoP nonce HMAC per RFC 9449 — server-internal validation artefacts.</summary>
-    public static readonly string DpopNonce = Utf8Constants.ToInternedString(DpopNonceUtf8);
+    public static string DpopNonce { get; } = Utf8Constants.ToInternedString(DpopNonceUtf8);
 }

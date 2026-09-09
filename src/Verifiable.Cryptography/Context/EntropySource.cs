@@ -78,10 +78,10 @@ public readonly struct EntropySource: IEquatable<EntropySource>
     public static EntropySource Unknown { get; } = new(4);
 
 
-    private static List<EntropySource> sources { get; } = [Csprng, Tpm, Hsm, Deterministic, Unknown];
+    private static List<EntropySource> RegisteredSources { get; } = [Csprng, Tpm, Hsm, Deterministic, Unknown];
 
     /// <summary>Gets all registered entropy source values.</summary>
-    public static IReadOnlyList<EntropySource> Sources => sources.AsReadOnly();
+    public static IReadOnlyList<EntropySource> Sources => RegisteredSources.AsReadOnly();
 
 
     /// <summary>
@@ -90,16 +90,16 @@ public readonly struct EntropySource: IEquatable<EntropySource>
     /// </summary>
     public static EntropySource Create(int code)
     {
-        for(int i = 0; i < sources.Count; ++i)
+        for(int i = 0; i < RegisteredSources.Count; ++i)
         {
-            if(sources[i].Code == code)
+            if(RegisteredSources[i].Code == code)
             {
                 throw new ArgumentException("Code already exists.");
             }
         }
 
         var newSource = new EntropySource(code);
-        sources.Add(newSource);
+        RegisteredSources.Add(newSource);
         return newSource;
     }
 

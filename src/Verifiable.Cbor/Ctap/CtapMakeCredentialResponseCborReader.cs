@@ -1,5 +1,5 @@
 using System;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
 
@@ -37,7 +37,7 @@ public static class CtapMakeCredentialResponseCborReader
     {
         try
         {
-            var reader = new CborReader(payload, CborConformanceMode.Ctap2Canonical);
+            var reader = new CborReader(payload, CborOptions.Ctap2Canonical);
             int? entryCount = reader.ReadStartMap();
 
             string? fmt = null;
@@ -101,7 +101,7 @@ public static class CtapMakeCredentialResponseCborReader
 
             return new CtapMakeCredentialResponse(fmt, resolvedAuthData, attStmt, epAtt, largeBlobKey);
         }
-        catch(Exception exception) when(exception is CborContentException or InvalidOperationException or OverflowException)
+        catch(Exception exception) when(exception is CborException or InvalidOperationException or OverflowException)
         {
             throw new Fido2FormatException("The authenticatorMakeCredential response bytes are not valid CTAP2 canonical CBOR.", exception);
         }

@@ -91,7 +91,7 @@ public readonly struct XAdESSignedDataObjectPropertyEntry: IEquatable<XAdESSigne
 /// </remarks>
 public readonly struct XAdESSignedDataObjectProperties: IEquatable<XAdESSignedDataObjectProperties>
 {
-    private static readonly (byte[] LocalName, XAdESSignedDataObjectPropertyName Name)[] Groups =
+    private static (byte[] LocalName, XAdESSignedDataObjectPropertyName Name)[] Groups { get; } =
     [
         ("DataObjectFormat"u8.ToArray(), XAdESSignedDataObjectPropertyName.DataObjectFormat),
         ("CommitmentTypeIndication"u8.ToArray(), XAdESSignedDataObjectPropertyName.CommitmentTypeIndication),

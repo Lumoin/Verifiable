@@ -7,9 +7,9 @@ namespace Verifiable.Tpm.Automata;
 
 /// <summary>
 /// A defined NV Index's data area held in pooled storage: the octets <c>TPM2_NV_Write()</c>,
-/// <c>TPM2_NV_Increment()</c>, and a PIN Index's own counter update store, and <c>TPM2_NV_Read()</c>,
+/// <c>TPM2_NV_Increment()</c>, <c>TPM2_NV_Extend()</c>, and a PIN Index's own counter update store, and <c>TPM2_NV_Read()</c>,
 /// <c>TPM2_NV_Certify()</c>, and <c>TPM2_PolicyNV()</c> read back. Its size is fixed at definition by
-/// <c>TPMS_NV_PUBLIC.dataSize</c> (TPM 2.0 Library Part 2, clause 13.6, Table 235), which is what
+/// <c>TPMS_NV_PUBLIC.dataSize</c> (TPM 2.0 Library Part 2, clause 13.6, Table 251), which is what
 /// <see cref="Capacity"/> holds; the area carries no structure of its own on the wire — the commands that
 /// transfer it frame a <c>TPM2B_MAX_NV_BUFFER</c> window over it — so no TPM 2.0 structure names the durable
 /// area itself and it is modelled as a length-carrying pooled buffer rather than as a <c>TPM2B_*</c> type.

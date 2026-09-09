@@ -26,11 +26,11 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// indicates no policy restriction.
 /// </para>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, section 10.8.4, Table 116.
+/// Specification reference: TPM 2.0 Library Part 2, clause 10.7.4, Table 119.
 /// </para>
 /// </remarks>
 /// <param name="Handle">A permanent handle.</param>
-/// <param name="PolicyHash">The policy in a <c>TPMT_HA</c>: the hash algorithm selector and the digest it sizes, the one field Table 116 names for the policy. <see cref="TpmtHa.Null"/> reports a handle with no policy restriction. As a struct field it is also what <c>default(TpmsTaggedPolicy)</c> leaves unset, so every accessor reads it as <see cref="TpmtHa.Null"/> when it is unset — the default-valued structure reports the same "no policy restriction" a NULL <c>TPMT_HA</c> does.</param>
+/// <param name="PolicyHash">The policy in a <c>TPMT_HA</c>: the hash algorithm selector and the digest it sizes, the one field Table 119 names for the policy. <see cref="TpmtHa.Null"/> reports a handle with no policy restriction. As a struct field it is also what <c>default(TpmsTaggedPolicy)</c> leaves unset, so every accessor reads it as <see cref="TpmtHa.Null"/> when it is unset — the default-valued structure reports the same "no policy restriction" a NULL <c>TPMT_HA</c> does.</param>
 /// <seealso cref="TpmsTaggedPolicyExtensions"/>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 public readonly record struct TpmsTaggedPolicy(

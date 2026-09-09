@@ -8,7 +8,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// <remarks>
 /// <para>
 /// TPM2_PolicyAuthorize has no response handles and no response parameters beyond the header (TPM 2.0 Library
-/// Part 3, Section 23.16, Table 151); a successful response indicates the session's policyDigest was replaced
+/// Part 3, clause 23.16, Table 171); a successful response indicates the session's policyDigest was replaced
 /// with the authority-controlled value <c>H(H(0...0 || TPM_CC_PolicyAuthorize || keySign) || policyRef)</c>.
 /// </para>
 /// </remarks>

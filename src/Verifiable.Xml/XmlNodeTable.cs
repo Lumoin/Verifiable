@@ -157,38 +157,47 @@ public sealed class XmlNodeTable: IDisposable
         }
 
         var builder = new XmlNodeTableBuilder(pool, octets.Length);
-        bool isBuilt;
-        if(detected == DetectedXmlEncoding.Utf8)
+        try
         {
-            ReadOnlySpan<byte> working = octets[bomLength..];
-            if(!XmlDocumentDecoder.TryValidateUtf8(working, bomLength, out error))
+            bool isBuilt;
+            if(detected == DetectedXmlEncoding.Utf8)
+            {
+                ReadOnlySpan<byte> working = octets[bomLength..];
+                if(!XmlDocumentDecoder.TryValidateUtf8(working, bomLength, out error))
+                {
+                    builder.Dispose();
+
+                    return false;
+                }
+
+                isBuilt = builder.TryBuild(working, bomLength, detected, out error);
+            }
+            else
+            {
+                using var transcoded = new PooledStructList<byte>(pool, Math.Max(64, octets.Length + (octets.Length / 2)));
+                bool isTranscoded = XmlDocumentDecoder.TryTranscodeUtf16(octets, bomLength, detected == DetectedXmlEncoding.Utf16BigEndian, transcoded, out error);
+                isBuilt = isTranscoded && builder.TryBuild(transcoded.AsSpan(), 0, detected, out error);
+            }
+
+            if(!isBuilt)
             {
                 builder.Dispose();
 
                 return false;
             }
 
-            isBuilt = builder.TryBuild(working, bomLength, detected, out error);
-        }
-        else
-        {
-            using var transcoded = new PooledStructList<byte>(pool, Math.Max(64, octets.Length + (octets.Length / 2)));
-            bool isTranscoded = XmlDocumentDecoder.TryTranscodeUtf16(octets, bomLength, detected == DetectedXmlEncoding.Utf16BigEndian, transcoded, out error);
-            isBuilt = isTranscoded && builder.TryBuild(transcoded.AsSpan(), 0, detected, out error);
-        }
+            table = builder.TransferToTable();
+            builder.Dispose();
+            error = default;
 
-        if(!isBuilt)
+            return true;
+        }
+        catch
         {
             builder.Dispose();
 
-            return false;
+            throw;
         }
-
-        table = builder.TransferToTable();
-        builder.Dispose();
-        error = default;
-
-        return true;
     }
 
 

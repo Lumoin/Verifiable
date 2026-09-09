@@ -63,6 +63,20 @@ public sealed record VcalmCredentialVerification
     /// <summary>The byte decoder (e.g. base58 decoder) the proof-value decoder composes.</summary>
     public required DecodeDelegate Decoder { get; init; }
 
+    /// <summary>
+    /// The schema-validation mechanism registry the §3.3.1 <c>results.credentialSchema[]</c>
+    /// evaluation dispatches through, or <see langword="null"/> to leave schema evaluation unwired
+    /// (the results stay empty, matching a deployment without a schema engine).
+    /// </summary>
+    public VcalmSchemaValidatorRegistry? SchemaValidators { get; init; }
+
+    /// <summary>
+    /// Resolves the schema document a <c>credentialSchema.id</c> URL identifies, or
+    /// <see langword="null"/> to leave schema evaluation unwired. An entry whose schema does not
+    /// resolve evaluates as Indeterminate rather than asserting either conformance outcome.
+    /// </summary>
+    public ResolveVcalmSchemaDocumentDelegate? ResolveSchemaDocument { get; init; }
+
     /// <summary>Computes the proof's message digest.</summary>
     public required ComputeDigestDelegate ComputeDigest { get; init; }
 

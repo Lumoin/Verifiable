@@ -33,13 +33,13 @@ internal sealed class DidCommTrustPingTests
     /// <summary>Provides the per-test cancellation token for the asynchronous encrypted e2e.</summary>
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly BaseMemoryPool Pool = BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool { get; } = BaseMemoryPool.Shared;
 
     //A non-network resolution context; it only satisfies the SSRF-policy-carrying parameter.
-    private static readonly ExchangeContext Context = new();
+    private static ExchangeContext Context { get; } = new();
 
     //The protected-header serializer the JWE layer hands a Dictionary<string, object> to produce UTF-8 JSON.
-    private static readonly JwtHeaderSerializer HeaderSerializer =
+    private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)header,
             TestSetup.DefaultSerializationOptions);
@@ -305,7 +305,7 @@ internal sealed class DidCommTrustPingTests
             HeaderSerializer,
             TestSetup.Base64UrlEncoder,
             CryptoFormatConversions.DefaultTagToEpkCrvConverter,
-            MicrosoftEntropyFunctions.GenerateNonce,
+            MicrosoftEntropyFunctionsAdapter.GenerateNonce,
             Pool,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
     }
@@ -347,7 +347,7 @@ internal sealed class DidCommTrustPingTests
             HeaderSerializer,
             TestSetup.Base64UrlEncoder,
             CryptoFormatConversions.DefaultTagToEpkCrvConverter,
-            MicrosoftEntropyFunctions.GenerateNonce,
+            MicrosoftEntropyFunctionsAdapter.GenerateNonce,
             Pool,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
     }

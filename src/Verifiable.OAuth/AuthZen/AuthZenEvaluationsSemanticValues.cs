@@ -22,19 +22,19 @@ public static class AuthZenEvaluationsSemanticValues
     public static ReadOnlySpan<byte> ExecuteAllUtf8 => "execute_all"u8;
 
     /// <summary><c>execute_all</c> — <see cref="AuthZenEvaluationsSemantic.ExecuteAll"/>.</summary>
-    public static readonly string ExecuteAll = Utf8Constants.ToInternedString(ExecuteAllUtf8);
+    public static string ExecuteAll { get; } = Utf8Constants.ToInternedString(ExecuteAllUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="DenyOnFirstDeny"/>.</summary>
     public static ReadOnlySpan<byte> DenyOnFirstDenyUtf8 => "deny_on_first_deny"u8;
 
     /// <summary><c>deny_on_first_deny</c> — <see cref="AuthZenEvaluationsSemantic.DenyOnFirstDeny"/>.</summary>
-    public static readonly string DenyOnFirstDeny = Utf8Constants.ToInternedString(DenyOnFirstDenyUtf8);
+    public static string DenyOnFirstDeny { get; } = Utf8Constants.ToInternedString(DenyOnFirstDenyUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="PermitOnFirstPermit"/>.</summary>
     public static ReadOnlySpan<byte> PermitOnFirstPermitUtf8 => "permit_on_first_permit"u8;
 
     /// <summary><c>permit_on_first_permit</c> — <see cref="AuthZenEvaluationsSemantic.PermitOnFirstPermit"/>.</summary>
-    public static readonly string PermitOnFirstPermit = Utf8Constants.ToInternedString(PermitOnFirstPermitUtf8);
+    public static string PermitOnFirstPermit { get; } = Utf8Constants.ToInternedString(PermitOnFirstPermitUtf8);
 
 
     /// <summary>Whether <paramref name="value"/> is the <c>execute_all</c> wire value.</summary>

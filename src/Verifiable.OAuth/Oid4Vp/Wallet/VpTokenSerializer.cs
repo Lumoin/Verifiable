@@ -73,8 +73,8 @@ public static class VpTokenSerializer
     /// Each entry's array still carries exactly one presentation under the
     /// single-presentation-per-query default; the
     /// <see cref="Verifiable.Core.Model.Dcql.CredentialQuery.Multiple"/>
-    /// extension for multiple presentations under one query id is a future
-    /// extension beyond this slice.
+    /// extension for multiple presentations under one query id is not
+    /// modelled.
     /// </summary>
     /// <param name="presentationsByQueryId">
     /// Map from DCQL credential query id to the full wire-form presentation for

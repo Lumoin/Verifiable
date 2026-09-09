@@ -1,7 +1,8 @@
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Cbor;
@@ -68,7 +69,7 @@ namespace Verifiable.Tests.JCose;
 /// <strong>Key material.</strong> Every signing key is P-256, minted through
 /// <see cref="TestKeyMaterialProvider.CreateP256KeyMaterial"/> (the Microsoft backend), signed via the explicit-
 /// delegate <see cref="CBAdESSignatureCreation.SignAsync"/> overload with
-/// <see cref="MicrosoftCryptographicFunctions.SignP256Async"/> — mirroring
+/// <see cref="MicrosoftCryptographicFunctionsAdapter.SignP256Async"/> — mirroring
 /// <c>Verifiable.Tests.Cose.CoseTests</c>'s own explicit-delegate composition pattern exactly, so this file's
 /// tests never depend on the <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/> resolution
 /// path the registry-resolved overload would exercise instead.
@@ -101,7 +102,7 @@ internal sealed class CBAdESSignatureCreationTests
                 new CBAdESAttachedPayloadInput(new byte[] { 0x01 }),
                 unsignedHeaders: null,
                 privateKey,
-                MicrosoftCryptographicFunctions.SignP256Async,
+                MicrosoftCryptographicFunctionsAdapter.SignP256Async,
                 dereference: null,
                 dereferenceContext: null,
                 unknownMechanismHandler: null,
@@ -137,7 +138,7 @@ internal sealed class CBAdESSignatureCreationTests
             new CBAdESAttachedPayloadInput(new byte[] { 0x01 }),
             unsignedHeaders: null,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             dereference: null,
             dereferenceContext: null,
             unknownMechanismHandler: null,
@@ -185,7 +186,7 @@ internal sealed class CBAdESSignatureCreationTests
             new CBAdESAttachedPayloadInput(new byte[] { 0x01 }),
             unsignedHeaders: null,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             dereference: null,
             dereferenceContext: null,
             unknownMechanismHandler: null,
@@ -226,7 +227,7 @@ internal sealed class CBAdESSignatureCreationTests
             new CBAdESAttachedPayloadInput(new byte[] { 0x01 }),
             unsignedHeaders: null,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             dereference: null,
             dereferenceContext: null,
             unknownMechanismHandler: null,
@@ -279,7 +280,7 @@ internal sealed class CBAdESSignatureCreationTests
                 new CBAdESAttachedPayloadInput(new byte[] { 0x01 }),
                 unsignedHeaders: null,
                 privateKey,
-                MicrosoftCryptographicFunctions.SignP256Async,
+                MicrosoftCryptographicFunctionsAdapter.SignP256Async,
                 dereference: null,
                 dereferenceContext: null,
                 unknownMechanismHandler: null,
@@ -387,7 +388,7 @@ internal sealed class CBAdESSignatureCreationTests
             new CBAdESAttachedPayloadInput(new byte[] { 0x01, 0x02, 0x03 }),
             unsignedHeaders: null,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             dereference: null,
             dereferenceContext: null,
             unknownMechanismHandler: null,
@@ -512,7 +513,7 @@ internal sealed class CBAdESSignatureCreationTests
             payloadInput,
             unsignedHeaders: null,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             DereferenceFromStoreAsync,
             context,
             unknownMechanismHandler: null,
@@ -557,7 +558,7 @@ internal sealed class CBAdESSignatureCreationTests
                 new CBAdESAttachedPayloadInput(new byte[] { 0x01 }),
                 unsignedHeaders: null,
                 privateKey,
-                MicrosoftCryptographicFunctions.SignP256Async,
+                MicrosoftCryptographicFunctionsAdapter.SignP256Async,
                 dereference: null,
                 dereferenceContext: null,
                 unknownMechanismHandler: null,
@@ -603,7 +604,7 @@ internal sealed class CBAdESSignatureCreationTests
                 new CBAdESAttachedPayloadInput(new byte[] { 0x01 }),
                 unsignedHeaders: null,
                 privateKey,
-                MicrosoftCryptographicFunctions.SignP256Async,
+                MicrosoftCryptographicFunctionsAdapter.SignP256Async,
                 dereference: null,
                 dereferenceContext: null,
                 unknownMechanismHandler: null,
@@ -645,7 +646,7 @@ internal sealed class CBAdESSignatureCreationTests
                 new CBAdESAttachedPayloadInput(new byte[] { 0x01 }),
                 unsignedHeaders: null,
                 privateKey,
-                MicrosoftCryptographicFunctions.SignP256Async,
+                MicrosoftCryptographicFunctionsAdapter.SignP256Async,
                 dereference: null,
                 dereferenceContext: null,
                 unknownMechanismHandler: null,
@@ -725,7 +726,7 @@ internal sealed class CBAdESSignatureCreationTests
                 payloadInput,
                 unsignedHeaders: null,
                 privateKey,
-                MicrosoftCryptographicFunctions.SignP256Async,
+                MicrosoftCryptographicFunctionsAdapter.SignP256Async,
                 DereferenceFromStoreAsync,
                 context,
                 unknownMechanismHandler: null,
@@ -780,7 +781,7 @@ internal sealed class CBAdESSignatureCreationTests
             payloadInput,
             unsignedHeaders: null,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             DereferenceFromStoreAsync,
             context,
             unknownMechanismHandler: null,
@@ -854,7 +855,7 @@ internal sealed class CBAdESSignatureCreationTests
             payloadInput,
             unsignedHeaders: null,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             DereferenceFromStoreAsync,
             context,
             unknownMechanismHandler: null,
@@ -885,7 +886,7 @@ internal sealed class CBAdESSignatureCreationTests
             verifiableOverConcatenation,
             CoseSerialization.BuildSigStructure,
             publicKey,
-            MicrosoftCryptographicFunctions.VerifyP256Async,
+            MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "The COSE signature must verify over the order-preserving concatenation, even though the wire payload is empty.");
@@ -933,7 +934,7 @@ internal sealed class CBAdESSignatureCreationTests
             payloadInput,
             unsignedHeaders: null,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             DereferenceFromStoreAsync,
             context,
             unknownMechanismHandler: null,
@@ -945,7 +946,7 @@ internal sealed class CBAdESSignatureCreationTests
             result.Message,
             CoseSerialization.BuildSigStructure,
             publicKey,
-            MicrosoftCryptographicFunctions.VerifyP256Async,
+            MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "The signature must verify directly over the produced message's own (empty) payload, proving the Sig_structure input was literally empty (CB-5.2.8.2.3-06).");
@@ -996,7 +997,7 @@ internal sealed class CBAdESSignatureCreationTests
                 CBAdESSignatureSerialization.EncodeCBAdESUnprotectedHeader,
                 CoseSerialization.BuildSigStructure,
                 privateKey,
-                MicrosoftCryptographicFunctions.SignP256Async,
+                MicrosoftCryptographicFunctionsAdapter.SignP256Async,
                 DereferenceFromStoreAsync,
                 context,
                 unknownMechanismHandler: null,
@@ -1035,7 +1036,7 @@ internal sealed class CBAdESSignatureCreationTests
                 payloadInput,
                 unsignedHeaders: null,
                 privateKey,
-                MicrosoftCryptographicFunctions.SignP256Async,
+                MicrosoftCryptographicFunctionsAdapter.SignP256Async,
                 DereferenceFromStoreAsync,
                 context,
                 unknownMechanismHandler: null,
@@ -1086,7 +1087,7 @@ internal sealed class CBAdESSignatureCreationTests
             payloadInput,
             unsignedHeaders: null,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             dereference: null,
             context,
             HandleUnknownMechanismAsync,
@@ -1101,7 +1102,7 @@ internal sealed class CBAdESSignatureCreationTests
             verifiableOverHandlerPayload,
             CoseSerialization.BuildSigStructure,
             publicKey,
-            MicrosoftCryptographicFunctions.VerifyP256Async,
+            MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "The signature must verify over the unknown-mechanism handler's returned payload.");
@@ -1141,7 +1142,7 @@ internal sealed class CBAdESSignatureCreationTests
                 new CBAdESAttachedPayloadInput(new byte[] { 0x01 }),
                 unsignedHeaders,
                 privateKey,
-                MicrosoftCryptographicFunctions.SignP256Async,
+                MicrosoftCryptographicFunctionsAdapter.SignP256Async,
                 dereference: null,
                 dereferenceContext: null,
                 unknownMechanismHandler: null,
@@ -1190,7 +1191,7 @@ internal sealed class CBAdESSignatureCreationTests
             new CBAdESAttachedPayloadInput(new byte[] { 0x01 }),
             unsignedHeaders,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             dereference: null,
             dereferenceContext: null,
             unknownMechanismHandler: null,
@@ -1221,9 +1222,10 @@ internal sealed class CBAdESSignatureCreationTests
         using PublicKeyMemory publicKey = keyPair.PublicKey;
         using PrivateKeyMemory privateKey = keyPair.PrivateKey;
 
-        var x5BagWriter = new CborWriter(CborConformanceMode.Canonical);
+        var x5BagWriterBuffer = new ArrayBufferWriter<byte>();
+        var x5BagWriter = new CborWriter(x5BagWriterBuffer, CborOptions.RfcCanonical);
         x5BagWriter.WriteByteString(new byte[] { 0xDE, 0xAD, 0xBE, 0xEF });
-        byte[] unprofiledX5BagBytes = x5BagWriter.Encode();
+        byte[] unprofiledX5BagBytes = x5BagWriterBuffer.WrittenSpan.ToArray();
 
         var x5BagLabel = new CoseHeaderIntegerLabel(CoseHeaderParameters.X5Bag);
 
@@ -1243,7 +1245,7 @@ internal sealed class CBAdESSignatureCreationTests
                 new CBAdESAttachedPayloadInput(new byte[] { 0x01 }),
                 unsignedHeaders: null,
                 privateKey,
-                MicrosoftCryptographicFunctions.SignP256Async,
+                MicrosoftCryptographicFunctionsAdapter.SignP256Async,
                 dereference: null,
                 dereferenceContext: null,
                 unknownMechanismHandler: null,
@@ -1293,9 +1295,10 @@ internal sealed class CBAdESSignatureCreationTests
         using PublicKeyMemory publicKey = keyPair.PublicKey;
         using PrivateKeyMemory privateKey = keyPair.PrivateKey;
 
-        var negativeLabelWriter = new CborWriter(CborConformanceMode.Canonical);
+        var negativeLabelWriterBuffer = new ArrayBufferWriter<byte>();
+        var negativeLabelWriter = new CborWriter(negativeLabelWriterBuffer, CborOptions.RfcCanonical);
         negativeLabelWriter.WriteByteString(new byte[] { 0xFE, 0xED });
-        byte[] unprofiledNegativeLabelBytes = negativeLabelWriter.Encode();
+        byte[] unprofiledNegativeLabelBytes = negativeLabelWriterBuffer.WrittenSpan.ToArray();
 
         var negativeLabel = new CoseHeaderIntegerLabel(-1);
 
@@ -1315,7 +1318,7 @@ internal sealed class CBAdESSignatureCreationTests
                 new CBAdESAttachedPayloadInput(new byte[] { 0x01 }),
                 unsignedHeaders: null,
                 privateKey,
-                MicrosoftCryptographicFunctions.SignP256Async,
+                MicrosoftCryptographicFunctionsAdapter.SignP256Async,
                 dereference: null,
                 dereferenceContext: null,
                 unknownMechanismHandler: null,
@@ -1363,9 +1366,10 @@ internal sealed class CBAdESSignatureCreationTests
         var criticalLabel = new CoseHeaderTextLabel("x-test-crit");
         var unprofiledLabel = new CoseHeaderTextLabel("x-test-ext");
 
-        var unprofiledWriter = new CborWriter(CborConformanceMode.Canonical);
+        var unprofiledWriterBuffer = new ArrayBufferWriter<byte>();
+        var unprofiledWriter = new CborWriter(unprofiledWriterBuffer, CborOptions.RfcCanonical);
         unprofiledWriter.WriteByteString(new byte[] { 0xCA, 0xFE });
-        byte[] unprofiledBytes = unprofiledWriter.Encode();
+        byte[] unprofiledBytes = unprofiledWriterBuffer.WrittenSpan.ToArray();
 
         var headers = new CBAdESProtectedHeaders(
             WellKnownCoseAlgorithms.Es256,
@@ -1384,7 +1388,7 @@ internal sealed class CBAdESSignatureCreationTests
                 new CBAdESAttachedPayloadInput(new byte[] { 0x01 }),
                 unsignedHeaders: null,
                 privateKey,
-                MicrosoftCryptographicFunctions.SignP256Async,
+                MicrosoftCryptographicFunctionsAdapter.SignP256Async,
                 dereference: null,
                 dereferenceContext: null,
                 unknownMechanismHandler: null,
@@ -1498,7 +1502,7 @@ internal sealed class CBAdESSignatureCreationTests
     /// <returns>Each member's label mapped to its own encoded item bytes.</returns>
     private static Dictionary<int, ReadOnlyMemory<byte>> ReadProtectedHeaderEntries(ReadOnlyMemory<byte> protectedHeaderBytes)
     {
-        var reader = new CborReader(protectedHeaderBytes, CborConformanceMode.Canonical);
+        var reader = new CborReader(protectedHeaderBytes, CborOptions.RfcCanonical);
         int? mapLength = reader.ReadStartMap();
         Assert.IsNotNull(mapLength, "The protected header must be a definite-length CBOR map.");
 
@@ -1523,7 +1527,7 @@ internal sealed class CBAdESSignatureCreationTests
     /// <returns>The sole member's claim key and its <c>NumericDate</c> value, in whole seconds since the Unix epoch.</returns>
     private static (int ClaimKey, long IssuedAtSeconds) ReadCwtClaimsMember(ReadOnlyMemory<byte> encodedCwtClaims)
     {
-        var reader = new CborReader(encodedCwtClaims, CborConformanceMode.Canonical);
+        var reader = new CborReader(encodedCwtClaims, CborOptions.RfcCanonical);
         int? memberCount = reader.ReadStartMap();
         Assert.IsNotNull(memberCount, "The CWT Claims map must be definite-length.");
         Assert.AreEqual(1, memberCount.Value, "The CWT Claims map must carry exactly one member (iat only).");
@@ -1544,7 +1548,7 @@ internal sealed class CBAdESSignatureCreationTests
     /// <returns>The decoded integers, in wire order.</returns>
     private static List<int> ReadIntArray(ReadOnlyMemory<byte> encodedArray)
     {
-        var reader = new CborReader(encodedArray, CborConformanceMode.Canonical);
+        var reader = new CborReader(encodedArray, CborOptions.RfcCanonical);
         int? length = reader.ReadStartArray();
         Assert.IsNotNull(length, "The array must be definite-length.");
 

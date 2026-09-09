@@ -33,7 +33,7 @@ internal sealed class SecurityEventTokenTests
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     //A receiver that has never seen any jti.
-    private static readonly IsSecurityEventTokenJtiSeenDelegate NeverSeen =
+    private static IsSecurityEventTokenJtiSeenDelegate NeverSeen { get; } =
         static (jti, context, cancellationToken) => ValueTask.FromResult(false);
 
 

@@ -15,11 +15,11 @@ namespace Verifiable.Tests.Apdu;
 internal sealed class DataGroup3And4Tests
 {
     //A minimal finger record: the ISO/IEC 19794-4 format identifier "FIR\0", a version, and filler payload.
-    private static readonly byte[] FingerRecord =
+    private static byte[] FingerRecord { get; } =
         [0x46, 0x49, 0x52, 0x00, 0x30, 0x31, 0x30, 0x00, 0xAA, 0xBB, 0xCC, 0xDD];
 
     //A minimal iris record: the ISO/IEC 19794-6 format identifier "IIR\0", a version, and filler payload.
-    private static readonly byte[] IrisRecord =
+    private static byte[] IrisRecord { get; } =
         [0x49, 0x49, 0x52, 0x00, 0x30, 0x31, 0x30, 0x00, 0x11, 0x22, 0x33, 0x44];
 
 

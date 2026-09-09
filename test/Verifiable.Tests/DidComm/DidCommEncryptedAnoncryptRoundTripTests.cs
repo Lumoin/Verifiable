@@ -29,19 +29,19 @@ internal sealed class DidCommEncryptedAnoncryptRoundTripTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly BaseMemoryPool Pool = BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool { get; } = BaseMemoryPool.Shared;
 
     //A non-network resolution context; it only satisfies the SSRF-policy-carrying parameter.
-    private static readonly ExchangeContext Context = new();
+    private static ExchangeContext Context { get; } = new();
 
     //A non-nested anoncrypt message never triggers nested-signature resolution, so this resolver is never
     //invoked; it satisfies the unpack overload's resolver parameter.
-    private static readonly DidResolver NestedSignerResolver = new DidResolver(DidMethodSelectors.FromResolvers(
+    private static DidResolver NestedSignerResolver { get; } = new DidResolver(DidMethodSelectors.FromResolvers(
         ("did:example", (_, _, _, _) => ValueTask.FromResult(DidResolutionResult.Failure(DidResolutionErrors.NotFound)))));
 
     //The protected-header serializer, mirroring GeneralJweEncRoundTripTests: the headers are a
     //Dictionary<string, object> the JWE layer hands to this delegate to produce the UTF-8 JSON bytes.
-    private static readonly JwtHeaderSerializer HeaderSerializer =
+    private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)header,
             TestSetup.DefaultSerializationOptions);
@@ -184,7 +184,7 @@ internal sealed class DidCommEncryptedAnoncryptRoundTripTests
                 HeaderSerializer,
                 TestSetup.Base64UrlEncoder,
                 CryptoFormatConversions.DefaultTagToEpkCrvConverter,
-                MicrosoftEntropyFunctions.GenerateNonce,
+                MicrosoftEntropyFunctionsAdapter.GenerateNonce,
                 Pool,
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
     }
@@ -227,7 +227,7 @@ internal sealed class DidCommEncryptedAnoncryptRoundTripTests
                 HeaderSerializer,
                 TestSetup.Base64UrlEncoder,
                 CryptoFormatConversions.DefaultTagToEpkCrvConverter,
-                MicrosoftEntropyFunctions.GenerateNonce,
+                MicrosoftEntropyFunctionsAdapter.GenerateNonce,
                 BouncyCastleKeyAgreementFunctions.EcdhEsMultiRecipientAgreementEncryptP256Async,
                 ConcatKdf.DefaultKeyDerivationDelegate,
                 MicrosoftKeyAgreementFunctions.AesKeyWrapAsync,
@@ -323,7 +323,7 @@ internal sealed class DidCommEncryptedAnoncryptRoundTripTests
             HeaderSerializer,
             TestSetup.Base64UrlEncoder,
             CryptoFormatConversions.DefaultTagToEpkCrvConverter,
-            MicrosoftEntropyFunctions.GenerateNonce,
+            MicrosoftEntropyFunctionsAdapter.GenerateNonce,
             BouncyCastleKeyAgreementFunctions.EcdhEsMultiRecipientAgreementEncryptP256Async,
             ConcatKdf.DefaultKeyDerivationDelegate,
             MicrosoftKeyAgreementFunctions.AesKeyWrapAsync,
@@ -421,7 +421,7 @@ internal sealed class DidCommEncryptedAnoncryptRoundTripTests
             HeaderSerializer,
             TestSetup.Base64UrlEncoder,
             CryptoFormatConversions.DefaultTagToEpkCrvConverter,
-            MicrosoftEntropyFunctions.GenerateNonce,
+            MicrosoftEntropyFunctionsAdapter.GenerateNonce,
             BouncyCastleKeyAgreementFunctions.EcdhEsMultiRecipientAgreementEncryptP256Async,
             ConcatKdf.DefaultKeyDerivationDelegate,
             MicrosoftKeyAgreementFunctions.AesKeyWrapAsync,
@@ -479,7 +479,7 @@ internal sealed class DidCommEncryptedAnoncryptRoundTripTests
             HeaderSerializer,
             TestSetup.Base64UrlEncoder,
             CryptoFormatConversions.DefaultTagToEpkCrvConverter,
-            MicrosoftEntropyFunctions.GenerateNonce,
+            MicrosoftEntropyFunctionsAdapter.GenerateNonce,
             encryptAgreement,
             ConcatKdf.DefaultKeyDerivationDelegate,
             MicrosoftKeyAgreementFunctions.AesKeyWrapAsync,
@@ -535,7 +535,7 @@ internal sealed class DidCommEncryptedAnoncryptRoundTripTests
             HeaderSerializer,
             TestSetup.Base64UrlEncoder,
             CryptoFormatConversions.DefaultTagToEpkCrvConverter,
-            MicrosoftEntropyFunctions.GenerateNonce,
+            MicrosoftEntropyFunctionsAdapter.GenerateNonce,
             Pool,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 

@@ -15,7 +15,7 @@ public static class WellKnownCodeChallengeMethods
     /// The <c>S256</c> PKCE code challenge method (RFC 7636 §4.3) — the only permitted value per HAIP 1.0
     /// and RFC 9700 §2.1.1; the plain method must not be used as it negates PKCE's downgrade protection.
     /// </summary>
-    public static readonly string S256 = Utf8Constants.ToInternedString(S256Utf8);
+    public static string S256 { get; } = Utf8Constants.ToInternedString(S256Utf8);
 
 
     /// <summary>Whether <paramref name="value"/> is <see cref="S256"/>.</summary>

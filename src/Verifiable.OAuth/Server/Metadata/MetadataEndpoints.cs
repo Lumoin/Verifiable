@@ -76,7 +76,7 @@ public static class MetadataEndpoints
     /// The endpoint builder delegate. Pass this to
     /// <see cref="EndpointServer.EndpointBuilders"/>.
     /// </summary>
-    public static readonly EndpointBuilderDelegate Builder = static (registration, context, ct) =>
+    public static EndpointBuilderDelegate Builder { get; } = static (registration, context, ct) =>
     {
         List<EndpointCandidate> candidates = [];
 
@@ -295,433 +295,497 @@ public static class MetadataEndpoints
                 }
 
                 StringBuilder sb = JsonAppender.Rent();
-                sb.Append('{');
-
-                //RFC 8414 §3.3: the issuer value in the metadata MUST be IDENTICAL to
-                //the issuer identifier used to build the metadata URL. Emit it verbatim
-                //(OriginalString) — GetLeftPart(UriPartial.Authority) stripped any path
-                //segment and broke exact-match for path-bearing / multi-tenant issuers
-                //(the same fix already applied in Rfc9068AccessTokenProducer).
-                string issuerValue = issuer.OriginalString;
-                bool issuerFirst = true;
-                JsonAppender.AppendStringField(sb, "issuer", issuerValue, ref issuerFirst);
-
-                //Endpoint emission walks the per-request
-                //EndpointChain. The dispatcher places it on the context after
-                //ResolveCapabilitiesAsync attenuation and per-candidate URL
-                //resolution, so this loop emits exactly the endpoints active
-                //for this request: capability-vetoed endpoints are absent,
-                //and the advertised URL is the same Uri the matcher will
-                //match against (no drift possible because both read
-                //ServerEndpoint.ResolvedUri).
-                //
-                //Endpoints share a DiscoveryMetadataKey when they share a URL
-                //(JAR variants of PAR/Authorize advertise under their non-JAR
-                //sibling's key; refresh-token shares the token endpoint URL).
-                //The JAR variants and refresh-token carry
-                //DiscoveryMetadataKey=null specifically to avoid double-
-                //emission, so the skip-null guard below is the only
-                //deduplication this loop needs.
-                EndpointChain? chain = context.EndpointChain;
-                if(chain is null)
+                string discoveryJson;
+                try
                 {
-                    return (null, ServerHttpResponse.ServerError(
-                        OAuthErrors.ServerError,
-                        "EndpointChain not on context for discovery emission. "
-                        + "DispatchAsync sets this; this code path is only "
-                        + "reachable through dispatch."));
-                }
+                    sb.Append('{');
 
-                bool authorizationCodeOnChain = false;
-                bool refreshTokenOnChain = false;
-                bool tokenEndpointOnChain = false;
-                bool clientCredentialsOnChain = false;
-                bool preAuthorizedCodeOnChain = false;
-                bool introspectionOnChain = false;
-                bool tokenExchangeOnChain = false;
-                bool jwtBearerOnChain = false;
-                foreach(ServerEndpoint chainEndpoint in chain)
-                {
-                    if(chainEndpoint.Capability == WellKnownCapabilityIdentifiers.OAuthAuthorizationCode)
+                    //Every member name the base emission writes, so a contributed field
+                    //(below, via AppendContributedField) naming one of them is refused
+                    //rather than silently duplicated (RFC 8259 §4: "The names within an
+                    //object SHOULD be unique"). Threaded through every Append*Field call
+                    //in this method rather than kept as a separate list, so the set can
+                    //never drift from what was actually written.
+                    HashSet<string> emittedFieldNames = new(StringComparer.Ordinal);
+
+                    //RFC 8414 §3.3: the issuer value in the metadata MUST be IDENTICAL to
+                    //the issuer identifier used to build the metadata URL. Emit it verbatim
+                    //(OriginalString) — GetLeftPart(UriPartial.Authority) stripped any path
+                    //segment and broke exact-match for path-bearing / multi-tenant issuers
+                    //(the same fix already applied in Rfc9068AccessTokenProducer).
+                    string issuerValue = issuer.OriginalString;
+                    bool issuerFirst = true;
+                    JsonAppender.AppendStringField(sb, "issuer", issuerValue, ref issuerFirst);
+                    emittedFieldNames.Add("issuer");
+
+                    //Endpoint emission walks the per-request
+                    //EndpointChain. The dispatcher places it on the context after
+                    //ResolveCapabilitiesAsync attenuation and per-candidate URL
+                    //resolution, so this loop emits exactly the endpoints active
+                    //for this request: capability-vetoed endpoints are absent,
+                    //and the advertised URL is the same Uri the matcher will
+                    //match against (no drift possible because both read
+                    //ServerEndpoint.ResolvedUri).
+                    //
+                    //Endpoints share a DiscoveryMetadataKey when they share a URL
+                    //(JAR variants of PAR/Authorize advertise under their non-JAR
+                    //sibling's key; refresh-token shares the token endpoint URL).
+                    //The JAR variants and refresh-token carry
+                    //DiscoveryMetadataKey=null specifically to avoid double-
+                    //emission, so the skip-null guard below is the only
+                    //deduplication this loop needs.
+                    EndpointChain? chain = context.EndpointChain;
+                    if(chain is null)
                     {
-                        authorizationCodeOnChain = true;
-                    }
-                    if(string.Equals(chainEndpoint.Name,
-                        WellKnownEndpointNames.AuthCodeRefreshToken, StringComparison.Ordinal))
-                    {
-                        refreshTokenOnChain = true;
-                    }
-                    if(string.Equals(chainEndpoint.Name,
-                        WellKnownEndpointNames.AuthCodeToken, StringComparison.Ordinal))
-                    {
-                        tokenEndpointOnChain = true;
-                    }
-                    if(string.Equals(chainEndpoint.Name,
-                        WellKnownEndpointNames.ClientCredentialsToken, StringComparison.Ordinal))
-                    {
-                        clientCredentialsOnChain = true;
-                    }
-                    if(string.Equals(chainEndpoint.Name,
-                        WellKnownEndpointNames.Oid4VciPreAuthorizedToken, StringComparison.Ordinal))
-                    {
-                        preAuthorizedCodeOnChain = true;
-                    }
-                    if(string.Equals(chainEndpoint.Name,
-                        WellKnownEndpointNames.AuthCodeIntrospect, StringComparison.Ordinal))
-                    {
-                        introspectionOnChain = true;
-                    }
-                    if(string.Equals(chainEndpoint.Name,
-                        WellKnownEndpointNames.TokenExchangeToken, StringComparison.Ordinal))
-                    {
-                        tokenExchangeOnChain = true;
-                    }
-                    if(string.Equals(chainEndpoint.Name,
-                        WellKnownEndpointNames.JwtBearerToken, StringComparison.Ordinal))
-                    {
-                        jwtBearerOnChain = true;
+                        return (null, ServerHttpResponse.ServerError(
+                            OAuthErrors.ServerError,
+                            "EndpointChain not on context for discovery emission. "
+                            + "DispatchAsync sets this; this code path is only "
+                            + "reachable through dispatch."));
                     }
 
-                    if(chainEndpoint.DiscoveryMetadataKey is null) { continue; }
-                    AppendField(
-                        sb,
-                        chainEndpoint.DiscoveryMetadataKey,
-                        chainEndpoint.ResolvedUri.ToString());
-                }
+                    bool authorizationCodeOnChain = false;
+                    bool refreshTokenOnChain = false;
+                    bool tokenEndpointOnChain = false;
+                    bool clientCredentialsOnChain = false;
+                    bool preAuthorizedCodeOnChain = false;
+                    bool introspectionOnChain = false;
+                    bool tokenExchangeOnChain = false;
+                    bool jwtBearerOnChain = false;
+                    foreach(ServerEndpoint chainEndpoint in chain)
+                    {
+                        if(chainEndpoint.Capability == WellKnownCapabilityIdentifiers.OAuthAuthorizationCode)
+                        {
+                            authorizationCodeOnChain = true;
+                        }
+                        if(string.Equals(chainEndpoint.Name,
+                            WellKnownEndpointNames.AuthCodeRefreshToken, StringComparison.Ordinal))
+                        {
+                            refreshTokenOnChain = true;
+                        }
+                        if(string.Equals(chainEndpoint.Name,
+                            WellKnownEndpointNames.AuthCodeToken, StringComparison.Ordinal))
+                        {
+                            tokenEndpointOnChain = true;
+                        }
+                        if(string.Equals(chainEndpoint.Name,
+                            WellKnownEndpointNames.ClientCredentialsToken, StringComparison.Ordinal))
+                        {
+                            clientCredentialsOnChain = true;
+                        }
+                        if(string.Equals(chainEndpoint.Name,
+                            WellKnownEndpointNames.Oid4VciPreAuthorizedToken, StringComparison.Ordinal))
+                        {
+                            preAuthorizedCodeOnChain = true;
+                        }
+                        if(string.Equals(chainEndpoint.Name,
+                            WellKnownEndpointNames.AuthCodeIntrospect, StringComparison.Ordinal))
+                        {
+                            introspectionOnChain = true;
+                        }
+                        if(string.Equals(chainEndpoint.Name,
+                            WellKnownEndpointNames.TokenExchangeToken, StringComparison.Ordinal))
+                        {
+                            tokenExchangeOnChain = true;
+                        }
+                        if(string.Equals(chainEndpoint.Name,
+                            WellKnownEndpointNames.JwtBearerToken, StringComparison.Ordinal))
+                        {
+                            jwtBearerOnChain = true;
+                        }
 
-                //OIDC Discovery 1.0 §3 REQUIRED fields. The library's subject
-                //identifier story is "public" by default (the application
-                //installs a custom ResolveSubjectIdentifierAsync to add the
-                //pairwise option).
-                AppendStringArrayField(
-                    sb,
-                    OpenIdProviderMetadataParameterNames.SubjectTypesSupported,
-                    SubjectTypePublic);
+                        if(chainEndpoint.DiscoveryMetadataKey is null) { continue; }
+                        AppendField(
+                            sb,
+                            chainEndpoint.DiscoveryMetadataKey,
+                            chainEndpoint.ResolvedUri.ToString(),
+                            emittedFieldNames);
+                    }
 
-                //response_types_supported — derived from the per-request chain
-                //to match the existing endpoint-URL emission's attenuation
-                //semantics. Authorization Code is the only OAuth 2.1-conformant
-                //response type the library ships; hybrid / implicit flows are
-                //out of scope.
-                if(authorizationCodeOnChain)
-                {
+                    //OIDC Discovery 1.0 §3 REQUIRED fields. The library's subject
+                    //identifier story is "public" by default (the application
+                    //installs a custom ResolveSubjectIdentifierAsync to add the
+                    //pairwise option).
                     AppendStringArrayField(
                         sb,
-                        AuthorizationServerMetadataParameterNames.ResponseTypesSupported,
-                        ResponseTypeCode);
-                }
+                        OpenIdProviderMetadataParameterNames.SubjectTypesSupported,
+                        SubjectTypePublic,
+                        emittedFieldNames);
 
-                //id_token_signing_alg_values_supported — derived from the
-                //registration's IdTokenIssuance signing keys. Each KeyId is
-                //resolved through the verification-key resolver and its tag
-                //mapped to a JWA identifier; the deduped set forms the
-                //advertised list.
-                IReadOnlyList<string> idTokenAlgs = await ResolveSigningAlgValuesAsync(
-                    Verifiable.Cryptography.Context.KeyUsageContext.IdTokenIssuance,
-                    server, registration, context, ct).ConfigureAwait(false);
-                if(idTokenAlgs.Count > 0)
-                {
-                    AppendStringArrayField(
-                        sb,
-                        OpenIdProviderMetadataParameterNames.IdTokenSigningAlgValuesSupported,
-                        idTokenAlgs);
-                }
-
-                //grant_types_supported (RFC 8414 §2 OPTIONAL). The library
-                //ships the authorization_code grant; refresh_token is added
-                //when the registration enables refresh-token endpoints.
-                //Defaults from RFC 6749 / OIDC Core (authorization_code +
-                //implicit) intentionally not used — implicit is out of scope
-                //per OAuth 2.1 / FAPI 2.0.
-                if(authorizationCodeOnChain || clientCredentialsOnChain || preAuthorizedCodeOnChain
-                    || tokenExchangeOnChain || jwtBearerOnChain)
-                {
-                    List<string> grantTypes = new(6);
+                    //response_types_supported — derived from the per-request chain
+                    //to match the existing endpoint-URL emission's attenuation
+                    //semantics. Authorization Code is the only OAuth 2.1-conformant
+                    //response type the library ships; hybrid / implicit flows are
+                    //out of scope.
                     if(authorizationCodeOnChain)
                     {
-                        grantTypes.Add(WellKnownGrantTypes.AuthorizationCode);
-                        if(refreshTokenOnChain)
+                        AppendStringArrayField(
+                            sb,
+                            AuthorizationServerMetadataParameterNames.ResponseTypesSupported,
+                            ResponseTypeCode,
+                            emittedFieldNames);
+                    }
+
+                    //id_token_signing_alg_values_supported — derived from the
+                    //registration's IdTokenIssuance signing keys. Each KeyId is
+                    //resolved through the verification-key resolver and its tag
+                    //mapped to a JWA identifier; the deduped set forms the
+                    //advertised list.
+                    IReadOnlyList<string> idTokenAlgs = await ResolveSigningAlgValuesAsync(
+                        Verifiable.Cryptography.Context.KeyUsageContext.IdTokenIssuance,
+                        server, registration, context, ct).ConfigureAwait(false);
+                    if(idTokenAlgs.Count > 0)
+                    {
+                        AppendStringArrayField(
+                            sb,
+                            OpenIdProviderMetadataParameterNames.IdTokenSigningAlgValuesSupported,
+                            idTokenAlgs,
+                            emittedFieldNames);
+                    }
+
+                    //grant_types_supported (RFC 8414 §2 OPTIONAL). The library
+                    //ships the authorization_code grant; refresh_token is added
+                    //when the registration enables refresh-token endpoints.
+                    //Defaults from RFC 6749 / OIDC Core (authorization_code +
+                    //implicit) intentionally not used — implicit is out of scope
+                    //per OAuth 2.1 / FAPI 2.0.
+                    if(authorizationCodeOnChain || clientCredentialsOnChain || preAuthorizedCodeOnChain
+                        || tokenExchangeOnChain || jwtBearerOnChain)
+                    {
+                        List<string> grantTypes = new(6);
+                        if(authorizationCodeOnChain)
                         {
-                            grantTypes.Add(WellKnownGrantTypes.RefreshToken);
+                            grantTypes.Add(WellKnownGrantTypes.AuthorizationCode);
+                            if(refreshTokenOnChain)
+                            {
+                                grantTypes.Add(WellKnownGrantTypes.RefreshToken);
+                            }
+                        }
+
+                        if(clientCredentialsOnChain)
+                        {
+                            grantTypes.Add(WellKnownGrantTypes.ClientCredentials);
+                        }
+
+                        if(preAuthorizedCodeOnChain)
+                        {
+                            grantTypes.Add(WellKnownGrantTypes.PreAuthorizedCode);
+                        }
+
+                        if(tokenExchangeOnChain)
+                        {
+                            grantTypes.Add(WellKnownGrantTypes.TokenExchange);
+                        }
+
+                        //ID-JAG §7.2: a Resource Authorization Server advertising the id-jag grant profile
+                        //MUST also include the jwt-bearer grant type. The profile is advertised below under
+                        //the same jwtBearerOnChain condition, so adding jwt-bearer here satisfies that MUST.
+                        if(jwtBearerOnChain)
+                        {
+                            grantTypes.Add(WellKnownGrantTypes.JwtBearer);
+                        }
+
+                        AppendStringArrayField(
+                            sb,
+                            AuthorizationServerMetadataParameterNames.GrantTypesSupported,
+                            grantTypes,
+                            emittedFieldNames);
+                    }
+
+                    //ID-JAG §7.1: an IdP Authorization Server that can mint an Identity Assertion JWT
+                    //Authorization Grant via Token Exchange SHOULD advertise the id-jag token type in
+                    //identity_chaining_requested_token_types_supported.
+                    if(tokenExchangeOnChain)
+                    {
+                        AppendStringArrayField(
+                            sb,
+                            AuthorizationServerMetadataParameterNames.IdentityChainingRequestedTokenTypesSupported,
+                            [TokenTypeNames.GetName(TokenType.IdJag)],
+                            emittedFieldNames);
+                    }
+
+                    //ID-JAG §7.2: a Resource Authorization Server that processes the id-jag grant — it
+                    //consumes an ID-JAG as a jwt-bearer assertion — SHOULD advertise the grant profile in
+                    //authorization_grant_profiles_supported.
+                    if(jwtBearerOnChain)
+                    {
+                        AppendStringArrayField(
+                            sb,
+                            AuthorizationServerMetadataParameterNames.AuthorizationGrantProfilesSupported,
+                            [WellKnownGrantProfiles.IdJag],
+                            emittedFieldNames);
+                    }
+
+                    //pre-authorized_grant_anonymous_access_supported (OID4VCI 1.0 §12.3 OPTIONAL):
+                    //"A boolean indicating whether the Credential Issuer accepts a Token Request with
+                    //a Pre-Authorized Code but without a client_id. The default is false." Advertised
+                    //only when the §6 Pre-Authorized Code token endpoint is on the chain AND the
+                    //deployment opted in via policy — the advertisement matches what the
+                    //ValidatePreAuthorizedCodeAsync seam will accept (it denies an anonymous request
+                    //with ClientAuthenticationRequired when the deployment requires authentication).
+                    //Omitted (rather than emitted false) when not opted in, since false is the §12.3
+                    //default the Wallet assumes for an absent parameter.
+                    if(preAuthorizedCodeOnChain && context.PreAuthorizedGrantAnonymousAccessSupported)
+                    {
+                        AppendBooleanField(
+                            sb,
+                            AuthorizationServerMetadataParameterNames.PreAuthorizedGrantAnonymousAccessSupported,
+                            true,
+                            emittedFieldNames);
+                    }
+
+                    //authorization_details_types_supported (RFC 9396 §10). Advertised when a
+                    //token grant that can process authorization_details is on the chain AND the
+                    //decision seam that mints the OID4VCI §6.2 credential_identifiers is wired —
+                    //an advertisement without the seam would invite requests the server refuses
+                    //with invalid_authorization_details.
+                    if((authorizationCodeOnChain || preAuthorizedCodeOnChain)
+                        && oauth.ResolveCredentialAuthorizationAsync is not null)
+                    {
+                        AppendStringArrayField(
+                            sb,
+                            AuthorizationServerMetadataParameterNames.AuthorizationDetailsTypesSupported,
+                            oauth.AuthorizationDetailTypes.RegisteredTypes,
+                            emittedFieldNames);
+                    }
+
+                    //JARM §4: advertise the JWT-secured response modes and signing algorithms
+                    //when the authorize endpoint is on the chain AND this registration carries
+                    //an authorization-response signing key — an advertisement without the key
+                    //would invite response_mode requests the server refuses with invalid_request.
+                    if(authorizationCodeOnChain)
+                    {
+                        IReadOnlyList<string> jarmAlgs = await ResolveSigningAlgValuesAsync(
+                            Verifiable.Cryptography.Context.KeyUsageContext.AuthorizationResponseSigning,
+                            server, registration, context, ct).ConfigureAwait(false);
+                        if(jarmAlgs.Count > 0)
+                        {
+                            AppendStringArrayField(
+                                sb,
+                                AuthorizationServerMetadataParameterNames.ResponseModesSupported,
+                                [
+                                    "query",
+                                    "fragment",
+                                    "form_post",
+                                    Jarm.JarmResponseModes.QueryJwt,
+                                    Jarm.JarmResponseModes.FragmentJwt,
+                                    Jarm.JarmResponseModes.FormPostJwt,
+                                    Jarm.JarmResponseModes.Jwt
+                                ],
+                                emittedFieldNames);
+                            AppendStringArrayField(
+                                sb,
+                                Jarm.JarmServerMetadataParameterNames.AuthorizationSigningAlgValuesSupported,
+                                jarmAlgs,
+                                emittedFieldNames);
                         }
                     }
 
-                    if(clientCredentialsOnChain)
+                    //RFC 9701 §7: advertise the introspection-response signing algorithms when
+                    //the introspection endpoint is on the chain AND this registration carries
+                    //an introspection-response signing key — an advertisement without the key
+                    //would invite Accept: application/token-introspection+jwt requests the
+                    //server refuses with invalid_request.
+                    if(introspectionOnChain)
                     {
-                        grantTypes.Add(WellKnownGrantTypes.ClientCredentials);
+                        IReadOnlyList<string> introspectionAlgs = await ResolveSigningAlgValuesAsync(
+                            Verifiable.Cryptography.Context.KeyUsageContext.IntrospectionResponseSigning,
+                            server, registration, context, ct).ConfigureAwait(false);
+                        if(introspectionAlgs.Count > 0)
+                        {
+                            AppendStringArrayField(
+                                sb,
+                                Introspection.IntrospectionServerMetadataParameterNames.IntrospectionSigningAlgValuesSupported,
+                                introspectionAlgs,
+                                emittedFieldNames);
+                        }
                     }
 
-                    if(preAuthorizedCodeOnChain)
-                    {
-                        grantTypes.Add(WellKnownGrantTypes.PreAuthorizedCode);
-                    }
-
-                    if(tokenExchangeOnChain)
-                    {
-                        grantTypes.Add(WellKnownGrantTypes.TokenExchange);
-                    }
-
-                    //ID-JAG §7.2: a Resource Authorization Server advertising the id-jag grant profile
-                    //MUST also include the jwt-bearer grant type. The profile is advertised below under
-                    //the same jwtBearerOnChain condition, so adding jwt-bearer here satisfies that MUST.
-                    if(jwtBearerOnChain)
-                    {
-                        grantTypes.Add(WellKnownGrantTypes.JwtBearer);
-                    }
-
-                    AppendStringArrayField(
-                        sb,
-                        AuthorizationServerMetadataParameterNames.GrantTypesSupported,
-                        grantTypes);
-                }
-
-                //ID-JAG §7.1: an IdP Authorization Server that can mint an Identity Assertion JWT
-                //Authorization Grant via Token Exchange SHOULD advertise the id-jag token type in
-                //identity_chaining_requested_token_types_supported.
-                if(tokenExchangeOnChain)
-                {
-                    AppendStringArrayField(
-                        sb,
-                        AuthorizationServerMetadataParameterNames.IdentityChainingRequestedTokenTypesSupported,
-                        [TokenTypeNames.GetName(TokenType.IdJag)]);
-                }
-
-                //ID-JAG §7.2: a Resource Authorization Server that processes the id-jag grant — it
-                //consumes an ID-JAG as a jwt-bearer assertion — SHOULD advertise the grant profile in
-                //authorization_grant_profiles_supported.
-                if(jwtBearerOnChain)
-                {
-                    AppendStringArrayField(
-                        sb,
-                        AuthorizationServerMetadataParameterNames.AuthorizationGrantProfilesSupported,
-                        [WellKnownGrantProfiles.IdJag]);
-                }
-
-                //pre-authorized_grant_anonymous_access_supported (OID4VCI 1.0 §12.3 OPTIONAL):
-                //"A boolean indicating whether the Credential Issuer accepts a Token Request with
-                //a Pre-Authorized Code but without a client_id. The default is false." Advertised
-                //only when the §6 Pre-Authorized Code token endpoint is on the chain AND the
-                //deployment opted in via policy — the advertisement matches what the
-                //ValidatePreAuthorizedCodeAsync seam will accept (it denies an anonymous request
-                //with ClientAuthenticationRequired when the deployment requires authentication).
-                //Omitted (rather than emitted false) when not opted in, since false is the §12.3
-                //default the Wallet assumes for an absent parameter.
-                if(preAuthorizedCodeOnChain && context.PreAuthorizedGrantAnonymousAccessSupported)
-                {
-                    AppendBooleanField(
-                        sb,
-                        AuthorizationServerMetadataParameterNames.PreAuthorizedGrantAnonymousAccessSupported,
-                        true);
-                }
-
-                //authorization_details_types_supported (RFC 9396 §10). Advertised when a
-                //token grant that can process authorization_details is on the chain AND the
-                //decision seam that mints the OID4VCI §6.2 credential_identifiers is wired —
-                //an advertisement without the seam would invite requests the server refuses
-                //with invalid_authorization_details.
-                if((authorizationCodeOnChain || preAuthorizedCodeOnChain)
-                    && oauth.ResolveCredentialAuthorizationAsync is not null)
-                {
-                    AppendStringArrayField(
-                        sb,
-                        AuthorizationServerMetadataParameterNames.AuthorizationDetailsTypesSupported,
-                        oauth.AuthorizationDetailTypes.RegisteredTypes);
-                }
-
-                //JARM §4: advertise the JWT-secured response modes and signing algorithms
-                //when the authorize endpoint is on the chain AND this registration carries
-                //an authorization-response signing key — an advertisement without the key
-                //would invite response_mode requests the server refuses with invalid_request.
-                if(authorizationCodeOnChain)
-                {
-                    IReadOnlyList<string> jarmAlgs = await ResolveSigningAlgValuesAsync(
-                        Verifiable.Cryptography.Context.KeyUsageContext.AuthorizationResponseSigning,
-                        server, registration, context, ct).ConfigureAwait(false);
-                    if(jarmAlgs.Count > 0)
+                    //code_challenge_methods_supported (RFC 7636 §6.2.1). The
+                    //library only implements S256 — plain is forbidden per OAuth
+                    //2.1 §7.5.1.
+                    if(authorizationCodeOnChain)
                     {
                         AppendStringArrayField(
                             sb,
-                            AuthorizationServerMetadataParameterNames.ResponseModesSupported,
-                            [
-                                "query",
-                                "fragment",
-                                "form_post",
-                                Jarm.JarmResponseModes.QueryJwt,
-                                Jarm.JarmResponseModes.FragmentJwt,
-                                Jarm.JarmResponseModes.FormPostJwt,
-                                Jarm.JarmResponseModes.Jwt
-                            ]);
-                        AppendStringArrayField(
-                            sb,
-                            Jarm.JarmServerMetadataParameterNames.AuthorizationSigningAlgValuesSupported,
-                            jarmAlgs);
-                    }
-                }
+                            AuthorizationServerMetadataParameterNames.CodeChallengeMethodsSupported,
+                            CodeChallengeMethodS256,
+                            emittedFieldNames);
 
-                //RFC 9701 §7: advertise the introspection-response signing algorithms when
-                //the introspection endpoint is on the chain AND this registration carries
-                //an introspection-response signing key — an advertisement without the key
-                //would invite Accept: application/token-introspection+jwt requests the
-                //server refuses with invalid_request.
-                if(introspectionOnChain)
-                {
-                    IReadOnlyList<string> introspectionAlgs = await ResolveSigningAlgValuesAsync(
-                        Verifiable.Cryptography.Context.KeyUsageContext.IntrospectionResponseSigning,
-                        server, registration, context, ct).ConfigureAwait(false);
-                    if(introspectionAlgs.Count > 0)
+                        //FAPI 2.0 §5.2.2 / RFC 9207: advertise whether PAR is mandatory and
+                        //whether the iss authorization-response parameter is emitted. Both
+                        //come from the resolved policy so the advertisement matches enforcement.
+                        AppendBooleanField(
+                            sb,
+                            AuthorizationServerMetadataParameterNames.RequirePushedAuthorizationRequests,
+                            context.RequirePushedAuthorizationRequests,
+                            emittedFieldNames);
+                        AppendBooleanField(
+                            sb,
+                            AuthorizationServerMetadataParameterNames.AuthorizationResponseIssParameterSupported,
+                            context.EmitIssOnRedirect,
+                            emittedFieldNames);
+                    }
+
+                    //RFC 9449 §5.1 — advertise the DPoP proof signature algorithms the AS
+                    //accepts whenever DPoP validation is wired (FAPI 2.0 sender-constrained
+                    //tokens). Independent of the authorize-endpoint chain.
+                    if(oauth.ValidateDpopProofAsync is not null)
                     {
                         AppendStringArrayField(
                             sb,
-                            Introspection.IntrospectionServerMetadataParameterNames.IntrospectionSigningAlgValuesSupported,
-                            introspectionAlgs);
+                            AuthorizationServerMetadataParameterNames.DpopSigningAlgValuesSupported,
+                            WellKnownDpopValues.SupportedSigningAlgorithms,
+                            emittedFieldNames);
                     }
-                }
 
-                //code_challenge_methods_supported (RFC 7636 §6.2.1). The
-                //library only implements S256 — plain is forbidden per OAuth
-                //2.1 §7.5.1.
-                if(authorizationCodeOnChain)
-                {
-                    AppendStringArrayField(
-                        sb,
-                        AuthorizationServerMetadataParameterNames.CodeChallengeMethodsSupported,
-                        CodeChallengeMethodS256);
-
-                    //FAPI 2.0 §5.2.2 / RFC 9207: advertise whether PAR is mandatory and
-                    //whether the iss authorization-response parameter is emitted. Both
-                    //come from the resolved policy so the advertisement matches enforcement.
-                    AppendBooleanField(
-                        sb,
-                        AuthorizationServerMetadataParameterNames.RequirePushedAuthorizationRequests,
-                        context.RequirePushedAuthorizationRequests);
-                    AppendBooleanField(
-                        sb,
-                        AuthorizationServerMetadataParameterNames.AuthorizationResponseIssParameterSupported,
-                        context.EmitIssOnRedirect);
-                }
-
-                //RFC 9449 §5.1 — advertise the DPoP proof signature algorithms the AS
-                //accepts whenever DPoP validation is wired (FAPI 2.0 sender-constrained
-                //tokens). Independent of the authorize-endpoint chain.
-                if(oauth.ValidateDpopProofAsync is not null)
-                {
-                    AppendStringArrayField(
-                        sb,
-                        AuthorizationServerMetadataParameterNames.DpopSigningAlgValuesSupported,
-                        WellKnownDpopValues.SupportedSigningAlgorithms);
-                }
-
-                //OIDC Back-Channel Logout 1.0 §4: advertise back-channel logout only when the
-                //capability is allowed AND the fan-out seam is wired (fail-closed). The OP is
-                //the sender — there is no OP endpoint to chain — so the boolean flags are
-                //emitted here rather than via a candidate's DiscoveryMetadataKey. The OP
-                //includes a sid in its Logout Tokens (the per-session sid), so session-based
-                //back-channel logout is supported too.
-                if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OidcBackChannelLogout)
-                    && oauth.DeliverBackChannelLogoutAsync is not null)
-                {
-                    AppendBooleanField(
-                        sb,
-                        AuthorizationServerMetadataParameterNames.BackchannelLogoutSupported,
-                        true);
-                    AppendBooleanField(
-                        sb,
-                        AuthorizationServerMetadataParameterNames.BackchannelLogoutSessionSupported,
-                        true);
-                }
-
-                //draft-ietf-oauth-client-id-metadata-document-02 §6: advertise
-                //client_id_metadata_document_supported only when the capability is
-                //allowed AND the CIMD resolver seam is wired (fail-closed) — mirroring
-                //the back-channel-logout dual gate above. CIMD applies AS-wide (any
-                //grant a URL-shaped client_id can drive), so this is not gated on
-                //authorizationCodeOnChain.
-                if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthClientIdMetadataDocument)
-                    && oauth.ResolveClientMetadataAsync is not null)
-                {
-                    AppendBooleanField(
-                        sb,
-                        AuthorizationServerMetadataParameterNames.ClientIdMetadataDocumentSupported,
-                        true);
-                }
-
-                //token_endpoint_auth_methods_supported (RFC 8414 §2 OPTIONAL).
-                //The library's token endpoint accepts PKCE-only public clients
-                //per OAuth 2.1 — auth method "none". Deployments that add
-                //client_secret_basic / private_key_jwt / mTLS auth advertise
-                //those via ContributeDiscoveryFieldsAsync; the library default
-                //reflects what the token endpoint code actually accepts today.
-                if(tokenEndpointOnChain)
-                {
-                    AppendStringArrayField(
-                        sb,
-                        AuthorizationServerMetadataParameterNames.TokenEndpointAuthMethodsSupported,
-                        TokenEndpointAuthMethodNone);
-                }
-
-                //scopes_supported (OIDC Discovery §3 RECOMMENDED). Derived
-                //from the registration's per-tenant AllowedScopes set; sorted
-                //lexicographically for deterministic wire output across
-                //ImmutableHashSet's iteration order. Omitted when the
-                //registration has no scopes configured.
-                if(registration.AllowedScopes.Count > 0)
-                {
-                    string[] sortedScopes = registration.AllowedScopes
-                        .OrderBy(static s => s, StringComparer.Ordinal)
-                        .ToArray();
-                    AppendStringArrayField(
-                        sb,
-                        AuthorizationServerMetadataParameterNames.ScopesSupported,
-                        sortedScopes);
-                }
-
-                //claims_supported (OIDC Discovery §3 RECOMMENDED). Lists the
-                //JWT claim names the standard
-                //ContributionProfiles.StandardClaimIssuer rules can emit, plus
-                //the spec-required sub. The list is aspirational per OIDC
-                //Discovery §3 — the OP is not guaranteed to populate every
-                //advertised claim for every request; scope / authentication-
-                //context drives actual emission. Deployments that install
-                //custom contributors extend the list via
-                //ContributeDiscoveryFieldsAsync; the library default reflects
-                //what the standard rules emit. Gated on authorization_code
-                //chain presence because the field is OIDC-specific.
-                if(authorizationCodeOnChain)
-                {
-                    AppendStringArrayField(
-                        sb,
-                        OpenIdProviderMetadataParameterNames.ClaimsSupported,
-                        StandardClaimsSupported);
-
-                    //claim_types_supported (OIDC Core §5.6 / OIDC Discovery §3
-                    //OPTIONAL). The library supplies claim values directly
-                    //(normal claim type per §5.6.1); aggregated and distributed
-                    //claim types are not implemented. Default per OIDC
-                    //Discovery §3 is ["normal"] when the field is absent;
-                    //emitting it explicitly is the unambiguous form.
-                    AppendStringArrayField(
-                        sb,
-                        OpenIdProviderMetadataParameterNames.ClaimTypesSupported,
-                        ClaimTypeNormal);
-                }
-
-                //Application-supplied additional fields merged after the base set.
-                if(oauth.ContributeDiscoveryFieldsAsync is not null)
-                {
-                    DiscoveryDocumentContribution contributed =
-                        await oauth.ContributeDiscoveryFieldsAsync(
-                            registration, context, ct).ConfigureAwait(false);
-
-                    foreach(DiscoveryField field in contributed.Fields)
+                    //OIDC Back-Channel Logout 1.0 §4: advertise back-channel logout only when the
+                    //capability is allowed AND the fan-out seam is wired (fail-closed). The OP is
+                    //the sender — there is no OP endpoint to chain — so the boolean flags are
+                    //emitted here rather than via a candidate's DiscoveryMetadataKey. The OP
+                    //includes a sid in its Logout Tokens (the per-session sid), so session-based
+                    //back-channel logout is supported too.
+                    if(registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OidcBackChannelLogout)
+                        && oauth.DeliverBackChannelLogoutAsync is not null)
                     {
-                        AppendContributedField(sb, field);
+                        AppendBooleanField(
+                            sb,
+                            AuthorizationServerMetadataParameterNames.BackchannelLogoutSupported,
+                            true,
+                            emittedFieldNames);
+                        AppendBooleanField(
+                            sb,
+                            AuthorizationServerMetadataParameterNames.BackchannelLogoutSessionSupported,
+                            true,
+                            emittedFieldNames);
                     }
+
+                    //draft-ietf-oauth-client-id-metadata-document-02 §6: advertise
+                    //client_id_metadata_document_supported only when the capability is
+                    //allowed AND the CIMD resolver seam is wired (fail-closed) — mirroring
+                    //the back-channel-logout dual gate above. CIMD applies AS-wide (any
+                    //grant a URL-shaped client_id can drive), so this is not gated on
+                    //authorizationCodeOnChain.
+                    if(registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthClientIdMetadataDocument)
+                        && oauth.ResolveClientMetadataAsync is not null)
+                    {
+                        AppendBooleanField(
+                            sb,
+                            AuthorizationServerMetadataParameterNames.ClientIdMetadataDocumentSupported,
+                            true,
+                            emittedFieldNames);
+                    }
+
+                    //token_endpoint_auth_methods_supported (RFC 8414 §2 OPTIONAL): "JSON
+                    //array containing a list of client authentication methods supported
+                    //by this token endpoint. ... If omitted, the default is
+                    //'client_secret_basic'." Emitted from the deployment's own
+                    //declaration whenever the token endpoint is on chain — omission
+                    //would advertise client_secret_basic, which the library does not
+                    //judge by default (RequireClientAuthenticationIfDeclaredAsync judges
+                    //every method through the single ValidateClientCredentialsAsync
+                    //seam, never a built-in client_secret_basic path).
+                    if(tokenEndpointOnChain)
+                    {
+                        string[] authMethodNames = [.. oauth.ClientAuthenticationMethodsSupported
+                            .Select(ClientAuthenticationMethodNames.GetName)];
+                        AppendStringArrayField(
+                            sb,
+                            AuthorizationServerMetadataParameterNames.TokenEndpointAuthMethodsSupported,
+                            authMethodNames,
+                            emittedFieldNames);
+
+                        //token_endpoint_auth_signing_alg_values_supported (RFC 8414 §2
+                        //OPTIONAL): "This metadata entry MUST be present if either of
+                        //these authentication methods are specified in the
+                        //'token_endpoint_auth_methods_supported' entry. ... Servers
+                        //SHOULD support 'RS256'." Emitted whenever the deployment
+                        //declared at least one algorithm; Validate() refuses a
+                        //PrivateKeyJwt/ClientSecretJwt declaration with an empty
+                        //algorithm set, so the MUST is met structurally. The RS256
+                        //SHOULD is the deployment's own choice of which algorithms to
+                        //declare — the validator does not demand RS256 specifically.
+                        if(oauth.ClientAssertionSigningAlgorithmsSupported.Count > 0)
+                        {
+                            AppendStringArrayField(
+                                sb,
+                                AuthorizationServerMetadataParameterNames.TokenEndpointAuthSigningAlgValuesSupported,
+                                [.. oauth.ClientAssertionSigningAlgorithmsSupported],
+                                emittedFieldNames);
+                        }
+                    }
+
+                    //scopes_supported (OIDC Discovery §3 RECOMMENDED). Derived
+                    //from the registration's per-tenant AllowedScopes set; sorted
+                    //lexicographically for deterministic wire output across
+                    //ImmutableHashSet's iteration order. Omitted when the
+                    //registration has no scopes configured.
+                    if(registration.AllowedScopes.Count > 0)
+                    {
+                        string[] sortedScopes = registration.AllowedScopes
+                            .OrderBy(static s => s, StringComparer.Ordinal)
+                            .ToArray();
+                        AppendStringArrayField(
+                            sb,
+                            AuthorizationServerMetadataParameterNames.ScopesSupported,
+                            sortedScopes,
+                            emittedFieldNames);
+                    }
+
+                    //claims_supported (OIDC Discovery §3 RECOMMENDED). Lists the
+                    //JWT claim names the standard
+                    //ContributionProfiles.StandardClaimIssuer rules can emit, plus
+                    //the spec-required sub. The list is aspirational per OIDC
+                    //Discovery §3 — the OP is not guaranteed to populate every
+                    //advertised claim for every request; scope / authentication-
+                    //context drives actual emission. Deployments that install
+                    //custom contributors extend the list via
+                    //ContributeDiscoveryFieldsAsync; the library default reflects
+                    //what the standard rules emit. Gated on authorization_code
+                    //chain presence because the field is OIDC-specific.
+                    if(authorizationCodeOnChain)
+                    {
+                        AppendStringArrayField(
+                            sb,
+                            OpenIdProviderMetadataParameterNames.ClaimsSupported,
+                            StandardClaimsSupported,
+                            emittedFieldNames);
+
+                        //claim_types_supported (OIDC Core §5.6 / OIDC Discovery §3
+                        //OPTIONAL). The library supplies claim values directly
+                        //(normal claim type per §5.6.1); aggregated and distributed
+                        //claim types are not implemented. Default per OIDC
+                        //Discovery §3 is ["normal"] when the field is absent;
+                        //emitting it explicitly is the unambiguous form.
+                        AppendStringArrayField(
+                            sb,
+                            OpenIdProviderMetadataParameterNames.ClaimTypesSupported,
+                            ClaimTypeNormal,
+                            emittedFieldNames);
+                    }
+
+                    //Application-supplied additional fields merged after the base set.
+                    if(oauth.ContributeDiscoveryFieldsAsync is not null)
+                    {
+                        DiscoveryDocumentContribution contributed =
+                            await oauth.ContributeDiscoveryFieldsAsync(
+                                registration, context, ct).ConfigureAwait(false);
+
+                        foreach(DiscoveryField field in contributed.Fields)
+                        {
+                            AppendContributedField(sb, field, emittedFieldNames);
+                        }
+                    }
+
+                    sb.Append('}');
+
+                    discoveryJson = sb.ToString();
+                }
+                finally
+                {
+                    JsonAppender.Return(sb);
                 }
 
-                sb.Append('}');
-
-                string discoveryJson = sb.ToString();
-                JsonAppender.Return(sb);
                 return (null, ServerHttpResponse.Ok(discoveryJson, WellKnownMediaTypes.Application.Json));
             },
 
@@ -746,7 +810,12 @@ public static class MetadataEndpoints
     /// <param name="sb">The <see cref="StringBuilder"/> the field is written to.</param>
     /// <param name="key">The JSON property name.</param>
     /// <param name="value">The JSON property value, written as a JSON string.</param>
-    private static void AppendField(StringBuilder sb, string key, string value)
+    /// <param name="emittedFieldNames">
+    /// The per-document set of member names the base emission has written so far;
+    /// <paramref name="key"/> is recorded into it so a later contributed field of
+    /// the same name is refused (RFC 8259 §4).
+    /// </param>
+    private static void AppendField(StringBuilder sb, string key, string value, HashSet<string> emittedFieldNames)
     {
         //Discovery callers always emit issuer first, so subsequent fields
         //carry a leading comma. Threading first=false into JsonAppender
@@ -754,6 +823,7 @@ public static class MetadataEndpoints
         //primitive.
         bool first = false;
         JsonAppender.AppendStringField(sb, key, value, ref first);
+        emittedFieldNames.Add(key);
     }
 
 
@@ -763,15 +833,23 @@ public static class MetadataEndpoints
     /// comma; callers must have written the opening brace and at least the
     /// <c>issuer</c> field before calling. No-ops on an empty list to avoid
     /// emitting <c>"key":[]</c> for fields that should be omitted entirely
-    /// when no values are available.
+    /// when no values are available — and correspondingly does not record
+    /// <paramref name="key"/> into <paramref name="emittedFieldNames"/> when
+    /// nothing was written.
     /// </summary>
+    /// <param name="emittedFieldNames">
+    /// The per-document set of member names the base emission has written so far;
+    /// <paramref name="key"/> is recorded into it when the array is non-empty, so a
+    /// later contributed field of the same name is refused (RFC 8259 §4).
+    /// </param>
     private static void AppendStringArrayField(
-        StringBuilder sb, string key, IReadOnlyList<string> values)
+        StringBuilder sb, string key, IReadOnlyList<string> values, HashSet<string> emittedFieldNames)
     {
         if(values.Count == 0) { return; }
 
         bool first = false;
         JsonAppender.AppendStringArrayField(sb, key, values, ref first);
+        emittedFieldNames.Add(key);
     }
 
 
@@ -780,10 +858,16 @@ public static class MetadataEndpoints
     /// <c>,"key":true|false</c>. Always emits the leading comma; callers must have
     /// written the opening brace and at least the <c>issuer</c> field first.
     /// </summary>
-    private static void AppendBooleanField(StringBuilder sb, string key, bool value)
+    /// <param name="emittedFieldNames">
+    /// The per-document set of member names the base emission has written so far;
+    /// <paramref name="key"/> is recorded into it so a later contributed field of
+    /// the same name is refused (RFC 8259 §4).
+    /// </param>
+    private static void AppendBooleanField(StringBuilder sb, string key, bool value, HashSet<string> emittedFieldNames)
     {
         bool first = false;
         JsonAppender.AppendBoolField(sb, key, value, ref first);
+        emittedFieldNames.Add(key);
     }
 
 
@@ -791,7 +875,6 @@ public static class MetadataEndpoints
     private static IReadOnlyList<string> SubjectTypePublic { get; } = ["public"];
     private static IReadOnlyList<string> ResponseTypeCode { get; } = ["code"];
     private static IReadOnlyList<string> CodeChallengeMethodS256 { get; } = ["S256"];
-    private static IReadOnlyList<string> TokenEndpointAuthMethodNone { get; } = ["none"];
     private static IReadOnlyList<string> ClaimTypeNormal { get; } = ["normal"];
 
     /// <summary>
@@ -869,7 +952,7 @@ public static class MetadataEndpoints
         CancellationToken cancellationToken)
     {
         var oauth = server.OAuth();
-        if(!((ClientRecord)registration).SigningKeys.TryGetValue(usage, out SigningKeySet? signingKeySet))
+        if(!registration.SigningKeys.TryGetValue(usage, out SigningKeySet? signingKeySet))
         {
             return [];
         }
@@ -916,12 +999,30 @@ public static class MetadataEndpoints
     /// <see cref="AuthorizationServerIntegration.ContributeDiscoveryFieldsAsync"/>;
     /// the closed <see cref="DiscoveryField"/> hierarchy means the library
     /// knows the JSON shape of every value at compile time without any
-    /// runtime CLR-type inspection.
+    /// runtime CLR-type inspection. A field naming a member already present in
+    /// <paramref name="emittedFieldNames"/> — one the base emission wrote, or an
+    /// earlier contributed field of the same name — is a composition defect
+    /// (RFC 8259 §4: "The names within an object SHOULD be unique") and is
+    /// refused rather than written, so the document never carries a duplicate
+    /// name.
     /// </remarks>
     /// <param name="sb">The <see cref="StringBuilder"/> the field is written to.</param>
     /// <param name="field">The contributed field, dispatched on its record subtype.</param>
-    private static void AppendContributedField(StringBuilder sb, DiscoveryField field)
+    /// <param name="emittedFieldNames">The per-document set of member names already written.</param>
+    /// <exception cref="InvalidOperationException">
+    /// <paramref name="field"/>'s <see cref="DiscoveryField.Name"/> is already in
+    /// <paramref name="emittedFieldNames"/>.
+    /// </exception>
+    private static void AppendContributedField(StringBuilder sb, DiscoveryField field, HashSet<string> emittedFieldNames)
     {
+        if(!emittedFieldNames.Add(field.Name))
+        {
+            throw new InvalidOperationException(
+                $"The discovery document contribution names '{field.Name}', which the base "
+                + "discovery emission already wrote. A contributed field must not duplicate a "
+                + "member the library emits; remove it from the contribution.");
+        }
+
         bool first = false;
         _ = field switch
         {

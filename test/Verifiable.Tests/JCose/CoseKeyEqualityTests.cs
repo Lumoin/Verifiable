@@ -212,7 +212,11 @@ internal sealed class CoseKeyEqualityTests
     }
 
 
-    /// <summary><see cref="CoseKey.Equals(object?)"/> reports <see langword="false"/> for a non-<see cref="CoseKey"/> object.</summary>
+    /// <summary>
+    /// <see cref="CoseKey.Equals(object?)"/> reports <see langword="false"/> for a non-<see cref="CoseKey"/> object.
+    /// The comparison is deliberately cross-type: it is the <see cref="object.Equals(object?)"/> contract's own
+    /// "different type" case, proved here with a <see cref="string"/> operand.
+    /// </summary>
     [TestMethod]
     public void EqualsObjectReturnsFalseForUnrelatedType()
     {

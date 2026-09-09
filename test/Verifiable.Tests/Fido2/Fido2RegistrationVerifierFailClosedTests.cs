@@ -4,6 +4,7 @@ using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Fido2;
 
@@ -70,19 +71,7 @@ internal sealed class Fido2RegistrationVerifierFailClosedTests
         SelectAttestationVerifierDelegate selectVerifier = Fido2AttestationSelectors.FromFormats(
             (WellKnownWebAuthnAttestationFormats.Packed, throwingVerify));
 
-        Fido2RegistrationOutcome outcome = await Fido2RegistrationVerifier.VerifyAsync(
-            WellKnownWebAuthnAttestationFormats.Packed,
-            attestationStatement: ReadOnlyMemory<byte>.Empty,
-            authDataBytes,
-            clientDataJson,
-            ceremonyInput,
-            selectVerifier,
-            AlwaysUnique,
-            trustAnchors: [],
-            validationTime: TestClock.CanonicalEpoch,
-            CorrelationId,
-            BaseMemoryPool.Shared,
-            cancellationToken: TestContext.CancellationToken);
+        Fido2RegistrationOutcome outcome = await Fido2RegistrationVerifier.VerifyAsync(WellKnownWebAuthnAttestationFormats.Packed, attestationStatement: ReadOnlyMemory<byte>.Empty, authDataBytes, clientDataJson, ceremonyInput, selectVerifier, AlwaysUnique, trustAnchors: [], validationTime: TestClock.CanonicalEpoch, CorrelationId, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         RejectedAttestationResult rejected = Assert.IsInstanceOfType<RejectedAttestationResult>(outcome.AttestationResult);
         Assert.AreEqual(Fido2AttestationErrors.VerificationFailed.Code, rejected.Error.Code);
@@ -117,19 +106,7 @@ internal sealed class Fido2RegistrationVerifierFailClosedTests
         SelectAttestationVerifierDelegate selectVerifier = Fido2AttestationSelectors.FromFormats(
             (WellKnownWebAuthnAttestationFormats.Packed, ThrowAfterAwaitAsync));
 
-        Fido2RegistrationOutcome outcome = await Fido2RegistrationVerifier.VerifyAsync(
-            WellKnownWebAuthnAttestationFormats.Packed,
-            attestationStatement: ReadOnlyMemory<byte>.Empty,
-            authDataBytes,
-            clientDataJson,
-            ceremonyInput,
-            selectVerifier,
-            AlwaysUnique,
-            trustAnchors: [],
-            validationTime: TestClock.CanonicalEpoch,
-            CorrelationId,
-            BaseMemoryPool.Shared,
-            cancellationToken: TestContext.CancellationToken);
+        Fido2RegistrationOutcome outcome = await Fido2RegistrationVerifier.VerifyAsync(WellKnownWebAuthnAttestationFormats.Packed, attestationStatement: ReadOnlyMemory<byte>.Empty, authDataBytes, clientDataJson, ceremonyInput, selectVerifier, AlwaysUnique, trustAnchors: [], validationTime: TestClock.CanonicalEpoch, CorrelationId, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         RejectedAttestationResult rejected = Assert.IsInstanceOfType<RejectedAttestationResult>(outcome.AttestationResult);
         Assert.AreEqual(Fido2AttestationErrors.VerificationFailed.Code, rejected.Error.Code);

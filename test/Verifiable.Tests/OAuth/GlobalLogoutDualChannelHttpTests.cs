@@ -64,7 +64,7 @@ internal sealed class GlobalLogoutDualChannelHttpTests
     private const string GtrClientId = "https://gtr.client.test";
 
     /// <summary>The base URI the GTR client is reachable at.</summary>
-    private static readonly Uri GtrClientBaseUri = new("https://gtr.client.test");
+    private static Uri GtrClientBaseUri { get; } = new("https://gtr.client.test");
 
     /// <summary>The <c>sub</c> half of the revoked iss_sub subject — the end-user logged out everywhere.</summary>
     private const string RevokedSubject = "subject-123";
@@ -77,7 +77,7 @@ internal sealed class GlobalLogoutDualChannelHttpTests
         /*lang=json,strict*/ "{\"sub_id\":{\"format\":\"iss_sub\",\"iss\":\"https://issuer.test\",\"sub\":\"subject-123\"}}";
 
     /// <summary>The single capability the Global Token Revocation endpoint requires.</summary>
-    private static readonly ImmutableHashSet<CapabilityIdentifier> GtrCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> GtrCapabilities { get; } =
         ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.OAuthGlobalTokenRevocation);
 
 

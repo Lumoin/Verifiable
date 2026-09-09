@@ -445,7 +445,16 @@ public static class BouncyCastleKeyAgreementFunctions
 
         //Write the 32-byte shared secret straight into pooled memory — no naked byte[].
         IMemoryOwner<byte> zOwner = pool.Rent(agreement.AgreementSize, AllocationKind.Pinned);
-        agreement.CalculateAgreement(epkParam, zOwner.Memory.Span[..agreement.AgreementSize]);
+        try
+        {
+            agreement.CalculateAgreement(epkParam, zOwner.Memory.Span[..agreement.AgreementSize]);
+        }
+        catch
+        {
+            zOwner.Dispose();
+
+            throw;
+        }
 
         //Reject a degenerate (all-zero) secret from a low-order epk before it derives a key (RFC 7748 §6.1).
         if(IsAllZeroX25519Secret(zOwner.Memory.Span[..agreement.AgreementSize]))
@@ -832,10 +841,18 @@ public static class BouncyCastleKeyAgreementFunctions
     /// algorithm). Matches <see cref="AeadEncryptDelegate"/>.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// A fresh 192-bit extended nonce is generated per operation; XChaCha20's nonce is large enough that
     /// random generation carries no birthday-bound concern, unlike AES-GCM's 96-bit nonce. The 256-bit
     /// subkey and the RFC 8439 96-bit nonce are derived per draft-irtf-cfrg-xchacha-03 §2.3 and the AEAD
     /// itself is BouncyCastle's RFC 8439 ChaCha20-Poly1305 over the subkey.
+    /// </para>
+    /// <para>
+    /// <paramref name="pool"/>'s three rented owners are deliberately not <c>using</c> declarations: on
+    /// success their ownership transfers to the returned <see cref="AeadEncryptResult"/>, which the caller
+    /// disposes; the surrounding try/catch disposes all three only on the throw path, before the exception
+    /// propagates.
+    /// </para>
     /// </remarks>
     /// <param name="plaintext">The plaintext bytes to encrypt.</param>
     /// <param name="key">The 256-bit content encryption key. Must be disposed by the caller after this method returns.</param>
@@ -888,7 +905,7 @@ public static class BouncyCastleKeyAgreementFunctions
             //ChaCha20-Poly1305 emits ciphertext (1:1 with plaintext) then the 16-byte tag; the combined
             //buffer splits at the plaintext length regardless of how the calls partition their writes.
             int written = aead.ProcessBytes(plaintext.Span, combinedOwner.Memory.Span);
-            written += aead.DoFinal(combinedOwner.Memory.Span[written..]);
+            aead.DoFinal(combinedOwner.Memory.Span[written..]);
 
             combinedOwner.Memory.Span.Slice(0, plaintext.Length).CopyTo(ciphertextOwner.Memory.Span[..plaintext.Length]);
             combinedOwner.Memory.Span.Slice(plaintext.Length, XChaCha20TagLength).CopyTo(tagOwner.Memory.Span[..XChaCha20TagLength]);
@@ -930,6 +947,12 @@ public static class BouncyCastleKeyAgreementFunctions
     /// <see cref="InvalidCipherTextException"/>, which is translated here so the
     /// <see cref="AeadDecryptDelegate"/> tag-failure contract holds across backends.
     /// </exception>
+    /// <remarks>
+    /// <paramref name="pool"/>'s <c>plaintextOwner</c> is deliberately not a <c>using</c> declaration: on
+    /// success its ownership transfers to the returned <see cref="DecryptedContent"/>, which the caller
+    /// disposes; the surrounding catch clauses dispose it only on the throw path, before the exception
+    /// propagates.
+    /// </remarks>
     public static async ValueTask<DecryptedContent> XChaCha20Poly1305DecryptAsync(
         Ciphertext ciphertext,
         SymmetricKeyMemory key,
@@ -1011,9 +1034,16 @@ public static class BouncyCastleKeyAgreementFunctions
     }
 
 
-    //Derives the XChaCha20-Poly1305 256-bit subkey and 96-bit RFC 8439 nonce from the 256-bit key and the
-    //192-bit extended nonce (draft-irtf-cfrg-xchacha-03 §2.3): subkey = HChaCha20(key, nonce[0..16]); the
-    //inner nonce is four zero bytes followed by nonce[16..24].
+    /// <summary>
+    /// Derives the XChaCha20-Poly1305 256-bit subkey and 96-bit RFC 8439 nonce from the 256-bit key and the
+    /// 192-bit extended nonce (draft-irtf-cfrg-xchacha-03 §2.3): subkey = HChaCha20(key, nonce[0..16]); the
+    /// inner nonce is four zero bytes followed by nonce[16..24]. The two-line body mirrors that two-part
+    /// formula directly; there is no further step to extract.
+    /// </summary>
+    /// <param name="key">The 256-bit XChaCha20 key.</param>
+    /// <param name="extendedNonce">The 192-bit extended nonce.</param>
+    /// <param name="subkey">Receives the derived 256-bit subkey.</param>
+    /// <param name="innerNonce">Receives the derived 96-bit RFC 8439 inner nonce.</param>
     private static void DeriveXChaCha20SubkeyAndNonce(
         ReadOnlySpan<byte> key,
         ReadOnlySpan<byte> extendedNonce,
@@ -1176,18 +1206,25 @@ public static class BouncyCastleKeyAgreementFunctions
         agreement.Init(privateKeyParam);
 
         IMemoryOwner<byte> zOwner = pool.Rent(2 * X25519SharedSecretSize, AllocationKind.Pinned);
-        agreement.CalculateAgreement(epkParam, zOwner.Memory.Span[..X25519SharedSecretSize]);
+        try
+        {
+            agreement.CalculateAgreement(epkParam, zOwner.Memory.Span[..X25519SharedSecretSize]);
 
-        //The ephemeral half (Ze) is derived from the attacker-supplied epk; reject a degenerate (all-zero)
-        //value from a low-order epk before either half feeds key derivation (RFC 7748 §6.1).
-        if(IsAllZeroX25519Secret(zOwner.Memory.Span[..X25519SharedSecretSize]))
+            //The ephemeral half (Ze) is derived from the attacker-supplied epk; reject a degenerate (all-zero)
+            //value from a low-order epk before either half feeds key derivation (RFC 7748 §6.1).
+            if(IsAllZeroX25519Secret(zOwner.Memory.Span[..X25519SharedSecretSize]))
+            {
+                throw new CryptographicException("The ECDH-1PU ephemeral X25519 shared secret is all-zero (a low-order ephemeral public key).");
+            }
+
+            agreement.CalculateAgreement(senderParam, zOwner.Memory.Span[X25519SharedSecretSize..(2 * X25519SharedSecretSize)]);
+        }
+        catch
         {
             zOwner.Dispose();
 
-            throw new CryptographicException("The ECDH-1PU ephemeral X25519 shared secret is all-zero (a low-order ephemeral public key).");
+            throw;
         }
-
-        agreement.CalculateAgreement(senderParam, zOwner.Memory.Span[X25519SharedSecretSize..(2 * X25519SharedSecretSize)]);
 
         return ValueTask.FromResult(new SharedSecret(zOwner, CryptoTags.X25519PrivateKey));
     }

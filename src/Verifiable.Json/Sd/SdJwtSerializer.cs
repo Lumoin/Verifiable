@@ -93,78 +93,126 @@ public static class SdJwtSerializer
         }
         catch(Exception ex)
         {
+            //decoder is a caller-supplied delegate whose implementation-specific exception vocabulary this
+            //method cannot enumerate; every failure normalizes to the public FormatException contract.
             throw new FormatException("Invalid Base64Url encoding in disclosure.", ex);
         }
 
         using(jsonBytes)
         {
-            using JsonDocument doc = JsonDocument.Parse(jsonBytes.Memory);
-            JsonElement root = doc.RootElement;
-
-            if(root.ValueKind != JsonValueKind.Array)
-            {
-                throw new FormatException("Disclosure must be a JSON array.");
-            }
-
-            int length = root.GetArrayLength();
-
-            if(length < 2 || length > 3)
-            {
-                throw new FormatException($"Disclosure array must have 2 or 3 elements, got {length}.");
-            }
-
-            string saltString = root[0].GetString()
-                ?? throw new FormatException("Salt cannot be null.");
-
-            IMemoryOwner<byte> saltOwner;
+            JsonDocument doc;
             try
             {
-                saltOwner = decoder(saltString, pool);
+                doc = JsonDocument.Parse(jsonBytes.Memory);
             }
-            catch(Exception ex)
+            catch(JsonException exception)
             {
-                throw new FormatException("Invalid Base64Url encoding in salt.", ex);
-            }
-
-            //Wrap the wire-decoded salt bytes in a Salt instance. Ownership of saltOwner
-            //transfers into the Salt. The Salt then transfers into the SdDisclosure via
-            //CreateProperty/CreateArrayElement; the disclosure disposes the Salt (and
-            //therefore the IMemoryOwner) when the disclosure is disposed.
-            //
-            //If wrapping or factory construction fails before the disclosure exists,
-            //we own the IMemoryOwner and must dispose it explicitly. The Salt instance
-            //itself, once constructed, takes care of its own owner via Dispose.
-            Salt salt;
-            try
-            {
-                salt = new Salt(saltOwner, saltTag, lifetime: null);
-            }
-            catch
-            {
-                saltOwner.Dispose();
-                throw;
+                throw new FormatException("Disclosure is not valid JSON.", exception);
             }
 
-            //From here, ownership is with `salt`. CreateProperty/CreateArrayElement
-            //take ownership of `salt` and dispose it on construction failure (e.g.,
-            //null/empty claim name).
-            if(length == 2)
+            using(doc)
             {
-                object? value = JsonElementConversion.Convert(root[1]);
-                return SdDisclosure.CreateArrayElement(salt, value);
-            }
-            else
-            {
-                //If GetString() throws or returns null, dispose `salt` before propagating.
-                string? claimName = root[1].GetString();
+                JsonElement root = doc.RootElement;
+
+                if(root.ValueKind != JsonValueKind.Array)
+                {
+                    throw new FormatException("Disclosure must be a JSON array.");
+                }
+
+                int length = root.GetArrayLength();
+
+                if(length < 2 || length > 3)
+                {
+                    throw new FormatException($"Disclosure array must have 2 or 3 elements, got {length}.");
+                }
+
+                string saltString = root[0].GetString()
+                    ?? throw new FormatException("Salt cannot be null.");
+
+                IMemoryOwner<byte> saltOwner;
+                try
+                {
+                    saltOwner = decoder(saltString, pool);
+                }
+                catch(Exception ex)
+                {
+                    //Same rationale as the disclosure decode above: decoder's exception vocabulary is not
+                    //enumerable here, so every failure normalizes to the public FormatException contract.
+                    throw new FormatException("Invalid Base64Url encoding in salt.", ex);
+                }
+
+                //Wrap the wire-decoded salt bytes in a Salt instance. Ownership of saltOwner
+                //transfers into the Salt. The Salt then transfers into the SdDisclosure via
+                //CreateProperty/CreateArrayElement; the disclosure disposes the Salt (and
+                //therefore the IMemoryOwner) when the disclosure is disposed.
+                //
+                //If wrapping or factory construction fails before the disclosure exists,
+                //we own the IMemoryOwner and must dispose it explicitly. The Salt instance
+                //itself, once constructed, takes care of its own owner via Dispose.
+                Salt salt;
+                try
+                {
+                    salt = new Salt(saltOwner, saltTag, lifetime: null);
+                }
+                catch
+                {
+                    saltOwner.Dispose();
+                    throw;
+                }
+
+                //From here, ownership is with `salt`. CreateProperty/CreateArrayElement take ownership of
+                //`salt` and dispose it on construction failure (e.g. null/empty claim name), so once one
+                //of them is reached, this method disposes salt no further. Reading the array's own
+                //elements below can itself throw (a claim-name slot that is not a JSON string, a
+                //malformed value element) before that hand-off, at which point salt is still unowned.
+                if(length == 2)
+                {
+                    object? arrayValue;
+                    try
+                    {
+                        arrayValue = JsonElementConversion.Convert(root[1]);
+                    }
+                    catch
+                    {
+                        salt.Dispose();
+
+                        throw;
+                    }
+
+                    return SdDisclosure.CreateArrayElement(salt, arrayValue);
+                }
+
+                string? claimName;
+                try
+                {
+                    claimName = root[1].GetString();
+                }
+                catch
+                {
+                    salt.Dispose();
+
+                    throw;
+                }
+
                 if(string.IsNullOrEmpty(claimName))
                 {
                     salt.Dispose();
                     throw new FormatException("Claim name cannot be null.");
                 }
 
-                object? value = JsonElementConversion.Convert(root[2]);
-                return SdDisclosure.CreateProperty(salt, claimName, value);
+                object? propertyValue;
+                try
+                {
+                    propertyValue = JsonElementConversion.Convert(root[2]);
+                }
+                catch
+                {
+                    salt.Dispose();
+
+                    throw;
+                }
+
+                return SdDisclosure.CreateProperty(salt, claimName, propertyValue);
             }
         }
     }
@@ -203,21 +251,37 @@ public static class SdJwtSerializer
 
 
     /// <summary>
-    /// Parses an SD-JWT token from its wire format.
+    /// Parses an SD-JWT token from its wire format. Computes <see cref="SdToken{TEnvelope}.DisclosurePaths"/>
+    /// and <see cref="SdToken{TEnvelope}.IssuerSignedClaims"/> by walking the issuer-signed
+    /// payload's digest tree, sharing the walker core with <see cref="SdJwtPathExtraction.ExtractPaths"/>.
     /// </summary>
     /// <param name="sdJwt">The SD-JWT string.</param>
     /// <param name="decoder">Delegate for Base64Url decoding.</param>
+    /// <param name="encoder">Delegate for Base64Url encoding, used to compute disclosure digests.</param>
     /// <param name="pool">Memory pool for allocations.</param>
     /// <param name="saltTag">
     /// The tag to stamp on each wire-decoded <see cref="Salt"/> (one per disclosure).
     /// </param>
+    /// <param name="hashAlgorithm">The disclosure-digest hash algorithm in IANA format.</param>
     /// <returns>The parsed token. Caller owns the returned token; disposing it disposes
     /// all contained disclosures and their salts.</returns>
-    /// <exception cref="FormatException">Thrown when the format is invalid.</exception>
-    public static SdToken<string> ParseToken(string sdJwt, DecodeDelegate decoder, BaseMemoryPool pool, Tag saltTag)
+    /// <exception cref="FormatException">
+    /// Thrown when the format is invalid, when the issuer-signed payload is not valid JSON, when two
+    /// disclosures carry the same salt bytes (RFC 9901 §9.3), when a same-level claim name collides
+    /// (RFC 9901 §7.1 step 3.c.ii.3), or when a disclosure is not referenced by any digest in the
+    /// payload (RFC 9901 §7.1 step 5).
+    /// </exception>
+    public static SdToken<string> ParseToken(
+        string sdJwt,
+        DecodeDelegate decoder,
+        EncodeDelegate encoder,
+        BaseMemoryPool pool,
+        Tag saltTag,
+        string hashAlgorithm = WellKnownHashAlgorithms.Sha256Iana)
     {
         ArgumentException.ThrowIfNullOrEmpty(sdJwt);
         ArgumentNullException.ThrowIfNull(decoder);
+        ArgumentNullException.ThrowIfNull(encoder);
         ArgumentNullException.ThrowIfNull(pool);
         ArgumentNullException.ThrowIfNull(saltTag);
 
@@ -236,7 +300,17 @@ public static class SdJwtSerializer
         }
 
         var disclosures = new List<SdDisclosure>();
+        var digestToDisclosure = new Dictionary<string, SdDisclosure>(StringComparer.Ordinal);
+
+        //RFC 9901 §9.3: "The Issuer MUST ensure that a new salt value is chosen for each claim,
+        //including when the same claim name occurs at different places in the structure of the
+        //SD-JWT." SdDisclosure equality is its salt bytes, so this set is exactly a
+        //salt-collision detector: a wire form carrying two disclosures under one salt is
+        //malformed, and admitting it would let a forged disclosure ride a legitimate one's
+        //identity through the parse plumbing.
+        var saltsSeen = new HashSet<SdDisclosure>();
         string? keyBindingJwt = null;
+        SdJwtWalkResult walkResult;
 
         try
         {
@@ -257,13 +331,52 @@ public static class SdJwtSerializer
                 {
                     SdDisclosure disclosure = ParseDisclosure(part, decoder, pool, saltTag);
                     disclosures.Add(disclosure);
+
+                    if(!saltsSeen.Add(disclosure))
+                    {
+                        throw new FormatException(
+                            "RFC 9901 §9.3: two Disclosures carry the same salt value; the Issuer must choose a new salt for each claim.");
+                    }
+
+                    //The digest is computed over the disclosure exactly as it appeared on the
+                    //wire (RFC 9901 §4.2.3) — the original encoded text, never a re-serialization
+                    //of the parsed value, which could legitimately differ byte-for-byte.
+                    string digest = SdJwtPathExtraction.ComputeDisclosureDigest(part, hashAlgorithm, encoder, pool);
+                    digestToDisclosure[digest] = disclosure;
+                }
+            }
+
+            walkResult = SdJwtPathExtraction.Walk(issuerJwt, digestToDisclosure, decoder, pool);
+
+            //RFC 9901 §7.1 step 5: every Disclosure the wire form carries must be referenced by
+            //some digest, directly or recursively via another Disclosure — a Disclosure Walk
+            //could not place is a parse failure, not silently dropped.
+            foreach(SdDisclosure disclosure in disclosures)
+            {
+                if(!walkResult.DisclosurePaths.ContainsKey(disclosure))
+                {
+                    throw new FormatException(
+                        $"RFC 9901 §7.1 step 5: the disclosure '{disclosure}' is not referenced by any digest in the issuer-signed payload.");
                 }
             }
         }
+        catch(JsonException exception)
+        {
+            //JsonDocument.Parse (inside SdJwtPathExtraction.Walk) throws its own JsonException for a
+            //non-JSON issuer-signed payload; this method's public contract is FormatException for
+            //every wire-shape rejection, so the leaf's own exception type is normalized here rather
+            //than left to escape as System.Text.Json's.
+            foreach(SdDisclosure d in disclosures)
+            {
+                d.Dispose();
+            }
+            throw new FormatException("The SD-JWT issuer-signed payload is not valid JSON.", exception);
+        }
         catch
         {
-            //If any disclosure fails to parse, dispose every disclosure already
-            //constructed before propagating. The token never came into existence.
+            //If any disclosure fails to parse, or the payload fails the digest-resolution
+            //rules, dispose every disclosure already constructed before propagating. The
+            //token never came into existence.
             foreach(SdDisclosure d in disclosures)
             {
                 d.Dispose();
@@ -271,7 +384,13 @@ public static class SdJwtSerializer
             throw;
         }
 
-        return new SdToken<string>(issuerJwt, disclosures, keyBindingJwt);
+        return SdToken<string>.CreateParsed(
+            issuerJwt,
+            disclosures,
+            new SdDisclosurePaths(walkResult.DisclosurePaths),
+            walkResult.IssuerSignedClaims,
+            walkResult.DisclosureInteriorClaims,
+            keyBindingJwt);
     }
 
 
@@ -280,13 +399,22 @@ public static class SdJwtSerializer
     /// </summary>
     /// <param name="sdJwt">The SD-JWT string.</param>
     /// <param name="decoder">Delegate for Base64Url decoding.</param>
+    /// <param name="encoder">Delegate for Base64Url encoding, used to compute disclosure digests.</param>
     /// <param name="pool">Memory pool for allocations.</param>
     /// <param name="saltTag">
     /// The tag to stamp on each wire-decoded <see cref="Salt"/>.
     /// </param>
     /// <param name="token">The parsed token if successful. Caller owns and disposes.</param>
+    /// <param name="hashAlgorithm">The disclosure-digest hash algorithm in IANA format.</param>
     /// <returns><c>true</c> if parsing succeeded; otherwise, <c>false</c>.</returns>
-    public static bool TryParseToken(string? sdJwt, DecodeDelegate decoder, BaseMemoryPool pool, Tag saltTag, out SdToken<string>? token)
+    public static bool TryParseToken(
+        string? sdJwt,
+        DecodeDelegate decoder,
+        EncodeDelegate encoder,
+        BaseMemoryPool pool,
+        Tag saltTag,
+        out SdToken<string>? token,
+        string hashAlgorithm = WellKnownHashAlgorithms.Sha256Iana)
     {
         token = null;
 
@@ -297,7 +425,7 @@ public static class SdJwtSerializer
 
         try
         {
-            token = ParseToken(sdJwt, decoder, pool, saltTag);
+            token = ParseToken(sdJwt, decoder, encoder, pool, saltTag, hashAlgorithm);
             return true;
         }
         catch
@@ -370,6 +498,14 @@ public static class SdJwtSerializer
     }
 
 
+    /// <summary>
+    /// Tells whether <paramref name="c"/> is a member of the Base64URL alphabet
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc4648#section-5">RFC 4648 section 5</see>). The
+    /// boolean expression mirrors the alphabet's four character classes directly; a named predicate per
+    /// class would only rename the citation, not simplify it.
+    /// </summary>
+    /// <param name="c">The character to classify.</param>
+    /// <returns><see langword="true"/> when <paramref name="c"/> is in the Base64URL alphabet.</returns>
     private static bool IsBase64UrlChar(char c)
     {
         return (c >= 'A' && c <= 'Z') ||

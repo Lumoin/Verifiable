@@ -20,6 +20,7 @@ using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Fido2;
 
@@ -30,7 +31,9 @@ namespace Verifiable.Tests.Fido2;
 /// in-house <see cref="TpmSimulator"/> instance plays the durable chip and OUTLIVES every
 /// <see cref="CtapAuthenticatorSimulator"/> instance built against it, and every assertion reads a
 /// wire-visible fact over the real, unmodified APDU transport (<see cref="CtapNfcTransportHarness"/>) —
-/// never internal simulator or TPM state.
+/// never internal simulator or TPM state. Each test's <c>(TpmDevice tpm, uint parentHandle)</c> pair is a
+/// tuple-deconstruction target, disposed/flushed in the method's own <see langword="finally"/> block
+/// because a <see langword="using"/> declaration cannot target a tuple-deconstruction assignment.
 /// </summary>
 [TestClass]
 internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
@@ -72,7 +75,7 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
             byte[] earlyBlob;
 
             CtapAuthenticatorSimulator simulator1 = await CtapClientPinFixtures.CreateSimulatorWithCustodyAsync(
-                RunId, BuildStateCustody(tpm, parentHandle, sealAuth, store), aaguid, pinRetriesCustody: pinCustody, cancellationToken: cancellationToken)
+                RunId, BuildStateCustody(tpm, parentHandle, sealAuth, store), aaguid, BaseMemoryPool.Shared, pinRetriesCustody: pinCustody, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
             using(CtapNfcTransportHarness harness1 = await CtapNfcTransportHarness.CreateAsync(simulator1, pool, cancellationToken).ConfigureAwait(false))
             {
@@ -98,7 +101,7 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
             simulator1.Dispose();
 
             CtapAuthenticatorSimulator simulator2 = await CtapClientPinFixtures.CreateSimulatorWithCustodyAsync(
-                RunId, BuildStateCustody(tpm, parentHandle, sealAuth, store), aaguid, pinRetriesCustody: pinCustody, cancellationToken: cancellationToken)
+                RunId, BuildStateCustody(tpm, parentHandle, sealAuth, store), aaguid, BaseMemoryPool.Shared, pinRetriesCustody: pinCustody, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
             using(CtapNfcTransportHarness harness2 = await CtapNfcTransportHarness.CreateAsync(simulator2, pool, cancellationToken).ConfigureAwait(false))
             {
@@ -152,7 +155,7 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
             byte[] preChangeBlob;
 
             CtapAuthenticatorSimulator simulator1 = await CtapClientPinFixtures.CreateSimulatorWithCustodyAsync(
-                RunId, BuildStateCustody(tpm, parentHandle, sealAuth, store), aaguid, pinRetriesCustody: pinCustody, cancellationToken: cancellationToken)
+                RunId, BuildStateCustody(tpm, parentHandle, sealAuth, store), aaguid, BaseMemoryPool.Shared, pinRetriesCustody: pinCustody, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
             using(CtapNfcTransportHarness harness1 = await CtapNfcTransportHarness.CreateAsync(simulator1, pool, cancellationToken).ConfigureAwait(false))
             {
@@ -169,7 +172,7 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
             simulator1.Dispose();
 
             CtapAuthenticatorSimulator simulator2 = await CtapClientPinFixtures.CreateSimulatorWithCustodyAsync(
-                RunId, BuildStateCustody(tpm, parentHandle, sealAuth, store), aaguid, pinRetriesCustody: pinCustody, cancellationToken: cancellationToken)
+                RunId, BuildStateCustody(tpm, parentHandle, sealAuth, store), aaguid, BaseMemoryPool.Shared, pinRetriesCustody: pinCustody, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
             using(CtapNfcTransportHarness harness2 = await CtapNfcTransportHarness.CreateAsync(simulator2, pool, cancellationToken).ConfigureAwait(false))
             {
@@ -221,7 +224,7 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
             CtapPinRetriesCustody pinCustody = TpmNvPinRetriesCustody.Create(tpm, ReadOnlyMemory<byte>.Empty, PinIndexHandle);
 
             CtapAuthenticatorSimulator simulator1 = await CtapClientPinFixtures.CreateSimulatorWithCustodyAsync(
-                RunId, BuildStateCustody(tpm, parentHandle, sealAuth, store), aaguid, pinRetriesCustody: pinCustody, cancellationToken: cancellationToken)
+                RunId, BuildStateCustody(tpm, parentHandle, sealAuth, store), aaguid, BaseMemoryPool.Shared, pinRetriesCustody: pinCustody, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
             using(CtapNfcTransportHarness harness1 = await CtapNfcTransportHarness.CreateAsync(simulator1, pool, cancellationToken).ConfigureAwait(false))
             {
@@ -232,7 +235,7 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
                 {
                     lastStatus = await ChangePinExpectingErrorAsync(harness1.Transceive, pool, protocolId, currentPin: "0000", newPin: "5678", cancellationToken)
                         .ConfigureAwait(false);
-                    simulator1.PowerCycle();
+                    simulator1.PowerCycle(BaseMemoryPool.Shared);
                 }
 
                 Assert.AreEqual(WellKnownCtapStatusCodes.PinBlocked, lastStatus, "the 8th mismatch must exhaust the persistent tier and report PIN_BLOCKED.");
@@ -246,7 +249,7 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
             simulator1.Dispose();
 
             CtapAuthenticatorSimulator simulator2 = await CtapClientPinFixtures.CreateSimulatorWithCustodyAsync(
-                RunId, BuildStateCustody(tpm, parentHandle, sealAuth, store), aaguid, pinRetriesCustody: pinCustody, cancellationToken: cancellationToken)
+                RunId, BuildStateCustody(tpm, parentHandle, sealAuth, store), aaguid, BaseMemoryPool.Shared, pinRetriesCustody: pinCustody, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
             using(CtapNfcTransportHarness harness2 = await CtapNfcTransportHarness.CreateAsync(simulator2, pool, cancellationToken).ConfigureAwait(false))
             {
@@ -305,7 +308,7 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
             CtapPinRetriesCustody pinCustody = TpmNvPinRetriesCustody.Create(tpm, ReadOnlyMemory<byte>.Empty, PinIndexHandle);
 
             CtapAuthenticatorSimulator simulator = await CtapClientPinFixtures.CreateSimulatorWithCustodyAsync(
-                RunId, BuildStateCustody(tpm, parentHandle, sealAuth, store), aaguid, pinRetriesCustody: pinCustody, cancellationToken: cancellationToken)
+                RunId, BuildStateCustody(tpm, parentHandle, sealAuth, store), aaguid, BaseMemoryPool.Shared, pinRetriesCustody: pinCustody, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
             using(CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false))
             {
@@ -330,7 +333,7 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
                     "the third consecutive mismatch must still burn a TPM-backed retry even though the REPORTED status is the boot latch, not PIN_INVALID.");
                 Assert.IsTrue(await GetPowerCycleStateAsync(harness.Transceive, pool, cancellationToken).ConfigureAwait(false));
 
-                simulator.PowerCycle();
+                simulator.PowerCycle(BaseMemoryPool.Shared);
 
                 Assert.IsFalse(
                     await GetPowerCycleStateAsync(harness.Transceive, pool, cancellationToken).ConfigureAwait(false), "PowerCycle must clear the boot-scoped latch.");
@@ -369,7 +372,7 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
         CancellationToken cancellationToken = TestContext.CancellationToken;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
 
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("pin-absent-control");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("pin-absent-control",BaseMemoryPool.Shared);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         await EstablishPinAsync(harness.Transceive, pool, protocolId, "1234", cancellationToken).ConfigureAwait(false);
@@ -427,7 +430,7 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
             CtapPinRetriesCustody pinCustody = TpmNvPinRetriesCustody.Create(tpm, ReadOnlyMemory<byte>.Empty, PinIndexHandle);
 
             CtapAuthenticatorSimulator simulator = await CtapClientPinFixtures.CreateSimulatorWithCustodyAsync(
-                RunId, BuildStateCustody(tpm, parentHandle, sealAuth, store), aaguid, pinRetriesCustody: pinCustody, cancellationToken: cancellationToken)
+                RunId, BuildStateCustody(tpm, parentHandle, sealAuth, store), aaguid, BaseMemoryPool.Shared, pinRetriesCustody: pinCustody, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
             using(CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false))
             {
@@ -470,7 +473,7 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         Guid aaguid = Guid.NewGuid();
         //At most 32 octets: an authValue is bounded by the digest size of the sealed object's nameAlg (SHA-256
-        //here) — TPM 2.0 Library Part 1, clause 17.6.4.2, enforced at TPM2_Create() with TPM_RC_SIZE.
+        //here) — TPM 2.0 Library Part 1, clause 16.6.4.2, enforced at TPM2_Create() with TPM_RC_SIZE.
         byte[] sealAuth = "pin-f1-discarded-seal-auth"u8.ToArray();
 
         (TpmDevice tpm, uint parentHandle) = await CreateChipWithLoadedStorageParentAsync("pin-f1-discarded-snapshot-chip", cancellationToken).ConfigureAwait(false);
@@ -480,6 +483,7 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
 
             CtapAuthenticatorSimulator simulator1 = await CtapClientPinFixtures.CreateSimulatorWithCustodyAsync(
                 RunId, BuildStateCustody(tpm, parentHandle, sealAuth, new DictionaryBackedTpmSealedSnapshotBlobStore()), aaguid,
+                BaseMemoryPool.Shared,
                 pinRetriesCustody: pinCustody, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
             using(CtapNfcTransportHarness harness1 = await CtapNfcTransportHarness.CreateAsync(simulator1, pool, cancellationToken).ConfigureAwait(false))
@@ -493,6 +497,7 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
             //the same TPM chip is the only thing carrying the original PIN's own truth forward.
             CtapAuthenticatorSimulator simulator2 = await CtapClientPinFixtures.CreateSimulatorWithCustodyAsync(
                 RunId, BuildStateCustody(tpm, parentHandle, sealAuth, new DictionaryBackedTpmSealedSnapshotBlobStore()), aaguid,
+                BaseMemoryPool.Shared,
                 pinRetriesCustody: pinCustody, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
             using(CtapNfcTransportHarness harness2 = await CtapNfcTransportHarness.CreateAsync(simulator2, pool, cancellationToken).ConfigureAwait(false))
@@ -520,8 +525,8 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
     /// authenticator's back (owner-authorized, simulating the crash window inside <c>ProvisionPinAsync</c>'s
     /// own undefine→redefine composition) while the whole-snapshot still says a PIN is set, then re-compose.
     /// PIN commands must answer a DEFINED CTAP status — never an escaping exception — and a fresh
-    /// <c>setPIN</c> must legitimately re-establish (turning F-2's brick into ordinary recovery), with the
-    /// new PIN authenticating afterward.
+    /// <c>setPIN</c> must legitimately re-establish rather than leaving the authenticator permanently unable
+    /// to accept a new PIN, with the new PIN authenticating afterward.
     /// </summary>
     [TestMethod]
     public async Task UndefiningTheIndexBehindTheAuthenticatorsBackAnswersDefinedStatusesAndSetPinReEstablishesOverRealApduTransport()
@@ -532,7 +537,8 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
         CancellationToken cancellationToken = TestContext.CancellationToken;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         Guid aaguid = Guid.NewGuid();
-        //At most 32 octets — the same clause 17.6.4.2 bound as the f1 case above.
+        //At most 32 octets — the same clause 16.6.4.2 bound as
+        //DiscardingTheWholeSnapshotEntirelyRefusesSetPinAndTheOriginalPinStillAuthenticatesOverRealApduTransport above.
         byte[] sealAuth = "pin-f2-undefine-seal-auth"u8.ToArray();
 
         (TpmDevice tpm, uint parentHandle) = await CreateChipWithLoadedStorageParentAsync("pin-f2-undefine-behind-back-chip", cancellationToken).ConfigureAwait(false);
@@ -542,7 +548,7 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
             CtapPinRetriesCustody pinCustody = TpmNvPinRetriesCustody.Create(tpm, ReadOnlyMemory<byte>.Empty, PinIndexHandle);
 
             CtapAuthenticatorSimulator simulator1 = await CtapClientPinFixtures.CreateSimulatorWithCustodyAsync(
-                RunId, BuildStateCustody(tpm, parentHandle, sealAuth, store), aaguid, pinRetriesCustody: pinCustody, cancellationToken: cancellationToken)
+                RunId, BuildStateCustody(tpm, parentHandle, sealAuth, store), aaguid, BaseMemoryPool.Shared, pinRetriesCustody: pinCustody, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
             using(CtapNfcTransportHarness harness1 = await CtapNfcTransportHarness.CreateAsync(simulator1, pool, cancellationToken).ConfigureAwait(false))
             {
@@ -559,7 +565,7 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
             Assert.IsTrue(undefineResult.IsSuccess, "the owner-authorized undefine simulating the crash window must succeed.");
 
             CtapAuthenticatorSimulator simulator2 = await CtapClientPinFixtures.CreateSimulatorWithCustodyAsync(
-                RunId, BuildStateCustody(tpm, parentHandle, sealAuth, store), aaguid, pinRetriesCustody: pinCustody, cancellationToken: cancellationToken)
+                RunId, BuildStateCustody(tpm, parentHandle, sealAuth, store), aaguid, BaseMemoryPool.Shared, pinRetriesCustody: pinCustody, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
             using(CtapNfcTransportHarness harness2 = await CtapNfcTransportHarness.CreateAsync(simulator2, pool, cancellationToken).ConfigureAwait(false))
             {
@@ -611,7 +617,7 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
             //First composition: NO pinRetriesCustody composed at all - the PIN is established under the
             //whole-snapshot custody alone, exactly the deployment shape before this custody seam existed.
             CtapAuthenticatorSimulator simulator1 = await CtapClientPinFixtures.CreateSimulatorWithCustodyAsync(
-                RunId, BuildStateCustody(tpm, parentHandle, sealAuth, store), aaguid, pinRetriesCustody: null, cancellationToken: cancellationToken)
+                RunId, BuildStateCustody(tpm, parentHandle, sealAuth, store), aaguid, BaseMemoryPool.Shared, pinRetriesCustody: null, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
             using(CtapNfcTransportHarness harness1 = await CtapNfcTransportHarness.CreateAsync(simulator1, pool, cancellationToken).ConfigureAwait(false))
             {
@@ -624,7 +630,7 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
             //NEVER been defined on this chip - the ordinary upgrade sequence.
             CtapPinRetriesCustody pinCustody = TpmNvPinRetriesCustody.Create(tpm, ReadOnlyMemory<byte>.Empty, PinIndexHandle);
             CtapAuthenticatorSimulator simulator2 = await CtapClientPinFixtures.CreateSimulatorWithCustodyAsync(
-                RunId, BuildStateCustody(tpm, parentHandle, sealAuth, store), aaguid, pinRetriesCustody: pinCustody, cancellationToken: cancellationToken)
+                RunId, BuildStateCustody(tpm, parentHandle, sealAuth, store), aaguid, BaseMemoryPool.Shared, pinRetriesCustody: pinCustody, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
             using(CtapNfcTransportHarness harness2 = await CtapNfcTransportHarness.CreateAsync(simulator2, pool, cancellationToken).ConfigureAwait(false))
             {
@@ -839,11 +845,11 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
     private static async Task<(TpmDevice Tpm, uint ParentHandle)> CreateChipWithLoadedStorageParentAsync(string chipRunId, CancellationToken cancellationToken)
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        var chip = new TpmSimulator(chipRunId, signingBackend: BouncyCastleTpmEccSigningBackend.Create());
+        var chip = new TpmSimulator(chipRunId, signingBackend: BouncyCastleTpmEccSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await chip.PowerOnAsync(cancellationToken).ConfigureAwait(false);
         await BringOperationalAsync(chip, pool, cancellationToken).ConfigureAwait(false);
 
-        TpmDevice tpm = TpmDevice.Create(chip.SubmitAsync);
+        TpmDevice tpm = TpmDevice.Create(chip.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_CreatePrimary, TpmResponseCodec.CreatePrimary);

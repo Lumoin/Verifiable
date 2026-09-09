@@ -27,10 +27,10 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </list>
 /// <para>
 /// The replacement value is bounded by the digest size of the hash algorithm used for context integrity, not by
-/// a per-hierarchy nameAlg (hierarchies have none) - TPM 2.0 Library Part 1, Section 17.6.4.2. The response HMAC
-/// keys on <c>newAuth</c>, not the pre-change auth (TPM 2.0 Library Part 3, Section 24.8.1's closing sentence),
+/// a per-hierarchy nameAlg (hierarchies have none) - TPM 2.0 Library Part 1, clause 16.6.4.2. The response HMAC
+/// keys on <c>newAuth</c>, not the pre-change auth (TPM 2.0 Library Part 3, clause 24.8.1's closing sentence),
 /// mirroring TPM2_NV_ChangeAuth's own response-HMAC swap. This command is authorized, so it is sent with
-/// <c>TPM_ST_SESSIONS</c>. See TPM 2.0 Library Part 3, Section 24.8 (Table 188/189).
+/// <c>TPM_ST_SESSIONS</c>. See TPM 2.0 Library Part 3, clause 24.8 (Table 205/206).
 /// </para>
 /// </remarks>
 public sealed class HierarchyChangeAuthInput: ITpmCommandInput, IDisposable
@@ -62,7 +62,7 @@ public sealed class HierarchyChangeAuthInput: ITpmCommandInput, IDisposable
     /// <inheritdoc/>
     /// <remarks>
     /// <c>newAuth</c> is the command's sole parameter, so it is trivially the first sized parameter and is
-    /// eligible for session-based parameter encryption (TPM 2.0 Library Part 1, Section 19.1). A separate
+    /// eligible for session-based parameter encryption (TPM 2.0 Library Part 1, clause 18.1). A separate
     /// decrypt session is the intended path for this value, mirroring the pinned-secret rotation shape already
     /// used for NV authValue rotation.
     /// </remarks>

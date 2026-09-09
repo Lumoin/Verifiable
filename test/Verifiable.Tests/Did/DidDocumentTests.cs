@@ -1,6 +1,8 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
+using Verifiable.Core.Did.Methods;
+using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Did;
 using Verifiable.Json;
 using Verifiable.Json.Converters;
@@ -105,6 +107,25 @@ internal sealed class DidDocumentTests
     public void EmptyDocumentHash()
     {
         _ = new DidDocument().GetHashCode();
+    }
+
+
+    /// <summary>
+    /// <see cref="DidDocument.Equals(DidDocument?)"/> compares <see cref="DidDocument.Context"/> by
+    /// value (via <see cref="Context.Equals(Context?)"/>), not by reference: two distinct
+    /// <see cref="Context"/> instances built from the same IRIs make the documents equal, and a
+    /// different first IRI makes them unequal — including through <see cref="DidDocument.GetHashCode"/>.
+    /// </summary>
+    [TestMethod]
+    public void DocumentEqualityComparesContextByValue()
+    {
+        var withDidCore10 = new DidDocument { Id = new GenericDidMethod("did:example:123"), Context = Context.FromIris(Context.DidCore10) };
+        var otherWithDidCore10 = new DidDocument { Id = new GenericDidMethod("did:example:123"), Context = Context.FromIris(Context.DidCore10) };
+        Assert.IsTrue(withDidCore10.Equals(otherWithDidCore10), "Two distinct same-valued Context instances must not break document equality.");
+        Assert.AreEqual(withDidCore10.GetHashCode(), otherWithDidCore10.GetHashCode());
+
+        var withDidCore11 = new DidDocument { Id = new GenericDidMethod("did:example:123"), Context = Context.FromIris(Context.DidCore11) };
+        Assert.IsFalse(withDidCore10.Equals(withDidCore11), "A different context IRI must break document equality.");
     }
 
 

@@ -38,7 +38,7 @@ namespace Verifiable.Tests.X509;
 /// </remarks>
 internal static class X509ChainTestRing
 {
-    private static readonly HashAlgorithmName SignatureHashAlg = HashAlgorithmName.SHA256;
+    private static HashAlgorithmName SignatureHashAlg { get; } = HashAlgorithmName.SHA256;
 
     /// <summary>
     /// The number of CSPRNG bytes drawn for a certificate serial number.

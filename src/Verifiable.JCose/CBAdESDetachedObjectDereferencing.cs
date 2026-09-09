@@ -317,8 +317,8 @@ public static class CBAdESDetachedObjectDereferencing
     /// resulting octets onto the stream. This is also the CB-5.2.8.2.3-07 reconstruction path — the same
     /// procedure the <c>ObjectIdByURIHash</c> mechanism falls back to whenever the full COSE Payload is needed
     /// for a purpose OTHER than the COSE signature-value computation itself (<c>adoTst</c>/<c>arcTst</c>
-    /// message imprints, CB-5.2.6-06); this method is public and composable for exactly that reuse — the S4
-    /// timestamp work calls it directly rather than reimplementing the concatenation.
+    /// message imprints, CB-5.2.6-06); this method is public and composable for exactly that reuse — the
+    /// CB-AdES timestamp-augmentation code calls it directly rather than reimplementing the concatenation.
     /// </summary>
     /// <param name="references">
     /// The ordered URI-references to dereference and concatenate, in wire (<c>pars</c>) order — order is

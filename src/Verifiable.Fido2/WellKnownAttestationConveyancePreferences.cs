@@ -22,7 +22,7 @@ public static class WellKnownAttestationConveyancePreferences
     /// <summary>
     /// The <c>none</c> wire value.
     /// </summary>
-    public static readonly string None = Utf8Constants.ToInternedString(NoneUtf8);
+    public static string None { get; } = Utf8Constants.ToInternedString(NoneUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Indirect"/>.</summary>
     public static ReadOnlySpan<byte> IndirectUtf8 => "indirect"u8;
@@ -30,7 +30,7 @@ public static class WellKnownAttestationConveyancePreferences
     /// <summary>
     /// The <c>indirect</c> wire value.
     /// </summary>
-    public static readonly string Indirect = Utf8Constants.ToInternedString(IndirectUtf8);
+    public static string Indirect { get; } = Utf8Constants.ToInternedString(IndirectUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Direct"/>.</summary>
     public static ReadOnlySpan<byte> DirectUtf8 => "direct"u8;
@@ -38,7 +38,7 @@ public static class WellKnownAttestationConveyancePreferences
     /// <summary>
     /// The <c>direct</c> wire value.
     /// </summary>
-    public static readonly string Direct = Utf8Constants.ToInternedString(DirectUtf8);
+    public static string Direct { get; } = Utf8Constants.ToInternedString(DirectUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Enterprise"/>.</summary>
     public static ReadOnlySpan<byte> EnterpriseUtf8 => "enterprise"u8;
@@ -46,7 +46,7 @@ public static class WellKnownAttestationConveyancePreferences
     /// <summary>
     /// The <c>enterprise</c> wire value.
     /// </summary>
-    public static readonly string Enterprise = Utf8Constants.ToInternedString(EnterpriseUtf8);
+    public static string Enterprise { get; } = Utf8Constants.ToInternedString(EnterpriseUtf8);
 
 
     /// <summary>

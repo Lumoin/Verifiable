@@ -34,6 +34,9 @@ namespace Verifiable.Tests.TestDataProviders
                 //Raw modulus lengths for RSA keys (not DER-encoded)
                 const int Rsa2048RawModulusBase64UrlEncodedLength = 342; //256 bytes * 4/3 ≈ 342 chars.
                 const int Rsa4096RawModulusBase64UrlEncodedLength = 683; //512 bytes * 4/3 ≈ 683 chars.
+
+                //Three independent checks (key type, exponent, modulus width for the requested size); kept
+                //as one expression since each conjunct/disjunct already names what it checks.
                 return WellKnownKeyTypeValues.IsRsa((string)actualKeyFormat.Header[WellKnownJwkMemberNames.Kty])
                     && ((string)actualKeyFormat.Header[WellKnownJwkMemberNames.E]).Equals(RsaUtilities.DefaultExponent, StringComparison.OrdinalIgnoreCase)
                     && (alg == CryptoAlgorithm.Rsa2048 && actualKeyFormat.Header[WellKnownJwkMemberNames.N] is string { Length: Rsa2048RawModulusBase64UrlEncodedLength }

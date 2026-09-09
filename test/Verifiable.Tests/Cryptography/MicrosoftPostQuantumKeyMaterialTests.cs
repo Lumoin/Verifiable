@@ -5,6 +5,7 @@ using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
 using Verifiable.Microsoft;
 using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Cryptography
 {
@@ -88,7 +89,7 @@ namespace Verifiable.Tests.Cryptography
             using var privateKey = keys.PrivateKey;
 
             await AssertSignAndVerifyAsync(privateKey, publicKey,
-                BouncyCastleCryptographicFunctions.SignMlDsa44Async, BouncyCastleCryptographicFunctions.VerifyMlDsa44Async).ConfigureAwait(false);
+                BouncyCastleCryptographicFunctionsAdapter.SignMlDsa44Async, BouncyCastleCryptographicFunctionsAdapter.VerifyMlDsa44Async).ConfigureAwait(false);
         }
 
 
@@ -124,7 +125,7 @@ namespace Verifiable.Tests.Cryptography
             using var privateKey = keys.PrivateKey;
 
             await AssertSignAndVerifyAsync(privateKey, publicKey,
-                BouncyCastleCryptographicFunctions.SignMlDsa65Async, BouncyCastleCryptographicFunctions.VerifyMlDsa65Async).ConfigureAwait(false);
+                BouncyCastleCryptographicFunctionsAdapter.SignMlDsa65Async, BouncyCastleCryptographicFunctionsAdapter.VerifyMlDsa65Async).ConfigureAwait(false);
         }
 
 
@@ -142,18 +143,14 @@ namespace Verifiable.Tests.Cryptography
             using var privateKey = keys.PrivateKey;
 
             ReadOnlyMemory<byte> data = TestData;
-            (Signature signature, CryptoEvent? _) = await BouncyCastleCryptographicFunctions.SignMlDsa65Async(
-                privateKey.AsReadOnlyMemory(), data, BaseMemoryPool.Shared,
-                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            (Signature signature, CryptoEvent? _) = await BouncyCastleCryptographicFunctions.SignMlDsa65Async(privateKey.AsReadOnlyMemory(), data, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch)).ConfigureAwait(false);
             using var disposableSignature = signature;
 
             byte[] tamperedBytes = signature.AsReadOnlyMemory().ToArray();
             tamperedBytes[0] ^= 0xFF;
             tamperedBytes[^1] ^= 0xFF;
 
-            (bool isValid, CryptoEvent? _) = await BouncyCastleCryptographicFunctions.VerifyMlDsa65Async(
-                data, tamperedBytes, publicKey.AsReadOnlyMemory(),
-                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            (bool isValid, CryptoEvent? _) = await BouncyCastleCryptographicFunctions.VerifyMlDsa65Async(data, tamperedBytes, publicKey.AsReadOnlyMemory(), cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch)).ConfigureAwait(false);
 
             Assert.IsFalse(isValid);
         }
@@ -191,7 +188,7 @@ namespace Verifiable.Tests.Cryptography
             using var privateKey = keys.PrivateKey;
 
             await AssertSignAndVerifyAsync(privateKey, publicKey,
-                BouncyCastleCryptographicFunctions.SignMlDsa87Async, BouncyCastleCryptographicFunctions.VerifyMlDsa87Async).ConfigureAwait(false);
+                BouncyCastleCryptographicFunctionsAdapter.SignMlDsa87Async, BouncyCastleCryptographicFunctionsAdapter.VerifyMlDsa87Async).ConfigureAwait(false);
         }
 
 

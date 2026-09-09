@@ -14,11 +14,13 @@ using Verifiable.Tpm.Spec.Attributes;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
+using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
 /// <summary>
-/// Drives <c>TPM2_NV_ReadPublic()</c> (TPM 2.0 Library Part 3, Section 31.6) against the in-house behavioural
+/// Drives <c>TPM2_NV_ReadPublic()</c> (TPM 2.0 Library Part 3, clause 31.6) against the in-house behavioural
 /// <see cref="TpmSimulator"/> - entirely in-process, with no external assets - through the same production
 /// command path production code uses (<see cref="TpmCommandExecutor"/> and
 /// <see cref="TpmDeviceExtensions.NvReadPublicAsync(uint, System.Threading.CancellationToken)"/>).
@@ -26,8 +28,8 @@ namespace Verifiable.Tests.Tpm;
 /// <remarks>
 /// <para>
 /// Every accepted-path test pins the returned Name against an INDEPENDENT in-test transcription of TPM 2.0
-/// Library Part 1, Section 14, Table 6's recipe (<c>nameAlg ‖ H_nameAlg(TPMS_NV_PUBLIC)</c>, marshaled per Part
-/// 2, Section 13.6, Table 235) - built here from <see cref="BinaryPrimitives"/> and the project's own registered
+/// Library Part 1, clause 13, Table 9's recipe (<c>nameAlg ‖ H_nameAlg(TPMS_NV_PUBLIC)</c>, marshaled per Part
+/// 2, clause 13.6, Table 251) - built here from <see cref="BinaryPrimitives"/> and the project's own registered
 /// digest seam, never by calling <c>TpmObjectName</c> or any other production Name-computation type, so a bug
 /// shared between the production recipe and this test's own oracle cannot pass silently.
 /// </para>
@@ -78,7 +80,7 @@ internal sealed class TpmInHouseSimulatorNvReadPublicTests
 
     /// <summary>
     /// A defined Index's returned public area matches what was defined, and its Name matches an independent
-    /// transcription of TPM 2.0 Library Part 1, Section 14, Table 6's recipe over a NON-EMPTY <c>authPolicy</c> -
+    /// transcription of TPM 2.0 Library Part 1, clause 13, Table 9's recipe over a NON-EMPTY <c>authPolicy</c> -
     /// pinning the retention fix, not merely the recipe's shape.
     /// </summary>
     [TestMethod]
@@ -86,7 +88,7 @@ internal sealed class TpmInHouseSimulatorNvReadPublicTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
         await DefineOrdinaryIndexAsync(device, pool, registry, OrdinaryIndexHandle, NonEmptyAuthPolicy).ConfigureAwait(false);
@@ -104,11 +106,11 @@ internal sealed class TpmInHouseSimulatorNvReadPublicTests
         byte[] expectedName = await ComputeIndependentNvNameAsync(pool, OrdinaryIndexHandle, NameAlg, OrdinaryAttributes, NonEmptyAuthPolicy, OrdinaryIndexDataSize).ConfigureAwait(false);
         Assert.AreSequenceEqual(
             expectedName, response.NvName.Span.ToArray(),
-            "The returned Name must equal nameAlg || H_nameAlg(TPMS_NV_PUBLIC) transcribed independently from Part 1, Section 14, Table 6 and Part 2, Section 13.6, Table 235.");
+            "The returned Name must equal nameAlg || H_nameAlg(TPMS_NV_PUBLIC) transcribed independently from Part 1, clause 13, Table 9 and Part 2, clause 13.6, Table 251.");
     }
 
     /// <summary>
-    /// The Name changes the instant TPMA_NV_WRITTEN flips at the first write (TPM 2.0 Library Part 1, Section
+    /// The Name changes the instant TPMA_NV_WRITTEN flips at the first write (TPM 2.0 Library Part 1, clause
     /// 14: "the Name will change to reflect that TPMA_NV_WRITTEN is SET for the Index") - the WRITTEN bit lives
     /// inside the hashed <c>attributes</c> field, so it is included in, never excluded from, the digest. Both
     /// the before- and after-write Names are independently pinned, not merely asserted unequal.
@@ -118,7 +120,7 @@ internal sealed class TpmInHouseSimulatorNvReadPublicTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
         await DefineOrdinaryIndexAsync(device, pool, registry, OrdinaryIndexHandle, authPolicy: ReadOnlyMemory<byte>.Empty).ConfigureAwait(false);
@@ -153,48 +155,48 @@ internal sealed class TpmInHouseSimulatorNvReadPublicTests
         Assert.IsFalse(nameBeforeWrite.AsSpan().SequenceEqual(nameAfterWrite), "The Name before and after the first write must differ.");
     }
 
-    /// <summary>An undefined handle (in-range, no Index present) is TPM_RC_HANDLE (TPM 2.0 Library Part 3, Section 5.4, clause 3.1).</summary>
+    /// <summary>An undefined handle (in-range, no Index present) is TPM_RC_HANDLE (TPM 2.0 Library Part 3, clause 5.4).</summary>
     [TestMethod]
     public async Task NvReadPublicOfAnUndefinedHandleReturnsHandle()
     {
-        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         TpmResult<NvReadPublicResponse> result = await device.NvReadPublicAsync(OrdinaryIndexHandle, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsSuccess, "An undefined handle must not succeed.");
-        Assert.AreEqual(TpmRcConstants.TPM_RC_HANDLE, result.ResponseCode);
+        Assert.AreEqual(HmacKeyHarness.HandleEncodedRc(TpmRcConstants.TPM_RC_HANDLE, 0), result.ResponseCode, "Table 251: nvIndex is TPM2_NV_ReadPublic()'s sole handle (handle 1); an undefined handle is handle-encoded TPM_RC_HANDLE at index 0.");
     }
 
     /// <summary>
     /// A handle outside the NV-Index MSO range is TPM_RC_VALUE at unmarshal time (TPMI_RH_NV_INDEX's own
-    /// interface-type check, TPM 2.0 Library Part 2, Section 9.25, Table 72) - never reaching the handle-
+    /// interface-type check, TPM 2.0 Library Part 2, clause 9.25, Table 71) - never reaching the handle-
     /// existence gate at all.
     /// </summary>
     [TestMethod]
     public async Task NvReadPublicOfAnOutOfRangeHandleReturnsValue()
     {
-        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         TpmResult<NvReadPublicResponse> result = await device.NvReadPublicAsync((uint)TpmRh.TPM_RH_OWNER, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsSuccess, "A permanent-handle-range value must not be accepted as an NV Index handle.");
-        Assert.AreEqual(TpmRcConstants.TPM_RC_VALUE, result.ResponseCode);
+        Assert.AreEqual(
+            HmacKeyHarness.HandleEncodedRc(TpmRcConstants.TPM_RC_VALUE, handleIndex: 0), result.ResponseCode,
+            "Table 251: nvIndex is TPM2_NV_ReadPublic()'s sole handle (index 0).");
     }
 
     /// <summary>
     /// NV_ReadPublic succeeds against a never-written Index, while the SAME Index's data-area read
     /// (TPM2_NV_Read) rejects with TPM_RC_NV_UNINITIALIZED - proving NV_ReadPublic is genuinely ungated on the
-    /// data-access checks (TPM 2.0 Library Part 3, Section 5.4's lock-gate clauses condition on "the command
+    /// data-access checks (TPM 2.0 Library Part 3, clause 5.4's lock-gate clauses condition on "the command
     /// requires read/write access to the index data", which NV_ReadPublic never requires since it reads only
-    /// the public area). TPMA_NV_READLOCKED/WRITELOCKED specifically are never wire-reachable in this
-    /// simulator (TPM2_NV_ReadLock()/TPM2_NV_WriteLock() are unmodelled, and TPM2_NV_DefineSpace() itself
-    /// refuses a definition that arrives already claiming either bit) - the simulator's own NV_ReadPublic
+    /// the public area). TPMA_NV_READLOCKED/WRITELOCKED specifically are never reached for THIS Index
+    /// (TPM2_NV_DefineSpace() refuses a definition that arrives already claiming either bit, and this test never
+    /// sends it TPM2_NV_ReadLock(), TPM2_NV_WriteLock() or TPM2_NV_GlobalWriteLock()) - the simulator's own NV_ReadPublic
     /// transition applies, by inspection, only the single generic existence check TPM 2.0 Library Part 3,
-    /// Section 5.4 clause 3.1 describes, uniformly regardless of which status attribute would otherwise be at
+    /// clause 5.4 describes, uniformly regardless of which status attribute would otherwise be at
     /// stake.
     /// </summary>
     [TestMethod]
@@ -202,7 +204,7 @@ internal sealed class TpmInHouseSimulatorNvReadPublicTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
         await DefineOrdinaryIndexAsync(device, pool, registry, OrdinaryIndexHandle, authPolicy: ReadOnlyMemory<byte>.Empty).ConfigureAwait(false);
@@ -223,7 +225,7 @@ internal sealed class TpmInHouseSimulatorNvReadPublicTests
     /// <summary>
     /// A definition whose <c>nameAlg</c> is not a hash this TPM implements is refused with <c>TPM_RC_HASH</c>: on
     /// hardware the <c>TPMI_ALG_HASH</c> interface type refuses it while unmarshaling <c>publicInfo</c> (TPM 2.0
-    /// Library Part 2, Section 9.27), so no Index can ever exist whose Name cannot be computed. The value is
+    /// Library Part 2, clause 9.27), so no Index can ever exist whose Name cannot be computed. The value is
     /// retained and drives every Name this model computes, so accepting it would strand the Index: its Name -
     /// needed by NV_ReadPublic, by cpHash on every session-authorized NV command, and by TPM2_PolicyNV - could
     /// never be produced.
@@ -233,24 +235,24 @@ internal sealed class TpmInHouseSimulatorNvReadPublicTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
         TpmResult<NvDefineSpaceResponse> defineResult = await TryDefineIndexAsync(
             device, pool, registry, OrdinaryIndexHandle, TpmAlgIdConstants.TPM_ALG_SM3_256, authPolicy: ReadOnlyMemory<byte>.Empty).ConfigureAwait(false);
 
         Assert.IsFalse(defineResult.IsSuccess, "An Index whose Name algorithm this TPM does not implement must never be defined.");
-        Assert.AreEqual(TpmRcConstants.TPM_RC_HASH, defineResult.ResponseCode);
+        Assert.AreEqual(HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_HASH, 1), defineResult.ResponseCode, "Table 245: publicInfo is TPM2_NV_DefineSpace()'s second parameter (parameter 2); an Index naming an unimplemented nameAlg is parameter-encoded TPM_RC_HASH at index 1.");
 
         TpmResult<NvReadPublicResponse> publicResult = await device.NvReadPublicAsync(OrdinaryIndexHandle, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_HANDLE, publicResult.ResponseCode,
+            HmacKeyHarness.HandleEncodedRc(TpmRcConstants.TPM_RC_HANDLE, 0), publicResult.ResponseCode,
             "The refused definition must leave no Index behind for a later Name computation to stumble over.");
     }
 
     /// <summary>
     /// A definition whose <c>authPolicy</c> is present but not exactly the <c>nameAlg</c> digest size is refused
-    /// with <c>TPM_RC_SIZE</c> (TPM 2.0 Library Part 3, Section 31.3.1's size condition on
+    /// with <c>TPM_RC_SIZE</c> (TPM 2.0 Library Part 3, clause 31.3.1's size condition on
     /// <c>publicInfo.authPolicy</c>; the reference's <c>NvDefineSpace</c> refuses any nonzero size differing from
     /// the digest size). The policy digest is hashed into the Index's Name, so an inconsistent one would give the
     /// Index a Name no hardware can produce.
@@ -260,7 +262,7 @@ internal sealed class TpmInHouseSimulatorNvReadPublicTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
         //A SHA-1-sized policy digest under a SHA-256 nameAlg: well-formed on the wire, inconsistent with the
@@ -270,19 +272,19 @@ internal sealed class TpmInHouseSimulatorNvReadPublicTests
             device, pool, registry, OrdinaryIndexHandle, NameAlg, undersizedAuthPolicy).ConfigureAwait(false);
 
         Assert.IsFalse(undersizedResult.IsSuccess, "An authPolicy shorter than the nameAlg digest size must not be accepted.");
-        Assert.AreEqual(TpmRcConstants.TPM_RC_SIZE, undersizedResult.ResponseCode);
+        Assert.AreEqual(HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SIZE, 1), undersizedResult.ResponseCode, "Table 245: publicInfo is TPM2_NV_DefineSpace()'s second parameter (parameter 2); an authPolicy shorter than the nameAlg digest size is parameter-encoded TPM_RC_SIZE at index 1.");
 
         byte[] oversizedAuthPolicy = new byte[Sha256DigestSize + 1];
         TpmResult<NvDefineSpaceResponse> oversizedResult = await TryDefineIndexAsync(
             device, pool, registry, OrdinaryIndexHandle, NameAlg, oversizedAuthPolicy).ConfigureAwait(false);
 
         Assert.IsFalse(oversizedResult.IsSuccess, "An authPolicy longer than the nameAlg digest size must not be accepted.");
-        Assert.AreEqual(TpmRcConstants.TPM_RC_SIZE, oversizedResult.ResponseCode);
+        Assert.AreEqual(HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SIZE, 1), oversizedResult.ResponseCode, "Table 245: publicInfo is TPM2_NV_DefineSpace()'s second parameter (parameter 2); an authPolicy longer than the nameAlg digest size is parameter-encoded TPM_RC_SIZE at index 1.");
     }
 
     /// <summary>
     /// A session BOUND to the very Index it then authorizes omits that Index's authValue from the command and
-    /// response HMAC keys (TPM 2.0 Library Part 1, Section 17.6.10, equation 22): binding already proved
+    /// response HMAC keys (TPM 2.0 Library Part 1, clause 16.6.10, equation 22): binding already proved
     /// knowledge of the authValue through the session-key KDFa, so folding it in again is redundant. The caller
     /// therefore never sets an authorization value on the session, and the read must still succeed - a
     /// simulator that folded the authValue anyway would answer an authorization failure and charge the
@@ -297,7 +299,7 @@ internal sealed class TpmInHouseSimulatorNvReadPublicTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
         await DefineOrdinaryIndexAsync(device, pool, registry, OrdinaryIndexHandle, authPolicy: ReadOnlyMemory<byte>.Empty).ConfigureAwait(false);
@@ -311,7 +313,7 @@ internal sealed class TpmInHouseSimulatorNvReadPublicTests
             Assert.IsTrue(writeResult.IsSuccess, $"NV_Write failed: '{writeResult.ResponseCode}'.");
         }
 
-        StartAuthSessionInput startInput = StartAuthSessionInput.CreateBoundUnsaltedHmacSession(OrdinaryIndexHandle, NameAlg);
+        StartAuthSessionInput startInput = StartAuthSessionInput.CreateBoundUnsaltedHmacSession(OrdinaryIndexHandle, NameAlg, TestEntropy.NewCounterStream(), pool);
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             device, startInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(startResult.IsSuccess, $"Binding a session to an ordinary NV Index must succeed: '{startResult.ResponseCode}'.");
@@ -323,7 +325,7 @@ internal sealed class TpmInHouseSimulatorNvReadPublicTests
         {
             using TpmSession boundSession = await TpmSession.CreateBoundAsync(
                 new TpmHandle(sessionHandle), IndexAuthValue, startInput.NonceCaller, started.NonceTPM,
-                NameAlg, pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+                NameAlg, TestEntropy.NewCounterStream(), pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
             TpmResult<NvReadPublicResponse> nameResult = await device.NvReadPublicAsync(OrdinaryIndexHandle, TestContext.CancellationToken).ConfigureAwait(false);
             Assert.IsTrue(nameResult.IsSuccess, $"NvReadPublicAsync failed: '{nameResult.ResponseCode}'.");
@@ -352,8 +354,8 @@ internal sealed class TpmInHouseSimulatorNvReadPublicTests
 
     /// <summary>
     /// Independently transcribes an NV Index's Name: <c>nameAlg ‖ H_nameAlg(nvIndex ‖ nameAlg ‖ attributes ‖
-    /// authPolicy ‖ dataSize)</c>, the whole marshaled <c>TPMS_NV_PUBLIC</c> (TPM 2.0 Library Part 2, Section
-    /// 13.6, Table 235) hashed per Part 1, Section 14, Table 6. Uses <see cref="BinaryPrimitives"/> directly and
+    /// authPolicy ‖ dataSize)</c>, the whole marshaled <c>TPMS_NV_PUBLIC</c> (TPM 2.0 Library Part 2, clause
+    /// 13.6, Table 251) hashed per Part 1, clause 13, Table 9. Uses <see cref="BinaryPrimitives"/> directly and
     /// the project's own registered digest seam - never <c>TpmsNvPublic.WriteTo</c> or <c>TpmObjectName</c>.
     /// </summary>
     /// <param name="pool">The memory pool.</param>
@@ -445,7 +447,7 @@ internal sealed class TpmInHouseSimulatorNvReadPublicTests
     /// <summary>Creates a simulator, powers it on, and brings it through TPM2_Startup(CLEAR) into the operational phase.</summary>
     private async Task<TpmSimulator> CreateOperationalAsync()
     {
-        var simulator = new TpmSimulator("tpm-in-house-nv-readpublic");
+        var simulator = new TpmSimulator("tpm-in-house-nv-readpublic", rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;

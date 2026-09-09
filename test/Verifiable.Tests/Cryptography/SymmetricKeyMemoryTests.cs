@@ -20,16 +20,10 @@ internal sealed class SymmetricKeyMemoryTests
     [TestMethod]
     public void ConstructorWithNullTagThrows()
     {
-        IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(32);
-        try
-        {
-            Assert.ThrowsExactly<ArgumentNullException>(() =>
-                _ = new SymmetricKeyMemory(owner, null!));
-        }
-        finally
-        {
-            owner.Dispose();
-        }
+        using IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(32);
+
+        Assert.ThrowsExactly<ArgumentNullException>(() =>
+            _ = new SymmetricKeyMemory(owner, null!));
     }
 
 

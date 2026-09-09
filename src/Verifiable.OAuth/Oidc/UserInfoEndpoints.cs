@@ -85,7 +85,7 @@ public static class UserInfoEndpoints
     /// The endpoint builder delegate. Pass this to
     /// <see cref="Verifiable.Server.ServerConfiguration.EndpointBuilders"/>.
     /// </summary>
-    public static readonly EndpointBuilderDelegate Builder = static (registration, context, ct) =>
+    public static EndpointBuilderDelegate Builder { get; } = static (registration, context, ct) =>
     {
         if(!((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OidcUserInfo))
         {
@@ -139,7 +139,7 @@ public static class UserInfoEndpoints
                 //header.
                 if(!BearerTokenValidation.TryExtractBearer(context, out string? bearerToken))
                 {
-                    return ((FlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.Unauthorized(
+                    return (null, ServerHttpResponse.Unauthorized(
                         OAuthErrors.InvalidToken,
                         "Missing or malformed Authorization header."));
                 }
@@ -150,7 +150,7 @@ public static class UserInfoEndpoints
 
                 if(validationFailure is not null)
                 {
-                    return ((FlowInput?)null, validationFailure);
+                    return (null, validationFailure);
                 }
 
                 //OIDC Core §5.3.1 — the access token MUST carry the openid
@@ -160,7 +160,7 @@ public static class UserInfoEndpoints
                     || scopeObj is not string scope
                     || !WellKnownScopes.ContainsOpenId(scope))
                 {
-                    return ((FlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.Forbidden(
+                    return (null, ServerHttpResponse.Forbidden(
                         OAuthErrors.InsufficientScope,
                         "UserInfo requires the openid scope per OIDC Core §5.3.1."));
                 }
@@ -169,7 +169,7 @@ public static class UserInfoEndpoints
                     || subObj is not string subject
                     || string.IsNullOrEmpty(subject))
                 {
-                    return ((FlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.Unauthorized(
+                    return (null, ServerHttpResponse.Unauthorized(
                         OAuthErrors.InvalidToken,
                         "Validated access token does not carry a sub claim."));
                 }
@@ -219,7 +219,7 @@ public static class UserInfoEndpoints
                 }
 
                 string body = BuildResponseBody(responseClaims);
-                return ((FlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.Ok(
+                return (null, ServerHttpResponse.Ok(
                     body, WellKnownMediaTypes.Application.Json));
             },
 

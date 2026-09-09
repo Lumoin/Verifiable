@@ -27,10 +27,10 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </list>
 /// <para>
 /// <c>phEnable</c> may only be CLEARed by this command - only <c>_TPM_Init</c>/TPM2_Startup() re-SETs it (TPM
-/// 2.0 Library Part 1, Section 11.3). <c>shEnable</c>/<c>ehEnable</c> CLEAR under either their own hierarchy's
-/// authorization or Platform Authorization, but SET only under Platform Authorization (Part 1, Sections
+/// 2.0 Library Part 1, clause 10.3). <c>shEnable</c>/<c>ehEnable</c> CLEAR under either their own hierarchy's
+/// authorization or Platform Authorization, but SET only under Platform Authorization (Part 1, clauses
 /// 11.4-11.5). This command is authorized, so it is sent with <c>TPM_ST_SESSIONS</c>. See TPM 2.0 Library Part
-/// 3, Section 24.2 (Table 176/177).
+/// 3, clause 24.2 (Table 193/194).
 /// </para>
 /// </remarks>
 /// <param name="AuthHandle">The hierarchy authorizing the change (endorsement, owner, or platform).</param>

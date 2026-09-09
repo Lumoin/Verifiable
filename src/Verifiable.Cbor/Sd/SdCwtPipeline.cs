@@ -1,7 +1,7 @@
 using System;
 using System.Buffers;
 using System.Collections.Generic;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Core.Model.SelectiveDisclosure;
@@ -26,12 +26,13 @@ internal static class SdCwtPipeline
         IReadOnlySet<CredentialPath> disclosablePaths,
         GenerateDisclosureSaltDelegate generateSalt,
         string hashAlgorithm,
+        BaseMemoryPool pool,
         DecoyDigestOptions decoyOptions)
     {
         byte[] payloadArray = payload.ToArray();
 
         var (cwtPayload, disclosures) = SdCwtClaimRedaction.Redact(
-            payloadArray, disclosablePaths, generateSalt, hashAlgorithm, decoyOptions);
+            payloadArray, disclosablePaths, generateSalt, hashAlgorithm, pool, decoyOptions);
 
         byte[] redactedBytes = SerializeCwtPayload(cwtPayload);
         return (redactedBytes, disclosures);
@@ -98,7 +99,8 @@ internal static class SdCwtPipeline
     /// </summary>
     private static byte[] BuildProtectedHeader(int algorithm, string keyId, string mediaType, int sdAlg)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(4);
         writer.WriteInt32(CoseHeaderParameters.Alg);
         writer.WriteInt32(algorithm);
@@ -109,7 +111,7 @@ internal static class SdCwtPipeline
         writer.WriteInt32(SdCwtConstants.SdAlgHeaderKey);
         writer.WriteInt32(sdAlg);
         writer.WriteEndMap();
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
     }
 
 
@@ -119,14 +121,15 @@ internal static class SdCwtPipeline
     /// </summary>
     private static byte[] BuildSigStructure(byte[] protectedHeader, ReadOnlySpan<byte> payload)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteStartArray(4);
         writer.WriteTextString("Signature1");
         writer.WriteByteString(protectedHeader);
         writer.WriteByteString([]);
         writer.WriteByteString(payload);
         writer.WriteEndArray();
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
     }
 
 
@@ -136,8 +139,9 @@ internal static class SdCwtPipeline
     private static byte[] SerializeCoseSign1(
         byte[] protectedHeader, ReadOnlySpan<byte> payload, ReadOnlySpan<byte> signature)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
-        writer.WriteTag((CborTag)CoseTags.Sign1);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
+        writer.WriteTag(new CborTag((ulong)CoseTags.Sign1));
         writer.WriteStartArray(4);
         writer.WriteByteString(protectedHeader);
         writer.WriteStartMap(0);
@@ -145,24 +149,41 @@ internal static class SdCwtPipeline
         writer.WriteByteString(payload);
         writer.WriteByteString(signature);
         writer.WriteEndArray();
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
     }
 
 
     /// <summary>
-    /// Serializes a <see cref="CwtPayload"/> to CBOR bytes, mapping the
-    /// <see cref="CwtDigestPlacement.RedactedClaimKeysSentinel"/> to <c>simple(59)</c>.
+    /// Serializes a <see cref="CwtPayload"/> to CBOR bytes, mapping every
+    /// <see cref="CwtDigestPlacement.RedactedClaimKeysSentinel"/> entry to <c>simple(59)</c>
+    /// through <see cref="WriteRedactedMap"/>.
     /// </summary>
     private static byte[] SerializeCwtPayload(CwtPayload payload)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
-        writer.WriteStartMap(payload.Count);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
+        WriteRedactedMap(writer, payload);
 
-        foreach(KeyValuePair<int, object> entry in payload)
+        return buffer.WrittenSpan.ToArray();
+    }
+
+
+    /// <summary>
+    /// Writes an integer-keyed CWT claims map, mapping <see cref="CwtDigestPlacement.RedactedClaimKeysSentinel"/>
+    /// to <c>simple(59)</c> at THIS level and recursing into every other value through
+    /// <see cref="WriteRedactedValue"/> so a sentinel placed under a nested disclosable object
+    /// (RFC 9901 §4.2.6 recursive disclosures — a digest array can sit at any level, not only the
+    /// root) reaches the wire the same way as one at the root.
+    /// </summary>
+    private static void WriteRedactedMap(CborWriter writer, IDictionary<int, object> map)
+    {
+        writer.WriteStartMap(map.Count);
+
+        foreach(KeyValuePair<int, object> entry in map)
         {
             if(entry.Key == CwtDigestPlacement.RedactedClaimKeysSentinel)
             {
-                writer.WriteSimpleValue((CborSimpleValue)SdCwtConstants.RedactedClaimKeysSimpleValue);
+                writer.WriteSimpleValue(SdCwtConstants.RedactedClaimKeysSimpleValue);
                 var digests = (List<byte[]>)entry.Value;
                 writer.WriteStartArray(digests.Count);
                 foreach(byte[] digest in digests)
@@ -175,11 +196,47 @@ internal static class SdCwtPipeline
             else
             {
                 writer.WriteInt32(entry.Key);
-                CborValueConverter.WriteValue(writer, entry.Value);
+                WriteRedactedValue(writer, entry.Value);
             }
         }
 
         writer.WriteEndMap();
-        return writer.Encode();
+    }
+
+
+    /// <summary>
+    /// Writes a single CWT claim value, recursing into a nested claims map through
+    /// <see cref="WriteRedactedMap"/> and into an array element by element (a nested disclosable
+    /// map can sit inside an array), and delegating every other shape — the leaves the SD-CWT
+    /// redaction vocabulary has no opinion on — to <see cref="CborValueConverter.WriteValue(CborWriter, object)"/>,
+    /// which stays unaware of the sentinel because it is SD-CWT vocabulary, not a general CBOR concept.
+    /// </summary>
+    private static void WriteRedactedValue(CborWriter writer, object? value)
+    {
+        switch(value)
+        {
+            case IDictionary<int, object> nestedMap:
+            {
+                WriteRedactedMap(writer, nestedMap);
+                break;
+            }
+            case IEnumerable<object?> items:
+            {
+                IReadOnlyList<object?> list = items as IReadOnlyList<object?> ?? [.. items];
+                writer.WriteStartArray(list.Count);
+                foreach(object? item in list)
+                {
+                    WriteRedactedValue(writer, item);
+                }
+
+                writer.WriteEndArray();
+                break;
+            }
+            default:
+            {
+                CborValueConverter.WriteValue(writer, value);
+                break;
+            }
+        }
     }
 }

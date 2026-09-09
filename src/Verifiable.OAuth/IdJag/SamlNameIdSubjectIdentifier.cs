@@ -13,28 +13,28 @@ namespace Verifiable.OAuth.IdJag;
 public static class SamlNameIdMemberNames
 {
     /// <summary>The <c>format</c> member — names the Subject Identifier Format (RFC 9493).</summary>
-    public static readonly string Format = "format";
+    public static string Format { get; } = "format";
 
     /// <summary>The Subject Identifier Format value identifying a SAML NameID identifier (§3.2.1).</summary>
-    public static readonly string SamlNameIdFormat = "saml-nameid";
+    public static string SamlNameIdFormat { get; } = "saml-nameid";
 
     /// <summary>The <c>issuer</c> member — the SAML issuer entity identifier (§3.2.1 / SAML §8.3.6).</summary>
-    public static readonly string Issuer = "issuer";
+    public static string Issuer { get; } = "issuer";
 
     /// <summary>The <c>nameid</c> member — the SAML Assertion Subject &lt;NameID&gt; value (§3.2.1).</summary>
-    public static readonly string NameId = "nameid";
+    public static string NameId { get; } = "nameid";
 
     /// <summary>The <c>nameid_format</c> member — the Format attribute of the &lt;NameID&gt; (§3.2.1, OPTIONAL).</summary>
-    public static readonly string NameIdFormat = "nameid_format";
+    public static string NameIdFormat { get; } = "nameid_format";
 
     /// <summary>The <c>name_qualifier</c> member — the NameQualifier attribute of the &lt;NameID&gt; (§3.2.1, OPTIONAL).</summary>
-    public static readonly string NameQualifier = "name_qualifier";
+    public static string NameQualifier { get; } = "name_qualifier";
 
     /// <summary>The <c>sp_name_qualifier</c> member — the SPNameQualifier attribute of the &lt;NameID&gt; (§3.2.1, OPTIONAL).</summary>
-    public static readonly string SpNameQualifier = "sp_name_qualifier";
+    public static string SpNameQualifier { get; } = "sp_name_qualifier";
 
     /// <summary>The <c>sp_provided_id</c> member — the SPProvidedID attribute of the &lt;NameID&gt; (§3.2.1, OPTIONAL).</summary>
-    public static readonly string SpProvidedId = "sp_provided_id";
+    public static string SpProvidedId { get; } = "sp_provided_id";
 }
 
 

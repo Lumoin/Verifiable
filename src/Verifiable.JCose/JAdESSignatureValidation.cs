@@ -553,7 +553,7 @@ public static class JAdESSignatureValidation
             return ToFailedResult(outcome, level);
         }
 
-        UnverifiedJAdESMessage message = outcome.Message!;
+        using UnverifiedJAdESMessage message = outcome.Message!;
         JAdESProtectedHeaders headers = outcome.Headers!;
         JAdESUnsignedHeaders? unsignedHeaders = outcome.UnsignedHeaders;
 
@@ -674,7 +674,6 @@ public static class JAdESSignatureValidation
         }
         finally
         {
-            message.Dispose();
             outcome.ArchiveTimestampPayloadSourceOwned?.Dispose();
         }
     }
@@ -839,9 +838,8 @@ public static class JAdESSignatureValidation
                     //header parameter's own whole-payload encoding here (RFC 7797 SS3) on top of that would
                     //encode it a second time, producing a Signing Input no conformant peer would reproduce
                     //from the clause text -- see JAdESSignatureCreation.SignAsync's identical reasoning.
-                    bool base64UrlPayload = headers.SigD is JAdESObjectIdByUriReference or JAdESObjectIdByUriHashReference
-                        ? false
-                        : headers.B64 is null || headers.B64.Value;
+                    bool base64UrlPayload = headers.SigD is not (JAdESObjectIdByUriReference or JAdESObjectIdByUriHashReference)
+                        && (headers.B64 is null || headers.B64.Value);
 
                     bool isValid = await Jws.VerifySignatureAsync(
                         signature.Protected,

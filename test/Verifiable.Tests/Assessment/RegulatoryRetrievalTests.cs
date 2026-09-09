@@ -31,6 +31,26 @@ internal sealed class CompositeClaimAssessorTests
     }
 
 
+    /// <summary>
+    /// <see cref="CompositeClaimAssessor{TInput}.AssessAsync"/>'s <c>CreationTimestampInUtc</c> is the exact
+    /// instant its passed <see cref="TimeProvider"/> reports, not wall time.
+    /// </summary>
+    [TestMethod]
+    public async Task AssessAsyncCreationTimestampIsThePassedTimeProvidersInstant()
+    {
+        var fixedTime = new DateTimeOffset(2025, 5, 10, 8, 0, 0, TimeSpan.Zero);
+        var timeProvider = new FakeTimeProvider(fixedTime);
+        var rules = new List<ClaimDelegate<string>> { new(SimpleRule, [ClaimId.AlgIsValid]) };
+        var issuer = new ClaimIssuer<string>(TestIssuerId, rules, timeProvider);
+        var assessors = new List<AssessorConfiguration> { new("fast-1", FastSuccessAssessor) };
+
+        var composite = new CompositeClaimAssessor<string>(issuer, assessors, timeProvider, AssessmentAggregationStrategy.AllMustSucceed);
+        var result = await composite.AssessAsync("test-input", TestCorrelationId, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(fixedTime.UtcDateTime, result.CreationTimestampInUtc, "CreationTimestampInUtc must equal the passed TimeProvider's instant exactly.");
+    }
+
+
     [TestMethod]
     public async Task AllAssessorsRunInParallel()
     {
@@ -48,12 +68,10 @@ internal sealed class CompositeClaimAssessorTests
         var composite = new CompositeClaimAssessor<string>(
             issuer,
             assessors,
-            AssessmentAggregationStrategy.AllMustSucceed,
-            timeProvider);
+            timeProvider,
+            AssessmentAggregationStrategy.AllMustSucceed);
 
-        var stopwatch = Stopwatch.StartNew();
         var result = await composite.AssessAsync("test-input", TestCorrelationId, TestContext.CancellationToken).ConfigureAwait(false);
-        stopwatch.Stop();
 
         Assert.IsTrue(result.IsSuccess);
         Assert.AreEqual(3, result.CompletedCount);
@@ -83,8 +101,8 @@ internal sealed class CompositeClaimAssessorTests
         var composite = new CompositeClaimAssessor<string>(
             issuer,
             assessors,
-            AssessmentAggregationStrategy.AllMustSucceed,
-            timeProvider);
+            timeProvider,
+            AssessmentAggregationStrategy.AllMustSucceed);
 
         var result = await composite.AssessAsync("test-input", TestCorrelationId, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -111,8 +129,8 @@ internal sealed class CompositeClaimAssessorTests
         var composite = new CompositeClaimAssessor<string>(
             issuer,
             assessors,
-            AssessmentAggregationStrategy.AnyMustSucceed,
-            timeProvider);
+            timeProvider,
+            AssessmentAggregationStrategy.AnyMustSucceed);
 
         var result = await composite.AssessAsync("test-input", TestCorrelationId, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -137,8 +155,8 @@ internal sealed class CompositeClaimAssessorTests
         var composite = new CompositeClaimAssessor<string>(
             issuer,
             assessors,
-            AssessmentAggregationStrategy.MajorityMustSucceed,
-            timeProvider);
+            timeProvider,
+            AssessmentAggregationStrategy.MajorityMustSucceed);
 
         var result = await composite.AssessAsync("test-input", TestCorrelationId, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -163,8 +181,8 @@ internal sealed class CompositeClaimAssessorTests
         var composite = new CompositeClaimAssessor<string>(
             issuer,
             assessors,
-            AssessmentAggregationStrategy.AnyMustSucceed,
-            timeProvider);
+            timeProvider,
+            AssessmentAggregationStrategy.AnyMustSucceed);
 
         var result = await composite.AssessAsync("test-input", TestCorrelationId, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -194,8 +212,8 @@ internal sealed class CompositeClaimAssessorTests
         var composite = new CompositeClaimAssessor<string>(
             issuer,
             assessors,
-            AssessmentAggregationStrategy.AnyMustSucceed,
-            timeProvider);
+            timeProvider,
+            AssessmentAggregationStrategy.AnyMustSucceed);
 
         var result = await composite.AssessAsync("test-input", TestCorrelationId, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -254,8 +272,8 @@ internal sealed class CompositeClaimAssessorTests
         var composite = new CompositeClaimAssessor<string>(
             issuer,
             assessors,
-            AssessmentAggregationStrategy.AnyMustSucceed,
-            timeProvider);
+            timeProvider,
+            AssessmentAggregationStrategy.AnyMustSucceed);
 
         //Start the assessment in the background.
         var assessTask = composite.AssessAsync("test-input", TestCorrelationId, cts.Token);
@@ -345,8 +363,8 @@ internal sealed class CompositeClaimAssessorTests
         var composite = new CompositeClaimAssessor<string>(
             issuer,
             assessors,
-            AssessmentAggregationStrategy.QuorumMustSucceed,
             timeProvider,
+            AssessmentAggregationStrategy.QuorumMustSucceed,
             requiredQuorum: 2);
 
         var result = await composite.AssessAsync("test-input", TestCorrelationId, TestContext.CancellationToken).ConfigureAwait(false);
@@ -365,7 +383,7 @@ internal sealed class CompositeClaimAssessorTests
         var issuer = new ClaimIssuer<string>(TestIssuerId, rules, timeProvider);
 
         Assert.Throws<ArgumentException>(() =>
-            new CompositeClaimAssessor<string>(issuer, []));
+            new CompositeClaimAssessor<string>(issuer, [], new FakeTimeProvider(TestClock.CanonicalEpoch)));
     }
 
 

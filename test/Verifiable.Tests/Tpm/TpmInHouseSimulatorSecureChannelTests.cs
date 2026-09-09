@@ -15,11 +15,13 @@ using Verifiable.Tpm.Infrastructure.Sessions;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
+using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
 /// <summary>
-/// Drives <c>TPM2_PolicySecret()</c>'s HMAC-session authorization arm (TPM 2.0 Library Part 3, Section 23.4.1:
+/// Drives <c>TPM2_PolicySecret()</c>'s HMAC-session authorization arm (TPM 2.0 Library Part 3, clause 23.4.1:
 /// "A password session, an HMAC session, or a policy session ... will satisfy this requirement") against the
 /// in-house behavioural <see cref="TpmSimulator"/> — entirely in-process, with no external assets — through the
 /// same production command path the production code uses (<see cref="TpmCommandExecutor"/> with the real
@@ -28,10 +30,10 @@ namespace Verifiable.Tests.Tpm;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Covered here: the cpHash Name2 known-answer test (TPM 2.0 Library Part 1, clause 16.7 equation
-/// 15; Table 6), lockout-over-HMAC (Part 1, clause 17.8.5), nonceTPM rolling and its replay consequence (Part 1,
-/// clause 17.6.3.1), and the secure-by-default verb pair. The policy-session authorization arm (equations 26/27,
-/// Part 1, clause 17.6.12) and <c>TPM_RC_MODE</c> (Part 3, Section 23.4.1) live in the sibling
+/// Covered here: the cpHash Name2 known-answer test (TPM 2.0 Library Part 1, clause 15.7 equation
+/// 15; Table 9), lockout-over-HMAC (Part 1, clause 16.8.5), nonceTPM rolling and its replay consequence (Part 1,
+/// clause 16.6.3.1), and the secure-by-default verb pair. The policy-session authorization arm (equations 26/27,
+/// Part 1, clause 16.6.12) and <c>TPM_RC_MODE</c> (Part 3, clause 23.4.1) live in the sibling
 /// <c>TpmInHouseSimulatorPolicySessionHmacTests</c>.
 /// </para>
 /// <para>
@@ -57,7 +59,7 @@ internal sealed class TpmInHouseSimulatorSecureChannelTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         TpmResult<StartAuthSessionResponse> policyStart = await tpm.StartPolicySessionAsync(
@@ -105,8 +107,8 @@ internal sealed class TpmInHouseSimulatorSecureChannelTests
 
     /// <summary>
     /// PolicySecret's cpHash Name2 term is the <em>policySession parameter's</em> raw handle, never the
-    /// authorizing HMAC session's own handle, even when the two differ (TPM 2.0 Library Part 1, clause 16.7
-    /// equation 15; Table 6). Starts a policy session A (the parameter being extended) and a DISTINCT HMAC
+    /// authorizing HMAC session's own handle, even when the two differ (TPM 2.0 Library Part 1, clause 15.7
+    /// equation 15; Table 9). Starts a policy session A (the parameter being extended) and a DISTINCT HMAC
     /// session B (the authorizer bound to <c>TPM_RH_ENDORSEMENT</c>), captures the wire command B actually sent,
     /// and independently recomputes the authHMAC twice: once with Name2 = A (the correct, accepted value) and
     /// once with Name2 = B (an easily-transposed wrong value) — the two must diverge, and the supplied HMAC must
@@ -125,8 +127,8 @@ internal sealed class TpmInHouseSimulatorSecureChannelTests
             return await simulator.SubmitAsync(command, commandPool, ct).ConfigureAwait(false);
         }
 
-        using TpmDevice capturingDevice = TpmDevice.Create(CaptureAsync);
-        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice capturingDevice = TpmDevice.Create(CaptureAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
+        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         TpmResult<StartAuthSessionResponse> policyStart = await plainDevice.StartPolicySessionAsync(
@@ -197,7 +199,7 @@ internal sealed class TpmInHouseSimulatorSecureChannelTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         TpmResult<StartAuthSessionResponse> policyStart = await tpm.StartPolicySessionAsync(
@@ -229,7 +231,7 @@ internal sealed class TpmInHouseSimulatorSecureChannelTests
                         return await simulator.SubmitAsync(mutable, commandPool, ct).ConfigureAwait(false);
                     }
 
-                    using TpmDevice tamperingDevice = TpmDevice.Create(TamperLastHmacByteAsync);
+                    using TpmDevice tamperingDevice = TpmDevice.Create(TamperLastHmacByteAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
                     using PolicySecretInput input = PolicySecretInput.CreateImmediate((uint)TpmRh.TPM_RH_ENDORSEMENT, policySessionHandle, pool);
 
                     TpmResult<PolicySecretResponse> secretResult = await TpmCommandExecutor.ExecuteAsync<PolicySecretResponse>(
@@ -256,7 +258,7 @@ internal sealed class TpmInHouseSimulatorSecureChannelTests
     /// <summary>
     /// A session-HMAC mismatch authorizing <c>TPM_RH_LOCKOUT</c> is a one-strike disable of
     /// <see cref="TpmDictionaryAttackParameters"/>'s lockout-auth availability (TPM 2.0 Library Part 1, clause
-    /// 17.8.5) — never a <see cref="TpmDictionaryAttackParameters.LockoutCounter"/> increment (that counter is
+    /// 16.8.5) — never a <see cref="TpmDictionaryAttackParameters.LockoutCounter"/> increment (that counter is
     /// the ordinary DA-protected-entity path, which lockoutAuth itself is exempt from). While disabled, EVERY
     /// further attempt — even with a correct HMAC — is refused with <c>TPM_RC_LOCKOUT</c> before any HMAC work;
     /// once <c>lockoutRecovery</c> seconds of simulated Time have elapsed, the very next command self-heals and,
@@ -270,7 +272,7 @@ internal sealed class TpmInHouseSimulatorSecureChannelTests
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool, ClockAdvanceQuantumMs).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         TpmResult<DictionaryAttackParametersResponse> lowered = await tpm.DictionaryAttackParametersAsync(
@@ -373,7 +375,7 @@ internal sealed class TpmInHouseSimulatorSecureChannelTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         TpmResult<StartAuthSessionResponse> policyStart = await tpm.StartPolicySessionAsync(
@@ -392,7 +394,7 @@ internal sealed class TpmInHouseSimulatorSecureChannelTests
                 return await simulator.SubmitAsync(command, commandPool, ct).ConfigureAwait(false);
             }
 
-            using TpmDevice capturingDevice = TpmDevice.Create(CaptureAsync);
+            using TpmDevice capturingDevice = TpmDevice.Create(CaptureAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
             //StartAuthSession runs over the PLAIN device: capturingDevice must observe ONLY the two PolicySecret
             //calls that follow, or "??=" would freeze firstCommand on the StartAuthSession bytes instead.
@@ -469,7 +471,7 @@ internal sealed class TpmInHouseSimulatorSecureChannelTests
             return await simulator.SubmitAsync(command, commandPool, ct).ConfigureAwait(false);
         }
 
-        using TpmDevice capturingDevice = TpmDevice.Create(CaptureAsync);
+        using TpmDevice capturingDevice = TpmDevice.Create(CaptureAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         TpmResult<StartAuthSessionResponse> policyStart = await capturingDevice.StartPolicySessionAsync(
             SessionAlg, TestContext.CancellationToken).ConfigureAwait(false);
@@ -508,7 +510,7 @@ internal sealed class TpmInHouseSimulatorSecureChannelTests
         }
         finally
         {
-            using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync);
+            using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
             TpmResult<PolicyGetDigestResponse> digestResult = await plainDevice.PolicyGetDigestAsync(
                 policySessionHandle, TestContext.CancellationToken).ConfigureAwait(false);
@@ -547,7 +549,7 @@ internal sealed class TpmInHouseSimulatorSecureChannelTests
             return await simulator.SubmitAsync(command, commandPool, ct).ConfigureAwait(false);
         }
 
-        using TpmDevice capturingDevice = TpmDevice.Create(CaptureAsync);
+        using TpmDevice capturingDevice = TpmDevice.Create(CaptureAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         TpmResult<StartAuthSessionResponse> policyStart = await capturingDevice.StartPolicySessionAsync(
             SessionAlg, TestContext.CancellationToken).ConfigureAwait(false);
@@ -610,8 +612,9 @@ internal sealed class TpmInHouseSimulatorSecureChannelTests
     /// <summary>
     /// Parses a captured <c>TPM2_PolicySecret()</c>-over-session wire command back into its authorizing session's
     /// fields and the raw <c>nonceTPM ‖ cpHashA ‖ policyRef ‖ expiration</c> parameter bytes, firewalled to the
-    /// wire (no back-channel into simulator or session internals). Mirrors <c>TryReadCommandSessionSpans</c>'s
-    /// generic session-body shape (sessionHandle, nonceCaller, sessionAttributes, hmac).
+    /// wire (no back-channel into simulator or session internals). Mirrors TPMS_AUTH_COMMAND's own generic
+    /// session-body shape (sessionHandle, nonceCaller, sessionAttributes, hmac; TPM 2.0 Library Part 2, clause
+    /// 10.12.2, Table 156).
     /// </summary>
     private static void ParsePolicySecretOverSessionCommand(
         byte[] command, out ReadOnlyMemory<byte> nonceCaller, out byte sessionAttributes, out ReadOnlyMemory<byte> hmac, out ReadOnlyMemory<byte> rawParameterArea)
@@ -634,11 +637,11 @@ internal sealed class TpmInHouseSimulatorSecureChannelTests
     }
 
     /// <summary>
-    /// Independently recomputes PolicySecret's command authHMAC (TPM 2.0 Library Part 1, clause 16.7 equation 15;
-    /// clause 17.6.5 equation 17): <c>cpHash = H(TPM_CC_PolicySecret ‖ Name(authHandle) ‖ Name2 ‖ parameters)</c>,
+    /// Independently recomputes PolicySecret's command authHMAC (TPM 2.0 Library Part 1, clause 15.7 equation 15;
+    /// clause 16.6.5 equation 17): <c>cpHash = H(TPM_CC_PolicySecret ‖ Name(authHandle) ‖ Name2 ‖ parameters)</c>,
     /// then <c>authHMAC = HMAC(sessionKey, cpHash ‖ nonceCaller ‖ nonceTPM ‖ sessionAttributes)</c> — no authValue
-    /// term (the session is bound directly to <c>TPM_RH_ENDORSEMENT</c>, so equation 22 (Part 1, clause 17.6.10)'s bind-omission applies)
-    /// and no folded nonces (a single session in the authorization area, clause 17.6.3.4).
+    /// term (the session is bound directly to <c>TPM_RH_ENDORSEMENT</c>, so equation 22 (Part 1, clause 16.6.10)'s bind-omission applies)
+    /// and no folded nonces (a single session in the authorization area, clause 16.6.3.4).
     /// </summary>
     private static async ValueTask<IMemoryOwner<byte>> ComputePolicySecretAuthHmacAsync(
         ReadOnlyMemory<byte> sessionKey, uint name2Handle, ReadOnlyMemory<byte> nonceCaller, ReadOnlyMemory<byte> nonceTpm,
@@ -712,7 +715,7 @@ internal sealed class TpmInHouseSimulatorSecureChannelTests
         BinaryPrimitives.WriteUInt32BigEndian(endorsementName, (uint)TpmRh.TPM_RH_ENDORSEMENT);
 
         Span<byte> predicted = stackalloc byte[DigestSize];
-        TpmPolicyDigest.ExtendForSecret(current, endorsementName, ReadOnlySpan<byte>.Empty, SessionAlg, predicted);
+        TpmPolicyDigest.ExtendForSecret(current, endorsementName, ReadOnlySpan<byte>.Empty, SessionAlg, predicted, BaseMemoryPool.Shared);
 
         return actualDigest.SequenceEqual(predicted);
     }
@@ -731,7 +734,7 @@ internal sealed class TpmInHouseSimulatorSecureChannelTests
     private async Task<(uint SessionHandle, TpmSession Session, byte[] InitialNonceCaller, byte[] InitialNonceTpm)> StartBoundHmacSessionAsync(
         TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, uint bindHandle, ReadOnlyMemory<byte> bindAuthValueOverride = default)
     {
-        StartAuthSessionInput startInput = StartAuthSessionInput.CreateBoundUnsaltedHmacSession(bindHandle, SessionAlg);
+        StartAuthSessionInput startInput = StartAuthSessionInput.CreateBoundUnsaltedHmacSession(bindHandle, SessionAlg, TestEntropy.NewCounterStream(), pool);
 
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             tpm, startInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
@@ -743,7 +746,7 @@ internal sealed class TpmInHouseSimulatorSecureChannelTests
 
         TpmSession session = await TpmSession.CreateBoundAsync(
             new TpmHandle(startResponse.SessionHandle.Value), bindAuthValueOverride, startInput.NonceCaller,
-            startResponse.NonceTPM, SessionAlg, pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            startResponse.NonceTPM, SessionAlg, TestEntropy.NewCounterStream(), pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         return (startResponse.SessionHandle.Value, session, initialNonceCaller, initialNonceTpm);
     }
@@ -779,7 +782,7 @@ internal sealed class TpmInHouseSimulatorSecureChannelTests
     private async Task<TpmSimulator> CreateOperationalAsync(BaseMemoryPool pool, ulong clockAdvanceQuantumMs = TpmSimulatorState.DefaultClockAdvanceQuantumMs)
     {
         var simulator = new TpmSimulator(
-            "tpm-in-house-secure-channel", signingBackend: BouncyCastleTpmEccSigningBackend.Create(), clockAdvanceQuantumMs: clockAdvanceQuantumMs);
+            "tpm-in-house-secure-channel", signingBackend: BouncyCastleTpmEccSigningBackend.Create(), clockAdvanceQuantumMs: clockAdvanceQuantumMs, rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await IssueStartupClearAsync(simulator, pool).ConfigureAwait(false);
 

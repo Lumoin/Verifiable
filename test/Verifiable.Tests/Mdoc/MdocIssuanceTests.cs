@@ -258,6 +258,8 @@ internal sealed class MdocIssuanceTests
     }
 
 
+    /// <summary><c>document</c> is disposed explicitly, not via a <see langword="using"/> declaration,
+    /// because the assertions below must observe the salts already disposed by the cascade.</summary>
     [TestMethod]
     public void DocumentDisposesEverySaltUnderEveryNamespace()
     {

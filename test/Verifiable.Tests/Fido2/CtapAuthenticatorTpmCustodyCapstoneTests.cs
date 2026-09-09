@@ -23,6 +23,7 @@ using Verifiable.Tpm.Infrastructure.Sessions;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Fido2;
 
@@ -36,7 +37,9 @@ namespace Verifiable.Tests.Fido2;
 /// physical TPM. Every assertion reads a wire-visible fact over the real, unmodified APDU transport
 /// (<see cref="CtapNfcTransportHarness"/>) — never internal simulator or TPM state — mirroring
 /// <see cref="CtapAuthenticatorResetFlowTests"/>'s and <see cref="TpmSealExtensionsTests"/>'s own
-/// firewalled composition.
+/// firewalled composition. Each test's <c>(TpmDevice tpm, uint parentHandle)</c> pair is a
+/// tuple-deconstruction target, disposed/flushed in the method's own <see langword="finally"/> block
+/// because a <see langword="using"/> declaration cannot target a tuple-deconstruction assignment.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -62,13 +65,12 @@ namespace Verifiable.Tests.Fido2;
 ///   OWN failure mode, left otherwise unclosed) cannot roll a composed NV counter back.
 ///   </description></item>
 ///   <item><description>
-///   <b>Durable cross-TPM-instance custody.</b> <c>TPM2_Create</c>'s <c>outPrivate</c> is this simulator's
-///   own plaintext encoding with no real parent-key wrap or integrity protection (roadmap W3) — sound for
-///   an in-process custody backend (this simulator's own <c>TPM2_Load</c> always recovers its own
-///   encoding correctly) but NOT a durable, cross-chip-instance secret container: a sealed blob persisted
-///   by ONE chip instance is only ever unsealable by that SAME chip instance for as long as it lives. Every
-///   capstone below models exactly that scope — one chip, surviving across CTAP simulator instances, never
-///   across a chip instance itself.
+///   <b>Durable cross-TPM-instance custody.</b> <c>TPM2_Create</c>'s <c>outPrivate</c> is wrapped and
+///   integrity-bound under the storage parent's protection seed (TPM 2.0 Library Part 1, Clause 20), and
+///   that seed is generated fresh per parent per chip instance — so a sealed blob persisted by ONE chip
+///   instance is only ever unsealable by that SAME chip instance for as long as it lives, and never a
+///   durable, cross-chip-instance secret container. Every capstone below models exactly that scope — one
+///   chip, surviving across CTAP simulator instances, never across a chip instance itself.
 ///   </description></item>
 /// </list>
 /// </remarks>
@@ -115,7 +117,7 @@ internal sealed class CtapAuthenticatorTpmCustodyCapstoneTests
             CoseKey protocolOneKeyAgreementBeforeDeath;
 
             CtapAuthenticatorSimulator simulator1 = await CtapMakeCredentialGetAssertionFixtures.CreateSimulatorWithCustodyAsync(
-                RunId, BuildCustody(tpm, parentHandle, sealAuth, store), aaguid, cancellationToken: cancellationToken).ConfigureAwait(false);
+                RunId, BuildCustody(tpm, parentHandle, sealAuth, store), aaguid, BaseMemoryPool.Shared, cancellationToken: cancellationToken).ConfigureAwait(false);
             using(CtapNfcTransportHarness harness1 = await CtapNfcTransportHarness.CreateAsync(simulator1, pool, cancellationToken).ConfigureAwait(false))
             {
                 await EstablishPinAsync(harness1.Transceive, pool, protocolId, Pin, cancellationToken).ConfigureAwait(false);
@@ -156,7 +158,7 @@ internal sealed class CtapAuthenticatorTpmCustodyCapstoneTests
             Assert.IsTrue(store.HasSealedBlob(RunId), "instance 1's own commands must have persisted a TPM-sealed snapshot before it died.");
 
             CtapAuthenticatorSimulator simulator2 = await CtapMakeCredentialGetAssertionFixtures.CreateSimulatorWithCustodyAsync(
-                RunId, BuildCustody(tpm, parentHandle, sealAuth, store), aaguid, cancellationToken: cancellationToken).ConfigureAwait(false);
+                RunId, BuildCustody(tpm, parentHandle, sealAuth, store), aaguid, BaseMemoryPool.Shared, cancellationToken: cancellationToken).ConfigureAwait(false);
             using(CtapNfcTransportHarness harness2 = await CtapNfcTransportHarness.CreateAsync(simulator2, pool, cancellationToken).ConfigureAwait(false))
             {
                 //FIRST wire command on instance 2: a remembered authenticatorGetAssertion sequence is
@@ -232,7 +234,7 @@ internal sealed class CtapAuthenticatorTpmCustodyCapstoneTests
             byte[] credentialIdBytes;
 
             CtapAuthenticatorSimulator simulator1 = await CtapMakeCredentialGetAssertionFixtures.CreateSimulatorWithCustodyAsync(
-                RunId, BuildCustody(tpm, parentHandle, sealAuth, store), aaguid, cancellationToken: cancellationToken).ConfigureAwait(false);
+                RunId, BuildCustody(tpm, parentHandle, sealAuth, store), aaguid, BaseMemoryPool.Shared, cancellationToken: cancellationToken).ConfigureAwait(false);
             using(CtapNfcTransportHarness harness1 = await CtapNfcTransportHarness.CreateAsync(simulator1, pool, cancellationToken).ConfigureAwait(false))
             {
                 birthGetInfoBytes = await GetInfoBytesAsync(harness1.Transceive, pool, cancellationToken).ConfigureAwait(false);
@@ -256,7 +258,7 @@ internal sealed class CtapAuthenticatorTpmCustodyCapstoneTests
             simulator1.Dispose();
 
             CtapAuthenticatorSimulator simulator2 = await CtapMakeCredentialGetAssertionFixtures.CreateSimulatorWithCustodyAsync(
-                RunId, BuildCustody(tpm, parentHandle, sealAuth, store), aaguid, cancellationToken: cancellationToken).ConfigureAwait(false);
+                RunId, BuildCustody(tpm, parentHandle, sealAuth, store), aaguid, BaseMemoryPool.Shared, cancellationToken: cancellationToken).ConfigureAwait(false);
             using(CtapNfcTransportHarness harness2 = await CtapNfcTransportHarness.CreateAsync(simulator2, pool, cancellationToken).ConfigureAwait(false))
             {
                 byte[] postResetGetInfoBytes = await GetInfoBytesAsync(harness2.Transceive, pool, cancellationToken).ConfigureAwait(false);
@@ -311,7 +313,7 @@ internal sealed class CtapAuthenticatorTpmCustodyCapstoneTests
         byte[] sealAuth = "tpm-custody-capstone-c-seal-auth"u8.ToArray();
 
         byte[] oracleGetInfoBytes;
-        using(CtapAuthenticatorSimulator oracleSimulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator(RunId + "-oracle", aaguid: aaguid))
+        using(CtapAuthenticatorSimulator oracleSimulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator(RunId + "-oracle", BaseMemoryPool.Shared, aaguid: aaguid))
         using(CtapNfcTransportHarness oracleHarness = await CtapNfcTransportHarness.CreateAsync(oracleSimulator, pool, cancellationToken).ConfigureAwait(false))
         {
             oracleGetInfoBytes = await GetInfoBytesAsync(oracleHarness.Transceive, pool, cancellationToken).ConfigureAwait(false);
@@ -324,7 +326,7 @@ internal sealed class CtapAuthenticatorTpmCustodyCapstoneTests
             Assert.IsFalse(store.HasSealedBlob(RunId), "nothing must ever have been stored for a first-boot run id.");
 
             CtapAuthenticatorSimulator simulator = await CtapMakeCredentialGetAssertionFixtures.CreateSimulatorWithCustodyAsync(
-                RunId, BuildCustody(tpm, parentHandle, sealAuth, store), aaguid, cancellationToken: cancellationToken).ConfigureAwait(false);
+                RunId, BuildCustody(tpm, parentHandle, sealAuth, store), aaguid, BaseMemoryPool.Shared, cancellationToken: cancellationToken).ConfigureAwait(false);
             using(CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false))
             {
                 byte[] firstBootGetInfoBytes = await GetInfoBytesAsync(harness.Transceive, pool, cancellationToken).ConfigureAwait(false);
@@ -369,7 +371,7 @@ internal sealed class CtapAuthenticatorTpmCustodyCapstoneTests
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         Guid aaguid = Guid.NewGuid();
         //At most 32 octets: an authValue is bounded by the digest size of the sealed object's nameAlg (SHA-256
-        //here) — TPM 2.0 Library Part 1, clause 17.6.4.2, enforced at TPM2_Create() with TPM_RC_SIZE.
+        //here) — TPM 2.0 Library Part 1, clause 16.6.4.2, enforced at TPM2_Create() with TPM_RC_SIZE.
         byte[] sealAuth = "capstone-d1-seal-auth"u8.ToArray();
 
         (TpmDevice tpm, uint parentHandle) = await CreateChipWithLoadedStorageParentAsync("tpm-custody-capstone-d1-chip", cancellationToken).ConfigureAwait(false);
@@ -378,7 +380,7 @@ internal sealed class CtapAuthenticatorTpmCustodyCapstoneTests
             var store = new DictionaryBackedTpmSealedSnapshotBlobStore();
 
             CtapAuthenticatorSimulator simulator1 = await CtapMakeCredentialGetAssertionFixtures.CreateSimulatorWithCustodyAsync(
-                RunId, BuildCustody(tpm, parentHandle, sealAuth, store), aaguid, cancellationToken: cancellationToken).ConfigureAwait(false);
+                RunId, BuildCustody(tpm, parentHandle, sealAuth, store), aaguid, BaseMemoryPool.Shared, cancellationToken: cancellationToken).ConfigureAwait(false);
             using(CtapNfcTransportHarness harness1 = await CtapNfcTransportHarness.CreateAsync(simulator1, pool, cancellationToken).ConfigureAwait(false))
             {
                 await EstablishPinAsync(harness1.Transceive, pool, protocolId, "1234", cancellationToken).ConfigureAwait(false);
@@ -395,7 +397,7 @@ internal sealed class CtapAuthenticatorTpmCustodyCapstoneTests
 
             TpmSealedStateCustodyException exception = await Assert.ThrowsExactlyAsync<TpmSealedStateCustodyException>(() =>
                 CtapMakeCredentialGetAssertionFixtures.CreateSimulatorWithCustodyAsync(
-                    RunId, BuildCustody(tpm, parentHandle, sealAuth, store), aaguid, cancellationToken: cancellationToken).AsTask());
+                    RunId, BuildCustody(tpm, parentHandle, sealAuth, store), aaguid, BaseMemoryPool.Shared, cancellationToken: cancellationToken).AsTask());
             Assert.IsTrue(
                 exception.Message.Contains("did not parse", StringComparison.OrdinalIgnoreCase),
                 $"the exception message should name the parse failure; was: '{exception.Message}'.");
@@ -406,7 +408,7 @@ internal sealed class CtapAuthenticatorTpmCustodyCapstoneTests
             store.ReplaceStoredBytes(RunId, originalBytes);
 
             CtapAuthenticatorSimulator simulator2 = await CtapMakeCredentialGetAssertionFixtures.CreateSimulatorWithCustodyAsync(
-                RunId, BuildCustody(tpm, parentHandle, sealAuth, store), aaguid, cancellationToken: cancellationToken).ConfigureAwait(false);
+                RunId, BuildCustody(tpm, parentHandle, sealAuth, store), aaguid, BaseMemoryPool.Shared, cancellationToken: cancellationToken).ConfigureAwait(false);
             using(CtapNfcTransportHarness harness2 = await CtapNfcTransportHarness.CreateAsync(simulator2, pool, cancellationToken).ConfigureAwait(false))
             {
                 CtapCommandException repeatSetPinException = await Assert.ThrowsExactlyAsync<CtapCommandException>(() =>
@@ -442,7 +444,7 @@ internal sealed class CtapAuthenticatorTpmCustodyCapstoneTests
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         Guid aaguid = Guid.NewGuid();
         //At most 32 octets each: an authValue is bounded by the digest size of the sealed object's nameAlg
-        //(SHA-256 here) — TPM 2.0 Library Part 1, clause 17.6.4.2, enforced at TPM2_Create() with TPM_RC_SIZE.
+        //(SHA-256 here) — TPM 2.0 Library Part 1, clause 16.6.4.2, enforced at TPM2_Create() with TPM_RC_SIZE.
         byte[] correctSealAuth = "capstone-d2-correct-seal-auth"u8.ToArray();
         byte[] wrongSealAuth = "capstone-d2-wrong-seal-auth"u8.ToArray();
 
@@ -452,7 +454,7 @@ internal sealed class CtapAuthenticatorTpmCustodyCapstoneTests
             var store = new DictionaryBackedTpmSealedSnapshotBlobStore();
 
             CtapAuthenticatorSimulator simulator1 = await CtapMakeCredentialGetAssertionFixtures.CreateSimulatorWithCustodyAsync(
-                RunId, BuildCustody(tpm, parentHandle, correctSealAuth, store), aaguid, cancellationToken: cancellationToken).ConfigureAwait(false);
+                RunId, BuildCustody(tpm, parentHandle, correctSealAuth, store), aaguid, BaseMemoryPool.Shared, cancellationToken: cancellationToken).ConfigureAwait(false);
             using(CtapNfcTransportHarness harness1 = await CtapNfcTransportHarness.CreateAsync(simulator1, pool, cancellationToken).ConfigureAwait(false))
             {
                 await EstablishPinAsync(harness1.Transceive, pool, protocolId, "1234", cancellationToken).ConfigureAwait(false);
@@ -463,7 +465,7 @@ internal sealed class CtapAuthenticatorTpmCustodyCapstoneTests
 
             TpmSealedStateCustodyException exception = await Assert.ThrowsExactlyAsync<TpmSealedStateCustodyException>(() =>
                 CtapMakeCredentialGetAssertionFixtures.CreateSimulatorWithCustodyAsync(
-                    RunId, BuildCustody(tpm, parentHandle, wrongSealAuth, store), aaguid, cancellationToken: cancellationToken).AsTask());
+                    RunId, BuildCustody(tpm, parentHandle, wrongSealAuth, store), aaguid, BaseMemoryPool.Shared, cancellationToken: cancellationToken).AsTask());
             Assert.IsTrue(
                 exception.Message.Contains("Unsealing", StringComparison.Ordinal),
                 $"the exception message should name the failed unseal; was: '{exception.Message}'.");
@@ -471,7 +473,7 @@ internal sealed class CtapAuthenticatorTpmCustodyCapstoneTests
             Assert.IsTrue(store.HasSealedBlob(RunId), "a failed wrong-sealAuth rehydration attempt must not wipe or alter the stored sealed blob.");
 
             CtapAuthenticatorSimulator simulator2 = await CtapMakeCredentialGetAssertionFixtures.CreateSimulatorWithCustodyAsync(
-                RunId, BuildCustody(tpm, parentHandle, correctSealAuth, store), aaguid, cancellationToken: cancellationToken).ConfigureAwait(false);
+                RunId, BuildCustody(tpm, parentHandle, correctSealAuth, store), aaguid, BaseMemoryPool.Shared, cancellationToken: cancellationToken).ConfigureAwait(false);
             using(CtapNfcTransportHarness harness2 = await CtapNfcTransportHarness.CreateAsync(simulator2, pool, cancellationToken).ConfigureAwait(false))
             {
                 CtapCommandException repeatSetPinException = await Assert.ThrowsExactlyAsync<CtapCommandException>(() =>
@@ -525,11 +527,11 @@ internal sealed class CtapAuthenticatorTpmCustodyCapstoneTests
     private static async Task<(TpmDevice Tpm, uint ParentHandle)> CreateChipWithLoadedStorageParentAsync(string chipRunId, CancellationToken cancellationToken)
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        var chip = new TpmSimulator(chipRunId, signingBackend: BouncyCastleTpmEccSigningBackend.Create());
+        var chip = new TpmSimulator(chipRunId, signingBackend: BouncyCastleTpmEccSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await chip.PowerOnAsync(cancellationToken).ConfigureAwait(false);
         await BringOperationalAsync(chip, pool, cancellationToken).ConfigureAwait(false);
 
-        TpmDevice tpm = TpmDevice.Create(chip.SubmitAsync);
+        TpmDevice tpm = TpmDevice.Create(chip.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_CreatePrimary, TpmResponseCodec.CreatePrimary);

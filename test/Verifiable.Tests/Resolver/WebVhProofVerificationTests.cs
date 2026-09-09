@@ -27,10 +27,10 @@ internal sealed class WebVhProofVerificationTests
     private const string GenesisTime = "2025-01-01T00:00:00Z";
     private const string SecondTime = "2025-02-01T00:00:00Z";
 
-    private static readonly WebVhValidationContext Context = new()
+    private static WebVhValidationContext Context { get; } = new()
     {
         Canonicalizer = WebVhLogEntryJson.Canonicalizer,
-        ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync,
+        ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
         Base58Encoder = DefaultCoderSelector.SelectEncoder(typeof(PublicKeyMultibase)),
         Base58Decoder = DefaultCoderSelector.SelectDecoder(typeof(PublicKeyMultibase)),
         MemoryPool = BaseMemoryPool.Shared,

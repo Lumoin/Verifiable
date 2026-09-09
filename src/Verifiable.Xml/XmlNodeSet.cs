@@ -280,7 +280,7 @@ public readonly struct XmlNodeSet: IEquatable<XmlNodeSet>
             return [index];
         }
 
-        int position = ((ReadOnlySpan<int>)indices).BinarySearch(index);
+        int position = indices.AsSpan().BinarySearch(index);
         if(position >= 0)
         {
             return indices;

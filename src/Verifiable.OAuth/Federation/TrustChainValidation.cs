@@ -161,7 +161,7 @@ public static class TrustChainValidation
                 ClockSkew = clockSkew,
             };
 
-            ClaimIssueResult result = await TrustChainValidator.Default()
+            ClaimIssueResult result = await TrustChainValidator.Default(new FrozenTimeProvider(validationTime))
                 .ValidateAsync(context, "inline-trust-chain-validation", cancellationToken)
                 .ConfigureAwait(false);
 
@@ -176,5 +176,17 @@ public static class TrustChainValidation
 
             return TrustChainValidationOutcome.Validated(chain, result);
         };
+    }
+
+
+    /// <summary>
+    /// A <see cref="TimeProvider"/> frozen at a single instant, so <see cref="TrustChainValidator"/>'s
+    /// exp/iat checks judge against the same <paramref name="validationTime"/> the delegate's own
+    /// caller committed to, rather than a clock that advances mid-validation.
+    /// </summary>
+    private sealed class FrozenTimeProvider(DateTimeOffset validationTime): TimeProvider
+    {
+        /// <inheritdoc />
+        public override DateTimeOffset GetUtcNow() => validationTime;
     }
 }

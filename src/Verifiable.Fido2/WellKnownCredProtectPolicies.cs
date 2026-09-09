@@ -23,7 +23,7 @@ public static class WellKnownCredProtectPolicies
     /// The <c>userVerificationOptional</c> value: credProtect wire value <c>0x01</c>, the default
     /// policy when the extension is not requested at all.
     /// </summary>
-    public static readonly string UserVerificationOptional = Utf8Constants.ToInternedString(UserVerificationOptionalUtf8);
+    public static string UserVerificationOptional { get; } = Utf8Constants.ToInternedString(UserVerificationOptionalUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="UserVerificationOptionalWithCredentialIdList"/>.</summary>
     public static ReadOnlySpan<byte> UserVerificationOptionalWithCredentialIdListUtf8 => "userVerificationOptionalWithCredentialIDList"u8;
@@ -32,7 +32,7 @@ public static class WellKnownCredProtectPolicies
     /// The <c>userVerificationOptionalWithCredentialIDList</c> value: credProtect wire value
     /// <c>0x02</c> — discoverable only via a presented credential ID or user verification.
     /// </summary>
-    public static readonly string UserVerificationOptionalWithCredentialIdList = Utf8Constants.ToInternedString(UserVerificationOptionalWithCredentialIdListUtf8);
+    public static string UserVerificationOptionalWithCredentialIdList { get; } = Utf8Constants.ToInternedString(UserVerificationOptionalWithCredentialIdListUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="UserVerificationRequired"/>.</summary>
     public static ReadOnlySpan<byte> UserVerificationRequiredUtf8 => "userVerificationRequired"u8;
@@ -41,7 +41,7 @@ public static class WellKnownCredProtectPolicies
     /// The <c>userVerificationRequired</c> value: credProtect wire value <c>0x03</c> — discovery and
     /// usage MUST be preceded by some form of user verification.
     /// </summary>
-    public static readonly string UserVerificationRequired = Utf8Constants.ToInternedString(UserVerificationRequiredUtf8);
+    public static string UserVerificationRequired { get; } = Utf8Constants.ToInternedString(UserVerificationRequiredUtf8);
 
 
     /// <summary>

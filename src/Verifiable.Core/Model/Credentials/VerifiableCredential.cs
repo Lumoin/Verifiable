@@ -271,16 +271,27 @@ public class VerifiableCredential: IEquatable<VerifiableCredential>
 
 
     /// <summary>
-    /// Equality is identity-of-credential based: <see cref="Id"/>, <see cref="Issuer"/>,
-    /// and the validity window (<see cref="ValidFrom"/>/<see cref="ValidUntil"/>). This is a
-    /// deliberate choice, not an oversight — it is not polymorphic over subtypes, so derived
-    /// types with additional identity-bearing members (for example a proof chain) are
-    /// responsible for their own equality.
+    /// Equality compares a subset of this credential's model state — <see cref="Context"/>,
+    /// <see cref="Id"/>, <see cref="Issuer"/>, and the validity window (<see cref="ValidFrom"/>/
+    /// <see cref="ValidUntil"/>) — only when <paramref name="other"/> has this exact runtime type.
+    /// It does not compare <see cref="CredentialSubject"/> or any other claim content, so two
+    /// credentials whose claims differ but whose Context/Id/Issuer/validity window match compare
+    /// equal; this method is not a substitute for a structural comparison of a credential's claims.
+    /// Nor is it the credential's spec-level identity: per
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#identifiers">
+    /// VC Data Model 2.0 §4.4 Identifiers</see>, that identity is the <see cref="Id"/> member alone,
+    /// not this method. This method is <see langword="virtual"/>: a derived type such as
+    /// <see cref="DataIntegrity.DataIntegritySecuredCredential"/>, which adds a proof chain,
+    /// overrides it to fold its own members in, so the override is still reached when the instance
+    /// is compared through this base static type, this class's
+    /// <c>IEquatable&lt;VerifiableCredential&gt;</c> implementation, or the inherited
+    /// <c>operator ==</c>: a credential carrying that proof is never equal to one lacking it or
+    /// signed differently, regardless of which static type the caller holds the instances as.
     /// </summary>
     /// <param name="other">The credential to compare against.</param>
     /// <returns><see langword="true"/> if the credentials are equal; otherwise <see langword="false"/>.</returns>
     [EditorBrowsable(EditorBrowsableState.Never)]
-    public bool Equals(VerifiableCredential? other)
+    public virtual bool Equals(VerifiableCredential? other)
     {
         if(other is null)
         {
@@ -292,7 +303,13 @@ public class VerifiableCredential: IEquatable<VerifiableCredential>
             return true;
         }
 
-        return string.Equals(Id, other.Id, StringComparison.Ordinal)
+        if(GetType() != other.GetType())
+        {
+            return false;
+        }
+
+        return Equals(Context, other.Context)
+            && string.Equals(Id, other.Id, StringComparison.Ordinal)
             && Equals(Issuer, other.Issuer)
             && ValidFrom == other.ValidFrom
             && ValidUntil == other.ValidUntil;
@@ -310,6 +327,7 @@ public class VerifiableCredential: IEquatable<VerifiableCredential>
     public override int GetHashCode()
     {
         var hash = new HashCode();
+        hash.Add(Context);
         hash.Add(Id, StringComparer.Ordinal);
         hash.Add(Issuer);
         hash.Add(ValidFrom);

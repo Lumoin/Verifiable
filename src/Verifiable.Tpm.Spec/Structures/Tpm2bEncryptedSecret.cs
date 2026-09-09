@@ -23,7 +23,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// } TPM2B_ENCRYPTED_SECRET;
 /// </code>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, clause 11.4.3, Table 210, page 180.
+/// Specification reference: TPM 2.0 Library Part 2, clause 11.4.3, Table 224, page 180.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -137,9 +137,16 @@ public sealed class Tpm2bEncryptedSecret: IDisposable
     /// <summary>
     /// Parses an encrypted secret from a TPM reader.
     /// </summary>
+    /// <remarks>
+    /// The declared size is checked against <see cref="MaxSize"/> and then <see cref="TpmReader.Remaining"/>
+    /// before any pooled buffer is rented, so a truncated or oversized frame throws without ever orphaning a
+    /// rental — the same ordering <see cref="Tpm2bDigest.Parse(ref TpmReader, BaseMemoryPool)"/> and
+    /// <see cref="Tpm2bPrivate.Parse(ref TpmReader, BaseMemoryPool)"/> use.
+    /// </remarks>
     /// <param name="reader">The reader.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The parsed encrypted secret.</returns>
+    /// <exception cref="InvalidOperationException">The declared size exceeds <see cref="MaxSize"/>, or exceeds the octets remaining in <paramref name="reader"/>.</exception>
     public static Tpm2bEncryptedSecret Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
@@ -153,6 +160,11 @@ public sealed class Tpm2bEncryptedSecret: IDisposable
         if(size > MaxSize)
         {
             throw new InvalidOperationException($"Encrypted secret size {size} exceeds maximum {MaxSize}.");
+        }
+
+        if(size > reader.Remaining)
+        {
+            throw new InvalidOperationException($"Encrypted secret size {size} exceeds the {reader.Remaining} octets remaining in the reader.");
         }
 
         IMemoryOwner<byte> storage = pool.Rent(size);

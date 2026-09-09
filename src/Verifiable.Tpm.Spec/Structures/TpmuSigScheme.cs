@@ -11,13 +11,13 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// <remarks>
 /// <para>
 /// Every non-anonymous signing scheme (<c>RSASSA</c>, <c>RSAPSS</c>, <c>ECDSA</c>, <c>SM2</c>,
-/// <c>ECSCHNORR</c>) carries just a hash algorithm — <c>TPMS_SCHEME_HASH</c>, Part 2 Table 170. The anonymous
-/// <c>ECDAA</c> scheme additionally carries a commit counter — <c>TPMS_SCHEME_ECDAA</c>, Part 2 Table 171.
-/// The HMAC scheme's <c>TPMS_SCHEME_HMAC</c> (Table 173) is the same shape as <c>TPMS_SCHEME_HASH</c>, so it
+/// <c>ECSCHNORR</c>) carries just a hash algorithm — <c>TPMS_SCHEME_HASH</c>, Part 2 Table 173. The anonymous
+/// <c>ECDAA</c> scheme additionally carries a commit counter — <c>TPMS_SCHEME_ECDAA</c>, Part 2 Table 174.
+/// The HMAC scheme's <c>TPMS_SCHEME_HMAC</c> (Table 176) is the same shape as <c>TPMS_SCHEME_HASH</c>, so it
 /// shares this type's hash-only member.
 /// </para>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 11.2.1.4, Table 179.
+/// Specification reference: TPM 2.0 Library Part 2, clause 11.2.1.4, Table 182.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]

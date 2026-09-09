@@ -30,9 +30,9 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// <para>
 /// If the enable associated with <c>authHandle</c> is not SET, the TPM returns <c>TPM_RC_HIERARCHY</c>; if
 /// <c>hashAlg</c> is not <c>TPM_ALG_NULL</c> and <c>authPolicy</c>'s size does not match that algorithm's digest
-/// size, the TPM returns <c>TPM_RC_SIZE</c> (TPM 2.0 Library Part 3, Section 24.3.1). This command is
-/// authorized, so it is sent with <c>TPM_ST_SESSIONS</c>. See TPM 2.0 Library Part 3, Section 24.3 (Table
-/// 178/179).
+/// size, the TPM returns <c>TPM_RC_SIZE</c> (TPM 2.0 Library Part 3, clause 24.3.1). This command is
+/// authorized, so it is sent with <c>TPM_ST_SESSIONS</c>. See TPM 2.0 Library Part 3, clause 24.3 (Table
+/// 195/196).
 /// </para>
 /// </remarks>
 public sealed class SetPrimaryPolicyInput: ITpmCommandInput, IDisposable

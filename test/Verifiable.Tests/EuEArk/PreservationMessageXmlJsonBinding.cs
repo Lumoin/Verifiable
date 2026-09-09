@@ -918,10 +918,10 @@ public static class PreservationMessageXmlJsonBinding
     private sealed class MessageWriter
     {
         /// <summary>The element being built, when the XML syntax is being written.</summary>
-        private readonly XElement? element;
+        private XElement? Element { get; }
 
         /// <summary>The object being built, when the JSON syntax is being written.</summary>
-        private readonly JsonObject? json;
+        private JsonObject? Json { get; }
 
 
         /// <summary>Initializes a writer for one element or object.</summary>
@@ -932,11 +932,11 @@ public static class PreservationMessageXmlJsonBinding
             Syntax = syntax;
             if(syntax == PreservationSyntax.Xml)
             {
-                element = new XElement(XName.Get(elementName, PreservationWellKnown.PreservationNamespace));
+                Element = new XElement(XName.Get(elementName, PreservationWellKnown.PreservationNamespace));
             }
             else
             {
-                json = [];
+                Json = [];
             }
         }
 
@@ -955,9 +955,9 @@ public static class PreservationMessageXmlJsonBinding
                 return;
             }
 
-            if(element is not null)
+            if(Element is not null)
             {
-                element.Add(new XElement(XName.Get(name.XmlElementName, PreservationWellKnown.PreservationNamespace), value));
+                Element.Add(new XElement(XName.Get(name.XmlElementName, PreservationWellKnown.PreservationNamespace), value));
             }
             else
             {
@@ -985,7 +985,7 @@ public static class PreservationMessageXmlJsonBinding
                 return;
             }
 
-            if(element is not null)
+            if(Element is not null)
             {
                 Text(name, instant.ToString("O", CultureInfo.InvariantCulture));
             }
@@ -1001,23 +1001,23 @@ public static class PreservationMessageXmlJsonBinding
         /// <param name="child">The child, written by a writer of its own.</param>
         internal void Child(PreservationName name, MessageWriter child)
         {
-            if(element is not null)
+            if(Element is not null)
             {
-                var renamed = new XElement(XName.Get(name.XmlElementName, PreservationWellKnown.PreservationNamespace), child.element!.Elements());
-                element.Add(renamed);
+                var renamed = new XElement(XName.Get(name.XmlElementName, PreservationWellKnown.PreservationNamespace), child.Element!.Elements());
+                Element.Add(renamed);
             }
             else
             {
-                Append(name.JsonMemberName, child.json!.DeepClone());
+                Append(name.JsonMemberName, child.Json!.DeepClone());
             }
         }
 
 
         /// <summary>States the written document's octets, in UTF-8.</summary>
         /// <returns>The octets.</returns>
-        internal byte[] ToOctets() => element is not null
-            ? Encoding.UTF8.GetBytes(element.ToString(SaveOptions.DisableFormatting))
-            : Encoding.UTF8.GetBytes(json!.ToJsonString());
+        internal byte[] ToOctets() => Element is not null
+            ? Encoding.UTF8.GetBytes(Element.ToString(SaveOptions.DisableFormatting))
+            : Encoding.UTF8.GetBytes(Json!.ToJsonString());
 
 
         /// <summary>
@@ -1027,9 +1027,9 @@ public static class PreservationMessageXmlJsonBinding
         /// <param name="value">The value to append.</param>
         private void Append(string memberName, JsonNode? value)
         {
-            if(!json!.TryGetPropertyValue(memberName, out JsonNode? existing))
+            if(!Json!.TryGetPropertyValue(memberName, out JsonNode? existing))
             {
-                json[memberName] = value;
+                Json[memberName] = value;
 
                 return;
             }
@@ -1041,7 +1041,7 @@ public static class PreservationMessageXmlJsonBinding
                 return;
             }
 
-            json[memberName] = new JsonArray(existing!.DeepClone(), value);
+            Json[memberName] = new JsonArray(existing!.DeepClone(), value);
         }
     }
 
@@ -1057,10 +1057,10 @@ public static class PreservationMessageXmlJsonBinding
     private sealed class MessageReader
     {
         /// <summary>The element being read, when the XML syntax is being read.</summary>
-        private readonly XElement? element;
+        private XElement? Element { get; }
 
         /// <summary>The object being read, when the JSON syntax is being read.</summary>
-        private readonly JsonObject? json;
+        private JsonObject? Json { get; }
 
 
         /// <summary>Initializes a reader over one element or object.</summary>
@@ -1068,8 +1068,8 @@ public static class PreservationMessageXmlJsonBinding
         /// <param name="json">The object, or <see langword="null"/> when XML is being read.</param>
         private MessageReader(XElement? element, JsonObject? json)
         {
-            this.element = element;
-            this.json = json;
+            this.Element = element;
+            this.Json = json;
         }
 
 
@@ -1100,7 +1100,7 @@ public static class PreservationMessageXmlJsonBinding
         /// <param name="elementName">The name the expected message's own clause gives it.</param>
         /// <returns><see langword="true"/> when the root is that element.</returns>
         internal bool RootIs(string elementName) =>
-            element is not null && string.Equals(element.Name.LocalName, elementName, StringComparison.Ordinal);
+            Element is not null && string.Equals(Element.Name.LocalName, elementName, StringComparison.Ordinal);
 
 
         /// <summary>Reads one textual member.</summary>
@@ -1108,12 +1108,12 @@ public static class PreservationMessageXmlJsonBinding
         /// <returns>The value, or <see langword="null"/> when the document states none.</returns>
         internal string? Text(PreservationName name)
         {
-            if(element is not null)
+            if(Element is not null)
             {
-                return element.Element(XName.Get(name.XmlElementName, PreservationWellKnown.PreservationNamespace))?.Value;
+                return Element.Element(XName.Get(name.XmlElementName, PreservationWellKnown.PreservationNamespace))?.Value;
             }
 
-            return json!.TryGetPropertyValue(name.JsonMemberName, out JsonNode? node) && node is JsonValue value
+            return Json!.TryGetPropertyValue(name.JsonMemberName, out JsonNode? node) && node is JsonValue value
                 ? value.GetValue<object>().ToString()
                 : null;
         }
@@ -1125,9 +1125,9 @@ public static class PreservationMessageXmlJsonBinding
         internal List<string> Texts(PreservationName name)
         {
             var values = new List<string>();
-            if(element is not null)
+            if(Element is not null)
             {
-                foreach(XElement child in element.Elements(XName.Get(name.XmlElementName, PreservationWellKnown.PreservationNamespace)))
+                foreach(XElement child in Element.Elements(XName.Get(name.XmlElementName, PreservationWellKnown.PreservationNamespace)))
                 {
                     values.Add(child.Value);
                 }
@@ -1135,7 +1135,7 @@ public static class PreservationMessageXmlJsonBinding
                 return values;
             }
 
-            if(!json!.TryGetPropertyValue(name.JsonMemberName, out JsonNode? node) || node is null)
+            if(!Json!.TryGetPropertyValue(name.JsonMemberName, out JsonNode? node) || node is null)
             {
                 return values;
             }
@@ -1181,7 +1181,7 @@ public static class PreservationMessageXmlJsonBinding
                 return null;
             }
 
-            return element is not null
+            return Element is not null
                 ? DateTimeOffset.Parse(text, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind)
                 : DateTimeOffset.FromUnixTimeMilliseconds(long.Parse(text, CultureInfo.InvariantCulture));
         }
@@ -1192,14 +1192,14 @@ public static class PreservationMessageXmlJsonBinding
         /// <returns>A reader over the child, or <see langword="null"/> when the document states none.</returns>
         internal MessageReader? Child(PreservationName name)
         {
-            if(element is not null)
+            if(Element is not null)
             {
-                XElement? child = element.Element(XName.Get(name.XmlElementName, PreservationWellKnown.PreservationNamespace));
+                XElement? child = Element.Element(XName.Get(name.XmlElementName, PreservationWellKnown.PreservationNamespace));
 
                 return child is null ? null : new MessageReader(child, json: null);
             }
 
-            return json!.TryGetPropertyValue(name.JsonMemberName, out JsonNode? node) && node is JsonObject asObject
+            return Json!.TryGetPropertyValue(name.JsonMemberName, out JsonNode? node) && node is JsonObject asObject
                 ? new MessageReader(element: null, asObject)
                 : null;
         }
@@ -1211,9 +1211,9 @@ public static class PreservationMessageXmlJsonBinding
         internal List<MessageReader> Children(PreservationName name)
         {
             var children = new List<MessageReader>();
-            if(element is not null)
+            if(Element is not null)
             {
-                foreach(XElement child in element.Elements(XName.Get(name.XmlElementName, PreservationWellKnown.PreservationNamespace)))
+                foreach(XElement child in Element.Elements(XName.Get(name.XmlElementName, PreservationWellKnown.PreservationNamespace)))
                 {
                     children.Add(new MessageReader(child, json: null));
                 }
@@ -1221,7 +1221,7 @@ public static class PreservationMessageXmlJsonBinding
                 return children;
             }
 
-            if(!json!.TryGetPropertyValue(name.JsonMemberName, out JsonNode? node) || node is null)
+            if(!Json!.TryGetPropertyValue(name.JsonMemberName, out JsonNode? node) || node is null)
             {
                 return children;
             }

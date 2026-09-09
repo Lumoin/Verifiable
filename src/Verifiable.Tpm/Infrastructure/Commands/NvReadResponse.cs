@@ -10,7 +10,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <strong>Response parameters (Part 3, Section 31.13):</strong>
+/// <strong>Response parameters (Part 3, clause 31.13):</strong>
 /// </para>
 /// <list type="bullet">
 ///   <item><description>data (TPM2B_MAX_NV_BUFFER) - the data read.</description></item>
@@ -23,7 +23,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 public sealed class NvReadResponse: ITpmWireType, IDisposable
 {
-    private readonly IMemoryOwner<byte> data;
+    private IMemoryOwner<byte> RawData { get; }
     private bool disposed;
 
     /// <summary>Gets the number of octets read.</summary>
@@ -31,12 +31,12 @@ public sealed class NvReadResponse: ITpmWireType, IDisposable
 
     private NvReadResponse(IMemoryOwner<byte> data, int length)
     {
-        this.data = data;
+        this.RawData = data;
         Length = length;
     }
 
     /// <summary>Gets the data read from the NV Index.</summary>
-    public ReadOnlySpan<byte> Data => data.Memory.Span[..Length];
+    public ReadOnlySpan<byte> Data => RawData.Memory.Span[..Length];
 
     /// <summary>
     /// Parses the response parameters from a TPM reader.
@@ -67,7 +67,7 @@ public sealed class NvReadResponse: ITpmWireType, IDisposable
     {
         if(!disposed)
         {
-            data.Dispose();
+            RawData.Dispose();
             disposed = true;
         }
     }

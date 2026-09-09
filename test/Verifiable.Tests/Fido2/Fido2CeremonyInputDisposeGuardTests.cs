@@ -23,22 +23,26 @@ namespace Verifiable.Tests.Fido2;
 [TestClass]
 internal sealed class Fido2CeremonyInputDisposeGuardTests
 {
-    /// <summary><see cref="RegistrationCeremonyInput.Dispose"/> called twice does not throw.</summary>
+    /// <summary><see cref="RegistrationCeremonyInput.Dispose"/> called twice does not throw; the two calls
+    /// below are explicit (in addition to the <see langword="using"/> declaration's own release at scope
+    /// exit) because the repeated call is itself the behaviour under test.</summary>
     [TestMethod]
     public void RegistrationCeremonyInputDoubleDisposeDoesNotThrow()
     {
-        RegistrationCeremonyInput input = Fido2CeremonyInputFactory.CreateValidRegistrationInput();
+        using RegistrationCeremonyInput input = Fido2CeremonyInputFactory.CreateValidRegistrationInput();
 
         input.Dispose();
         input.Dispose();
     }
 
 
-    /// <summary><see cref="AssertionCeremonyInput.Dispose"/> called twice does not throw.</summary>
+    /// <summary><see cref="AssertionCeremonyInput.Dispose"/> called twice does not throw; the two calls
+    /// below are explicit (in addition to the <see langword="using"/> declaration's own release at scope
+    /// exit) because the repeated call is itself the behaviour under test.</summary>
     [TestMethod]
     public void AssertionCeremonyInputDoubleDisposeDoesNotThrow()
     {
-        AssertionCeremonyInput input = Fido2CeremonyInputFactory.CreateValidAssertionInput();
+        using AssertionCeremonyInput input = Fido2CeremonyInputFactory.CreateValidAssertionInput();
 
         input.Dispose();
         input.Dispose();

@@ -53,7 +53,7 @@ internal sealed class JwsIssuanceFlowTests
     //Shared builder instances.
     private static CredentialBuilder CredentialBuilder { get; } = new CredentialBuilder();
     private static KeyDidBuilder KeyDidBuilder { get; } = new KeyDidBuilder();
-    private static WebDidBuilder WebDidBuilder { get; } = new WebDidBuilder();
+    private static WebDidBuilder WebDidBuilder { get; } = new WebDidBuilder(BaseMemoryPool.Shared);
 
     /// <summary>
     /// Fake time provider for deterministic testing.
@@ -112,6 +112,7 @@ internal sealed class JwsIssuanceFlowTests
         var holderDidDocument = await KeyDidBuilder.BuildAsync(
             publicKey,
             testData.VerificationMethodTypeInfo,
+            BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var holderDid = holderDidDocument.Id!.ToString();

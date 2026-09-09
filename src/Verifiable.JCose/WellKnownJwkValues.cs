@@ -35,7 +35,7 @@ namespace Verifiable.JCose
         /// indicating the key is used for computing digital signatures or MACs per
         /// <see href="https://www.rfc-editor.org/rfc/rfc7517#section-4.2">RFC 7517 §4.2</see>.
         /// </summary>
-        public static readonly string UseSig = Utf8Constants.ToInternedString(UseSigUtf8);
+        public static string UseSig { get; } = Utf8Constants.ToInternedString(UseSigUtf8);
 
         /// <summary>The UTF-8 source literal of <see cref="UseEnc"/>.</summary>
         public static ReadOnlySpan<byte> UseEncUtf8 => "enc"u8;
@@ -50,7 +50,7 @@ namespace Verifiable.JCose
         /// JWE header parameter NAME (also the string <c>"enc"</c>) per RFC 7516 §4.1.2.
         /// Same string, different semantic context.
         /// </remarks>
-        public static readonly string UseEnc = Utf8Constants.ToInternedString(UseEncUtf8);
+        public static string UseEnc { get; } = Utf8Constants.ToInternedString(UseEncUtf8);
 
 
         //Values of the "typ" (Type) header parameter — RFC 7519 §5.1.
@@ -63,7 +63,7 @@ namespace Verifiable.JCose
         /// per <see href="https://www.rfc-editor.org/rfc/rfc7519#section-5.1">RFC 7519 §5.1</see>.
         /// Spelled uppercase for compatibility with legacy implementations.
         /// </summary>
-        public static readonly string TypeJwt = Utf8Constants.ToInternedString(TypeJwtUtf8);
+        public static string TypeJwt { get; } = Utf8Constants.ToInternedString(TypeJwtUtf8);
 
 
         /// <summary>Whether <paramref name="value"/> is <see cref="UseSig"/>.</summary>

@@ -309,7 +309,7 @@ internal static class WebVhTestLog
     {
         VerifiablePresentation unsignedPresentation = new()
         {
-            Context = new Context { Contexts = [Context.Credentials20] },
+            Context = Context.FromIris(Context.Credentials20),
             Type = ["VerifiablePresentation"],
             Holder = did,
             VerifiableCredential = [BuildWhoisCredential(did)]
@@ -368,7 +368,7 @@ internal static class WebVhTestLog
     {
         return new VerifiableCredential
         {
-            Context = new Context { Contexts = [Context.Credentials20] },
+            Context = Context.FromIris(Context.Credentials20),
             Type = ["VerifiableCredential"],
             CredentialSubject = [new CredentialSubject { Id = did }]
         };
@@ -528,13 +528,13 @@ internal static class WebVhTestLog
 /// </summary>
 internal sealed class WebVhController: IDisposable
 {
-    private readonly PublicKeyMemory publicKeyMemory;
-    private readonly PrivateKey privateKey;
+    private PublicKeyMemory PublicKeyMemory { get; }
+    private PrivateKey PrivateKey { get; }
 
     private WebVhController(PublicKeyMemory publicKeyMemory, PrivateKey privateKey, string multikey)
     {
-        this.publicKeyMemory = publicKeyMemory;
-        this.privateKey = privateKey;
+        this.PublicKeyMemory = publicKeyMemory;
+        this.PrivateKey = privateKey;
         Multikey = multikey;
     }
 
@@ -556,7 +556,7 @@ internal sealed class WebVhController: IDisposable
     public static WebVhController Create()
     {
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys = BouncyCastleKeyMaterialCreator.CreateEd25519Keys(BaseMemoryPool.Shared);
-        string multikey = MultibaseSerializer.EncodeKey(keys.PublicKey, WebVhTestLog.Base58Encoder);
+        string multikey = MultibaseSerializer.EncodeKey(keys.PublicKey, WebVhTestLog.Base58Encoder, BaseMemoryPool.Shared);
         PrivateKey signingKey = CryptographicKeyFactory.CreatePrivateKey(keys.PrivateKey, "webvh-test", keys.PrivateKey.Tag);
 
         return new WebVhController(keys.PublicKey, signingKey, multikey);
@@ -566,7 +566,7 @@ internal sealed class WebVhController: IDisposable
     /// <summary>Signs the eddsa-jcs-2022 hash data and encodes the signature as a multibase proofValue.</summary>
     public async Task<string> SignProofValueAsync(ReadOnlyMemory<byte> hashData)
     {
-        using Signature signature = await privateKey.SignAsync(hashData, BaseMemoryPool.Shared).ConfigureAwait(false);
+        using Signature signature = await PrivateKey.SignAsync(hashData, BaseMemoryPool.Shared).ConfigureAwait(false);
 
         return ProofValueCodecs.EncodeBase58Btc(signature.AsReadOnlyMemory().Span, WebVhTestLog.Base58Encoder, BaseMemoryPool.Shared);
     }
@@ -574,8 +574,8 @@ internal sealed class WebVhController: IDisposable
 
     public void Dispose()
     {
-        privateKey.Dispose();
-        publicKeyMemory.Dispose();
+        PrivateKey.Dispose();
+        PublicKeyMemory.Dispose();
     }
 }
 

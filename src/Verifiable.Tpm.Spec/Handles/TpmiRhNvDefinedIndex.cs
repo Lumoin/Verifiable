@@ -17,7 +17,7 @@ namespace Verifiable.Tpm.Spec.Handles;
 /// outside these ranges — a permanent NV index included — is <c>TPM_RC_VALUE</c>.
 /// </para>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 9.26, Table 73.
+/// Specification reference: TPM 2.0 Library Part 2, clause 9.26, Table 72.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]

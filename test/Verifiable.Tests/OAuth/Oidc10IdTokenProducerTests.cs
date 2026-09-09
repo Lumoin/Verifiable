@@ -47,11 +47,11 @@ internal sealed class Oidc10IdTokenProducerTests
 
     private const string ClientId = "https://idtoken-baseline.test";
     private const string SubjectId = "subject-baseline";
-    private static readonly Uri ClientBaseUri = new("https://idtoken-baseline.test");
+    private static Uri ClientBaseUri { get; } = new("https://idtoken-baseline.test");
     //RegisterDpopClient hard-codes its single registered redirect URI to
     //https://client.example.com/callback; the PAR/Authorize/Token flow must
     //present that exact URI to match the registration.
-    private static readonly Uri RedirectUri =
+    private static Uri RedirectUri { get; } =
         new("https://client.example.com/callback");
 
 

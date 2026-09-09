@@ -17,12 +17,12 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// </summary>
 internal static class OAuthJarFixtures
 {
-    private static readonly JwtHeaderSerializer JwtHeaderSerializerDelegate =
+    private static JwtHeaderSerializer JwtHeaderSerializerDelegate { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)header,
             TestSetup.DefaultSerializationOptions);
 
-    private static readonly JwtPayloadSerializer JwtPayloadSerializerDelegate =
+    private static JwtPayloadSerializer JwtPayloadSerializerDelegate { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)payload,
             TestSetup.DefaultSerializationOptions);

@@ -58,18 +58,18 @@ internal static class CardVerifiableCertificateMinter
     /// <summary>Inspection System relative-authorization bit granting read access to EF.DG4 (iris), bit 1 (<c>0x01</c>); OR it into the authorization octet.</summary>
     public const byte ReadDataGroup4 = 0x01;
 
-    private static readonly Asn1Tag CertificateTag = new(TagClass.Application, 33, isConstructed: true);   // 7F21
-    private static readonly Asn1Tag BodyTag = new(TagClass.Application, 78, isConstructed: true);          // 7F4E
-    private static readonly Asn1Tag ProfileIdentifierTag = new(TagClass.Application, 41);                  // 5F29
-    private static readonly Asn1Tag CertificationAuthorityReferenceTag = new(TagClass.Application, 2);     // 42
-    private static readonly Asn1Tag PublicKeyTag = new(TagClass.Application, 73, isConstructed: true);     // 7F49
-    private static readonly Asn1Tag CertificateHolderReferenceTag = new(TagClass.Application, 32);         // 5F20
-    private static readonly Asn1Tag AuthorizationTemplateTag = new(TagClass.Application, 76, isConstructed: true); // 7F4C
-    private static readonly Asn1Tag DiscretionaryDataTag = new(TagClass.Application, 19);                  // 53
-    private static readonly Asn1Tag EffectiveDateTag = new(TagClass.Application, 37);                      // 5F25
-    private static readonly Asn1Tag ExpirationDateTag = new(TagClass.Application, 36);                     // 5F24
-    private static readonly Asn1Tag SignatureTag = new(TagClass.Application, 55);                          // 5F37
-    private static readonly Asn1Tag PublicPointTag = new(TagClass.ContextSpecific, 6);                     // 86
+    private static Asn1Tag CertificateTag { get; } = new(TagClass.Application, 33, isConstructed: true);   // 7F21
+    private static Asn1Tag BodyTag { get; } = new(TagClass.Application, 78, isConstructed: true);          // 7F4E
+    private static Asn1Tag ProfileIdentifierTag { get; } = new(TagClass.Application, 41);                  // 5F29
+    private static Asn1Tag CertificationAuthorityReferenceTag { get; } = new(TagClass.Application, 2);     // 42
+    private static Asn1Tag PublicKeyTag { get; } = new(TagClass.Application, 73, isConstructed: true);     // 7F49
+    private static Asn1Tag CertificateHolderReferenceTag { get; } = new(TagClass.Application, 32);         // 5F20
+    private static Asn1Tag AuthorizationTemplateTag { get; } = new(TagClass.Application, 76, isConstructed: true); // 7F4C
+    private static Asn1Tag DiscretionaryDataTag { get; } = new(TagClass.Application, 19);                  // 53
+    private static Asn1Tag EffectiveDateTag { get; } = new(TagClass.Application, 37);                      // 5F25
+    private static Asn1Tag ExpirationDateTag { get; } = new(TagClass.Application, 36);                     // 5F24
+    private static Asn1Tag SignatureTag { get; } = new(TagClass.Application, 55);                          // 5F37
+    private static Asn1Tag PublicPointTag { get; } = new(TagClass.ContextSpecific, 6);                     // 86
 
 
     /// <summary>

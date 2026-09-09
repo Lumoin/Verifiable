@@ -34,7 +34,7 @@ internal sealed class DataIntegrityProofTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly DateTime ProofCreated = new(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+    private static DateTime ProofCreated { get; } = new(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
     private static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> P256IssuerKeys { get; } = BouncyCastleKeyMaterialCreator.CreateP256Keys(BaseMemoryPool.Shared);
 
@@ -64,7 +64,7 @@ internal sealed class DataIntegrityProofTests
             DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -85,7 +85,7 @@ internal sealed class DataIntegrityProofTests
             SerializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Decoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -117,7 +117,7 @@ internal sealed class DataIntegrityProofTests
             DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -138,7 +138,7 @@ internal sealed class DataIntegrityProofTests
             SerializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Decoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -205,7 +205,7 @@ internal sealed class DataIntegrityProofTests
         //Holder receives credential and verifies issuer signature.
         var holderVerifyResult = await signedCredential.VerifyBaseProofAsync(
             P256IssuerKeys.PublicKey,
-            BouncyCastleCryptographicFunctions.VerifyP256Async,
+            BouncyCastleCryptographicFunctionsAdapter.VerifyP256Async,
             EcdsaSd2023CborSerializer.ParseBaseProof,
             JsonLdSelection.PartitionStatements,
             RdfcCanonicalizer,
@@ -259,7 +259,7 @@ internal sealed class DataIntegrityProofTests
         //Verifier receives derived credential and verifies the selective disclosure proof.
         var verificationResult = await derivedCredential.VerifyDerivedProofAsync(
             P256IssuerKeys.PublicKey,
-            BouncyCastleCryptographicFunctions.VerifyP256Async,
+            BouncyCastleCryptographicFunctionsAdapter.VerifyP256Async,
             EcdsaSd2023CborSerializer.ParseDerivedProof,
             RdfcCanonicalizer,
             ContextResolver,
@@ -617,7 +617,7 @@ internal sealed class DataIntegrityProofTests
             DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext);
 
@@ -631,7 +631,7 @@ internal sealed class DataIntegrityProofTests
             SerializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Decoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext);
 
@@ -641,7 +641,7 @@ internal sealed class DataIntegrityProofTests
 
     //Canonicalization/signing here is in-memory; a default context yields the
     //secure-default SSRF policy and satisfies the policy-carrying parameter.
-    private static readonly ExchangeContext EmptyContext = new();
+    private static ExchangeContext EmptyContext { get; } = new();
 
     private static CanonicalizationDelegate RdfcCanonicalizer { get; } = CanonicalizationTestUtilities.CreateRdfcCanonicalizer();
 

@@ -9,6 +9,7 @@ namespace Verifiable.OAuth.Introspection;
 /// resource server registers as a client; these parameters configure how its JWT
 /// introspection responses are secured.
 /// </summary>
+/// <seealso cref="Verifiable.OAuth.Client.ClientMetadataParameterNames"/>
 public static class IntrospectionClientMetadataParameterNames
 {
     /// <summary>The UTF-8 source literal of <see cref="IntrospectionSignedResponseAlg"/>.</summary>
@@ -18,7 +19,7 @@ public static class IntrospectionClientMetadataParameterNames
     /// The <c>introspection_signed_response_alg</c> parameter — the JWS <c>alg</c> for
     /// signing introspection responses. Defaults to <c>RS256</c> when omitted.
     /// </summary>
-    public static readonly string IntrospectionSignedResponseAlg = Utf8Constants.ToInternedString(IntrospectionSignedResponseAlgUtf8);
+    public static string IntrospectionSignedResponseAlg { get; } = Utf8Constants.ToInternedString(IntrospectionSignedResponseAlgUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="IntrospectionEncryptedResponseAlg"/>.</summary>
     public static ReadOnlySpan<byte> IntrospectionEncryptedResponseAlgUtf8 => "introspection_encrypted_response_alg"u8;
@@ -28,7 +29,7 @@ public static class IntrospectionClientMetadataParameterNames
     /// for content key encryption (sign-then-encrypt Nested JWT when both are
     /// requested). No encryption when omitted.
     /// </summary>
-    public static readonly string IntrospectionEncryptedResponseAlg = Utf8Constants.ToInternedString(IntrospectionEncryptedResponseAlgUtf8);
+    public static string IntrospectionEncryptedResponseAlg { get; } = Utf8Constants.ToInternedString(IntrospectionEncryptedResponseAlgUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="IntrospectionEncryptedResponseEnc"/>.</summary>
     public static ReadOnlySpan<byte> IntrospectionEncryptedResponseEncUtf8 => "introspection_encrypted_response_enc"u8;
@@ -38,7 +39,7 @@ public static class IntrospectionClientMetadataParameterNames
     /// for content encryption. Defaults to <c>A128CBC-HS256</c>; MUST NOT be specified
     /// without <c>introspection_encrypted_response_alg</c>.
     /// </summary>
-    public static readonly string IntrospectionEncryptedResponseEnc = Utf8Constants.ToInternedString(IntrospectionEncryptedResponseEncUtf8);
+    public static string IntrospectionEncryptedResponseEnc { get; } = Utf8Constants.ToInternedString(IntrospectionEncryptedResponseEncUtf8);
 
 
     /// <summary>Returns <see langword="true"/> when <paramref name="value"/> is exactly

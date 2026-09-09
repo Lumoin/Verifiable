@@ -9,6 +9,7 @@ using Verifiable.Cryptography.Context;
 using Verifiable.Json;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 
 namespace Verifiable.Tests.Builders
@@ -48,7 +49,7 @@ namespace Verifiable.Tests.Builders
 
                 resultClaims.Add(new Claim(ClaimId.WebDidKeyFormat, claimOutCome, ClaimContext.None, sublaims));
             }
-            else if(document.VerificationMethod?[0]?.KeyFormat is PublicKeyMultibase multiKeyFormat)
+            else if(document.VerificationMethod?[0]?.KeyFormat is PublicKeyMultibase)
             {
                 //TODO: This will be refactored to validate the multibase format.
                 resultClaims.Add(new Claim(ClaimId.WebDidKeyFormat, ClaimOutcome.Success));
@@ -71,7 +72,7 @@ namespace Verifiable.Tests.Builders
         /// <summary>
         /// The one and only (stateless) builder for <c>did:web</c> DID used in the tests.
         /// </summary>
-        private static WebDidBuilder WebDidBuilder { get; } = new WebDidBuilder();
+        private static WebDidBuilder WebDidBuilder { get; } = new WebDidBuilder(BaseMemoryPool.Shared);
 
         /// <summary>
         /// The test context.
@@ -83,12 +84,10 @@ namespace Verifiable.Tests.Builders
         /// The one and only (stateless) assessor for <c>did:web</c> for the builder tests.
         /// </summary>
         private static ClaimAssessor<DidDocument> WebDidAssessor { get; } = new ClaimAssessor<DidDocument>(
-            new ClaimIssuer<DidDocument>(
-                issuerId: "DefaultWebDidIssuer",
-                validationRules: WebDidValidationRules.AllRules,
-                claimIdGenerator: (ct) => ValueTask.FromResult(string.Empty)),
+            new ClaimIssuer<DidDocument>(issuerId: "DefaultWebDidIssuer", validationRules: WebDidValidationRules.AllRules, claimIdGenerator: (ct) => ValueTask.FromResult(string.Empty), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch)),
             assessor: DefaultAssessors.DefaultWebDidAssessorAsync,
-            assessorId: "DefaultWebDidAssessorId");
+            assessorId: "DefaultWebDidAssessorId",
+            timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
 
 
 
@@ -152,7 +151,7 @@ namespace Verifiable.Tests.Builders
             using var privateKey = keyPair.PrivateKey;
 
             string webDomain = "example.com";
-            var builder = new WebDidBuilder();
+            var builder = new WebDidBuilder(BaseMemoryPool.Shared);
 
             //Test 1: JSON without context - minimal representation.
             var docWithoutContext = await builder.BuildAsync(
@@ -174,7 +173,7 @@ namespace Verifiable.Tests.Builders
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsNotNull(docWithContext.Context, "JsonWithContext should have @context.");
-            Assert.AreEqual(Context.DidCore10, docWithContext.Context.Contexts![0]);
+            Assert.AreEqual(Context.DidCore10, docWithContext.Context.Entries[0].Iri);
 
             //Test 3: JSON-LD - full semantic representation.
             var docJsonLd = await builder.BuildAsync(
@@ -187,9 +186,9 @@ namespace Verifiable.Tests.Builders
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsNotNull(docJsonLd.Context, "JsonLd should have @context.");
-            Assert.HasCount(2, docJsonLd.Context.Contexts!);
-            Assert.AreEqual(Context.DidCore11, docJsonLd.Context.Contexts![0]);
-            Assert.AreEqual("https://example.com/custom", docJsonLd.Context.Contexts[1]);
+            Assert.HasCount(2, docJsonLd.Context.Entries);
+            Assert.AreEqual(Context.DidCore11, docJsonLd.Context.Entries[0].Iri);
+            Assert.AreEqual("https://example.com/custom", docJsonLd.Context.Entries[1].Iri);
 
             //Verify all three have the same core structure.
             Assert.AreEqual(docWithoutContext.Id, docWithContext.Id);

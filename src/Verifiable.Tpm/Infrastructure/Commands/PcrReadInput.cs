@@ -20,7 +20,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 ///   <item><description>pcrSelectionIn (TPML_PCR_SELECTION) - PCRs to read.</description></item>
 /// </list>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 3, Section 22.4.
+/// Specification reference: TPM 2.0 Library Part 3, clause 22.4.
 /// </para>
 /// </remarks>
 public sealed class PcrReadInput: ITpmCommandInput, IDisposable

@@ -1,5 +1,6 @@
 using System;
-using System.Formats.Cbor;
+using System.Buffers;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
 
@@ -35,7 +36,8 @@ public static class CtapBioEnrollmentRequestCborWriter
 
         bool hasSubCommandParams = request.TemplateId is not null || request.TemplateFriendlyName is not null || request.TimeoutMilliseconds is not null;
 
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.Ctap2Canonical);
 
         int memberCount = (request.Modality is not null ? 1 : 0)
             + (request.SubCommand is not null ? 1 : 0)
@@ -83,7 +85,7 @@ public static class CtapBioEnrollmentRequestCborWriter
 
         writer.WriteEndMap();
 
-        byte[] encoded = writer.Encode();
+        byte[] encoded = buffer.WrittenSpan.ToArray();
 
         return new TaggedMemory<byte>(encoded, Fido2BufferTags.CtapBioEnrollmentRequestPayload);
     }
@@ -101,7 +103,8 @@ public static class CtapBioEnrollmentRequestCborWriter
     /// <returns>The encoded <c>subCommandParams</c> map, tagged <see cref="Fido2BufferTags.CtapBioEnrollmentSubCommandParamsPayload"/>.</returns>
     public static TaggedMemory<byte> WriteSubCommandParams(ReadOnlyMemory<byte>? templateId, string? templateFriendlyName, int? timeoutMilliseconds)
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.Ctap2Canonical);
 
         int memberCount = (templateId is not null ? 1 : 0) + (templateFriendlyName is not null ? 1 : 0) + (timeoutMilliseconds is not null ? 1 : 0);
         writer.WriteStartMap(memberCount);
@@ -126,7 +129,7 @@ public static class CtapBioEnrollmentRequestCborWriter
 
         writer.WriteEndMap();
 
-        byte[] encoded = writer.Encode();
+        byte[] encoded = buffer.WrittenSpan.ToArray();
 
         return new TaggedMemory<byte>(encoded, Fido2BufferTags.CtapBioEnrollmentSubCommandParamsPayload);
     }

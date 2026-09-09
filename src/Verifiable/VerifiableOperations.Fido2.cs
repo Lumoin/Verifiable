@@ -83,6 +83,8 @@ internal static partial class VerifiableOperations
     /// </param>
     /// <param name="mdsBlobPath">The file path to a compact-JWS FIDO Metadata Service BLOB.</param>
     /// <param name="mdsRootPath">The file path to the MDS root certificate <paramref name="mdsBlobPath"/> chains to.</param>
+    /// <param name="pool">The memory pool this verb's working buffers are rented from.</param>
+    /// <param name="timeProvider">The clock the not-before/not-after freshness checks read "now" from.</param>
     /// <param name="requireTeeEnforcedAuthorizations">
     /// The <c>android-key</c> format's TEE-only policy knob (see
     /// <see cref="AndroidKeyAttestation.Build"/>'s parameter of the same name). Defaults to
@@ -103,6 +105,11 @@ internal static partial class VerifiableOperations
     /// shape) to store for future authentication ceremonies. On failure, the exact failing claim or
     /// attestation error identifier.
     /// </returns>
+    /// <remarks>
+    /// <strong>Manual disposal, not a <see langword="using"/> declaration.</strong> <c>trustAnchors</c> is a
+    /// per-certificate list, not one disposable value, so it is disposed in its own <see langword="finally"/>
+    /// rather than through a <see langword="using"/> declaration.
+    /// </remarks>
     public static async Task<Result<string, string>> VerifyFido2RegistrationAsync(
         string attestationObjectPath,
         string clientDataJsonPath,
@@ -112,16 +119,21 @@ internal static partial class VerifiableOperations
         IReadOnlyList<string>? trustAnchorPaths,
         string? mdsBlobPath,
         string? mdsRootPath,
+        BaseMemoryPool pool,
+        TimeProvider timeProvider,
         bool requireTeeEnforcedAuthorizations = false,
         string? userVerification = null,
         string? authenticatorAttachment = null,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(pool);
+        ArgumentNullException.ThrowIfNull(timeProvider);
+
         try
         {
-            CryptoProviderStartup.EnsureRegistered();
+            CryptoProviderStartup.EnsureRegistered(timeProvider);
 
-            DateTimeOffset now = TimeProvider.System.GetUtcNow();
+            DateTimeOffset now = timeProvider.GetUtcNow();
 
             if(!TryParseUserVerification(userVerification, out UserVerificationRequirement userVerificationRequirement, out string? userVerificationError))
             {
@@ -159,7 +171,7 @@ internal static partial class VerifiableOperations
             AuthenticatorData authenticatorData;
             try
             {
-                authenticatorData = AuthenticatorDataReader.Read(parts.AuthenticatorData, CredentialPublicKeyCborReader.Read, BaseMemoryPool.Shared);
+                authenticatorData = AuthenticatorDataReader.Read(parts.AuthenticatorData, CredentialPublicKeyCborReader.Read, pool);
             }
             catch(Fido2FormatException ex)
             {
@@ -185,9 +197,15 @@ internal static partial class VerifiableOperations
 
                 return Result.Failure<string, string>($"Malformed clientDataJSON: {ex.Message}");
             }
+            catch
+            {
+                authenticatorData.Dispose();
+
+                throw;
+            }
 
             Result<IReadOnlyList<PkiCertificateMemory>, string> trustAnchorsResult = await ResolveRegistrationTrustAnchorsAsync(
-                trustAnchorPaths, mdsBlobPath, mdsRootPath, authenticatorData, now, cancellationToken).ConfigureAwait(false);
+                trustAnchorPaths, mdsBlobPath, mdsRootPath, authenticatorData, now, pool, cancellationToken).ConfigureAwait(false);
 
             if(!trustAnchorsResult.IsSuccess)
             {
@@ -199,7 +217,7 @@ internal static partial class VerifiableOperations
             IReadOnlyList<PkiCertificateMemory> trustAnchors = trustAnchorsResult.Value!;
             try
             {
-                DigestValue expectedRpIdHash = ComputeRpIdHash(rpId, BaseMemoryPool.Shared);
+                DigestValue expectedRpIdHash = ComputeRpIdHash(rpId, pool);
 
                 using RegistrationCeremonyInput ceremonyInput = new()
                 {
@@ -209,7 +227,8 @@ internal static partial class VerifiableOperations
                     ExpectedOrigins = new HashSet<string>(StringComparer.Ordinal) { origin },
                     ExpectedRpIdHash = expectedRpIdHash,
                     UserVerification = userVerificationRequirement,
-                    ExpectedPubKeyCredParams = SupportedPubKeyCredParams
+                    ExpectedPubKeyCredParams = SupportedPubKeyCredParams,
+                    ExtensionProcessingPool = pool
                 };
 
                 SelectAttestationVerifierDelegate selectVerifier = BuildAttestationVerifierSelector(requireTeeEnforcedAuthorizations);
@@ -225,7 +244,8 @@ internal static partial class VerifiableOperations
                     trustAnchors,
                     now,
                     Guid.NewGuid().ToString(),
-                    BaseMemoryPool.Shared,
+                    pool,
+                    timeProvider,
                     transports: null,
                     authenticatorAttachment: authenticatorAttachment,
                     cancellationToken: cancellationToken).ConfigureAwait(false);
@@ -271,6 +291,8 @@ internal static partial class VerifiableOperations
     /// <param name="rpId">The relying party ID whose SHA-256 hash <c>authData.rpIdHash</c> is checked against.</param>
     /// <param name="origin">The single origin the relying party accepts for this ceremony.</param>
     /// <param name="challenge">The base64url-encoded challenge exactly as issued to the client.</param>
+    /// <param name="pool">The memory pool this verb's working buffers are rented from.</param>
+    /// <param name="timeProvider">The clock passed to the cryptographic provider registry.</param>
     /// <param name="storedSignCount">The signature counter value stored for this credential from the previous ceremony. Defaults to <c>0</c>.</param>
     /// <param name="userVerification">
     /// The relying party's user-verification policy wire value (<c>required</c>, <c>preferred</c>,
@@ -290,14 +312,19 @@ internal static partial class VerifiableOperations
         string rpId,
         string origin,
         string challenge,
+        BaseMemoryPool pool,
+        TimeProvider timeProvider,
         uint storedSignCount = 0,
         string? userVerification = null,
         string? userHandlePath = null,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(pool);
+        ArgumentNullException.ThrowIfNull(timeProvider);
+
         try
         {
-            CryptoProviderStartup.EnsureRegistered();
+            CryptoProviderStartup.EnsureRegistered(timeProvider);
 
             if(!TryParseUserVerification(userVerification, out UserVerificationRequirement userVerificationRequirement, out string? userVerificationError))
             {
@@ -323,7 +350,7 @@ internal static partial class VerifiableOperations
             Fido2CredentialRecord record;
             try
             {
-                record = Fido2CredentialRecordJsonReader.Read(recordBytes, BaseMemoryPool.Shared);
+                record = Fido2CredentialRecordJsonReader.Read(recordBytes, pool);
             }
             catch(Fido2FormatException ex)
             {
@@ -342,7 +369,7 @@ internal static partial class VerifiableOperations
                 try
                 {
                     clientData = ClientDataJsonReader.Read(clientDataJsonBytes);
-                    authenticatorData = AuthenticatorDataReader.Read(authenticatorDataBytes, CredentialPublicKeyCborReader.Read, BaseMemoryPool.Shared);
+                    authenticatorData = AuthenticatorDataReader.Read(authenticatorDataBytes, CredentialPublicKeyCborReader.Read, pool);
                 }
                 catch(Fido2FormatException ex)
                 {
@@ -364,10 +391,10 @@ internal static partial class VerifiableOperations
                     }
                 }
 
-                DigestValue expectedRpIdHash = ComputeRpIdHash(rpId, BaseMemoryPool.Shared);
-                CredentialId credentialId = CredentialId.Create(record.Id.AsReadOnlySpan(), BaseMemoryPool.Shared);
+                DigestValue expectedRpIdHash = ComputeRpIdHash(rpId, pool);
+                CredentialId credentialId = CredentialId.Create(record.Id.AsReadOnlySpan(), pool);
                 UserHandle? responseUserHandle = userHandleBytes is not null
-                    ? UserHandle.Create(userHandleBytes, BaseMemoryPool.Shared)
+                    ? UserHandle.Create(userHandleBytes, pool)
                     : null;
 
                 using AssertionCeremonyInput ceremonyInput = new()
@@ -390,7 +417,8 @@ internal static partial class VerifiableOperations
                     StoredUvInitialized = record.UvInitialized,
                     StoredBackupEligible = record.BackupEligible,
                     StoredBackupState = record.BackupState,
-                    ResponseUserHandle = responseUserHandle
+                    ResponseUserHandle = responseUserHandle,
+                    ExtensionProcessingPool = pool
                 };
 
                 Fido2AssertionOutcome outcome = await Fido2AssertionVerifier.VerifyAsync(
@@ -400,7 +428,8 @@ internal static partial class VerifiableOperations
                     clientDataJsonBytes,
                     ceremonyInput,
                     Guid.NewGuid().ToString(),
-                    BaseMemoryPool.Shared,
+                    pool,
+                    timeProvider,
                     cancellationToken: cancellationToken).ConfigureAwait(false);
 
                 if(!outcome.IsAcceptable)
@@ -421,20 +450,25 @@ internal static partial class VerifiableOperations
     /// <summary>
     /// Generates a WebAuthn cryptographic challenge through the registered entropy provider.
     /// </summary>
+    /// <param name="pool">The memory pool the challenge bytes are rented from.</param>
+    /// <param name="timeProvider">The clock passed to the cryptographic provider registry.</param>
     /// <param name="byteLength">
     /// The challenge length in bytes, or <see langword="null"/> for
     /// <see cref="Fido2ChallengeGeneration"/>'s default length.
     /// </param>
     /// <returns>On success, the base64url-encoded challenge string. On failure, the floor violation message.</returns>
-    public static Result<string, string> CreateFido2Challenge(int? byteLength = null)
+    public static Result<string, string> CreateFido2Challenge(BaseMemoryPool pool, TimeProvider timeProvider, int? byteLength = null)
     {
+        ArgumentNullException.ThrowIfNull(pool);
+        ArgumentNullException.ThrowIfNull(timeProvider);
+
         try
         {
-            CryptoProviderStartup.EnsureRegistered();
+            CryptoProviderStartup.EnsureRegistered(timeProvider);
 
             string challenge = byteLength is int length
-                ? Fido2ChallengeGeneration.Generate(length, BaseMemoryPool.Shared)
-                : Fido2ChallengeGeneration.Generate(BaseMemoryPool.Shared);
+                ? Fido2ChallengeGeneration.Generate(length, pool)
+                : Fido2ChallengeGeneration.Generate(pool);
 
             return Result.Success<string, string>(challenge);
         }
@@ -616,6 +650,7 @@ internal static partial class VerifiableOperations
         string? mdsRootPath,
         AuthenticatorData authenticatorData,
         DateTimeOffset validationTime,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         if(trustAnchorPaths is { Count: > 0 })
@@ -625,7 +660,7 @@ internal static partial class VerifiableOperations
             {
                 foreach(string path in trustAnchorPaths)
                 {
-                    anchors.Add(await ReadCertificateFileAsync(path, cancellationToken).ConfigureAwait(false));
+                    anchors.Add(await ReadCertificateFileAsync(path, pool, cancellationToken).ConfigureAwait(false));
                 }
             }
             catch(Exception ex) when(ex is IOException or CryptographicException or FormatException)
@@ -651,7 +686,7 @@ internal static partial class VerifiableOperations
         try
         {
             blobBytes = await File.ReadAllBytesAsync(mdsBlobPath, cancellationToken).ConfigureAwait(false);
-            mdsRoot = await ReadCertificateFileAsync(mdsRootPath, cancellationToken).ConfigureAwait(false);
+            mdsRoot = await ReadCertificateFileAsync(mdsRootPath, pool, cancellationToken).ConfigureAwait(false);
         }
         catch(Exception ex) when(ex is IOException or CryptographicException or FormatException)
         {
@@ -668,7 +703,7 @@ internal static partial class VerifiableOperations
             //revocation delegate either, so Required would fail closed unconditionally here.
             var request = new MetadataBlobVerificationRequest(
                 blobBytes, [mdsRoot], validationTime, MdsVerificationTenantId,
-                MetadataBlobSerialNumberPolicy.NotTracked, MetadataBlobRevocationPolicy.NotChecked, BaseMemoryPool.Shared);
+                MetadataBlobSerialNumberPolicy.NotTracked, MetadataBlobRevocationPolicy.NotChecked, pool);
 
             MetadataBlobResult blobResult = await verifyBlob(request, cancellationToken).ConfigureAwait(false);
 
@@ -697,7 +732,7 @@ internal static partial class VerifiableOperations
             }
 
             return Result.Success<IReadOnlyList<PkiCertificateMemory>, string>(
-                MetadataBlobPayloadQueries.GetAttestationTrustAnchors(entry!, BaseMemoryPool.Shared));
+                MetadataBlobPayloadQueries.GetAttestationTrustAnchors(entry!, pool));
         }
     }
 
@@ -706,12 +741,12 @@ internal static partial class VerifiableOperations
     /// Reads a certificate file as either PEM or raw DER, returning a pooled
     /// <see cref="PkiCertificateMemory"/> carrier over its DER bytes.
     /// </summary>
-    private static async ValueTask<PkiCertificateMemory> ReadCertificateFileAsync(string path, CancellationToken cancellationToken)
+    private static async ValueTask<PkiCertificateMemory> ReadCertificateFileAsync(string path, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         byte[] fileBytes = await File.ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false);
         byte[] derBytes = ExtractDerBytes(fileBytes);
 
-        IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(derBytes.Length);
+        IMemoryOwner<byte> owner = pool.Rent(derBytes.Length);
         try
         {
             derBytes.CopyTo(owner.Memory);
@@ -836,9 +871,9 @@ internal static partial class VerifiableOperations
     /// the <see cref="CryptographicKeyEvents"/> wiring can invoke it directly, in-process, without
     /// spawning the CLI just to observe the event stream.
     /// </remarks>
-    internal static async Task RunFido2ObservedWorkloadAsync(CancellationToken cancellationToken)
+    internal static async Task RunFido2ObservedWorkloadAsync(BaseMemoryPool pool, TimeProvider timeProvider, CancellationToken cancellationToken)
     {
-        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        ArgumentNullException.ThrowIfNull(pool);
 
         //Routes through the CreateKeyPair choke point so the observed CBOM's provenance also carries the
         //KeyMaterialGeneratedEvent for this ceremony's mint step, completing mint+sign+verify coverage
@@ -879,7 +914,8 @@ internal static partial class VerifiableOperations
             //Discouraged, mirroring the registration verb's own "no other signal" reasoning.
             UserVerification = UserVerificationRequirement.Discouraged,
             StoredSignCount = 0,
-            StoredUvInitialized = true
+            StoredUvInitialized = true,
+            ExtensionProcessingPool = pool
         };
 
         _ = await Fido2AssertionVerifier.VerifyAsync(
@@ -890,6 +926,7 @@ internal static partial class VerifiableOperations
             ceremonyInput,
             "cbom-observed-fido2-workload",
             pool,
+            timeProvider,
             cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 

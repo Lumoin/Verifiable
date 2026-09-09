@@ -110,19 +110,18 @@ internal sealed class DcqlPresentationFlowTests
         List<DcqlMatch<SdToken<string>>> matches = DcqlEvaluator.Evaluate(
             prepared,
             credentials: [issuedToken],
-            metadataExtractor: SdTokenDcqlAdapter.CreateMetadataExtractor<string>(
-                DcqlCredentialFormats.SdJwt, credentialType: EudiPid.SdJwtVct),
+            metadataExtractor: SdTokenDcqlAdapter.CreateMetadataExtractor<string>(DcqlCredentialFormats.SdJwt),
             claimExtractor: SdTokenDcqlAdapter.ClaimExtractor<string>).ToList();
 
         Assert.HasCount(1, matches);
-        Assert.AreEqual(EudiPid.DefaultCredentialQueryId, matches[0].CredentialQueryId);
+        Assert.AreEqual(EudiPid.DefaultCredentialQueryId, matches[0].CredentialQueryId.Value);
         Assert.HasCount(2, matches[0].MatchedPatterns);
 
         DisclosureMatch<SdToken<string>> match = DcqlPathResolver.ToDisclosureMatch(
             matches[0], CreateAllAvailablePaths(), CreateMandatoryPaths(), DcqlCredentialFormats.SdJwt);
 
         //Disclosure engine computes optimal disclosure via lattice.
-        var computation = new DisclosureComputation<SdToken<string>>();
+        var computation = new DisclosureComputation<SdToken<string>>([], new FakeTimeProvider(TestClock.CanonicalEpoch));
         var graph = await computation.ComputeAsync(
             [match],
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -199,7 +198,7 @@ internal sealed class DcqlPresentationFlowTests
         SdToken<string> issuedToken = await IssueSignedPidTokenAsync(privateKey, TestContext.CancellationToken)
             .ConfigureAwait(false);
 
-        var query = await new DcqlQueryBuilder()
+        await new DcqlQueryBuilder()
             .WithSdJwtCredential(EudiPid.DefaultCredentialQueryId,
                 [EudiPid.SdJwtVct],
                 [ClaimsQuery.ForPath([EudiPid.SdJwt.GivenName]),
@@ -237,7 +236,7 @@ internal sealed class DcqlPresentationFlowTests
             [EudiPid.DefaultCredentialQueryId] = new HashSet<CredentialPath> { emailPath }
         };
 
-        var computation = new DisclosureComputation<SdToken<string>>();
+        var computation = new DisclosureComputation<SdToken<string>>([], new FakeTimeProvider(TestClock.CanonicalEpoch));
         var graph = await computation.ComputeAsync(
             [match],
             userExclusions,
@@ -337,7 +336,7 @@ internal sealed class DcqlPresentationFlowTests
             Format = DcqlCredentialFormats.MsoMdoc
         };
 
-        var computation = new DisclosureComputation<string>();
+        var computation = new DisclosureComputation<string>([], new FakeTimeProvider(TestClock.CanonicalEpoch));
         var graph = await computation.ComputeAsync(
             [pidMatch, mdlMatch],
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -359,7 +358,7 @@ internal sealed class DcqlPresentationFlowTests
         Assert.IsTrue(vpToken.ContainsKey("mdl"));
 
         //Verify the PID issuer signature is still valid from the serialized form.
-        SdToken<string> parsedPid = SdJwtSerializer.ParseToken(vpToken[EudiPid.DefaultCredentialQueryId], Decoder, Pool, TestSalts.TestSaltTag);
+        SdToken<string> parsedPid = SdJwtSerializer.ParseToken(vpToken[EudiPid.DefaultCredentialQueryId], Decoder, Encoder, Pool, TestSalts.TestSaltTag);
         bool pidSignatureValid = await Jws.VerifyAsync(
             parsedPid.IssuerSigned, Decoder, Pool,
             publicKey, TestContext.CancellationToken).ConfigureAwait(false);
@@ -432,7 +431,7 @@ internal sealed class DcqlPresentationFlowTests
             });
         });
 
-        var computation = new DisclosureComputation<SdToken<string>>([organizationPolicy]);
+        var computation = new DisclosureComputation<SdToken<string>>([organizationPolicy], new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         var match = new DisclosureMatch<SdToken<string>>
         {
@@ -494,7 +493,7 @@ internal sealed class DcqlPresentationFlowTests
         Assert.EndsWith("~", wireFormat, "SD-JWT without key binding must end with tilde.");
         Assert.Contains("~", wireFormat);
 
-        SdToken<string> parsed = SdJwtSerializer.ParseToken(wireFormat, Decoder, Pool, TestSalts.TestSaltTag);
+        SdToken<string> parsed = SdJwtSerializer.ParseToken(wireFormat, Decoder, Encoder, Pool, TestSalts.TestSaltTag);
 
         Assert.AreEqual(issuedToken.IssuerSigned, parsed.IssuerSigned);
         Assert.HasCount(issuedToken.Disclosures.Count, parsed.Disclosures);
@@ -582,7 +581,7 @@ internal sealed class DcqlPresentationFlowTests
             publicKey, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(signatureValid, "Ed25519 issuer JWT signature must be valid.");
 
-        var query = await new DcqlQueryBuilder()
+        await new DcqlQueryBuilder()
             .WithSdJwtCredential(EudiPid.DefaultCredentialQueryId,
                 [EudiPid.SdJwtVct],
                 [ClaimsQuery.ForPath([EudiPid.SdJwt.Birthdate])])
@@ -604,7 +603,7 @@ internal sealed class DcqlPresentationFlowTests
             Format = DcqlCredentialFormats.SdJwt
         };
 
-        var computation = new DisclosureComputation<SdToken<string>>();
+        var computation = new DisclosureComputation<SdToken<string>>([], new FakeTimeProvider(TestClock.CanonicalEpoch));
         var graph = await computation.ComputeAsync(
             [match],
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -685,20 +684,11 @@ internal sealed class DcqlPresentationFlowTests
                 return Task.FromResult<IReadOnlyList<CredentialDisclosureDecision<SdToken<string>>>>(rewritten);
             });
 
-        var computation = new DisclosureComputation<SdToken<string>>(
-            [unboundedPolicy], crossCredentialOptimizers: [unboundedOptimizer]);
+        var computation = new DisclosureComputation<SdToken<string>>([unboundedPolicy], new FakeTimeProvider(TestClock.CanonicalEpoch), crossCredentialOptimizers: [unboundedOptimizer]);
 
         CredentialQuery credentialQuery = DcqlFixtures.PidGivenAndFamilyName().Credentials![0];
 
-        DcqlDisclosureResult<SdToken<string>> result = await DcqlDisclosure.ComputeStrategyAsync(
-            credentialQuery,
-            issuedToken,
-            SdTokenDcqlAdapter.CreateMetadataExtractor<string>(
-                DcqlCredentialFormats.SdJwt, credentialType: EudiPid.SdJwtVct),
-            SdTokenDcqlAdapter.ClaimExtractor<string>,
-            mandatoryPaths: CreateMandatoryPaths(),
-            computation: computation,
-            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        DcqlDisclosureResult<SdToken<string>> result = await DcqlDisclosure.ComputeStrategyAsync(credentialQuery, issuedToken, SdTokenDcqlAdapter.CreateMetadataExtractor<string>(DcqlCredentialFormats.SdJwt), SdTokenDcqlAdapter.ClaimExtractor<string>, new FakeTimeProvider(TestClock.CanonicalEpoch), mandatoryPaths: CreateMandatoryPaths(), computation: computation, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.ConstraintsSatisfied, "The credential matches the query's format and type constraints.");
         Assert.HasCount(1, result.Graph.Decisions);
@@ -796,13 +786,24 @@ internal sealed class DcqlPresentationFlowTests
             CredentialPath.FromJsonPointer($"/{EudiPid.SdJwt.PhoneNumber}")
         };
 
-        return await claims.IssueSdJwtTokenAsync(
+        //Issuance produces the signed wire form but carries no parsed DisclosurePaths/
+        //IssuerSignedClaims (SdToken's plain constructor defaults both to empty — there is no
+        //payload to walk yet). Parsing the wire form back is what a wallet does once it stores
+        //an issued credential, and it is what gives the DCQL adapter real vct/aka_vcts/iss
+        //evidence to match against instead of a caller-supplied type string.
+        string wireFormat;
+        using(SdToken<string> issued = await claims.IssueSdJwtTokenAsync(
             c => JsonSerializerExtensions.SerializeToUtf8Bytes(c, TestSetup.DefaultSerializationOptions),
             SdJwtIssuance.IssueVerboseAsync,
             disclosablePaths, TestSalts.DefaultGenerator(),
             privateKey, IssuerKeyId, Pool,
             mediaType: WellKnownMediaTypes.Jwt.VcSdJwt,
-            cancellationToken: cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false))
+        {
+            wireFormat = SdJwtSerializer.SerializeToken(issued, Encoder);
+        }
+
+        return SdJwtSerializer.ParseToken(wireFormat, Decoder, Encoder, Pool, TestSalts.TestSaltTag);
     }
 
 
@@ -814,7 +815,7 @@ internal sealed class DcqlPresentationFlowTests
     private static string ComputeDigest(string encodedDisclosure, EncodeDelegate encoder)
     {
         return SdJwtPathExtraction.ComputeDisclosureDigest(
-            encodedDisclosure, WellKnownHashAlgorithms.Sha256Iana, encoder);
+            encodedDisclosure, WellKnownHashAlgorithms.Sha256Iana, encoder, BaseMemoryPool.Shared);
     }
 
 

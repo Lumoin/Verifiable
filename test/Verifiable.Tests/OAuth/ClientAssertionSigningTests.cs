@@ -28,11 +28,11 @@ internal sealed class ClientAssertionSigningTests
     private const string TokenEndpoint = "https://as.example.com/token";
     private const string SigningKeyId = "client-key-1";
 
-    private static readonly JwtHeaderSerializer HeaderSerializer =
+    private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)header, TestSetup.DefaultSerializationOptions);
 
-    private static readonly JwtPayloadSerializer PayloadSerializer =
+    private static JwtPayloadSerializer PayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)payload, TestSetup.DefaultSerializationOptions);
 

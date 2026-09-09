@@ -31,7 +31,7 @@ internal sealed class Oid4VciCredentialEndpointTests
     private const string ClientId = "https://wallet.client.test";
 
     /// <summary>The base URI the registered client is reachable at.</summary>
-    private static readonly Uri ClientBaseUri = new("https://wallet.client.test");
+    private static Uri ClientBaseUri { get; } = new("https://wallet.client.test");
 
     /// <summary>The End-User the offered Credential is about — the grant-bound subject.</summary>
     private const string OfferSubject = "urn:uuid:end-user-42";
@@ -50,7 +50,7 @@ internal sealed class Oid4VciCredentialEndpointTests
     /// The capabilities the Credential Endpoint needs, plus the grant + RFC 9068 producer
     /// capabilities used to mint the access token the endpoint then validates.
     /// </summary>
-    private static readonly ImmutableHashSet<CapabilityIdentifier> CredentialCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> CredentialCapabilities { get; } =
         ImmutableHashSet.Create(
             WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
             WellKnownCapabilityIdentifiers.Oid4VciPreAuthorizedCodeGrant,

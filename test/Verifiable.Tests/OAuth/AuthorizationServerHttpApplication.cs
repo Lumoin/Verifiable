@@ -66,20 +66,20 @@ internal sealed class AuthorizationServerHttpApplication
     public const string TestSubjectHeaderName = "X-Test-Subject-Id";
 
     /// <summary>The server every incoming request is dispatched to.</summary>
-    private readonly EndpointServer server;
+    private EndpointServer Server { get; }
 
 
     /// <summary>Wraps <paramref name="server"/> so <see cref="ProcessRequestAsync"/> can dispatch to it.</summary>
     public AuthorizationServerHttpApplication(EndpointServer server)
     {
         ArgumentNullException.ThrowIfNull(server);
-        this.server = server;
+        this.Server = server;
     }
 
 
     /// <summary>
     /// Maps <paramref name="context"/>'s inbound HTTP request to an <see cref="IncomingRequest"/>,
-    /// dispatches it through <see cref="server"/>, and maps the resulting <see cref="ServerHttpResponse"/>
+    /// dispatches it through <see cref="Server"/>, and maps the resulting <see cref="ServerHttpResponse"/>
     /// back onto the HTTP response.
     /// </summary>
     public async Task ProcessRequestAsync(HttpContext context)
@@ -111,7 +111,7 @@ internal sealed class AuthorizationServerHttpApplication
             ExchangeContext.SetSubjectId(subjectHeaderValues[0]!);
         }
 
-        ServerHttpResponse response = await server.DispatchAsync(
+        ServerHttpResponse response = await Server.DispatchAsync(
             incomingRequest, ExchangeContext, context.RequestAborted).ConfigureAwait(false);
 
         //OID4VP JAR endpoint: per the library contract documented on
@@ -235,15 +235,9 @@ internal sealed class AuthorizationServerHttpApplication
         //Buffer the body bytes. OAuth bodies are tiny — form fields or
         //short JSON registration documents — and buffering keeps the
         //mapping straightforward.
-        ReadOnlyMemory<byte> bodyBytes;
-        if(request.ContentLength is > 0 || HasReadableBody(request))
-        {
-            bodyBytes = await ReadBodyBytesAsync(request.BodyReader, cancellationToken).ConfigureAwait(false);
-        }
-        else
-        {
-            bodyBytes = ReadOnlyMemory<byte>.Empty;
-        }
+        ReadOnlyMemory<byte> bodyBytes = request.ContentLength is > 0 || HasReadableBody(request)
+            ? await ReadBodyBytesAsync(request.BodyReader, cancellationToken).ConfigureAwait(false)
+            : ReadOnlyMemory<byte>.Empty;
 
         string contentType = request.ContentType ?? string.Empty;
 

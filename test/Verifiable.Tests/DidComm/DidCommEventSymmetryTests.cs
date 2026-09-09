@@ -33,7 +33,7 @@ internal sealed class DidCommEventSymmetryTests
 
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
-    private static readonly ExchangeContext Context = new();
+    private static ExchangeContext Context { get; } = new();
 
 
     /// <summary>
@@ -49,7 +49,7 @@ internal sealed class DidCommEventSymmetryTests
         using PrivateKeyMemory privateKey = keys.PrivateKey;
 
         DidDocument document = await new KeyDidBuilder().BuildAsync(
-            publicKey, MultikeyVerificationMethodTypeInfo.Instance, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            publicKey, MultikeyVerificationMethodTypeInfo.Instance, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         string did = document.Id!.Id;
         string kid = AuthenticationKid(document, did);
 
@@ -116,7 +116,7 @@ internal sealed class DidCommEventSymmetryTests
         using PrivateKeyMemory priorPrivateKey = priorKeys.PrivateKey;
 
         DidDocument priorDocument = await new KeyDidBuilder().BuildAsync(
-            priorPublicKey, MultikeyVerificationMethodTypeInfo.Instance, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            priorPublicKey, MultikeyVerificationMethodTypeInfo.Instance, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         string priorDid = priorDocument.Id!.Id;
         string priorKid = AuthenticationKid(priorDocument, priorDid);
 

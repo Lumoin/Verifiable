@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using Verifiable.Core.Model.Did;
 using Verifiable.JCose;
 
@@ -449,6 +450,46 @@ namespace Verifiable.Tests.Did
             Assert.IsTrue(jwk1.Equals(jwk2));
             Assert.IsTrue(jwk1 == jwk2);
             Assert.IsFalse(jwk1 != jwk2);
+        }
+
+
+        /// <summary>
+        /// RFC 7517 &#167;4 JWK members compare as exact JSON member names.
+        /// <see cref="PublicKeyJwk.GetHashCode"/> combines <see cref="PublicKeyJwk.Header"/> entries
+        /// in key order, so the hash must be a pure function of content: the iteration order must not
+        /// depend on the current culture's string collation. The same instance must hash to the same
+        /// value under two cultures whose default string ordering differs (Danish collates the
+        /// digraph <c>"aa"</c> as the letter <c>&#229;</c>, sorting it after <c>"z"</c>, unlike
+        /// English).
+        /// </summary>
+        [TestMethod]
+        public void HashCodeIsCultureIndependent()
+        {
+            var jwk = new PublicKeyJwk
+            {
+                Header = new Dictionary<string, object>
+                {
+                    ["aa"] = "1",
+                    ["z"] = "2",
+                    ["b"] = "3"
+                }
+            };
+
+            CultureInfo originalCulture = CultureInfo.CurrentCulture;
+            try
+            {
+                CultureInfo.CurrentCulture = new CultureInfo("en-US");
+                int hashUnderEnUs = jwk.GetHashCode();
+
+                CultureInfo.CurrentCulture = new CultureInfo("da-DK");
+                int hashUnderDaDk = jwk.GetHashCode();
+
+                Assert.AreEqual(hashUnderEnUs, hashUnderDaDk);
+            }
+            finally
+            {
+                CultureInfo.CurrentCulture = originalCulture;
+            }
         }
     }
 }

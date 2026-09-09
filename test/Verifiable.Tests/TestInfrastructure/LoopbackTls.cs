@@ -19,13 +19,65 @@ namespace Verifiable.Tests.TestInfrastructure;
 internal static class LoopbackTls
 {
     /// <summary>
-    /// Mints a fresh, minimal self-signed leaf certificate for a loopback HTTPS listener, subject
-    /// <c>CN={commonName}</c>, covering both SAN forms a loopback client may dial (the <c>localhost</c>
-    /// DNS name and the <c>127.0.0.1</c> IP address). No CA chain is minted: every client in this
-    /// topology pins the leaf certificate's bytes directly (<see cref="CreatePinnedHandler"/>) rather
-    /// than validating a chain to a trust anchor — there is no CA in a loopback test topology.
+    /// The ONE PKCS#12 export every non-distinct loopback host in the process loads its
+    /// <see cref="CreateServerCertificate"/> instance from — minted lazily and thread-safely on the
+    /// first call, so the whole suite pays for one P-256 keygen and one self-signed-leaf/PKCS#12
+    /// round-trip instead of one per host.
     /// </summary>
-    /// <param name="commonName">The certificate subject's common name, e.g. <c>oauth-loopback-test-host</c>.</param>
+    private static Lazy<byte[]> SharedPkcs12 { get; } = new(() => MintPkcs12Bytes("loopback-shared-test-host"));
+
+
+    /// <summary>
+    /// Loads a fresh <see cref="X509Certificate2"/> instance from <see cref="SharedPkcs12"/> — the
+    /// certificate every non-distinct loopback HTTPS listener in this repository presents. No CA chain
+    /// backs it: every client in this topology pins the leaf certificate's bytes directly
+    /// (<see cref="CreatePinnedHandler(X509Certificate2)"/>) rather than validating a chain to a trust
+    /// anchor, so every caller presenting the SAME leaf bytes changes no security property of the
+    /// fixture. Each call returns its own disposable instance; the underlying bytes are minted once.
+    /// </summary>
+    /// <param name="commonName">
+    /// Validated non-empty for call-site parity with <see cref="CreateDistinctServerCertificate"/>; the
+    /// shared certificate's own subject was fixed when <see cref="SharedPkcs12"/> was first minted, so
+    /// this argument does not select the returned certificate's identity. A caller whose topology needs
+    /// a certificate distinct from every other host's calls <see cref="CreateDistinctServerCertificate"/>
+    /// instead, where the common name does select the subject.
+    /// </param>
+    internal static X509Certificate2 CreateServerCertificate(string commonName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(commonName);
+
+        return X509CertificateLoader.LoadPkcs12(SharedPkcs12.Value, password: null, X509KeyStorageFlags.Exportable);
+    }
+
+
+    /// <summary>
+    /// Mints a genuinely fresh self-signed leaf certificate on every call, subject <c>CN={commonName}</c>
+    /// — for a host type of which one test method may start several instances that must remain mutually
+    /// distinct TLS identities (a pinning-rejection proof needs a genuinely untrusted second party; a
+    /// multi-party topology needs each of its several same-type parties to differ from one another), or
+    /// for a single shell's opt-in to a distinct per-host identity
+    /// (<see cref="Verifiable.Tests.OAuth.TestHostShell.AddHost(string, bool)"/> with
+    /// <c>useDistinctCertificate: true</c>) — rather than sharing <see cref="CreateServerCertificate"/>'s
+    /// single process-wide leaf. Otherwise identical to <see cref="CreateServerCertificate"/>: same SAN
+    /// forms, same key usage, same validity window.
+    /// </summary>
+    /// <param name="commonName">The certificate subject's common name, e.g. <c>oauth-loopback-as2</c>.</param>
+    internal static X509Certificate2 CreateDistinctServerCertificate(string commonName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(commonName);
+
+        return X509CertificateLoader.LoadPkcs12(MintPkcs12Bytes(commonName), password: null, X509KeyStorageFlags.Exportable);
+    }
+
+
+    /// <summary>
+    /// Builds one self-signed leaf certificate's PKCS#12 bytes, subject <c>CN={commonName}</c>, covering
+    /// both SAN forms a loopback client may dial (the <c>localhost</c> DNS name and the <c>127.0.0.1</c>
+    /// IP address), with digital-signature/key-encipherment key usage, a server-auth EKU, and validity
+    /// anchored to <see cref="TestClock.CanonicalEpoch"/>. Shared by <see cref="SharedPkcs12"/> (minted
+    /// once) and <see cref="CreateDistinctServerCertificate"/> (minted fresh every call).
+    /// </summary>
+    /// <param name="commonName">The certificate subject's common name.</param>
     /// <remarks>
     /// <see cref="CertificateRequest.CreateSelfSigned"/> returns a certificate backed by an EPHEMERAL,
     /// in-memory CNG key; the platform TLS stack refuses to use an ephemeral key as a SERVER credential
@@ -33,10 +85,8 @@ internal static class LoopbackTls
     /// PKCS#12 export/reload gives it a persisted key container Kestrel's
     /// <see cref="System.Net.Security.SslStream"/> server authentication can actually use.
     /// </remarks>
-    internal static X509Certificate2 CreateServerCertificate(string commonName)
+    private static byte[] MintPkcs12Bytes(string commonName)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(commonName);
-
         //Cert-factory carve-out: CertificateRequest requires a framework AsymmetricAlgorithm
         //to sign the self-signed leaf certificate; this key is never converted to library
         //PrivateKeyMemory, so it stays framework-native for its whole lifetime.
@@ -57,9 +107,8 @@ internal static class LoopbackTls
         DateTimeOffset now = TestClock.CanonicalEpoch;
 
         using X509Certificate2 ephemeral = request.CreateSelfSigned(now.AddMinutes(-5), now.AddDays(1));
-        byte[] pfxBytes = ephemeral.Export(X509ContentType.Pfx);
 
-        return X509CertificateLoader.LoadPkcs12(pfxBytes, password: null, X509KeyStorageFlags.Exportable);
+        return ephemeral.Export(X509ContentType.Pfx);
     }
 
 

@@ -1,7 +1,9 @@
 using System;
 using System.Buffers;
 using System.Collections.Generic;
-using System.Formats.Cbor;
+using System.Numerics;
+using Lumoin.Veritas.Cbor;
+using Lumoin.Veritas.Cbor.Converters;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Cbor;
@@ -33,7 +35,7 @@ public static class AcdcCbor
     /// <exception cref="CborContentException">The bytes are not a CBOR map, or carry a value an ACDC field map does not use.</exception>
     public static MessageFieldMap DecodeFieldMap(ReadOnlyMemory<byte> cbor)
     {
-        var reader = new CborReader(cbor);
+        var reader = new CborReader(cbor, CborOptions.Strict);
         if(reader.PeekState() != CborReaderState.StartMap)
         {
             throw new CborContentException("An ACDC body MUST be a CBOR map.");
@@ -138,7 +140,7 @@ public static class AcdcCbor
         ArgumentNullException.ThrowIfNull(map);
         ArgumentNullException.ThrowIfNull(output);
 
-        var writer = new CborWriter();
+        var writer = new CborWriter(output, CborOptions.Strict);
 
         writer.WriteStartMap(map.Count);
 
@@ -178,7 +180,8 @@ public static class AcdcCbor
                 int integer => WriteWhole(writer, integer),
                 long wide => WriteWhole(writer, wide),
                 decimal exact => WriteFraction(writer, exact),
-                _ => throw new NotSupportedException($"Unsupported scalar value type in an ACDC field map: {value?.GetType()}.")
+                //value is already proven non-null here — the null pattern above is exhaustive over that case.
+                _ => throw new NotSupportedException($"Unsupported scalar value type in an ACDC field map: {value.GetType()}.")
             };
 
             if(child is not null)
@@ -186,9 +189,6 @@ public static class AcdcCbor
                 stack.Push(child);
             }
         }
-
-        Span<byte> destination = output.GetSpan(writer.BytesWritten);
-        output.Advance(writer.Encode(destination));
 
         static EncodeFrame StartMap(CborWriter writer, MessageFieldMap nested)
         {
@@ -228,9 +228,38 @@ public static class AcdcCbor
 
         static EncodeFrame? WriteFraction(CborWriter writer, decimal value)
         {
-            writer.WriteDecimal(value);
+            WriteDecimalFraction(writer, value);
             return null;
         }
+    }
+
+
+    /// <summary>
+    /// Writes <paramref name="value"/> as an RFC 8949 §3.4.4 Tag 4 decimal fraction: the two-element
+    /// array <c>[exponent, mantissa]</c> that <see cref="DecimalFractionCborConverter"/> encodes, with
+    /// the exponent and unscaled mantissa read directly off the decimal's own bit layout so the wire
+    /// value is exact for every representable <see cref="decimal"/>.
+    /// </summary>
+    /// <param name="writer">The CBOR writer to write the decimal fraction to.</param>
+    /// <param name="value">The decimal value to encode.</param>
+    private static void WriteDecimalFraction(CborWriter writer, decimal value)
+    {
+        Span<int> bits = stackalloc int[4];
+        decimal.GetBits(value, bits);
+
+        int scale = (bits[3] >> 16) & 0x7F;
+        bool isNegative = bits[3] < 0;
+
+        BigInteger mantissa = (new BigInteger((uint)bits[2]) << 64)
+            | (new BigInteger((uint)bits[1]) << 32)
+            | new BigInteger((uint)bits[0]);
+
+        if(isNegative)
+        {
+            mantissa = -mantissa;
+        }
+
+        new DecimalFractionCborConverter().Write(writer, new CborDecimalFraction(-scale, mantissa));
     }
 
 

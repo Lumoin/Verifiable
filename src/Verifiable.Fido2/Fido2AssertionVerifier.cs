@@ -120,8 +120,7 @@ public static class Fido2AssertionVerifier
     /// <param name="correlationId">Identifier correlating this verification with other operations.</param>
     /// <param name="pool">The memory pool the verification's working buffers rent from.</param>
     /// <param name="timeProvider">
-    /// Time provider for <see cref="ClaimIssueResult.CreationTimestampInUtc"/> stamping. When
-    /// <see langword="null"/>, <see cref="TimeProvider.System"/> is used.
+    /// Time provider for <see cref="ClaimIssueResult.CreationTimestampInUtc"/> stamping.
     /// </param>
     /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
     /// <returns>The combined signature and ceremony-rule outcome.</returns>
@@ -133,7 +132,7 @@ public static class Fido2AssertionVerifier
         AssertionCeremonyInput ceremonyInput,
         string correlationId,
         BaseMemoryPool pool,
-        TimeProvider? timeProvider = null,
+        TimeProvider timeProvider,
         CancellationToken cancellationToken = default)
     {
         var claimIssuer = new ClaimIssuer<AssertionCeremonyInput>(

@@ -33,7 +33,7 @@ internal sealed class JAdESCounterSignTests
     /// <summary>The MSTest context, carrying the cancellation token every asynchronous call observes.</summary>
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly JwtPartEncoder<Dictionary<string, object>> HeaderEncoder =
+    private static JwtPartEncoder<Dictionary<string, object>> HeaderEncoder { get; } =
         static header => new TaggedMemory<byte>(JsonSerializer.SerializeToUtf8Bytes(header), Tag.Create(Purpose.Data));
 
 
@@ -59,7 +59,7 @@ internal sealed class JAdESCounterSignTests
             HeaderEncoder,
             TestSetup.Base64UrlEncoder,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             BaseMemoryPool.Shared,
             counterSignerUnprotectedHeader: null,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -75,7 +75,7 @@ internal sealed class JAdESCounterSignTests
         {
             bool verified = await JAdESCounterSign.VerifyAsync(
                 nested!.Wire, embeddingSignatureValue, TestSetup.Base64UrlEncoder, publicKey,
-                MicrosoftCryptographicFunctions.VerifyP256Async, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+                MicrosoftCryptographicFunctionsAdapter.VerifyP256Async, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsTrue(verified);
         }
@@ -98,7 +98,7 @@ internal sealed class JAdESCounterSignTests
             HeaderEncoder,
             TestSetup.Base64UrlEncoder,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             BaseMemoryPool.Shared,
             counterSignerUnprotectedHeader: null,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -116,7 +116,7 @@ internal sealed class JAdESCounterSignTests
         {
             bool verified = await JAdESCounterSign.VerifyAsync(
                 nested!.Wire, embeddingSignatureValue, TestSetup.Base64UrlEncoder, publicKey,
-                MicrosoftCryptographicFunctions.VerifyP256Async, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+                MicrosoftCryptographicFunctionsAdapter.VerifyP256Async, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsTrue(verified);
         }
@@ -140,7 +140,7 @@ internal sealed class JAdESCounterSignTests
             HeaderEncoder,
             TestSetup.Base64UrlEncoder,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             BaseMemoryPool.Shared,
             counterSignerUnprotectedHeader: null,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -153,7 +153,7 @@ internal sealed class JAdESCounterSignTests
         {
             bool verified = await JAdESCounterSign.VerifyAsync(
                 nested!.Wire, differentEmbeddingValue, TestSetup.Base64UrlEncoder, publicKey,
-                MicrosoftCryptographicFunctions.VerifyP256Async, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+                MicrosoftCryptographicFunctionsAdapter.VerifyP256Async, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsFalse(verified);
         }
@@ -183,7 +183,7 @@ internal sealed class JAdESCounterSignTests
             HeaderEncoder,
             TestSetup.Base64UrlEncoder,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             BaseMemoryPool.Shared,
             counterSignerUnprotectedHeader: null,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -196,7 +196,7 @@ internal sealed class JAdESCounterSignTests
         {
             bool verified = await JAdESCounterSign.VerifyAsync(
                 nested!.Wire, embeddingSignatureValue, TestSetup.Base64UrlEncoder, unrelatedPublicKey,
-                MicrosoftCryptographicFunctions.VerifyP256Async, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+                MicrosoftCryptographicFunctionsAdapter.VerifyP256Async, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsFalse(verified);
         }
@@ -294,7 +294,7 @@ internal sealed class JAdESCounterSignTests
             HeaderEncoder,
             TestSetup.Base64UrlEncoder,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             BaseMemoryPool.Shared,
             counterSignerUnprotectedHeader: null,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -333,7 +333,7 @@ internal sealed class JAdESCounterSignTests
             HeaderEncoder,
             TestSetup.Base64UrlEncoder,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             BaseMemoryPool.Shared,
             counterSignerUnprotectedHeader: null,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);

@@ -239,31 +239,31 @@ public static class EArkPackageReading
         private bool hasDataFolder;
 
         /// <summary>The files in the level's <c>metadata</c> folder outside its named sub-folders.</summary>
-        private readonly List<EArkPackageEntry>metadataFiles = [];
+        private List<EArkPackageEntry>MetadataFiles { get; } = [];
 
         /// <summary>The files in the level's <c>metadata/preservation</c> folder.</summary>
-        private readonly List<EArkPackageEntry>preservationMetadataFiles = [];
+        private List<EArkPackageEntry>PreservationMetadataFiles { get; } = [];
 
         /// <summary>The files in the level's <c>metadata/descriptive</c> folder.</summary>
-        private readonly List<EArkPackageEntry>descriptiveMetadataFiles = [];
+        private List<EArkPackageEntry>DescriptiveMetadataFiles { get; } = [];
 
         /// <summary>The files in the level's <c>metadata/other</c> folder.</summary>
-        private readonly List<EArkPackageEntry>otherMetadataFiles = [];
+        private List<EArkPackageEntry>OtherMetadataFiles { get; } = [];
 
         /// <summary>The files in the level's <c>schemas</c> folder.</summary>
-        private readonly List<EArkPackageEntry>schemaFiles = [];
+        private List<EArkPackageEntry>SchemaFiles { get; } = [];
 
         /// <summary>The files in the level's <c>documentation</c> folder.</summary>
-        private readonly List<EArkPackageEntry>documentationFiles = [];
+        private List<EArkPackageEntry>DocumentationFiles { get; } = [];
 
         /// <summary>The files in the level's <c>data</c> folder.</summary>
-        private readonly List<EArkPackageEntry>dataFiles = [];
+        private List<EArkPackageEntry>DataFiles { get; } = [];
 
         /// <summary>The files at positions the vocabulary names none of.</summary>
-        private readonly List<EArkPackageEntry>extensionFiles = [];
+        private List<EArkPackageEntry>ExtensionFiles { get; } = [];
 
         /// <summary>The entries carrying a fixed name at a position the specification does not put it at.</summary>
-        private readonly List<EArkPackageEntry>misplacedEntries = [];
+        private List<EArkPackageEntry>MisplacedEntries { get; } = [];
 
 
         /// <summary>
@@ -279,15 +279,15 @@ public static class EArkPackageReading
             _ = placement switch
             {
                 EArkPackageEntryPlacement.Manifest => Assign(entry, ref manifest),
-                EArkPackageEntryPlacement.Metadata => Record(entry, remaining == 1, ref hasMetadataFolder, metadataFiles),
-                EArkPackageEntryPlacement.PreservationMetadata => Record(entry, remaining == 2, ref hasPreservationMetadataFolder, preservationMetadataFiles),
-                EArkPackageEntryPlacement.DescriptiveMetadata => Record(entry, remaining == 2, ref hasDescriptiveMetadataFolder, descriptiveMetadataFiles),
-                EArkPackageEntryPlacement.OtherMetadata => Record(entry, remaining == 2, ref hasOtherMetadataFolder, otherMetadataFiles),
-                EArkPackageEntryPlacement.Schemas => Record(entry, remaining == 1, ref hasSchemasFolder, schemaFiles),
-                EArkPackageEntryPlacement.Documentation => Record(entry, remaining == 1, ref hasDocumentationFolder, documentationFiles),
-                EArkPackageEntryPlacement.Data => Record(entry, remaining == 1, ref hasDataFolder, dataFiles),
-                EArkPackageEntryPlacement.Extension => AddFile(entry, extensionFiles),
-                EArkPackageEntryPlacement.Misplaced => AddEntry(entry, misplacedEntries),
+                EArkPackageEntryPlacement.Metadata => Record(entry, remaining == 1, ref hasMetadataFolder, MetadataFiles),
+                EArkPackageEntryPlacement.PreservationMetadata => Record(entry, remaining == 2, ref hasPreservationMetadataFolder, PreservationMetadataFiles),
+                EArkPackageEntryPlacement.DescriptiveMetadata => Record(entry, remaining == 2, ref hasDescriptiveMetadataFolder, DescriptiveMetadataFiles),
+                EArkPackageEntryPlacement.OtherMetadata => Record(entry, remaining == 2, ref hasOtherMetadataFolder, OtherMetadataFiles),
+                EArkPackageEntryPlacement.Schemas => Record(entry, remaining == 1, ref hasSchemasFolder, SchemaFiles),
+                EArkPackageEntryPlacement.Documentation => Record(entry, remaining == 1, ref hasDocumentationFolder, DocumentationFiles),
+                EArkPackageEntryPlacement.Data => Record(entry, remaining == 1, ref hasDataFolder, DataFiles),
+                EArkPackageEntryPlacement.Extension => AddFile(entry, ExtensionFiles),
+                EArkPackageEntryPlacement.Misplaced => AddEntry(entry, MisplacedEntries),
                 _ => true
             };
 
@@ -349,15 +349,15 @@ public static class EArkPackageReading
             HasSchemasFolder = hasSchemasFolder,
             HasDocumentationFolder = hasDocumentationFolder,
             HasDataFolder = hasDataFolder,
-            MetadataFiles = metadataFiles,
-            PreservationMetadataFiles = preservationMetadataFiles,
-            DescriptiveMetadataFiles = descriptiveMetadataFiles,
-            OtherMetadataFiles = otherMetadataFiles,
-            SchemaFiles = schemaFiles,
-            DocumentationFiles = documentationFiles,
-            DataFiles = dataFiles,
-            ExtensionFiles = extensionFiles,
-            MisplacedEntries = misplacedEntries
+            MetadataFiles = MetadataFiles,
+            PreservationMetadataFiles = PreservationMetadataFiles,
+            DescriptiveMetadataFiles = DescriptiveMetadataFiles,
+            OtherMetadataFiles = OtherMetadataFiles,
+            SchemaFiles = SchemaFiles,
+            DocumentationFiles = DocumentationFiles,
+            DataFiles = DataFiles,
+            ExtensionFiles = ExtensionFiles,
+            MisplacedEntries = MisplacedEntries
         };
     }
 

@@ -1,5 +1,6 @@
 using System.Text;
 using Verifiable.Core;
+using Verifiable.Core.Transport;
 using Verifiable.JCose;
 
 using static Verifiable.Server.EndpointInput;
@@ -36,7 +37,7 @@ public static class VcalmWorkflowEndpoints
     /// The endpoint builder delegate. Pass this to
     /// <see cref="Verifiable.Server.ServerConfiguration.EndpointBuilders"/>.
     /// </summary>
-    public static readonly EndpointBuilderDelegate Builder = static (registration, context, ct) =>
+    public static EndpointBuilderDelegate Builder { get; } = static (registration, context, ct) =>
     {
         List<EndpointCandidate> candidates = [];
 
@@ -47,7 +48,7 @@ public static class VcalmWorkflowEndpoints
 
             //§3.6.1 create needs the parser and the store seam; §3.6.2 read needs the load seam.
             //Fail-closed: a workflow service that cannot persist / load a workflow is a dead route.
-            if(vcalm?.ParseVcalmCreateWorkflowAsync is not null && vcalm?.StoreVcalmWorkflowAsync is not null)
+            if(vcalm?.ParseVcalmCreateWorkflowAsync is not null && vcalm.StoreVcalmWorkflowAsync is not null)
             {
                 candidates.Add(BuildCreateWorkflow());
             }
@@ -249,7 +250,7 @@ public static class VcalmWorkflowEndpoints
 
         string? location = context.VcalmWorkflowLocation;
 
-        return location is not null ? response.WithHeader("Location", location) : response;
+        return location is not null ? response.WithHeader(WellKnownHttpHeaderNames.Location, location) : response;
     }
 
 

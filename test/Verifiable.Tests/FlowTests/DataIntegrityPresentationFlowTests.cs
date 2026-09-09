@@ -54,7 +54,7 @@ internal sealed class DataIntegrityPresentationFlowTests
     private static JsonSerializerOptions JsonOptions { get; } = TestSetup.DefaultSerializationOptions;
     private static CredentialBuilder CredentialBuilder { get; } = new CredentialBuilder();
     private static KeyDidBuilder KeyDidBuilder { get; } = new KeyDidBuilder();
-    private static WebDidBuilder WebDidBuilder { get; } = new WebDidBuilder();
+    private static WebDidBuilder WebDidBuilder { get; } = new WebDidBuilder(BaseMemoryPool.Shared);
 
     private static FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(
         new DateTimeOffset(2024, 6, 15, 12, 0, 0, TimeSpan.Zero));
@@ -67,7 +67,7 @@ internal sealed class DataIntegrityPresentationFlowTests
 
     //Canonicalization/signing here is in-memory; a default context yields the
     //secure-default SSRF policy and satisfies the policy-carrying parameter.
-    private static readonly ExchangeContext EmptyContext = new();
+    private static ExchangeContext EmptyContext { get; } = new();
 
     private static ProofValueEncoderDelegate ProofValueEncoder { get; } = ProofValueCodecs.EncodeBase58Btc;
     private static ProofValueDecoderDelegate ProofValueDecoder { get; } = ProofValueCodecs.DecodeBase58Btc;
@@ -111,6 +111,7 @@ internal sealed class DataIntegrityPresentationFlowTests
         var holderDidDocument = await KeyDidBuilder.BuildAsync(
             publicKey,
             testData.VerificationMethodTypeInfo,
+            BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var issuerVerificationMethodId = issuerDidDocument.VerificationMethod![0].Id!;
@@ -149,7 +150,7 @@ internal sealed class DataIntegrityPresentationFlowTests
             DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -157,7 +158,7 @@ internal sealed class DataIntegrityPresentationFlowTests
         //Holder wraps the signed credential in a Verifiable Presentation.
         var unsignedPresentation = new VerifiablePresentation
         {
-            Context = new Context { Contexts = [Context.Credentials20] },
+            Context = Context.FromIris(Context.Credentials20),
             Type = ["VerifiablePresentation"],
             Holder = holderDid,
             VerifiableCredential = [signedCredential]
@@ -178,7 +179,7 @@ internal sealed class DataIntegrityPresentationFlowTests
             DeserializePresentation,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -192,7 +193,7 @@ internal sealed class DataIntegrityPresentationFlowTests
             SerializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Decoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -210,7 +211,7 @@ internal sealed class DataIntegrityPresentationFlowTests
             SerializePresentation,
             SerializeProofOptions,
             TestSetup.Base58Decoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -243,6 +244,7 @@ internal sealed class DataIntegrityPresentationFlowTests
         var holderDidDocument = await KeyDidBuilder.BuildAsync(
             publicKey,
             testData.VerificationMethodTypeInfo,
+            BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var issuerVerificationMethodId = issuerDidDocument.VerificationMethod![0].Id!;
@@ -274,14 +276,14 @@ internal sealed class DataIntegrityPresentationFlowTests
             DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var signedPresentation = await new VerifiablePresentation
         {
-            Context = new Context { Contexts = [Context.Credentials20] },
+            Context = Context.FromIris(Context.Credentials20),
             Type = ["VerifiablePresentation"],
             Holder = holderDid,
             VerifiableCredential = [signedCredential]
@@ -299,7 +301,7 @@ internal sealed class DataIntegrityPresentationFlowTests
             DeserializePresentation,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -317,7 +319,7 @@ internal sealed class DataIntegrityPresentationFlowTests
             SerializePresentation,
             SerializeProofOptions,
             TestSetup.Base58Decoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -343,6 +345,7 @@ internal sealed class DataIntegrityPresentationFlowTests
         var holderDidDocument = await KeyDidBuilder.BuildAsync(
             publicKey,
             testData.VerificationMethodTypeInfo,
+            BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var signedPresentation = await SignMinimalPresentationAsync(
@@ -364,7 +367,7 @@ internal sealed class DataIntegrityPresentationFlowTests
             SerializePresentation,
             SerializeProofOptions,
             TestSetup.Base58Decoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -391,6 +394,7 @@ internal sealed class DataIntegrityPresentationFlowTests
         var holderDidDocument = await KeyDidBuilder.BuildAsync(
             publicKey,
             testData.VerificationMethodTypeInfo,
+            BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var signedPresentation = await SignMinimalPresentationAsync(
@@ -413,7 +417,7 @@ internal sealed class DataIntegrityPresentationFlowTests
             SerializePresentation,
             SerializeProofOptions,
             TestSetup.Base58Decoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -439,6 +443,7 @@ internal sealed class DataIntegrityPresentationFlowTests
         var holderDidDocument = await KeyDidBuilder.BuildAsync(
             publicKey,
             testData.VerificationMethodTypeInfo,
+            BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var signedPresentation = await SignMinimalPresentationAsync(
@@ -459,7 +464,7 @@ internal sealed class DataIntegrityPresentationFlowTests
             SerializePresentation,
             SerializeProofOptions,
             TestSetup.Base58Decoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -482,7 +487,7 @@ internal sealed class DataIntegrityPresentationFlowTests
 
         return await new VerifiablePresentation
         {
-            Context = new Context { Contexts = [Context.Credentials20] },
+            Context = Context.FromIris(Context.Credentials20),
             Type = ["VerifiablePresentation"],
             Holder = holderDid
         }.SignAsync(
@@ -499,7 +504,7 @@ internal sealed class DataIntegrityPresentationFlowTests
             DeserializePresentation,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -524,6 +529,7 @@ internal sealed class DataIntegrityPresentationFlowTests
         var holderDidDocument = await KeyDidBuilder.BuildAsync(
             publicKey,
             testData.VerificationMethodTypeInfo,
+            BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var holderVerificationMethodId = holderDidDocument.VerificationMethod![0].Id!;
@@ -532,7 +538,7 @@ internal sealed class DataIntegrityPresentationFlowTests
 
         var signedPresentation = await new VerifiablePresentation
         {
-            Context = new Context { Contexts = [Context.Credentials20] },
+            Context = Context.FromIris(Context.Credentials20),
             Type = ["VerifiablePresentation"],
             Holder = holderDid
         }.SignAsync(
@@ -549,7 +555,7 @@ internal sealed class DataIntegrityPresentationFlowTests
             DeserializePresentation,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -568,7 +574,7 @@ internal sealed class DataIntegrityPresentationFlowTests
             SerializePresentation,
             SerializeProofOptions,
             TestSetup.Base58Decoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -601,6 +607,7 @@ internal sealed class DataIntegrityPresentationFlowTests
         var holderDidDocument = await KeyDidBuilder.BuildAsync(
             publicKey,
             testData.VerificationMethodTypeInfo,
+            BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var issuerVerificationMethodId = issuerDidDocument.VerificationMethod![0].Id!;
@@ -632,14 +639,14 @@ internal sealed class DataIntegrityPresentationFlowTests
             DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var signedPresentation = await new VerifiablePresentation
         {
-            Context = new Context { Contexts = [Context.Credentials20] },
+            Context = Context.FromIris(Context.Credentials20),
             Type = ["VerifiablePresentation"],
             Holder = holderDid,
             VerifiableCredential = [signedCredential]
@@ -657,7 +664,7 @@ internal sealed class DataIntegrityPresentationFlowTests
             DeserializePresentation,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -673,7 +680,7 @@ internal sealed class DataIntegrityPresentationFlowTests
             SerializePresentation,
             SerializeProofOptions,
             TestSetup.Base58Decoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -705,6 +712,7 @@ internal sealed class DataIntegrityPresentationFlowTests
         var holderDidDocument = await KeyDidBuilder.BuildAsync(
             publicKey,
             testData.VerificationMethodTypeInfo,
+            BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var issuerVerificationMethodId = issuerDidDocument.VerificationMethod![0].Id!;
@@ -736,14 +744,14 @@ internal sealed class DataIntegrityPresentationFlowTests
             DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var signedPresentation = await new VerifiablePresentation
         {
-            Context = new Context { Contexts = [Context.Credentials20] },
+            Context = Context.FromIris(Context.Credentials20),
             Type = ["VerifiablePresentation"],
             Holder = holderDid,
             VerifiableCredential = [signedCredential]
@@ -761,7 +769,7 @@ internal sealed class DataIntegrityPresentationFlowTests
             DeserializePresentation,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -777,7 +785,7 @@ internal sealed class DataIntegrityPresentationFlowTests
             SerializePresentation,
             SerializeProofOptions,
             TestSetup.Base58Decoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -805,6 +813,7 @@ internal sealed class DataIntegrityPresentationFlowTests
         var holderDidDocument = await KeyDidBuilder.BuildAsync(
             publicKey,
             testData.VerificationMethodTypeInfo,
+            BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var signedPresentation = await SignMinimalPresentationAsync(holderDidDocument, privateKey).ConfigureAwait(false);
@@ -836,7 +845,7 @@ internal sealed class DataIntegrityPresentationFlowTests
             SerializePresentation,
             SerializeProofOptions,
             TestSetup.Base58Decoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -865,6 +874,7 @@ internal sealed class DataIntegrityPresentationFlowTests
         var holderDidDocument = await KeyDidBuilder.BuildAsync(
             publicKey,
             testData.VerificationMethodTypeInfo,
+            BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var signedPresentation = await SignMinimalPresentationAsync(holderDidDocument, privateKey).ConfigureAwait(false);
@@ -879,7 +889,7 @@ internal sealed class DataIntegrityPresentationFlowTests
             SerializePresentation,
             SerializeProofOptions,
             TestSetup.Base58Decoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);

@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Core.Did;
 using Verifiable.Core.Model.Did;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Did
 {
@@ -308,6 +309,28 @@ MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE4f7jGC8Y4A8L2Y9XZGx8QY4Y8A8L
             var upperCaseHex = new PublicKeyHex("ABCDEF123456");
 
             Assert.AreEqual(lowerCaseHex.GetHashCode(), upperCaseHex.GetHashCode());
+        }
+
+
+        /// <summary>
+        /// The <see cref="object.Equals(object?)"/>/<see cref="object.GetHashCode"/> contract requires
+        /// that <see cref="PublicKeyHex.GetHashCode"/> be computed with the same comparison basis as
+        /// <see cref="PublicKeyHex.Equals(KeyFormat?)"/> (ordinal-ignore-case: hexadecimal key
+        /// material is case-insensitive but otherwise exact content). A soft hyphen (U+00AD, a
+        /// Unicode default-ignorable code point) inserted into the key produces a byte-different
+        /// string that a culture-aware comparison could still treat as equal; both halves of the
+        /// contract — <c>Equals</c> returning <see langword="false"/> and <c>GetHashCode</c>
+        /// differing — must hold for the type to behave correctly in hash containers.
+        /// </summary>
+        [TestMethod]
+        public void KeyWithIgnorableCodePointIsNotEqualToOriginalAndHashesDiffer()
+        {
+            var original = new PublicKeyHex("AB");
+            var tampered = new PublicKeyHex("AB".InsertIgnorableCodePointAt(1));
+
+            Assert.IsFalse(original.Equals(tampered));
+            Assert.IsFalse(original == tampered);
+            Assert.AreNotEqual(original.GetHashCode(), tampered.GetHashCode());
         }
     }
 }

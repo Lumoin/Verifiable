@@ -127,6 +127,8 @@ internal static class Oid4VciHeaderKeyResolution
             }
             catch
             {
+                //jwkMembers is client-supplied wire input; any failure reconstructing a key from it is an
+                //invalid key reference rather than an internal fault.
                 return Outcome.Failed(HeaderKeyResolutionStatus.InvalidKeyReference);
             }
         }
@@ -201,7 +203,8 @@ internal static class Oid4VciHeaderKeyResolution
     //Resolves the leaf PublicKeyMemory from the header's x5c chain, composing the existing X.509
     //surface: parse + chain-validate to the issuer-supplied trust anchors / validity instant on the
     //context. Returns null (→ KeyReferenceUnresolved) when the trust material is absent or the chain
-    //does not validate, rather than throwing.
+    //does not validate, rather than throwing. chain is a per-certificate list, not one disposable
+    //value, so it is disposed in its own finally rather than through a using declaration.
     private static async ValueTask<PublicKeyMemory?> ResolveKeyFromX5cAsync(
         List<string> x5cValues,
         Oid4VciProofX509Verification x509Verification,
@@ -222,6 +225,8 @@ internal static class Oid4VciHeaderKeyResolution
         }
         catch
         {
+            //x5cValues is client-supplied wire input; any failure parsing it into a certificate chain is
+            //an unresolved key reference rather than an internal fault.
             return null;
         }
 
@@ -233,6 +238,8 @@ internal static class Oid4VciHeaderKeyResolution
         }
         catch
         {
+            //x509Verification.ValidateChain is a caller-registered delegate; any failure validating the
+            //chain resolves to no key rather than an internal fault.
             return null;
         }
         finally

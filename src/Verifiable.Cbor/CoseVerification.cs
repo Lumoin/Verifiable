@@ -1,7 +1,7 @@
 using System;
 using System.Buffers;
 using System.Collections.Generic;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -53,7 +53,7 @@ public static class CoseVerification
         {
             message = CoseSerialization.ParseCoseSign1(encodedCoseSign1, pool);
         }
-        catch(Exception ex) when(ex is CborContentException or InvalidOperationException or ArgumentException or IndexOutOfRangeException)
+        catch(Exception ex) when(ex is CborException or InvalidOperationException or ArgumentException or IndexOutOfRangeException)
         {
             //Malformed, untagged, or wrong-shape COSE on untrusted input — fail closed, like the JWS
             //verify paths, rather than letting the CBOR reader's exception escape.
@@ -100,7 +100,7 @@ public static class CoseVerification
         {
             protectedMap = CoseSerialization.ParseProtectedHeader(protectedHeader);
         }
-        catch(Exception ex) when(ex is CborContentException or InvalidOperationException)
+        catch(Exception ex) when(ex is CborException or InvalidOperationException)
         {
             return null;
         }

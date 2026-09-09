@@ -46,7 +46,7 @@ public static class SiopVerifierEndpoints
     /// The endpoint builder delegate. Pass this to
     /// <see cref="Verifiable.Server.ServerConfiguration.EndpointBuilders"/>.
     /// </summary>
-    public static readonly EndpointBuilderDelegate Builder = static (registration, context, ct) =>
+    public static EndpointBuilderDelegate Builder { get; } = static (registration, context, ct) =>
     {
         if(!((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.SiopSelfIssuedOp))
         {
@@ -401,7 +401,11 @@ public static class SiopVerifierEndpoints
     /// <see cref="ServerEndpoint.BuildInputAsync"/> performs NO cryptographic validation — it emits
     /// the pure <see cref="SiopResponsePosted"/> input, and the §11.1 validation runs in the
     /// <see cref="OAuthActionExecutor"/> via the action the resulting
-    /// <see cref="SiopResponseReceivedState"/> declares.
+    /// <see cref="SiopResponseReceivedState"/> declares. A validated response answers 200 JSON
+    /// (<see cref="SelfIssuedAuthenticationVerifiedState"/>); a refused response answers RFC 6749
+    /// §4.1.2.1's error shape (HTTP 400, <see cref="SiopVerifierFlowFailedState.Refusal"/> — see
+    /// <see cref="SiopFlowFailed.Refusal"/> for exactly which failures carry one); anything
+    /// else is a genuine Verifier fault (HTTP 500).
     /// </remarks>
     private static EndpointCandidate BuildSiopResponse() =>
         new()
@@ -455,7 +459,6 @@ public static class SiopVerifierEndpoints
             BuildInputAsync = static (fields, context, currentState, ct) =>
             {
                 EndpointServer server = context.Server!;
-                var oauth = server.OAuth();
 
                 //SiopRequestPreparedState is the same-device (by-value) path; SiopRequestObjectServedState
                 //is the by-reference path where the RP served a signed §9 Request Object at request_uri.
@@ -545,16 +548,24 @@ public static class SiopVerifierEndpoints
             },
 
             BuildResponse = static (state, _, _) =>
-            {
-                if(state is not SelfIssuedAuthenticationVerifiedState)
+                state switch
                 {
-                    return ServerHttpResponse.ServerError(
-                        OAuthErrors.ServerError,
-                        $"Unexpected state after SIOP response: {state.GetType().Name}.");
-                }
+                    SelfIssuedAuthenticationVerifiedState => ServerHttpResponse.Ok(
+                        "{}", WellKnownMediaTypes.Application.Json),
 
-                return ServerHttpResponse.Ok("{}", WellKnownMediaTypes.Application.Json);
-            }
+                    //SIOPv2 defines no RP->Wallet failure shape of its own; a refused response is
+                    //answered with RFC 6749 §4.1.2.1's error shape (HTTP 400), the same as OID4VP
+                    //direct_post. 500 stays reserved for a genuine Verifier fault (an unclassified
+                    //failure state, carrying no typed refusal).
+                    SiopVerifierFlowFailedState { Refusal: { } refusal } => ServerHttpResponse.BadRequest(
+                        refusal.ErrorCode, refusal.Description),
+
+                    //The state is server-side detail; naming its CLR type on the wire is an internal-structure
+                    //disclosure and an oracle for probing the flow's implementation.
+                    _ => ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError,
+                        "Unexpected state after SIOP response.")
+                }
         };
 
 

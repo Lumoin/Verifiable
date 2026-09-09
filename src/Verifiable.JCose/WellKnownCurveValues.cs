@@ -18,7 +18,7 @@ namespace Verifiable.JCose
         /// P-256 curve.
         /// </summary>
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7518#section-6.2.1.1">P-256</see>.</remarks>
-        public static readonly string P256 = Utf8Constants.ToInternedString(P256Utf8);
+        public static string P256 { get; } = Utf8Constants.ToInternedString(P256Utf8);
 
         /// <summary>The UTF-8 source literal of <see cref="P384"/>.</summary>
         public static ReadOnlySpan<byte> P384Utf8 => "P-384"u8;
@@ -27,7 +27,7 @@ namespace Verifiable.JCose
         /// P-384 curve.
         /// </summary>
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7518#section-6.2.1.2">P-384</see>.</remarks>
-        public static readonly string P384 = Utf8Constants.ToInternedString(P384Utf8);
+        public static string P384 { get; } = Utf8Constants.ToInternedString(P384Utf8);
 
         /// <summary>The UTF-8 source literal of <see cref="P521"/>.</summary>
         public static ReadOnlySpan<byte> P521Utf8 => "P-521"u8;
@@ -36,7 +36,7 @@ namespace Verifiable.JCose
         /// P-521 curve.
         /// </summary>
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7518#section-6.2.1.3">P-521</see>.</remarks>
-        public static readonly string P521 = Utf8Constants.ToInternedString(P521Utf8);
+        public static string P521 { get; } = Utf8Constants.ToInternedString(P521Utf8);
 
         /// <summary>The UTF-8 source literal of <see cref="Secp256k1"/>.</summary>
         public static ReadOnlySpan<byte> Secp256k1Utf8 => "secp256k1"u8;
@@ -45,7 +45,7 @@ namespace Verifiable.JCose
         /// secp256k1 curve.
         /// </summary>
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7518#section-6.2.1.4">secp256k1</see>.</remarks>
-        public static readonly string Secp256k1 = Utf8Constants.ToInternedString(Secp256k1Utf8);
+        public static string Secp256k1 { get; } = Utf8Constants.ToInternedString(Secp256k1Utf8);
 
         /// <summary>The UTF-8 source literal of <see cref="Ed25519"/>.</summary>
         public static ReadOnlySpan<byte> Ed25519Utf8 => "Ed25519"u8;
@@ -54,7 +54,7 @@ namespace Verifiable.JCose
         /// Ed25519 curve.
         /// </summary>
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc8037#section-2">Ed25519</see>.</remarks>
-        public static readonly string Ed25519 = Utf8Constants.ToInternedString(Ed25519Utf8);
+        public static string Ed25519 { get; } = Utf8Constants.ToInternedString(Ed25519Utf8);
 
         /// <summary>The UTF-8 source literal of <see cref="Ed448"/>.</summary>
         public static ReadOnlySpan<byte> Ed448Utf8 => "Ed448"u8;
@@ -63,7 +63,7 @@ namespace Verifiable.JCose
         /// Ed448 curve.
         /// </summary>
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc8037#section-2">Ed448</see>.</remarks>
-        public static readonly string Ed448 = Utf8Constants.ToInternedString(Ed448Utf8);
+        public static string Ed448 { get; } = Utf8Constants.ToInternedString(Ed448Utf8);
 
         /// <summary>The UTF-8 source literal of <see cref="X25519"/>.</summary>
         public static ReadOnlySpan<byte> X25519Utf8 => "X25519"u8;
@@ -72,7 +72,7 @@ namespace Verifiable.JCose
         /// X25519 curve for ECDH key agreement.
         /// </summary>
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7748">X25519</see>.</remarks>
-        public static readonly string X25519 = Utf8Constants.ToInternedString(X25519Utf8);
+        public static string X25519 { get; } = Utf8Constants.ToInternedString(X25519Utf8);
 
         /// <summary>The UTF-8 source literal of <see cref="X448"/>.</summary>
         public static ReadOnlySpan<byte> X448Utf8 => "X448"u8;
@@ -81,7 +81,7 @@ namespace Verifiable.JCose
         /// X448 curve for ECDH key agreement.
         /// </summary>
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7748">X448</see>.</remarks>
-        public static readonly string X448 = Utf8Constants.ToInternedString(X448Utf8);
+        public static string X448 { get; } = Utf8Constants.ToInternedString(X448Utf8);
 
         /// <summary>The UTF-8 source literal of <see cref="BrainpoolP224r1"/>.</summary>
         public static ReadOnlySpan<byte> BrainpoolP224r1Utf8 => "brainpoolP224r1"u8;
@@ -94,7 +94,7 @@ namespace Verifiable.JCose
         /// string matches the BouncyCastle registered curve name. brainpoolP224r1 has no fully-specified
         /// ECDSA / COSE algorithm registration, so it appears as an ECDH curve identified by this <c>crv</c>.
         /// </remarks>
-        public static readonly string BrainpoolP224r1 = Utf8Constants.ToInternedString(BrainpoolP224r1Utf8);
+        public static string BrainpoolP224r1 { get; } = Utf8Constants.ToInternedString(BrainpoolP224r1Utf8);
 
         /// <summary>The UTF-8 source literal of <see cref="BrainpoolP256r1"/>.</summary>
         public static ReadOnlySpan<byte> BrainpoolP256r1Utf8 => "brainpoolP256r1"u8;
@@ -107,7 +107,7 @@ namespace Verifiable.JCose
         /// the JWK <c>crv</c> string matches the BouncyCastle / IANA registered curve
         /// name so a single string resolves both library lookup and on-wire identification.
         /// </remarks>
-        public static readonly string BrainpoolP256r1 = Utf8Constants.ToInternedString(BrainpoolP256r1Utf8);
+        public static string BrainpoolP256r1 { get; } = Utf8Constants.ToInternedString(BrainpoolP256r1Utf8);
 
         /// <summary>The UTF-8 source literal of <see cref="BrainpoolP320r1"/>.</summary>
         public static ReadOnlySpan<byte> BrainpoolP320r1Utf8 => "brainpoolP320r1"u8;
@@ -116,7 +116,7 @@ namespace Verifiable.JCose
         /// Brainpool P-320r1 curve.
         /// </summary>
         /// <remarks>Named per <see href="https://www.rfc-editor.org/rfc/rfc5639">RFC 5639</see>.</remarks>
-        public static readonly string BrainpoolP320r1 = Utf8Constants.ToInternedString(BrainpoolP320r1Utf8);
+        public static string BrainpoolP320r1 { get; } = Utf8Constants.ToInternedString(BrainpoolP320r1Utf8);
 
         /// <summary>The UTF-8 source literal of <see cref="BrainpoolP384r1"/>.</summary>
         public static ReadOnlySpan<byte> BrainpoolP384r1Utf8 => "brainpoolP384r1"u8;
@@ -125,7 +125,7 @@ namespace Verifiable.JCose
         /// Brainpool P-384r1 curve.
         /// </summary>
         /// <remarks>Named per <see href="https://www.rfc-editor.org/rfc/rfc5639">RFC 5639</see>.</remarks>
-        public static readonly string BrainpoolP384r1 = Utf8Constants.ToInternedString(BrainpoolP384r1Utf8);
+        public static string BrainpoolP384r1 { get; } = Utf8Constants.ToInternedString(BrainpoolP384r1Utf8);
 
         /// <summary>The UTF-8 source literal of <see cref="BrainpoolP512r1"/>.</summary>
         public static ReadOnlySpan<byte> BrainpoolP512r1Utf8 => "brainpoolP512r1"u8;
@@ -134,7 +134,7 @@ namespace Verifiable.JCose
         /// Brainpool P-512r1 curve.
         /// </summary>
         /// <remarks>Named per <see href="https://www.rfc-editor.org/rfc/rfc5639">RFC 5639</see>.</remarks>
-        public static readonly string BrainpoolP512r1 = Utf8Constants.ToInternedString(BrainpoolP512r1Utf8);
+        public static string BrainpoolP512r1 { get; } = Utf8Constants.ToInternedString(BrainpoolP512r1Utf8);
 
 
         /// <summary>

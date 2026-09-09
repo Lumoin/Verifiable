@@ -1,4 +1,5 @@
-using System.Formats.Cbor;
+using System.Buffers;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Core.Model.Mdoc;
 
 namespace Verifiable.Cbor.Mdoc;
@@ -64,7 +65,8 @@ public static class MdocCborDeviceAuthenticationEncoder
     {
         ArgumentException.ThrowIfNullOrEmpty(docType);
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
 
         writer.WriteStartArray(4);
         writer.WriteTextString(MdocWellKnownKeys.DeviceAuthenticationContext);
@@ -73,7 +75,7 @@ public static class MdocCborDeviceAuthenticationEncoder
         writer.WriteEncodedValue(encodedDeviceNameSpacesBytes.Span);
         writer.WriteEndArray();
 
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
     }
 
 

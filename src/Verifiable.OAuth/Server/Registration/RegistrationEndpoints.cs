@@ -61,7 +61,7 @@ public static class RegistrationEndpoints
     /// Endpoints are emitted only when the registration's capability set
     /// includes <see cref="WellKnownCapabilityIdentifiers.OAuthDynamicClientRegistration"/>.
     /// </remarks>
-    public static readonly EndpointBuilderDelegate Builder = static (registration, context, ct) =>
+    public static EndpointBuilderDelegate Builder { get; } = static (registration, context, ct) =>
     {
         if(!((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthDynamicClientRegistration))
         {
@@ -135,6 +135,8 @@ public static class RegistrationEndpoints
         }
         catch(Exception)
         {
+            //oauth.ParseClientMetadataAsync is a caller-registered delegate over an untrusted request body;
+            //any parse failure is a bad request rather than an internal fault.
             return ServerHttpResponse.BadRequest(
                 OAuthErrors.InvalidClientMetadata,
                 "Request body did not parse as a valid RFC 7591 client metadata document.");
@@ -218,8 +220,8 @@ public static class RegistrationEndpoints
         {
             sb.Append('{');
             bool first = true;
-            JsonAppender.AppendStringField(sb, "client_id", clientId, ref first);
-            JsonAppender.AppendInt64Field(sb, "client_id_issued_at",
+            JsonAppender.AppendStringField(sb, ClientMetadataParameterNames.ClientId, clientId, ref first);
+            JsonAppender.AppendInt64Field(sb, ClientMetadataParameterNames.ClientIdIssuedAt,
                 now.ToUnixTimeSeconds(), ref first);
             JsonAppender.AppendStringField(sb, "registration_access_token",
                 accessToken.Value, ref first);
@@ -242,20 +244,20 @@ public static class RegistrationEndpoints
     {
         if(metadata.ClientName is not null)
         {
-            JsonAppender.AppendStringField(sb, "client_name", metadata.ClientName, ref first);
+            JsonAppender.AppendStringField(sb, ClientMetadataParameterNames.ClientName, metadata.ClientName, ref first);
         }
         if(metadata.ClientUri is not null)
         {
-            JsonAppender.AppendUriField(sb, "client_uri", metadata.ClientUri, ref first);
+            JsonAppender.AppendUriField(sb, ClientMetadataParameterNames.ClientUri, metadata.ClientUri, ref first);
         }
         if(metadata.RedirectUris.Count > 0)
         {
-            JsonAppender.AppendUriArrayField(sb, "redirect_uris",
+            JsonAppender.AppendUriArrayField(sb, ClientMetadataParameterNames.RedirectUris,
                 metadata.RedirectUris, ref first);
         }
         if(metadata.Scope is not null)
         {
-            JsonAppender.AppendStringField(sb, "scope", metadata.Scope, ref first);
+            JsonAppender.AppendStringField(sb, ClientMetadataParameterNames.Scope, metadata.Scope, ref first);
         }
         if(metadata.AuthorizationDetailsTypes is not null)
         {
@@ -267,13 +269,13 @@ public static class RegistrationEndpoints
         }
         if(metadata.TokenEndpointAuthMethod is not null)
         {
-            JsonAppender.AppendStringField(sb, "token_endpoint_auth_method",
+            JsonAppender.AppendStringField(sb, ClientMetadataParameterNames.TokenEndpointAuthMethod,
                 ClientAuthenticationMethodNames.GetName(metadata.TokenEndpointAuthMethod.Value),
                 ref first);
         }
         if(metadata.JwksUri is not null)
         {
-            JsonAppender.AppendUriField(sb, "jwks_uri", metadata.JwksUri, ref first);
+            JsonAppender.AppendUriField(sb, ClientMetadataParameterNames.JwksUri, metadata.JwksUri, ref first);
         }
         //Additional fields (grant_types, response_types, jwks, application_type,
         //id_token_signed_response_alg, logout URIs) follow the same pattern.
@@ -334,9 +336,8 @@ public static class RegistrationEndpoints
             BuildInputAsync = async (fields, context, currentState, ct) =>
             {
                 EndpointServer server = context.Server!;
-                var oauth = server.OAuth();
                 ServerHttpResponse response = await handler(context, server, ct).ConfigureAwait(false);
-                return ((FlowInput?)null, (ServerHttpResponse?)response);
+                return (null, response);
             },
 
             BuildResponse = static (state, _, _) =>
@@ -357,7 +358,6 @@ public static class RegistrationEndpoints
         EndpointServer server,
         CancellationToken cancellationToken)
     {
-        var oauth = server.OAuth();
         ServerHttpResponse? authFailure = await ValidateBearerAsync(
             context, server, cancellationToken).ConfigureAwait(false);
         if(authFailure is not null) { return authFailure; }
@@ -416,6 +416,8 @@ public static class RegistrationEndpoints
         }
         catch(Exception)
         {
+            //oauth.ParseClientMetadataAsync is a caller-registered delegate over an untrusted request body;
+            //any parse failure is a bad request rather than an internal fault.
             return ServerHttpResponse.BadRequest(
                 OAuthErrors.InvalidClientMetadata,
                 "Request body did not parse as a valid RFC 7591 client metadata document.");
@@ -464,7 +466,6 @@ public static class RegistrationEndpoints
         EndpointServer server,
         CancellationToken cancellationToken)
     {
-        var oauth = server.OAuth();
         ServerHttpResponse? authFailure = await ValidateBearerAsync(
             context, server, cancellationToken).ConfigureAwait(false);
         if(authFailure is not null) { return authFailure; }
@@ -530,8 +531,8 @@ public static class RegistrationEndpoints
         {
             sb.Append('{');
             bool first = true;
-            JsonAppender.AppendStringField(sb, "client_id", registration.ClientId, ref first);
-            JsonAppender.AppendUriArrayField(sb, "redirect_uris",
+            JsonAppender.AppendStringField(sb, ClientMetadataParameterNames.ClientId, registration.ClientId, ref first);
+            JsonAppender.AppendUriArrayField(sb, ClientMetadataParameterNames.RedirectUris,
                 registration.AllowedRedirectUris, ref first);
             if(registration.AllowedScopes.Count > 0)
             {
@@ -542,7 +543,7 @@ public static class RegistrationEndpoints
                 //debugging, stable diffs in audit logs.
                 string scope = string.Join(' ',
                     registration.AllowedScopes.OrderBy(s => s, StringComparer.Ordinal));
-                JsonAppender.AppendStringField(sb, "scope", scope, ref first);
+                JsonAppender.AppendStringField(sb, ClientMetadataParameterNames.Scope, scope, ref first);
             }
             if(registration.AllowedAuthorizationDetailsTypes is not null)
             {

@@ -98,11 +98,11 @@ internal sealed class CtapPinUvAuthProtocolTests
         new(
             id,
             MicrosoftKeyAgreementFunctions.EcdhKeyAgreementDecryptP256Async,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
-            MicrosoftHmacFunctions.ComputeHmacAsync,
-            BouncyCastleSymmetricFunctions.SymmetricEncryptAsync,
-            BouncyCastleSymmetricFunctions.SymmetricDecryptAsync,
-            generateNonce ?? MicrosoftEntropyFunctions.GenerateNonce);
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
+            MicrosoftHmacFunctionsAdapter.ComputeHmacAsync,
+            BouncyCastleSymmetricFunctionsAdapter.SymmetricEncryptAsync,
+            BouncyCastleSymmetricFunctionsAdapter.SymmetricDecryptAsync,
+            generateNonce ?? MicrosoftEntropyFunctionsAdapter.GenerateNonce);
 
     /// <summary>Wraps a hex-encoded 32-byte P-256 exchange private scalar as a <see cref="PrivateKeyMemory"/>.</summary>
     private static PrivateKeyMemory PrivateKeyFromHex(string hex)
@@ -175,6 +175,9 @@ internal sealed class CtapPinUvAuthProtocolTests
         }
         finally
         {
+            //The finally does more than Dispose(): sharedSecret's span must be zeroed before the pool
+            //reclaims it, on every exit path including a thrown exception; a using declaration only ever
+            //calls Dispose().
             sharedSecret.Memory.Span.Clear();
             sharedSecret.Dispose();
         }
@@ -207,6 +210,9 @@ internal sealed class CtapPinUvAuthProtocolTests
         }
         finally
         {
+            //The finally does more than Dispose(): sharedSecret's span must be zeroed before the pool
+            //reclaims it, on every exit path including a thrown exception; a using declaration only ever
+            //calls Dispose().
             sharedSecret.Memory.Span.Clear();
             sharedSecret.Dispose();
         }
@@ -246,6 +252,9 @@ internal sealed class CtapPinUvAuthProtocolTests
         }
         finally
         {
+            //The finally does more than Dispose(): sharedSecret's span must be zeroed before the pool
+            //reclaims it, on every exit path including a thrown exception; a using declaration only ever
+            //calls Dispose().
             sharedSecret.Memory.Span.Clear();
             sharedSecret.Dispose();
         }
@@ -506,6 +515,9 @@ internal sealed class CtapPinUvAuthProtocolTests
             }
             finally
             {
+                //The finally does more than Dispose(): fromPlatformSide's/fromAuthenticatorSide's span must
+                //be zeroed before the pool reclaims it, on every exit path including a thrown exception; a
+                //using declaration only ever calls Dispose().
                 fromPlatformSide.Memory.Span.Clear();
                 fromPlatformSide.Dispose();
             }

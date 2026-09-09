@@ -1,4 +1,4 @@
-﻿namespace Verifiable.Cesr;
+namespace Verifiable.Cesr;
 
 /// <summary>
 /// The size descriptor for a single CESR code: how the fully qualified primitive is partitioned into a

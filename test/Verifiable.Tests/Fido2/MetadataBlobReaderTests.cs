@@ -48,34 +48,28 @@ internal sealed class MetadataBlobReaderTests
         string payloadJson = MetadataBlobTestVectors.BuildPayloadJson(1, "2030-01-01", [entry1, entry2]);
         byte[] blobBytes = MetadataBlobTestVectors.BuildBlobBytes(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256(signingKey, data));
 
-        UnverifiedMetadataBlob blob = MetadataBlobReader.Read(blobBytes, BaseMemoryPool.Shared);
-        try
-        {
-            Assert.AreEqual(WellKnownJwaValues.Es256, blob.Algorithm);
-            Assert.HasCount(1, blob.X5c);
-            Assert.IsTrue(blob.X5c[0].AsReadOnlySpan().SequenceEqual(signerCertificate.RawData));
-            Assert.AreEqual(1L, blob.Payload.No);
-            Assert.AreEqual(new DateOnly(2030, 1, 1), blob.Payload.NextUpdate);
-            Assert.HasCount(2, blob.Payload.Entries);
+        using UnverifiedMetadataBlob blob = MetadataBlobReader.Read(blobBytes, BaseMemoryPool.Shared);
 
-            MetadataBlobPayloadEntry fido2Entry = blob.Payload.Entries[0];
-            Assert.AreEqual(aaguid, fido2Entry.Aaguid);
-            Assert.IsNull(fido2Entry.Aaid);
-            Assert.IsNotNull(fido2Entry.AttestationRootCertificates);
-            Assert.HasCount(1, fido2Entry.AttestationRootCertificates!);
-            Assert.IsTrue(fido2Entry.AttestationRootCertificates![0].AsReadOnlySpan().SequenceEqual(attestationRootCertificate.RawData));
-            Assert.HasCount(1, fido2Entry.StatusReports);
-            Assert.AreEqual(WellKnownAuthenticatorStatuses.FidoCertified, fido2Entry.StatusReports[0].Status);
+        Assert.AreEqual(WellKnownJwaValues.Es256, blob.Algorithm);
+        Assert.HasCount(1, blob.X5c);
+        Assert.IsTrue(blob.X5c[0].AsReadOnlySpan().SequenceEqual(signerCertificate.RawData));
+        Assert.AreEqual(1L, blob.Payload.No);
+        Assert.AreEqual(new DateOnly(2030, 1, 1), blob.Payload.NextUpdate);
+        Assert.HasCount(2, blob.Payload.Entries);
 
-            MetadataBlobPayloadEntry u2fEntry = blob.Payload.Entries[1];
-            Assert.IsNull(u2fEntry.Aaguid);
-            Assert.IsNotNull(u2fEntry.AttestationCertificateKeyIdentifiers);
-            Assert.Contains("aabbccddeeff00112233445566778899aabbccdd", u2fEntry.AttestationCertificateKeyIdentifiers!);
-        }
-        finally
-        {
-            blob.Dispose();
-        }
+        MetadataBlobPayloadEntry fido2Entry = blob.Payload.Entries[0];
+        Assert.AreEqual(aaguid, fido2Entry.Aaguid);
+        Assert.IsNull(fido2Entry.Aaid);
+        Assert.IsNotNull(fido2Entry.AttestationRootCertificates);
+        Assert.HasCount(1, fido2Entry.AttestationRootCertificates!);
+        Assert.IsTrue(fido2Entry.AttestationRootCertificates![0].AsReadOnlySpan().SequenceEqual(attestationRootCertificate.RawData));
+        Assert.HasCount(1, fido2Entry.StatusReports);
+        Assert.AreEqual(WellKnownAuthenticatorStatuses.FidoCertified, fido2Entry.StatusReports[0].Status);
+
+        MetadataBlobPayloadEntry u2fEntry = blob.Payload.Entries[1];
+        Assert.IsNull(u2fEntry.Aaguid);
+        Assert.IsNotNull(u2fEntry.AttestationCertificateKeyIdentifiers);
+        Assert.Contains("aabbccddeeff00112233445566778899aabbccdd", u2fEntry.AttestationCertificateKeyIdentifiers!);
     }
 
 

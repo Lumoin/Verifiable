@@ -431,6 +431,12 @@ namespace Verifiable.Tests.TestInfrastructure
         /// <param name="conditionType">The type containing the condition method.</param>
         /// <param name="conditionMethodName">The name of a static, parameterless method returning bool.</param>
         /// <param name="reason">The reason displayed when the test is skipped.</param>
+        /// <remarks>
+        /// An attribute constructor accepts only compile-time constants, so the condition cannot be
+        /// passed as a <see cref="Func{TResult}"/> directly; <see cref="Type.GetMethod(string, BindingFlags)"/>
+        /// resolves the named static method to a delegate once, at attribute-construction time, from the
+        /// <see cref="Type"/> and <see cref="string"/> constants the attribute usage does supply.
+        /// </remarks>
         public IgnoreIfAttribute(Type conditionType, string conditionMethodName, string reason)
         {
             var method = 

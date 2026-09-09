@@ -27,7 +27,7 @@ internal sealed class BitstringStatusListCredentialJwsTests
 {
     private const int Example4Index = 94567;
     private const int UnsetIndex = 5;
-    private static readonly DateTimeOffset Now = StatusListTestConstants.BitstringValidationReferenceTime;
+    private static DateTimeOffset Now { get; } = StatusListTestConstants.BitstringValidationReferenceTime;
 
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core.Assessment;
 using Verifiable.Cryptography;
 using Verifiable.OAuth.Federation;
@@ -20,7 +21,7 @@ internal sealed class FederationTrustMarkResolverTests
 
     private const string MarkId = "https://example.test/trust-mark/sirtfi";
 
-    private static readonly TimeSpan ClockSkew = TimeSpan.FromMinutes(5);
+    private static TimeSpan ClockSkew { get; } = TimeSpan.FromMinutes(5);
 
 
     /// <summary>A validly-signed mark whose issuer the Trust Anchor authorizes directly (§6.2) is admitted.</summary>
@@ -49,7 +50,7 @@ internal sealed class FederationTrustMarkResolverTests
 
         IReadOnlyList<TrustMarkVerdict> verdicts = await FederationTrustMarkResolver.ResolveVerifiedAsync(
             chain, [candidate], VerifyAgainst(anchor), TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared,
-            timeProvider: null, ClockSkew, TestContext.CancellationToken).ConfigureAwait(false);
+            timeProvider: new FakeTimeProvider(now), ClockSkew, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.HasCount(1, verdicts);
         Assert.IsTrue(verdicts[0].SignatureVerified, "The mark signature should verify against the resolved issuer key.");
@@ -85,7 +86,7 @@ internal sealed class FederationTrustMarkResolverTests
 
         IReadOnlyList<TrustMarkVerdict> verdicts = await FederationTrustMarkResolver.ResolveVerifiedAsync(
             chain, [candidate], VerifyAgainst(anchor), TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared,
-            timeProvider: null, ClockSkew, TestContext.CancellationToken).ConfigureAwait(false);
+            timeProvider: new FakeTimeProvider(now), ClockSkew, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(verdicts[0].SignatureVerified, "A tampered signature must not verify against the resolved key.");
         Assert.IsFalse(verdicts[0].Admitted, "A mark whose signature does not verify must be rejected.");
@@ -110,7 +111,7 @@ internal sealed class FederationTrustMarkResolverTests
 
         IReadOnlyList<TrustMarkVerdict> verdicts = await FederationTrustMarkResolver.ResolveVerifiedAsync(
             chain, [candidate], VerifyAgainst(anchor), TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared,
-            timeProvider: null, ClockSkew, TestContext.CancellationToken).ConfigureAwait(false);
+            timeProvider: new FakeTimeProvider(now), ClockSkew, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(verdicts[0].SignatureVerified, "The signature still verifies; only authorization is missing.");
         Assert.AreEqual(ClaimOutcome.Failure, verdicts[0].IssuerAuthorization.Outcome);
@@ -164,7 +165,7 @@ internal sealed class FederationTrustMarkResolverTests
 
         IReadOnlyList<TrustMarkVerdict> verdicts = await FederationTrustMarkResolver.ResolveVerifiedAsync(
             chain, [candidate], verify, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared,
-            timeProvider: null, ClockSkew, TestContext.CancellationToken).ConfigureAwait(false);
+            timeProvider: new FakeTimeProvider(now), ClockSkew, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(ClaimOutcome.Failure, verdicts[0].IssuerAuthorization.Outcome, "No direct authorization is declared.");
         Assert.AreEqual(ClaimOutcome.Success, verdicts[0].Delegation.Outcome, "The delegation must validate.");
@@ -173,12 +174,11 @@ internal sealed class FederationTrustMarkResolverTests
 
 
     /// <summary>
-    /// Exploit regression (F2, trust-mark path mirror): Federation §7 makes the <c>kid</c> header a MUST on
-    /// Trust Mark JWTs. A <c>kid</c>-less mark cannot be key-pinned — post-fix the in-chain resolver returns no
-    /// key for it (no silent first-key fallback) so its signature does not verify — and
-    /// <c>CheckTrustMarkKidPresent</c> names the missing <c>kid</c> as a shape failure. Pre-fix the resolver
-    /// selected the anchor's first published key, the signature verified, and an authorized kid-less mark was
-    /// wrongly admitted.
+    /// Federation §7 makes the <c>kid</c> header a MUST on Trust Mark JWTs. A <c>kid</c>-less mark cannot be
+    /// key-pinned: the in-chain resolver returns no key for a kid-less mark (no silent first-key fallback), so
+    /// its signature does not verify, and <c>CheckTrustMarkKidPresent</c> names the missing <c>kid</c> as a
+    /// shape failure — the alternative (selecting the anchor's first published key) would wrongly admit an
+    /// unauthorized kid-less mark.
     /// </summary>
     [TestMethod]
     public async Task KidlessMarkIsRejected()
@@ -208,7 +208,7 @@ internal sealed class FederationTrustMarkResolverTests
 
         IReadOnlyList<TrustMarkVerdict> verdicts = await FederationTrustMarkResolver.ResolveVerifiedAsync(
             chain, [candidate], VerifyAgainst(anchor), TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared,
-            timeProvider: null, ClockSkew, TestContext.CancellationToken).ConfigureAwait(false);
+            timeProvider: new FakeTimeProvider(now), ClockSkew, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(verdicts[0].SignatureVerified,
             "A kid-less mark must not resolve a key from the chain (no silent first-key fallback) per §7.");
@@ -219,6 +219,49 @@ internal sealed class FederationTrustMarkResolverTests
             "A kid-less mark must fail TrustMarkKidPresent — Trust Mark JWTs MUST carry a kid per §7.");
 
         Assert.IsFalse(verdicts[0].Admitted, "A kid-less mark must be rejected.");
+    }
+
+
+    /// <summary>
+    /// §7.3's exp/iat shape check runs against the <see cref="TimeProvider"/> passed to
+    /// <see cref="FederationTrustMarkResolver.ResolveVerifiedAsync"/>, never <see cref="TimeProvider.System"/>.
+    /// The chain and mark are minted valid at a FIXED historical instant far from real wall time
+    /// (<see cref="TestClock.CanonicalEpoch"/>); the resolver is called with a <see cref="FakeTimeProvider"/>
+    /// fixed to that SAME instant. By real wall-clock time the mark is long expired, so admission here can
+    /// only follow from the resolver actually consulting the passed clock rather than silently reading
+    /// <see cref="TimeProvider.System"/> — an isolating pin the other tests in this class (which seed their
+    /// <see cref="FakeTimeProvider"/> from real wall time) cannot provide.
+    /// </summary>
+    [TestMethod]
+    public async Task MarkValidAtThePassedClockIsAdmittedEvenThoughRealWallTimeHasLongPassedItsExpiry()
+    {
+        DateTimeOffset now = TestClock.CanonicalEpoch;
+        using FederationTestRingNode subject = FederationTestRing.CreateNode(new EntityIdentifier("https://example.test/subject"));
+        using FederationTestRingNode anchor = FederationTestRing.CreateNode(new EntityIdentifier("https://example.test/anchor"));
+
+        Dictionary<string, object> anchorExtra = new(StringComparer.Ordinal)
+        {
+            [WellKnownFederationClaimNames.TrustMarkIssuers] = new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                [MarkId] = new List<object> { anchor.Identifier.Value },
+            },
+        };
+
+        TrustChain chain = await BuildChainAsync(subject, anchor, anchorExtra, now, TestContext.CancellationToken).ConfigureAwait(false);
+
+        MintedTrustMark minted = await FederationTestRing.MintTrustMarkAsync(
+            anchor, subject, MarkId, now, now.AddHours(1), cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        TrustMarkCandidate candidate = new() { Mark = minted.Mark, Header = minted.Header, CompactJws = minted.CompactJws };
+
+        IReadOnlyList<TrustMarkVerdict> verdicts = await FederationTrustMarkResolver.ResolveVerifiedAsync(
+            chain, [candidate], VerifyAgainst(anchor), TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared,
+            timeProvider: new FakeTimeProvider(now), ClockSkew, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(verdicts[0].Admitted,
+            "A mark valid at the PASSED clock's instant must be admitted, even though that instant is long " +
+            "before real wall time — proving §7.3's exp/iat check reads the injected TimeProvider, not " +
+            "TimeProvider.System.");
     }
 
 

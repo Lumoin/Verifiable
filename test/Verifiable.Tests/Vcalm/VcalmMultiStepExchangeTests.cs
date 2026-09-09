@@ -49,9 +49,9 @@ internal sealed class VcalmMultiStepExchangeTests
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private const string ClientId = "https://multistep.client.test";
-    private static readonly Uri ClientBaseUri = new("https://multistep.client.test");
+    private static Uri ClientBaseUri { get; } = new("https://multistep.client.test");
 
-    private static readonly ImmutableHashSet<CapabilityIdentifier> Capabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> Capabilities { get; } =
         ImmutableHashSet.Create(
             WellKnownVcalmCapabilities.VcalmExchange,
             WellKnownVcalmCapabilities.VcalmHolder,
@@ -83,7 +83,7 @@ internal sealed class VcalmMultiStepExchangeTests
     private static ProofOptionsSerializeDelegate SerializeProofOptions { get; } =
         ProofOptionsSerializer.Create(JsonOptions);
 
-    private static readonly ExchangeContext EmptyContext = new();
+    private static ExchangeContext EmptyContext { get; } = new();
 
     private List<VerifierKeyMaterial> RegisteredMaterials { get; } = [];
     private List<IDisposable> OwnedKeys { get; } = [];
@@ -444,7 +444,8 @@ internal sealed class VcalmMultiStepExchangeTests
     /// <summary>
     /// §3.6 cycle bounding: a workflow whose step graph cycles (supplied DIRECTLY to the exchange
     /// engine, bypassing §3.6.1 create-time validation) does NOT loop forever — the engine caps the
-    /// per-message step walk and fails the exchange as invalid.
+    /// per-message step walk and fails the exchange as invalid. The <c>ImmutableDictionary&lt;,&gt;.Empty</c>
+    /// read that seeds the cyclic step map needs no lock: it is a get-only BCL singleton that nothing mutates in place.
     /// </summary>
     [TestMethod]
     public async Task MalformedNextStepCycleIsBoundedToInvalid()
@@ -623,6 +624,138 @@ internal sealed class VcalmMultiStepExchangeTests
 
     //Two presentation steps: stepOne requests a presentation and advances to stepTwo, which also requests
     //a presentation and is the final step (no nextStep).
+    /// <summary>
+    /// §3.6.1 <c>presentationSchema</c>: a presented presentation that conforms to the step's
+    /// declared JSON Schema (type MUST be <c>JsonSchema</c>) passes and the exchange completes.
+    /// See <see href="https://www.w3.org/TR/vcalm-1.0/">VCALM 1.0 §3.6.1</see>.
+    /// </summary>
+    [TestMethod]
+    public async Task PresentationConformingToStepSchemaCompletes()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
+        string segment = RegisterMultiStep(app, holder, SchemaGatedWorkflow(ProofRequiringSchemaEnvelope));
+        app.Server.Vcalm().VcalmSchemaValidators.Register(
+            VcalmSchemaValidatorRegistry.JsonSchemaType,
+            SchemaValidationTestUtilities.CreateVeritasSchemaValidator());
+
+        string exchangeId = await CreateExchangeAndGetIdAsync(app, segment).ConfigureAwait(false);
+        (string challenge, string domain) = await InitiateAndExtractBindingAsync(app, segment, exchangeId).ConfigureAwait(false);
+
+        string present = await SignPresentationMessageAsync(holder, challenge, domain).ConfigureAwait(false);
+        ServerHttpResponse complete = await app.DispatchVcalmExchangeByIdAsync(
+            segment, "POST", exchangeId, present, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(200, complete.StatusCode, complete.Body);
+        using JsonDocument finalState = await GetExchangeStateAsync(app, segment, exchangeId).ConfigureAwait(false);
+        Assert.AreEqual("complete", finalState.RootElement.GetProperty(VcalmParameterNames.State).GetString(),
+            "A schema-conforming presentation completes the schema-gated step.");
+    }
+
+
+    /// <summary>
+    /// §3.6.1 <c>presentationSchema</c> fail-closed: a cryptographically valid presentation that
+    /// VIOLATES the step's declared schema is refused with a <c>MALFORMED_VALUE_ERROR</c> and the
+    /// exchange goes invalid — the schema Failure outcome per
+    /// <see href="https://www.w3.org/TR/vc-json-schema/#evaluation">VC JSON Schema §4.2</see>.
+    /// </summary>
+    [TestMethod]
+    public async Task PresentationViolatingStepSchemaIsRefused()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
+        string segment = RegisterMultiStep(app, holder, SchemaGatedWorkflow(AbsentMemberRequiringSchemaEnvelope));
+        app.Server.Vcalm().VcalmSchemaValidators.Register(
+            VcalmSchemaValidatorRegistry.JsonSchemaType,
+            SchemaValidationTestUtilities.CreateVeritasSchemaValidator());
+
+        string exchangeId = await CreateExchangeAndGetIdAsync(app, segment).ConfigureAwait(false);
+        (string challenge, string domain) = await InitiateAndExtractBindingAsync(app, segment, exchangeId).ConfigureAwait(false);
+
+        string present = await SignPresentationMessageAsync(holder, challenge, domain).ConfigureAwait(false);
+        ServerHttpResponse refused = await app.DispatchVcalmExchangeByIdAsync(
+            segment, "POST", exchangeId, present, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, refused.StatusCode, refused.Body);
+        using JsonDocument problem = JsonDocument.Parse(refused.Body);
+        Assert.AreEqual(VcalmProblemTypes.MalformedValueError,
+            problem.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(),
+            "A schema-violating presentation is a MALFORMED_VALUE_ERROR refusal.");
+
+        using JsonDocument invalidState = await GetExchangeStateAsync(app, segment, exchangeId).ConfigureAwait(false);
+        Assert.AreEqual("invalid", invalidState.RootElement.GetProperty(VcalmParameterNames.State).GetString(),
+            "The schema refusal drives the exchange to invalid.");
+    }
+
+
+    /// <summary>
+    /// §3.6.1 fail-closed: a step declaring a <c>presentationSchema</c> whose mechanism has no
+    /// registered validator refuses presented presentations — the workflow author demanded a check
+    /// this instance cannot run, so the check is not skipped.
+    /// </summary>
+    [TestMethod]
+    public async Task UnregisteredSchemaMechanismRefusesPresentation()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
+        string vendorEnvelope = /*lang=json,strict*/ """{ "type": "VendorMechanism" }""";
+        string segment = RegisterMultiStep(app, holder, SchemaGatedWorkflow(vendorEnvelope));
+
+        string exchangeId = await CreateExchangeAndGetIdAsync(app, segment).ConfigureAwait(false);
+        (string challenge, string domain) = await InitiateAndExtractBindingAsync(app, segment, exchangeId).ConfigureAwait(false);
+
+        string present = await SignPresentationMessageAsync(holder, challenge, domain).ConfigureAwait(false);
+        ServerHttpResponse refused = await app.DispatchVcalmExchangeByIdAsync(
+            segment, "POST", exchangeId, present, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, refused.StatusCode, refused.Body);
+        using JsonDocument problem = JsonDocument.Parse(refused.Body);
+        Assert.AreEqual(VcalmProblemTypes.MalformedValueError,
+            problem.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(),
+            "An unrunnable declared check refuses fail-closed.");
+    }
+
+
+    //A single presentation step gated by the given §3.6.1 presentationSchema envelope.
+    private static VcalmWorkflowConfiguration SchemaGatedWorkflow(string presentationSchemaJson) => new()
+    {
+        InitialStep = "stepOne",
+        Steps = ImmutableDictionary<string, VcalmWorkflowStep>.Empty
+            .SetItem("stepOne", new VcalmWorkflowStep
+            {
+                CreateChallenge = true,
+                VerifiablePresentationRequestJson = DidAuthVprJson,
+                PresentationQueryJson = DidAuthQueryJson,
+                PresentationSchemaJson = presentationSchemaJson
+            })
+    };
+
+    //The signed DID-auth presentation always carries a proof; this schema passes it.
+    private const string ProofRequiringSchemaEnvelope = /*lang=json,strict*/ """
+        {
+          "type": "JsonSchema",
+          "jsonSchema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "required": ["proof"]
+          }
+        }
+        """;
+
+    //No presentation carries this member; this schema refuses every presentation.
+    private const string AbsentMemberRequiringSchemaEnvelope = /*lang=json,strict*/ """
+        {
+          "type": "JsonSchema",
+          "jsonSchema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "required": ["definitelyAbsentMember"]
+          }
+        }
+        """;
+
+
+
     private static VcalmWorkflowConfiguration TwoPresentationStepWorkflow() => new()
     {
         InitialStep = "stepOne",
@@ -737,7 +870,7 @@ internal sealed class VcalmMultiStepExchangeTests
             SerializePresentation = SerializePresentation,
             SerializeProofOptions = SerializeProofOptions,
             Decoder = TestSetup.Base58Decoder,
-            ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             MemoryPool = Pool
         };
 
@@ -765,7 +898,7 @@ internal sealed class VcalmMultiStepExchangeTests
                 SerializePresentation = SerializePresentation,
                 SerializeProofOptions = SerializeProofOptions,
                 Decoder = TestSetup.Base58Decoder,
-                ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync,
+                ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
                 MemoryPool = Pool
             };
         }
@@ -807,6 +940,7 @@ internal sealed class VcalmMultiStepExchangeTests
         DidDocument holderDidDocument = await KeyDidBuilder.BuildAsync(
             keyPair.PublicKey,
             MultikeyVerificationMethodTypeInfo.Instance,
+            BaseMemoryPool.Shared,
             includeDefaultContext: false,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -828,7 +962,7 @@ internal sealed class VcalmMultiStepExchangeTests
             DeserializePresentation = DeserializePresentation,
             SerializeProofOptions = SerializeProofOptions,
             Encoder = TestSetup.Base58Encoder,
-            ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             MemoryPool = Pool
         };
 
@@ -844,6 +978,7 @@ internal sealed class VcalmMultiStepExchangeTests
         DidDocument issuerDidDocument = await KeyDidBuilder.BuildAsync(
             keyPair.PublicKey,
             MultikeyVerificationMethodTypeInfo.Instance,
+            BaseMemoryPool.Shared,
             includeDefaultContext: false,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -865,7 +1000,7 @@ internal sealed class VcalmMultiStepExchangeTests
             DeserializeCredential = DeserializeCredential,
             SerializeProofOptions = SerializeProofOptions,
             Encoder = TestSetup.Base58Encoder,
-            ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync
+            ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync
         };
 
         return new IssuerSigningContext(descriptor, issuerDid);
@@ -883,6 +1018,7 @@ internal sealed class VcalmMultiStepExchangeTests
         DidDocument issuerDidDocument = await KeyDidBuilder.BuildAsync(
             keyPair.PublicKey,
             MultikeyVerificationMethodTypeInfo.Instance,
+            BaseMemoryPool.Shared,
             includeDefaultContext: false,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -904,7 +1040,7 @@ internal sealed class VcalmMultiStepExchangeTests
             DeserializeCredential = DeserializeCredential,
             SerializeProofOptions = SerializeProofOptions,
             Encoder = TestSetup.Base58Encoder,
-            ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync
+            ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync
         };
 
         return new IssuerSigningContext(descriptor, issuerDid);
@@ -966,7 +1102,7 @@ internal sealed class VcalmMultiStepExchangeTests
             SerializePresentation = SerializePresentation,
             SerializeProofOptions = SerializeProofOptions,
             Decoder = TestSetup.Base58Decoder,
-            ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             MemoryPool = Pool
         };
 
@@ -1028,7 +1164,7 @@ internal sealed class VcalmMultiStepExchangeTests
     {
         VerifiablePresentation unproofed = new()
         {
-            Context = new Context { Contexts = [Context.Credentials20] },
+            Context = Context.FromIris(Context.Credentials20),
             Type = ["VerifiablePresentation"],
             Holder = holder.HolderDid
         };

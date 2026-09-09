@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Time.Testing;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Tests.TestInfrastructure;
@@ -33,7 +34,7 @@ internal sealed class CryptoEventSinkTests
     public void DefaultSinkForwardsToEventsStream()
     {
         var observer = new TestObserver<CryptoEvent>();
-        CryptoEvent evt = SignatureProducedEvent.Create(CryptoAlgorithm.P256, dataLength: 32, signatureLength: 64, backend: "test-backend");
+        CryptoEvent evt = SignatureProducedEvent.Create(CryptoAlgorithm.P256, dataLength: 32, signatureLength: 64, backend: "test-backend", timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         using(CryptographicKeyEvents.Events.Subscribe(observer))
         {
@@ -41,6 +42,22 @@ internal sealed class CryptoEventSinkTests
         }
 
         Assert.Contains(evt, observer.Received, "DefaultSink must publish the exact event instance to the Events stream.");
+    }
+
+
+    /// <summary>
+    /// A <see cref="CryptoEvent"/> factory's <c>OccurredAt</c> is the exact instant its passed
+    /// <see cref="TimeProvider"/> reports — never <see cref="DateTimeOffset.UtcNow"/> or any other clock.
+    /// </summary>
+    [TestMethod]
+    public void SignatureProducedEventOccurredAtIsThePassedTimeProvidersInstant()
+    {
+        var fakeTimeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch);
+
+        CryptoEvent evt = SignatureProducedEvent.Create(
+            CryptoAlgorithm.P256, dataLength: 32, signatureLength: 64, backend: "test-backend", timeProvider: fakeTimeProvider);
+
+        Assert.AreEqual(TestClock.CanonicalEpoch, evt.OccurredAt, "OccurredAt must equal the passed TimeProvider's instant exactly.");
     }
 
 
@@ -54,7 +71,7 @@ internal sealed class CryptoEventSinkTests
     {
         var throwingObserver = new ThrowingObserver();
         var laterObserver = new TestObserver<CryptoEvent>();
-        CryptoEvent evt = VerificationCompletedEvent.Create(CryptoAlgorithm.P256, VerificationOutcome.Valid, dataLength: 32, backend: "test-backend");
+        CryptoEvent evt = VerificationCompletedEvent.Create(CryptoAlgorithm.P256, VerificationOutcome.Valid, dataLength: 32, backend: "test-backend", timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         using(CryptographicKeyEvents.Events.Subscribe(throwingObserver))
         using(CryptographicKeyEvents.Events.Subscribe(laterObserver))
@@ -77,7 +94,7 @@ internal sealed class CryptoEventSinkTests
     {
         var earlierObserver = new TestObserver<CryptoEvent>();
         var throwingObserver = new ThrowingObserver();
-        CryptoEvent evt = SignatureProducedEvent.Create(CryptoAlgorithm.Ed25519, dataLength: 16, signatureLength: 64, backend: "test-backend");
+        CryptoEvent evt = SignatureProducedEvent.Create(CryptoAlgorithm.Ed25519, dataLength: 16, signatureLength: 64, backend: "test-backend", timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         using(CryptographicKeyEvents.Events.Subscribe(earlierObserver))
         using(CryptographicKeyEvents.Events.Subscribe(throwingObserver))
@@ -102,7 +119,7 @@ internal sealed class CryptoEventSinkTests
     {
         const int WorkerCount = 16;
         const int IterationsPerWorker = 200;
-        CryptoEvent evt = SignatureProducedEvent.Create(CryptoAlgorithm.P256, dataLength: 8, signatureLength: 64, backend: "stress-test");
+        CryptoEvent evt = SignatureProducedEvent.Create(CryptoAlgorithm.P256, dataLength: 8, signatureLength: 64, backend: "stress-test", timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         var emitters = Enumerable.Range(0, WorkerCount).Select(_ => Task.Run(() =>
         {

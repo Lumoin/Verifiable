@@ -21,6 +21,7 @@ using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Fido2;
 
@@ -31,7 +32,10 @@ namespace Verifiable.Tests.Fido2;
 /// deferred. Mirrors that class's own firewalled discipline exactly: ONE in-house <see cref="TpmSimulator"/>
 /// instance plays the durable chip and OUTLIVES every <see cref="CtapAuthenticatorSimulator"/> instance
 /// built against it, and every assertion reads a wire-visible fact over the real, unmodified APDU transport
-/// (<see cref="CtapNfcTransportHarness"/>) — never internal simulator or TPM state.
+/// (<see cref="CtapNfcTransportHarness"/>) — never internal simulator or TPM state. Each test's
+/// <c>(TpmDevice tpm, uint parentHandle)</c> pair is a tuple-deconstruction target, disposed/flushed in
+/// the method's own <see langword="finally"/> block because a <see langword="using"/> declaration cannot
+/// target a tuple-deconstruction assignment.
 /// </summary>
 [TestClass]
 internal sealed class CtapAuthenticatorNvSignCounterCapstoneTests
@@ -86,7 +90,7 @@ internal sealed class CtapAuthenticatorNvSignCounterCapstoneTests
             uint lastPreKillWireSignCount;
 
             CtapAuthenticatorSimulator simulator1 = await CtapMakeCredentialGetAssertionFixtures.CreateSimulatorWithCustodyAsync(
-                RunId, BuildStateCustody(tpm, parentHandle, sealAuth, store), aaguid, signatureCounterCustody: counterCustody, cancellationToken: cancellationToken)
+                RunId, BuildStateCustody(tpm, parentHandle, sealAuth, store), aaguid, BaseMemoryPool.Shared, signatureCounterCustody: counterCustody, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
             using(CtapNfcTransportHarness harness1 = await CtapNfcTransportHarness.CreateAsync(simulator1, pool, cancellationToken).ConfigureAwait(false))
             {
@@ -116,7 +120,7 @@ internal sealed class CtapAuthenticatorNvSignCounterCapstoneTests
             simulator1.Dispose();
 
             CtapAuthenticatorSimulator simulator2 = await CtapMakeCredentialGetAssertionFixtures.CreateSimulatorWithCustodyAsync(
-                RunId, BuildStateCustody(tpm, parentHandle, sealAuth, store), aaguid, signatureCounterCustody: counterCustody, cancellationToken: cancellationToken)
+                RunId, BuildStateCustody(tpm, parentHandle, sealAuth, store), aaguid, BaseMemoryPool.Shared, signatureCounterCustody: counterCustody, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
             using(CtapNfcTransportHarness harness2 = await CtapNfcTransportHarness.CreateAsync(simulator2, pool, cancellationToken).ConfigureAwait(false))
             {
@@ -169,7 +173,7 @@ internal sealed class CtapAuthenticatorNvSignCounterCapstoneTests
             uint signCountBeforeDeath;
 
             CtapAuthenticatorSimulator simulator1 = await CtapMakeCredentialGetAssertionFixtures.CreateSimulatorWithCustodyAsync(
-                RunId, BuildStateCustody(tpm, parentHandle, sealAuth, store), aaguid, signatureCounterCustody: counterCustody, cancellationToken: cancellationToken)
+                RunId, BuildStateCustody(tpm, parentHandle, sealAuth, store), aaguid, BaseMemoryPool.Shared, signatureCounterCustody: counterCustody, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
             using(CtapNfcTransportHarness harness1 = await CtapNfcTransportHarness.CreateAsync(simulator1, pool, cancellationToken).ConfigureAwait(false))
             {
@@ -184,7 +188,7 @@ internal sealed class CtapAuthenticatorNvSignCounterCapstoneTests
             simulator1.Dispose();
 
             CtapAuthenticatorSimulator simulator2 = await CtapMakeCredentialGetAssertionFixtures.CreateSimulatorWithCustodyAsync(
-                RunId, BuildStateCustody(tpm, parentHandle, sealAuth, store), aaguid, signatureCounterCustody: counterCustody, cancellationToken: cancellationToken)
+                RunId, BuildStateCustody(tpm, parentHandle, sealAuth, store), aaguid, BaseMemoryPool.Shared, signatureCounterCustody: counterCustody, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
             using(CtapNfcTransportHarness harness2 = await CtapNfcTransportHarness.CreateAsync(simulator2, pool, cancellationToken).ConfigureAwait(false))
             {
@@ -220,7 +224,7 @@ internal sealed class CtapAuthenticatorNvSignCounterCapstoneTests
         CancellationToken cancellationToken = TestContext.CancellationToken;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("nv-absent-control");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("nv-absent-control",BaseMemoryPool.Shared);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         await EstablishPinAsync(harness.Transceive, pool, protocolId, Pin, cancellationToken).ConfigureAwait(false);
@@ -268,7 +272,7 @@ internal sealed class CtapAuthenticatorNvSignCounterCapstoneTests
                 TpmNvSignatureCounterCustody.Create(tpm, ReadOnlyMemory<byte>.Empty, counterAuth, BaseNvIndexHandle)).Build();
 
             CtapAuthenticatorSimulator simulator = await CtapMakeCredentialGetAssertionFixtures.CreateSimulatorWithCustodyAsync(
-                RunId, BuildStateCustody(tpm, parentHandle, sealAuth, store), aaguid, signatureCounterCustody: counterHarness.Custody, cancellationToken: cancellationToken)
+                RunId, BuildStateCustody(tpm, parentHandle, sealAuth, store), aaguid, BaseMemoryPool.Shared, signatureCounterCustody: counterHarness.Custody, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
             uint maxPreResetObserved;
             uint signCountAfterPostResetMint;
@@ -358,7 +362,7 @@ internal sealed class CtapAuthenticatorNvSignCounterCapstoneTests
                 TpmNvSignatureCounterCustody.Create(tpm, ReadOnlyMemory<byte>.Empty, counterAuth, BaseNvIndexHandle)).Build();
 
             CtapAuthenticatorSimulator simulator = await CtapMakeCredentialGetAssertionFixtures.CreateSimulatorWithCustodyAsync(
-                RunId, BuildStateCustody(tpm, parentHandle, sealAuth, store), aaguid, signatureCounterCustody: counterHarness.Custody, cancellationToken: cancellationToken)
+                RunId, BuildStateCustody(tpm, parentHandle, sealAuth, store), aaguid, BaseMemoryPool.Shared, signatureCounterCustody: counterHarness.Custody, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
             using(CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false))
             {
@@ -424,11 +428,11 @@ internal sealed class CtapAuthenticatorNvSignCounterCapstoneTests
     private static async Task<(TpmDevice Tpm, uint ParentHandle)> CreateChipWithLoadedStorageParentAsync(string chipRunId, CancellationToken cancellationToken)
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        var chip = new TpmSimulator(chipRunId, signingBackend: BouncyCastleTpmEccSigningBackend.Create());
+        var chip = new TpmSimulator(chipRunId, signingBackend: BouncyCastleTpmEccSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await chip.PowerOnAsync(cancellationToken).ConfigureAwait(false);
         await BringOperationalAsync(chip, pool, cancellationToken).ConfigureAwait(false);
 
-        TpmDevice tpm = TpmDevice.Create(chip.SubmitAsync);
+        TpmDevice tpm = TpmDevice.Create(chip.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_CreatePrimary, TpmResponseCodec.CreatePrimary);

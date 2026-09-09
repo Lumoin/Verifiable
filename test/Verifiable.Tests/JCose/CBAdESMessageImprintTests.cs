@@ -1,6 +1,6 @@
 using System;
 using System.Buffers;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Cbor;
 using Verifiable.Foundation;
 using Verifiable.JCose;
@@ -81,7 +81,8 @@ internal sealed class CBAdESMessageImprintTests
         byte[] payload = [0xAA, 0xBB, 0xCC];
         byte[] signatureValue = [0x10, 0x20, 0x30, 0x40];
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartArray(6);
         writer.WriteTextString("Signature1"); //step 2: COSE_Sign1 context text.
         writer.WriteByteString(bodyProtectedHeader); //step 3.
@@ -90,7 +91,7 @@ internal sealed class CBAdESMessageImprintTests
         writer.WriteByteString(signatureValue); //step 9.
         writer.WriteByteString(ReadOnlySpan<byte>.Empty); //steps 10/11: body layer has no uHeaders at all.
         writer.WriteEndArray();
-        byte[] expected = writer.Encode();
+        byte[] expected = writerBuffer.WrittenSpan.ToArray();
 
         CBAdESArchiveTimestampImprintContext context = BuildArcTstContext(
             CBAdESCoseSign1StructureContext.Instance,
@@ -128,7 +129,8 @@ internal sealed class CBAdESMessageImprintTests
         byte[] detachedPayload = [0x0A, 0x0B];
         byte[] signatureValue = [0x99];
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartArray(6);
         writer.WriteTextString("Signature1");
         writer.WriteByteString(ReadOnlySpan<byte>.Empty); //step 3: body layer has no protected header.
@@ -137,7 +139,7 @@ internal sealed class CBAdESMessageImprintTests
         writer.WriteByteString(signatureValue);
         writer.WriteByteString(ReadOnlySpan<byte>.Empty);
         writer.WriteEndArray();
-        byte[] expected = writer.Encode();
+        byte[] expected = writerBuffer.WrittenSpan.ToArray();
 
         CBAdESArchiveTimestampImprintContext context = BuildArcTstContext(
             CBAdESCoseSign1StructureContext.Instance,
@@ -175,7 +177,8 @@ internal sealed class CBAdESMessageImprintTests
         byte[] payload = [0xF0];
         byte[] signatureValue = [0x77];
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartArray(7);
         writer.WriteTextString("Signature"); //step 2: COSE_Sign context text.
         writer.WriteByteString(bodyProtectedHeader); //step 3.
@@ -185,7 +188,7 @@ internal sealed class CBAdESMessageImprintTests
         writer.WriteByteString(signatureValue); //step 9.
         writer.WriteByteString(ReadOnlySpan<byte>.Empty); //steps 10/11: no uHeaders at all.
         writer.WriteEndArray();
-        byte[] expected = writer.Encode();
+        byte[] expected = writerBuffer.WrittenSpan.ToArray();
 
         CBAdESArchiveTimestampImprintContext context = BuildArcTstContext(
             CBAdESCoseSignStructureContext.Instance,
@@ -223,7 +226,8 @@ internal sealed class CBAdESMessageImprintTests
         byte[] payload = [0x02];
         byte[] signatureValue = [0x03];
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartArray(7);
         writer.WriteTextString("Signature");
         writer.WriteByteString(bodyProtectedHeader);
@@ -233,7 +237,7 @@ internal sealed class CBAdESMessageImprintTests
         writer.WriteByteString(signatureValue);
         writer.WriteByteString(ReadOnlySpan<byte>.Empty);
         writer.WriteEndArray();
-        byte[] expected = writer.Encode();
+        byte[] expected = writerBuffer.WrittenSpan.ToArray();
 
         CBAdESArchiveTimestampImprintContext context = BuildArcTstContext(
             CBAdESCoseSignStructureContext.Instance,
@@ -280,25 +284,27 @@ internal sealed class CBAdESMessageImprintTests
             countersignedTarget, isAbbreviated: true, signProtected: null, externalAad: ReadOnlyMemory<byte>.Empty);
         Assert.IsTrue(countersignInput.OtherFieldsSignature.HasValue, "A COSE_Sign1 countersign target always yields an other_fields contribution.");
 
-        var otherFieldsWriter = new CborWriter(CborConformanceMode.Canonical);
+        using var otherFieldsBuffer = new SlabBufferWriter(BaseMemoryPool.Shared);
+        var otherFieldsWriter = new CborWriter(otherFieldsBuffer, CborOptions.RfcCanonical);
         otherFieldsWriter.WriteStartArray(1);
         otherFieldsWriter.WriteByteString(countersignInput.OtherFieldsSignature!.Value.Span);
         otherFieldsWriter.WriteEndArray();
 
         //Pool-route the writer's own output -- the family
-        //idiom CBAdESSignatureSerialization.SerializeCBAdESSign1 itself uses (BytesWritten sizes
-        //the rental, Encode(Span) writes directly into it) -- rather than a naked heap byte[] from
-        //the parameterless CborWriter.Encode() overload.
-        int otherFieldsBytesSize = otherFieldsWriter.BytesWritten;
-        using IMemoryOwner<byte> otherFieldsBytesOwner = BaseMemoryPool.Shared.Rent(otherFieldsBytesSize);
-        Assert.AreEqual(otherFieldsBytesSize, otherFieldsWriter.Encode(otherFieldsBytesOwner.Memory.Span));
+        //idiom CBAdESSignatureSerialization.SerializeCBAdESSign1 itself uses (the slab buffer's
+        //Detach() hands back an owner sized exactly to BytesWritten) -- rather than a naked heap
+        //byte[] from an ArrayBufferWriter. BytesWritten is captured before Detach() resets it.
+        int otherFieldsBytesWritten = otherFieldsBuffer.BytesWritten;
+        using IMemoryOwner<byte> otherFieldsBytesOwner = otherFieldsBuffer.Detach();
+        Assert.HasCount(otherFieldsBytesWritten, otherFieldsBytesOwner.Memory);
 
         byte[] bodyProtectedHeader = [0x0A];
         byte[] externallySuppliedData = [0xEE];
         byte[] payload = [0xF0];
         byte[] signatureValue = [0x77];
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartArray(7);
         writer.WriteTextString("CounterSignature0V2"); //step 2: RFC 9338 clause 3.3, other_fields present, abbreviated form.
         writer.WriteByteString(bodyProtectedHeader); //step 3.
@@ -308,7 +314,7 @@ internal sealed class CBAdESMessageImprintTests
         writer.WriteByteString(signatureValue); //step 9.
         writer.WriteByteString(ReadOnlySpan<byte>.Empty); //steps 10/11: no uHeaders at all.
         writer.WriteEndArray();
-        byte[] expected = writer.Encode();
+        byte[] expected = writerBuffer.WrittenSpan.ToArray();
 
         var context = new CBAdESArchiveTimestampImprintContext
         {
@@ -383,7 +389,8 @@ internal sealed class CBAdESMessageImprintTests
         byte[] segment2 = [0x03];
         byte[] signatureValue = [0x55];
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartArray(6);
         writer.WriteTextString("Signature1");
         writer.WriteByteString(ReadOnlySpan<byte>.Empty);
@@ -392,7 +399,7 @@ internal sealed class CBAdESMessageImprintTests
         writer.WriteByteString(signatureValue);
         writer.WriteByteString(ReadOnlySpan<byte>.Empty);
         writer.WriteEndArray();
-        byte[] expected = writer.Encode();
+        byte[] expected = writerBuffer.WrittenSpan.ToArray();
 
         CBAdESArchiveTimestampImprintContext context = BuildArcTstContext(
             CBAdESCoseSign1StructureContext.Instance,
@@ -434,7 +441,8 @@ internal sealed class CBAdESMessageImprintTests
         byte[] item2 = [0xC0, 0xC1, 0xC2];
         byte[] uHeadersEncodedArray = BuildExpectedArrayOfByteStrings(item0, item1, item2);
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartArray(8);
         writer.WriteTextString("Signature1");
         writer.WriteByteString(bodyProtectedHeader);
@@ -445,7 +453,7 @@ internal sealed class CBAdESMessageImprintTests
         writer.WriteByteString(item1);
         writer.WriteByteString(item2);
         writer.WriteEndArray();
-        byte[] expected = writer.Encode();
+        byte[] expected = writerBuffer.WrittenSpan.ToArray();
 
         CBAdESArchiveTimestampImprintContext context = BuildArcTstContext(
             CBAdESCoseSign1StructureContext.Instance,
@@ -581,7 +589,8 @@ internal sealed class CBAdESMessageImprintTests
         byte[] item3 = [0xD0, 0xD1, 0xD2, 0xD3];
         byte[] uHeadersEncodedArray = BuildExpectedArrayOfByteStrings(item0, item1, item2, item3);
 
-        var generationWriter = new CborWriter(CborConformanceMode.Canonical);
+        var generationWriterBuffer = new ArrayBufferWriter<byte>();
+        var generationWriter = new CborWriter(generationWriterBuffer, CborOptions.RfcCanonical);
         generationWriter.WriteStartArray(9);
         generationWriter.WriteTextString("Signature1");
         generationWriter.WriteByteString(bodyProtectedHeader);
@@ -593,9 +602,10 @@ internal sealed class CBAdESMessageImprintTests
         generationWriter.WriteByteString(item2);
         generationWriter.WriteByteString(item3);
         generationWriter.WriteEndArray();
-        byte[] expectedGeneration = generationWriter.Encode();
+        byte[] expectedGeneration = generationWriterBuffer.WrittenSpan.ToArray();
 
-        var validationWriter = new CborWriter(CborConformanceMode.Canonical);
+        var validationWriterBuffer = new ArrayBufferWriter<byte>();
+        var validationWriter = new CborWriter(validationWriterBuffer, CborOptions.RfcCanonical);
         validationWriter.WriteStartArray(7);
         validationWriter.WriteTextString("Signature1");
         validationWriter.WriteByteString(bodyProtectedHeader);
@@ -605,7 +615,7 @@ internal sealed class CBAdESMessageImprintTests
         validationWriter.WriteByteString(item0);
         validationWriter.WriteByteString(item1); //stops here: item2/item3 precede neither the target (index 2 is item2 itself).
         validationWriter.WriteEndArray();
-        byte[] expectedValidation = validationWriter.Encode();
+        byte[] expectedValidation = validationWriterBuffer.WrittenSpan.ToArray();
 
         CBAdESArchiveTimestampImprintContext context = BuildArcTstContext(
             CBAdESCoseSign1StructureContext.Instance,
@@ -673,12 +683,13 @@ internal sealed class CBAdESMessageImprintTests
     [TestMethod]
     public void ArcTstValidationFailsClosedWhenNonByteStringElementIsInTheSkippedRange()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartArray(2);
         writer.WriteByteString([0xA0]); //Element 0: taken (arcTstElementIndex 1 -> itemsToTake 1), a valid bstr.
         writer.WriteInt32(99); //Element 1: SKIPPED (i=1 >= itemsToTake=1), not a bstr -- the skip-path check.
         writer.WriteEndArray();
-        byte[] uHeadersWithNonBstrInSkipRange = writer.Encode();
+        byte[] uHeadersWithNonBstrInSkipRange = writerBuffer.WrittenSpan.ToArray();
 
         CBAdESArchiveTimestampImprintContext context = BuildArcTstContext(
             CBAdESCoseSign1StructureContext.Instance,
@@ -766,7 +777,8 @@ internal sealed class CBAdESMessageImprintTests
         byte[] item1 = [0xB0, 0xB1];
         byte[] uHeadersEncodedArray = BuildExpectedArrayOfByteStrings(item0, item1);
 
-        var presentPrefixWriter = new CborWriter(CborConformanceMode.Canonical);
+        var presentPrefixWriterBuffer = new ArrayBufferWriter<byte>();
+        var presentPrefixWriter = new CborWriter(presentPrefixWriterBuffer, CborOptions.RfcCanonical);
         presentPrefixWriter.WriteStartArray(5); //Steps 10/11 contribute ZERO items -- the empty prefix.
         presentPrefixWriter.WriteTextString("Signature1");
         presentPrefixWriter.WriteByteString(bodyProtectedHeader);
@@ -774,9 +786,10 @@ internal sealed class CBAdESMessageImprintTests
         presentPrefixWriter.WriteByteString(payload);
         presentPrefixWriter.WriteByteString(signatureValue);
         presentPrefixWriter.WriteEndArray();
-        byte[] expectedPresentEmptyPrefix = presentPrefixWriter.Encode();
+        byte[] expectedPresentEmptyPrefix = presentPrefixWriterBuffer.WrittenSpan.ToArray();
 
-        var absentWriter = new CborWriter(CborConformanceMode.Canonical);
+        var absentWriterBuffer = new ArrayBufferWriter<byte>();
+        var absentWriter = new CborWriter(absentWriterBuffer, CborOptions.RfcCanonical);
         absentWriter.WriteStartArray(6); //Steps 10/11 contribute the ONE "not present" zero-length bstr sentinel.
         absentWriter.WriteTextString("Signature1");
         absentWriter.WriteByteString(bodyProtectedHeader);
@@ -785,7 +798,7 @@ internal sealed class CBAdESMessageImprintTests
         absentWriter.WriteByteString(signatureValue);
         absentWriter.WriteByteString(ReadOnlySpan<byte>.Empty);
         absentWriter.WriteEndArray();
-        byte[] expectedAbsentSentinel = absentWriter.Encode();
+        byte[] expectedAbsentSentinel = absentWriterBuffer.WrittenSpan.ToArray();
 
         CBAdESArchiveTimestampImprintContext presentContext = BuildArcTstContext(
             CBAdESCoseSign1StructureContext.Instance,
@@ -849,7 +862,8 @@ internal sealed class CBAdESMessageImprintTests
         byte[] payload = [0x0C];
         byte[] signatureValue = [0x0D];
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartArray(6);
         writer.WriteTextString("Signature1");
         writer.WriteByteString(bodyProtectedHeader);
@@ -858,7 +872,7 @@ internal sealed class CBAdESMessageImprintTests
         writer.WriteByteString(signatureValue);
         writer.WriteByteString(ReadOnlySpan<byte>.Empty); //steps 10/11: uHeaders header parameter absent entirely.
         writer.WriteEndArray();
-        byte[] expected = writer.Encode();
+        byte[] expected = writerBuffer.WrittenSpan.ToArray();
 
         CBAdESArchiveTimestampImprintContext context = BuildArcTstContext(
             CBAdESCoseSign1StructureContext.Instance,
@@ -1300,12 +1314,13 @@ internal sealed class CBAdESMessageImprintTests
     /// <returns>The encoded one-entry map bytes.</returns>
     private static byte[] EncodeFilterFixtureElement(int label, string marker)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(label);
         writer.WriteTextString(marker);
         writer.WriteEndMap();
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -1318,7 +1333,8 @@ internal sealed class CBAdESMessageImprintTests
     /// <returns>The encoded array bytes.</returns>
     private static byte[] BuildExpectedArrayOfByteStrings(params byte[][] items)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartArray(items.Length);
         foreach(byte[] item in items)
         {
@@ -1326,7 +1342,7 @@ internal sealed class CBAdESMessageImprintTests
         }
 
         writer.WriteEndArray();
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -1335,9 +1351,10 @@ internal sealed class CBAdESMessageImprintTests
     /// <returns>The encoded <c>bstr</c> TLV bytes.</returns>
     private static byte[] EncodeCanonicalByteString(byte[] content)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteByteString(content);
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -1348,9 +1365,10 @@ internal sealed class CBAdESMessageImprintTests
     /// <returns>The encoded bytes.</returns>
     private static byte[] BuildUHeadersBytesThatAreNotAnArray()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteInt32(42);
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -1361,11 +1379,12 @@ internal sealed class CBAdESMessageImprintTests
     /// <returns>The encoded bytes.</returns>
     private static byte[] BuildUHeadersArrayWithNonByteStringElement()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartArray(1);
         writer.WriteInt32(1); //Not a bstr -- CB-5.3.1-04 requires every element encapsulated in a CBOR byte string.
         writer.WriteEndArray();
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -1376,9 +1395,10 @@ internal sealed class CBAdESMessageImprintTests
     /// <returns>The encoded bytes.</returns>
     private static byte[] BuildZeroElementUHeadersArray()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartArray(0);
         writer.WriteEndArray();
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 }

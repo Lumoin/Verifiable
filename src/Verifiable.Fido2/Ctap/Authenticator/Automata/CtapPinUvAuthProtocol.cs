@@ -386,6 +386,11 @@ public sealed record CtapPinUvAuthProtocol(
     /// <c>[0,32)</c> from the <c>"CTAP2 HMAC key"</c> info label, bytes <c>[32,64)</c> from
     /// <c>"CTAP2 AES key"</c>.
     /// </summary>
+    /// <remarks>
+    /// <strong>Manual disposal, not <see langword="using"/> declarations.</strong> <c>hmacKeyHalf</c> and
+    /// <c>aesKeyHalf</c> both carry key material, so each is zeroed before disposal — a
+    /// <see langword="using"/> declaration only ever calls <c>Dispose()</c>, never a zeroing step first.
+    /// </remarks>
     private static async ValueTask<IMemoryOwner<byte>> KdfProtocolTwoAsync(ReadOnlyMemory<byte> z, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         using IMemoryOwner<byte> zeroSalt = pool.Rent(Sha256DigestLength);

@@ -139,7 +139,7 @@ internal static class CredentialEndpointProofValidation
             oauth.Codecs.Encoder!,
             oauth.Codecs.Decoder!,
             server.TimeProvider,
-            BaseMemoryPool.Shared,
+            oauth.MemoryPool!,
             expectation.IatSkew,
             cancellationToken).ConfigureAwait(false);
 

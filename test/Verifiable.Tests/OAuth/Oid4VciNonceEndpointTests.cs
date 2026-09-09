@@ -28,10 +28,10 @@ internal sealed class Oid4VciNonceEndpointTests
     private const string ClientId = "https://wallet.client.test";
 
     /// <summary>The base URI the registered client is reachable at.</summary>
-    private static readonly Uri ClientBaseUri = new("https://wallet.client.test");
+    private static Uri ClientBaseUri { get; } = new("https://wallet.client.test");
 
     /// <summary>The single capability the Nonce Endpoint requires.</summary>
-    private static readonly ImmutableHashSet<CapabilityIdentifier> NonceCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> NonceCapabilities { get; } =
         ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.Oid4VciNonceEndpoint);
 
 

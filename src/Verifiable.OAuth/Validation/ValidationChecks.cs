@@ -394,6 +394,25 @@ public static class ValidationChecks
 
 
     /// <summary>
+    /// Records whether the credential declares its own type. SD-JWT VC §2.2.2.3 makes
+    /// <c>vct</c> REQUIRED (§2.2.2.1 defines the claim), so a <c>dc+sd-jwt</c> credential that carries none fails
+    /// verification rather than being treated as a plain, untyped SD-JWT.
+    /// </summary>
+    public static ValueTask<List<Claim>> CheckCredentialTypePresent(
+        ValidationContext context,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        return ValueTask.FromResult<List<Claim>>(
+            [new Claim(
+                ValidationClaimIds.CredentialTypePresent,
+                context.CredentialTypePresent ? ClaimOutcome.Success : ClaimOutcome.Failure)]);
+    }
+
+
+    /// <summary>
     /// Records whether the presentation satisfies the DCQL query — every claim
     /// the credential query requested is present in the extracted claims. The
     /// derivation (comparing the query's requested leaf identifiers against the

@@ -24,7 +24,7 @@ namespace Verifiable.BouncyCastle;
     Justification = "The caller is responsible for disposing the returned key material instances.")]
 public static class BouncyCastleKeyMaterialCreator
 {
-    private static SecureRandom random { get; } = new();
+    private static SecureRandom Random { get; } = new();
 
     private static ProviderLibrary ProviderLib { get; } = new(
         typeof(BouncyCastleKeyMaterialCreator).Assembly.GetName().Name ?? "Verifiable.BouncyCastle",
@@ -118,7 +118,7 @@ public static class BouncyCastleKeyMaterialCreator
         }
 
         var generator = new Ed25519KeyPairGenerator();
-        generator.Init(new Ed25519KeyGenerationParameters(random));
+        generator.Init(new Ed25519KeyGenerationParameters(Random));
         AsymmetricCipherKeyPair keyPair = generator.GenerateKeyPair();
 
         byte[] publicKey = ((Ed25519PublicKeyParameters)keyPair.Public).GetEncoded();
@@ -153,7 +153,7 @@ public static class BouncyCastleKeyMaterialCreator
         }
 
         var generator = new X25519KeyPairGenerator();
-        generator.Init(new X25519KeyGenerationParameters(random));
+        generator.Init(new X25519KeyGenerationParameters(Random));
         AsymmetricCipherKeyPair keyPair = generator.GenerateKeyPair();
 
         byte[] publicKey = ((X25519PublicKeyParameters)keyPair.Public).GetEncoded();
@@ -206,7 +206,7 @@ public static class BouncyCastleKeyMaterialCreator
         var secCurve = SecNamedCurves.GetByName("secp256r1");
         var domainParams = new ECDomainParameters(
             secCurve.Curve, secCurve.G, secCurve.N, secCurve.H, secCurve.GetSeed());
-        var keyGenParam = new ECKeyGenerationParameters(domainParams, random);
+        var keyGenParam = new ECKeyGenerationParameters(domainParams, Random);
         var generator = new ECKeyPairGenerator();
         generator.Init(keyGenParam);
 
@@ -477,7 +477,7 @@ public static class BouncyCastleKeyMaterialCreator
 
         var domainParams = new ECDomainParameters(
             curve.Curve, curve.G, curve.N, curve.H, curve.GetSeed());
-        var keyGenParam = new ECKeyGenerationParameters(domainParams, random);
+        var keyGenParam = new ECKeyGenerationParameters(domainParams, Random);
         var generator = new ECKeyPairGenerator();
         generator.Init(keyGenParam);
 
@@ -537,7 +537,7 @@ public static class BouncyCastleKeyMaterialCreator
 
         var domainParams = new ECDomainParameters(
             curve.Curve, curve.G, curve.N, curve.H, curve.GetSeed());
-        var keyGenParam = new ECKeyGenerationParameters(domainParams, random);
+        var keyGenParam = new ECKeyGenerationParameters(domainParams, Random);
         var generator = new ECKeyPairGenerator();
         generator.Init(keyGenParam);
 
@@ -595,7 +595,7 @@ public static class BouncyCastleKeyMaterialCreator
         var curve = SecNamedCurves.GetByName(secCurveName);
         var domainParams = new ECDomainParameters(
             curve.Curve, curve.G, curve.N, curve.H, curve.GetSeed());
-        var keyGenParam = new ECKeyGenerationParameters(domainParams, random);
+        var keyGenParam = new ECKeyGenerationParameters(domainParams, Random);
         var generator = new ECKeyPairGenerator();
         generator.Init(keyGenParam);
 
@@ -650,7 +650,7 @@ public static class BouncyCastleKeyMaterialCreator
         var curve = SecNamedCurves.GetByName(secCurveName);
         var domainParams = new ECDomainParameters(
             curve.Curve, curve.G, curve.N, curve.H, curve.GetSeed());
-        var keyGenParam = new ECKeyGenerationParameters(domainParams, random);
+        var keyGenParam = new ECKeyGenerationParameters(domainParams, Random);
         var generator = new ECKeyPairGenerator();
         generator.Init(keyGenParam);
 
@@ -710,7 +710,7 @@ public static class BouncyCastleKeyMaterialCreator
         }
 
         var generator = new RsaKeyPairGenerator();
-        var keyGenParam = new KeyGenerationParameters(random, keySizeInBits);
+        var keyGenParam = new KeyGenerationParameters(Random, keySizeInBits);
         generator.Init(keyGenParam);
 
         AsymmetricCipherKeyPair keyPair = generator.GenerateKeyPair();
@@ -757,7 +757,7 @@ public static class BouncyCastleKeyMaterialCreator
             activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
         }
 
-        var keyGenParameters = new MLDsaKeyGenerationParameters(random, parameters);
+        var keyGenParameters = new MLDsaKeyGenerationParameters(Random, parameters);
         var keyPairGen = new MLDsaKeyPairGenerator();
         keyPairGen.Init(keyGenParameters);
 
@@ -792,7 +792,7 @@ public static class BouncyCastleKeyMaterialCreator
             activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
         }
 
-        var keyGenParameters = new MLKemKeyGenerationParameters(random, parameters);
+        var keyGenParameters = new MLKemKeyGenerationParameters(Random, parameters);
         var keyPairGen = new MLKemKeyPairGenerator();
         keyPairGen.Init(keyGenParameters);
 
@@ -830,13 +830,15 @@ public static class BouncyCastleKeyMaterialCreator
         PublicPrivateKeyCreationDelegate<PublicKeyMemory, PrivateKeyMemory> creator,
         CryptoAlgorithm algorithm,
         Purpose purpose,
-        BaseMemoryPool memoryPool)
+        BaseMemoryPool memoryPool,
+        TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(creator);
         ArgumentNullException.ThrowIfNull(memoryPool);
+        ArgumentNullException.ThrowIfNull(timeProvider);
 
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys = creator(memoryPool);
-        CryptoEvent evt = KeyMaterialGeneratedEvent.Create(algorithm, purpose, MaterialSemantics.Direct, CryptoLib.Name);
+        CryptoEvent evt = KeyMaterialGeneratedEvent.Create(algorithm, purpose, MaterialSemantics.Direct, CryptoLib.Name, timeProvider: timeProvider);
 
         return (keys, evt);
     }

@@ -34,8 +34,8 @@ internal sealed class JarParTests
     private const string ClientId = "https://client.example.com";
     private const string DefaultState = "state-jar-par-01";
     private const string DefaultNonce = "nonce-jar-par-01";
-    private static readonly Uri ClientBaseUri = new("https://client.example.com");
-    private static readonly Uri RegisteredRedirectUri = new("https://client.example.com/callback");
+    private static Uri ClientBaseUri { get; } = new("https://client.example.com");
+    private static Uri RegisteredRedirectUri { get; } = new("https://client.example.com/callback");
 
     private static ImmutableHashSet<CapabilityIdentifier> JarParCapabilities { get; } =
         ImmutableHashSet.Create(

@@ -149,7 +149,7 @@ internal sealed class PresentationSecuringConverterTests
     {
         var enveloped = new EnvelopedVerifiablePresentation
         {
-            Context = new Context { Contexts = [Context.Credentials20] },
+            Context = Context.FromIris(Context.Credentials20),
             Id = "data:application/vp+jwt,abc.def.ghi",
             Type = [CredentialConstants.EnvelopedVerifiablePresentationType]
         };

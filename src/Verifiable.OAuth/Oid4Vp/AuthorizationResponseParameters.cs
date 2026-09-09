@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography.Text;
 
 namespace Verifiable.OAuth.Oid4Vp;
@@ -18,7 +19,7 @@ public static class AuthorizationResponseParameters
     /// values are the matching Verifiable Presentations.
     /// Per OID4VP 1.0 §8.1.
     /// </summary>
-    public static readonly string VpToken = Utf8Constants.ToInternedString(VpTokenUtf8);
+    public static string VpToken { get; } = Utf8Constants.ToInternedString(VpTokenUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="State"/>.</summary>
     public static ReadOnlySpan<byte> StateUtf8 => "state"u8;
@@ -28,7 +29,7 @@ public static class AuthorizationResponseParameters
     /// Returned unchanged from the Authorization Request for CSRF protection
     /// per RFC 6749 §4.1.2 and RFC 9700 §4.7. OPTIONAL.
     /// </summary>
-    public static readonly string State = Utf8Constants.ToInternedString(StateUtf8);
+    public static string State { get; } = Utf8Constants.ToInternedString(StateUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Response"/>.</summary>
     public static ReadOnlySpan<byte> ResponseUtf8 => "response"u8;
@@ -38,7 +39,7 @@ public static class AuthorizationResponseParameters
     /// Contains the compact JWE serialization of the encrypted Authorization
     /// Response per OID4VP 1.0 §8.3.1.
     /// </summary>
-    public static readonly string Response = Utf8Constants.ToInternedString(ResponseUtf8);
+    public static string Response { get; } = Utf8Constants.ToInternedString(ResponseUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="RedirectUri"/>.</summary>
     public static ReadOnlySpan<byte> RedirectUriUtf8 => "redirect_uri"u8;
@@ -48,7 +49,9 @@ public static class AuthorizationResponseParameters
     /// after a successful Authorization Response POST per OID4VP 1.0 §8.2.
     /// OPTIONAL. When present the Wallet redirects the user to this URI.
     /// </summary>
-    public static readonly string RedirectUri = Utf8Constants.ToInternedString(RedirectUriUtf8);
+    [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
+        Justification = "This member is the wire parameter NAME 'redirect_uri' (compared and serialised as a string), not a dereferenceable System.Uri.")]
+    public static string RedirectUri { get; } = Utf8Constants.ToInternedString(RedirectUriUtf8);
 
 
     /// <summary>Returns <see langword="true"/> when <paramref name="value"/> is

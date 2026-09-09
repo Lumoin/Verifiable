@@ -241,6 +241,21 @@ public static class GeneralJweEncryptionExtensions
     }
 
 
+    /// <summary>
+    /// The shared anoncrypt/authcrypt encryption core (RFC 7516 §5.1, 1PU §2.1 ordering): generates
+    /// the CEK, encrypts the content once, then agrees, derives, and wraps once per recipient.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Manual disposal, not a <see langword="using"/> declaration.</strong> <c>cekEntropy</c> is
+    /// bound by a tuple deconstruction from <paramref name="generateContentEncryptionKey"/> (a
+    /// <see langword="using"/> declaration accepts only a single simple declaration, never a
+    /// deconstruction target), so it is disposed in its own short <see langword="try"/>/<see langword="finally"/>
+    /// immediately after its bytes are copied into <c>cekOwner</c>. <c>encryptResult</c> and
+    /// <c>recipientEntries</c> transfer ownership into the returned <see cref="GeneralJweMessage"/> on
+    /// success — nulled/reset just before the return so the outer <see langword="finally"/> disposes
+    /// them only on a throw, never on the success path a <see langword="using"/> declaration would
+    /// also dispose on.
+    /// </remarks>
     private static async ValueTask<GeneralJweMessage> EncryptCoreAsync(
         ReadOnlyMemory<byte> plaintext,
         IReadOnlyList<GeneralJweRecipientInput> recipients,
@@ -522,7 +537,20 @@ public static class GeneralJweEncryptionExtensions
 
         int maxLength = System.Buffers.Text.Base64Url.GetMaxDecodedLength(encoded.Length);
         IMemoryOwner<byte> owner = pool.Rent(maxLength);
-        if(!System.Buffers.Text.Base64Url.TryDecodeFromChars(encoded, owner.Memory.Span, out int written))
+        bool isDecoded;
+        int written;
+        try
+        {
+            isDecoded = System.Buffers.Text.Base64Url.TryDecodeFromChars(encoded, owner.Memory.Span, out written);
+        }
+        catch
+        {
+            owner.Dispose();
+
+            throw;
+        }
+
+        if(!isDecoded)
         {
             owner.Dispose();
             throw new FormatException($"Header parameter '{parameterName}' is not valid base64url.");

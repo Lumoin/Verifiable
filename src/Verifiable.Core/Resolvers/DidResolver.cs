@@ -110,6 +110,9 @@ public sealed class DidResolver
         }
         catch
         {
+            //methodResolver is a caller-registered, per-method delegate; a fault it raises is an internal
+            //error from this dispatcher's perspective rather than a signal to propagate uncaught, cancellation
+            //excepted above.
             return DidResolutionResult.Failure(DidResolutionErrors.InternalError);
         }
 
@@ -229,6 +232,9 @@ public sealed class DidResolver
             }
             catch
             {
+                //The same per-method dispatch boundary as the resolution path above: a fault from the
+                //registered method resolver is an internal error rather than a signal to propagate uncaught,
+                //cancellation excepted above.
                 return DidDereferencingResult.Failure(DidResolutionErrors.InternalError);
             }
         }
@@ -334,6 +340,9 @@ public sealed class DidResolver
             for(int i = 0; i < document.VerificationMethod.Length; ++i)
             {
                 var vm = document.VerificationMethod[i];
+
+                //Kept as if/else rather than a ternary: the "expand" branch is a multi-property object
+                //initializer, which a ternary would make harder to read, not easier.
                 if(vm.Id is not null && vm.Id.StartsWith('#'))
                 {
                     expandedVms[i] = new VerificationMethod
@@ -361,6 +370,9 @@ public sealed class DidResolver
             {
                 var svc = document.Service[i];
                 string? idStr = svc.Id?.ToString();
+
+                //Kept as if/else rather than a ternary, for the same reason as the verification-method
+                //loop above: the "expand" branch is a multi-property object initializer.
                 if(idStr is not null && idStr.StartsWith('#'))
                 {
                     //DidUrl.ParseAbsolute throws for invalid input; the expanded string is always

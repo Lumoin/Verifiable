@@ -17,7 +17,7 @@ internal sealed class SaltReuseCheckTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly DateTimeOffset Now =
+    private static DateTimeOffset Now { get; } =
         new(2026, 5, 29, 12, 0, 0, TimeSpan.Zero);
 
 

@@ -24,7 +24,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// An exponent of zero indicates the default exponent of 2^16+1 (65537).
 /// </para>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 12.2.3.5, Table 215.
+/// Specification reference: TPM 2.0 Library Part 2, clause 12.2.3.4, Table 228.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -79,18 +79,34 @@ public readonly record struct TpmsRsaParms
     public uint EffectiveExponent => Exponent == 0 ? DefaultExponent : Exponent;
 
     /// <summary>
-    /// Creates RSA parameters for a signing key.
+    /// Creates RSA parameters for an unrestricted key: <c>symmetric</c> NULL and the default exponent, the
+    /// shape Table 228's <c>scheme</c> row carries both "for an unrestricted signing key" and "for an
+    /// unrestricted decryption key" — an unrestricted key of either kind has no symmetric algorithm of its own,
+    /// only the padding <paramref name="scheme"/> distinguishes the two. A NULL <paramref name="scheme"/> is
+    /// itself the deprecated cell of that row — "Support for TPM_ALG_NULL except for Storage Keys, and keys
+    /// intended for use with the raw RSAEP/RSADP primitive, was deprecated in version 185. See Part 0." (TPM 2.0
+    /// Library Part 2, clause 12.2.3.4, Table 228) — and this method still admits it, the raw-primitive form
+    /// Part 0, clause 3.1.4.2's carve-out names.
     /// </summary>
     /// <param name="keyBits">Key size in bits.</param>
-    /// <param name="scheme">The signing scheme.</param>
+    /// <param name="scheme">The unrestricted key's signing or decryption scheme.</param>
     /// <returns>The RSA parameters.</returns>
-    public static TpmsRsaParms ForSigning(ushort keyBits, TpmtRsaScheme scheme) => new()
+    public static TpmsRsaParms ForUnrestrictedKey(ushort keyBits, TpmtRsaScheme scheme) => new()
     {
         Symmetric = TpmtSymDefObject.Null,
         Scheme = scheme,
         KeyBits = keyBits,
         Exponent = 0 // Default
     };
+
+    /// <summary>
+    /// Creates RSA parameters for a signing key — an unrestricted key whose scheme is a signing scheme
+    /// (RSASSA, RSAPSS, or NULL).
+    /// </summary>
+    /// <param name="keyBits">Key size in bits.</param>
+    /// <param name="scheme">The signing scheme.</param>
+    /// <returns>The RSA parameters.</returns>
+    public static TpmsRsaParms ForSigning(ushort keyBits, TpmtRsaScheme scheme) => ForUnrestrictedKey(keyBits, scheme);
 
     /// <summary>
     /// Creates RSA parameters for a storage key.

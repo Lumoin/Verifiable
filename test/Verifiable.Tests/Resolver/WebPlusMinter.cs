@@ -205,7 +205,7 @@ internal static class WebPlusMinter
             }
 
             VerificationMethod verificationMethod = DidBuilderExtensions.CreateVerificationMethod(
-                verificationKey.PublicKey, MultikeyVerificationMethodTypeInfo.Instance, verificationMethodId, id);
+                verificationKey.PublicKey, MultikeyVerificationMethodTypeInfo.Instance, verificationMethodId, id, BaseMemoryPool.Shared);
             didDocument.VerificationMethod = [verificationMethod];
             didDocument.WithStandardVerificationRelationships(verificationKey.PublicKey, verificationMethodId);
         }
@@ -356,7 +356,7 @@ internal sealed class WebPlusController: IDisposable
     public static WebPlusController Create()
     {
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys = BouncyCastleKeyMaterialCreator.CreateEd25519Keys(BaseMemoryPool.Shared);
-        string mbPubKey = MultibaseSerializer.EncodeKey(keys.PublicKey, TestSetup.Base58Encoder);
+        string mbPubKey = MultibaseSerializer.EncodeKey(keys.PublicKey, TestSetup.Base58Encoder, BaseMemoryPool.Shared);
         PrivateKey signingKey = CryptographicKeyFactory.CreatePrivateKey(keys.PrivateKey, "webplus-test", keys.PrivateKey.Tag);
 
         return new WebPlusController(keys.PublicKey, signingKey, mbPubKey);

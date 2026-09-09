@@ -13,7 +13,7 @@ internal sealed class CheqdDidResolverTests
 {
     //did:cheqd resolution only computes a URL — no network I/O — so a default context
     //suffices; it exists only to satisfy the SSRF-policy-carrying parameter.
-    private static readonly ExchangeContext EmptyContext = new();
+    private static ExchangeContext EmptyContext { get; } = new();
 
     public TestContext TestContext { get; set; } = null!;
 

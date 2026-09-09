@@ -55,36 +55,19 @@ public static class DcqlBuilderExtensions
         }
 
         /// <summary>
-        /// Adds a transformation that registers an SD-JWT credential query with the given claims.
-        /// </summary>
-        /// <param name="id">The credential query identifier.</param>
-        /// <param name="claims">The claims to request.</param>
-        /// <returns>This builder instance for method chaining.</returns>
-        /// <example>
-        /// <code>
-        /// var builder = new DcqlQueryBuilder()
-        ///     .WithSdJwtCredential("pid",
-        ///         ClaimsQuery.ForPath("given_name"),
-        ///         ClaimsQuery.ForPath("family_name"));
-        /// </code>
-        /// </example>
-        public DcqlQueryBuilder WithSdJwtCredential(string id, ClaimsQuery[] claims)
-        {
-            ArgumentNullException.ThrowIfNull(id);
-            ArgumentNullException.ThrowIfNull(claims);
-
-            return builder.WithCredential(new CredentialQuery
-            {
-                Id = id,
-                Format = DcqlCredentialFormats.SdJwt,
-                Claims = claims.Length > 0 ? claims : null
-            });
-        }
-
-        /// <summary>
         /// Adds a transformation that registers an SD-JWT credential query with type
         /// constraints and claims.
         /// </summary>
+        /// <remarks>
+        /// The type constraint is not optional for this format:
+        /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#appendix-B.3.5">
+        /// OpenID for Verifiable Presentations 1.0, Appendix B.3.5</see> makes <c>vct_values</c>
+        /// REQUIRED — "vct_values: REQUIRED. A non-empty array of strings that specifies allowed
+        /// values for the type of the requested Verifiable Credential" — so a <c>dc+sd-jwt</c>
+        /// query without it is not expressible here, and every query this builds is one
+        /// <see cref="DcqlQueryExtensions"/>'s validation and
+        /// <see cref="Verifiable.Core.Dcql.DcqlEvaluator"/> accept.
+        /// </remarks>
         /// <param name="id">The credential query identifier.</param>
         /// <param name="vctValues">The acceptable Verifiable Credential Type values.</param>
         /// <param name="claims">The claims to request.</param>

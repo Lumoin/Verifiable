@@ -3,7 +3,8 @@ using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Core.Model.SelectiveDisclosure;
-using Verifiable.JsonPointer;
+using Lumoin.Veritas.JsonPointer;
+using JsonPointerType = Lumoin.Veritas.JsonPointer.JsonPointer;
 
 namespace Verifiable.Vcalm;
 
@@ -25,7 +26,11 @@ public static class VcalmDcqlAdapters
 {
     /// <summary>
     /// The default VC-DM 2.0 metadata extractor: the credential's most-specific <c>type</c> as the
-    /// DCQL <c>format</c> and <c>credentialType</c>, and the issuer id as the DCQL issuer.
+    /// DCQL <c>format</c> and <c>credentialType</c>. Sets no
+    /// <see cref="DcqlCredentialMetadata.TrustedAuthorityEvidence"/> — VC-DM 2.0 carries no X.509
+    /// chain or ETSI Trusted List evidence here; an application resolving a
+    /// <c>openid_federation</c> trust path for <see cref="VerifiableCredential.Issuer"/> supplies its
+    /// own extractor built on this one.
     /// </summary>
     public static DcqlMetadataExtractor<VerifiableCredential> MetadataExtractor { get; } = credential =>
     {
@@ -35,7 +40,6 @@ public static class VcalmDcqlAdapters
         {
             Format = credentialType,
             CredentialType = credentialType,
-            Issuer = credential.Issuer?.Id,
             AvailablePaths = CollectSubjectPaths(credential)
         };
     };
@@ -81,7 +85,7 @@ public static class VcalmDcqlAdapters
 
     //The reference-token sequence of a JSON pointer, materialized from the pointer's span so it can
     //cross into the value-navigation helpers.
-    private static string[] ToKeys(JsonPointer.JsonPointer pointer)
+    private static string[] ToKeys(JsonPointerType pointer)
     {
         ReadOnlySpan<JsonPointerSegment> segments = pointer.Segments;
         string[] keys = new string[segments.Length];
@@ -113,7 +117,7 @@ public static class VcalmDcqlAdapters
 
             foreach(KeyValuePair<string, object> field in subject.AdditionalData)
             {
-                JsonPointer.JsonPointer pointer = JsonPointer.JsonPointer.Root
+                JsonPointerType pointer = JsonPointerType.Root
                     .Append(VcalmParameterNames.CredentialSubject)
                     .Append(field.Key);
                 paths.Add(new CredentialPath(pointer));

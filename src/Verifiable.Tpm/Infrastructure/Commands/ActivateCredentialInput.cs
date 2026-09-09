@@ -19,7 +19,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// enrollment.
 /// </para>
 /// <para>
-/// Command structure (TPM 2.0 Part 3, Section 12.5):
+/// Command structure (TPM 2.0 Library Part 3, clause 12.5):
 /// </para>
 /// <list type="bullet">
 ///   <item><description>activateHandle (TPMI_DH_OBJECT): The object the credential is bound to (the attestation key). Requires ADMIN-role authorization.</description></item>
@@ -29,10 +29,11 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </list>
 /// <para>
 /// Both handles require authorization, so the executor is given two authorization sessions in handle order: the
-/// activate object's first, the key's second. The activate object's session is password-only in this slice (ADMIN
-/// role); the key's session may be a password session or, for a key whose <c>userWithAuth</c> attribute is CLEAR
+/// activate object's first, the key's second. The activate object's session is password-only (ADMIN
+/// role); a policy-authorized ADMIN session on <c>activateHandle</c> is not modelled. The key's session may be a
+/// password session or, for a key whose <c>userWithAuth</c> attribute is CLEAR
 /// (for example a standard endorsement key), a policy session satisfying the key's authPolicy (TPM 2.0 Part 3,
-/// Section 5.6).
+/// clause 5.6).
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]

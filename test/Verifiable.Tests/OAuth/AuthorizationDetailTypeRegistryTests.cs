@@ -1,3 +1,4 @@
+using Verifiable.Cryptography;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Server;
@@ -25,7 +26,7 @@ internal sealed class AuthorizationDetailTypeRegistryTests
     [TestMethod]
     public void DefaultRegistryCarriesOnlyOpenIdCredential()
     {
-        AuthorizationServerIntegration integration = new();
+        AuthorizationServerIntegration integration = new() { MemoryPool = BaseMemoryPool.Shared };
 
         Assert.IsTrue(integration.AuthorizationDetailTypes.IsRegistered(
             AuthorizationDetailsTypeValues.OpenIdCredential));

@@ -1,6 +1,7 @@
 using System;
+using System.Buffers;
 using System.Collections.Generic;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using Verifiable.JCose;
 
 namespace Verifiable.Cbor;
@@ -70,7 +71,7 @@ public static class CwtPayloadUtilities
         string? audience = null,
         byte[]? cwtId = null,
         IReadOnlyDictionary<int, object>? additionalClaims = null,
-        CborConformanceMode conformanceMode = CborConformanceMode.Canonical)
+        CborConformanceMode conformanceMode = CborConformanceMode.RfcCanonical)
     {
         ArgumentException.ThrowIfNullOrEmpty(issuer);
 
@@ -111,7 +112,8 @@ public static class CwtPayloadUtilities
             mapSize += additionalClaims.Count;
         }
 
-        var writer = new CborWriter(conformanceMode);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborSerializerOptions.Default(conformanceMode));
         writer.WriteStartMap(mapSize);
 
         //Write standard claims in numeric order for canonical encoding.
@@ -172,7 +174,8 @@ public static class CwtPayloadUtilities
         }
 
         writer.WriteEndMap();
-        return writer.Encode();
+
+        return buffer.WrittenSpan.ToArray();
     }
 
 
@@ -190,7 +193,7 @@ public static class CwtPayloadUtilities
         string? subjectId,
         DateTimeOffset validFrom,
         DateTimeOffset? validUntil = null,
-        CborConformanceMode conformanceMode = CborConformanceMode.Canonical)
+        CborConformanceMode conformanceMode = CborConformanceMode.RfcCanonical)
     {
         return Build(
             issuer: issuerId,
@@ -207,7 +210,7 @@ public static class CwtPayloadUtilities
     /// <param name="conformanceMode">CBOR conformance mode for deterministic encoding.</param>
     /// <returns>A delegate that builds CWT payloads.</returns>
     public static CwtPayloadDelegate CreateDelegate(
-        CborConformanceMode conformanceMode = CborConformanceMode.Canonical)
+        CborConformanceMode conformanceMode = CborConformanceMode.RfcCanonical)
     {
         return (issuer, subject, issuedAt, expiration, additionalClaims) =>
             Build(

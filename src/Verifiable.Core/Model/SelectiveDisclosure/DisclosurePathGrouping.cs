@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using Verifiable.JsonPointer;
+using Lumoin.Veritas.JsonPointer;
 
 namespace Verifiable.Core.Model.SelectiveDisclosure;
 
@@ -74,7 +74,7 @@ public static class DisclosurePathGrouping
             }
 
             //The leaf name is the last segment's raw token value.
-            JsonPointer.JsonPointerSegment? lastSegment = path.JsonPointer.LastSegment;
+            JsonPointerSegment? lastSegment = path.JsonPointer.LastSegment;
             if(lastSegment is null)
             {
                 continue;

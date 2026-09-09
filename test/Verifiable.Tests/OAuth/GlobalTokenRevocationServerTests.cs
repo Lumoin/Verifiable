@@ -33,10 +33,10 @@ internal sealed class GlobalTokenRevocationServerTests
     private const string ClientId = "https://gtr.client.test";
 
     /// <summary>The base URI the registered client is reachable at.</summary>
-    private static readonly Uri ClientBaseUri = new("https://gtr.client.test");
+    private static Uri ClientBaseUri { get; } = new("https://gtr.client.test");
 
     /// <summary>The single capability the Global Token Revocation endpoint requires.</summary>
-    private static readonly ImmutableHashSet<CapabilityIdentifier> GtrCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> GtrCapabilities { get; } =
         ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.OAuthGlobalTokenRevocation);
 
     /// <summary>A representative iss_sub request body.</summary>

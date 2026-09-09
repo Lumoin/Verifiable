@@ -22,5 +22,5 @@ public static class ServerActivityNames
     /// Covers the full request lifecycle: correlation resolution, state load,
     /// input building, PDA step, response building, and state save.
     /// </summary>
-    public static readonly string Handle = Utf8Constants.ToInternedString(HandleUtf8);
+    public static string Handle { get; } = Utf8Constants.ToInternedString(HandleUtf8);
 }

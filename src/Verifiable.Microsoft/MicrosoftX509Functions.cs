@@ -113,9 +113,18 @@ public static class MicrosoftX509Functions
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Leaf public key. Caller must dispose.</returns>
     /// <remarks>
+    /// <para>
     /// Chain building is in-memory; the async signature carries the optionally-supplied
     /// <paramref name="checkRevocation"/> seam (an OCSP/CRL round-trip) and reserves the seam for remote-anchor
     /// resolution. With no checker the method completes without awaiting.
+    /// </para>
+    /// <para>
+    /// <strong>Manual disposal, not <see langword="using"/> declarations.</strong> <c>anchorCerts</c> and
+    /// <c>intermediateCerts</c> must stay alive for <see cref="X509Chain.Build"/> to read them out of
+    /// <c>CustomTrustStore</c>/<c>ExtraStore</c>, and each is a per-certificate list, not one disposable value,
+    /// so both are disposed in the <see langword="finally"/> below rather than through a
+    /// <see langword="using"/> declaration inside the loops that build them.
+    /// </para>
     /// </remarks>
     /// <exception cref="System.Security.SecurityException">
     /// Thrown when chain validation fails, including when <paramref name="checkRevocation"/> reports the leaf as
@@ -326,22 +335,18 @@ public static class MicrosoftX509Functions
 
     /// <summary>
     /// Reads the <c>KeyIdentifier</c> of the certificate's AuthorityKeyIdentifier extension
-    /// (RFC 5280 §4.2.1.1) and returns it base64url-encoded — the value a DCQL
-    /// <c>trusted_authorities</c> entry of type <c>aki</c> matches against per
+    /// (RFC 5280 §4.2.1.1) — the value a DCQL <c>trusted_authorities</c> entry of type <c>aki</c>
+    /// matches against per
     /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-6.1.1.1">OID4VP 1.0 §6.1.1.1</see>.
     /// Returns <see langword="null"/> when the certificate carries no AuthorityKeyIdentifier
     /// extension or that extension omits the KeyIdentifier (e.g. it identifies the issuer by
     /// name + serial instead).
     /// </summary>
     /// <param name="certificate">The certificate to read — typically the leaf of an mdoc IssuerAuth x5chain.</param>
-    /// <param name="base64UrlEncoder">Encoder producing the base64url string form (the AKI is public metadata, not key material).</param>
-    /// <returns>The base64url-encoded AuthorityKeyIdentifier KeyIdentifier, or <see langword="null"/>.</returns>
-    public static string? GetAuthorityKeyIdentifier(
-        PkiCertificateMemory certificate,
-        EncodeDelegate base64UrlEncoder)
+    /// <returns>The certificate's <see cref="AuthorityKeyIdentifier"/>, or <see langword="null"/>.</returns>
+    public static AuthorityKeyIdentifier? GetAuthorityKeyIdentifier(PkiCertificateMemory certificate)
     {
         ArgumentNullException.ThrowIfNull(certificate);
-        ArgumentNullException.ThrowIfNull(base64UrlEncoder);
 
         using X509Certificate2 cert = X509CertificateLoader.LoadCertificate(certificate.AsReadOnlyMemory().Span);
 
@@ -351,7 +356,44 @@ public static class MicrosoftX509Functions
             return null;
         }
 
-        return base64UrlEncoder(keyIdentifier.Span);
+        return new AuthorityKeyIdentifier(keyIdentifier);
+    }
+
+
+    /// <summary>
+    /// Implements <see cref="ReadCertificateSubjectKeyIdentifierDelegate"/>. Reads the <c>KeyIdentifier</c>
+    /// contents of the certificate's SubjectKeyIdentifier extension (RFC 5280 §4.2.1.2).
+    /// </summary>
+    /// <param name="certificate">The certificate to read.</param>
+    /// <returns>The SubjectKeyIdentifier's octets, or an empty <see cref="ReadOnlyMemory{T}"/> when the certificate carries no such extension.</returns>
+    public static ReadOnlyMemory<byte> GetSubjectKeyIdentifier(PkiCertificateMemory certificate)
+    {
+        ArgumentNullException.ThrowIfNull(certificate);
+
+        using X509Certificate2 cert = X509CertificateLoader.LoadCertificate(certificate.AsReadOnlyMemory().Span);
+
+        if(cert.Extensions.OfType<X509SubjectKeyIdentifierExtension>().FirstOrDefault() is not { } subjectKeyIdentifier)
+        {
+            return ReadOnlyMemory<byte>.Empty;
+        }
+
+        return subjectKeyIdentifier.SubjectKeyIdentifierBytes;
+    }
+
+
+    /// <summary>
+    /// Implements <see cref="ReadCertificateSubjectNameDelegate"/>. Renders the certificate's Subject as an
+    /// RFC 4514 distinguished name string.
+    /// </summary>
+    /// <param name="certificate">The certificate to read.</param>
+    /// <returns>The certificate Subject's RFC 4514 string form.</returns>
+    public static string GetSubjectName(PkiCertificateMemory certificate)
+    {
+        ArgumentNullException.ThrowIfNull(certificate);
+
+        using X509Certificate2 cert = X509CertificateLoader.LoadCertificate(certificate.AsReadOnlyMemory().Span);
+
+        return Rfc4514SubjectNameText.FromDer(cert.SubjectName.RawData);
     }
 
 

@@ -83,8 +83,7 @@ internal sealed class BackendLeafKeyParityTests
     /// Both backends' <see cref="ExtractAuthorityKeyIdentifierDelegate"/> implementations
     /// (<see cref="MicrosoftX509Functions.GetAuthorityKeyIdentifier"/> and
     /// <see cref="BouncyCastleX509Functions.GetAuthorityKeyIdentifier"/>) read the identical
-    /// base64url-encoded AuthorityKeyIdentifier <c>KeyIdentifier</c> bytes from the same minted
-    /// certificate.
+    /// AuthorityKeyIdentifier <c>KeyIdentifier</c> bytes from the same minted certificate.
     /// </summary>
     [TestMethod]
     public void AuthorityKeyIdentifierMatchesAcrossBackends()
@@ -102,8 +101,8 @@ internal sealed class BackendLeafKeyParityTests
             additionalExtensions: [Fido2AttestationTestVectors.CreateLeafAuthorityKeyIdentifierExtension(rootCert)]);
         using PkiCertificateMemory leafPki = Fido2AttestationTestVectors.ToPkiCertificateMemory(leafCert.RawData);
 
-        string? microsoftKeyIdentifier = MicrosoftX509Functions.GetAuthorityKeyIdentifier(leafPki, TestSetup.Base64UrlEncoder);
-        string? bouncyCastleKeyIdentifier = BouncyCastleX509Functions.GetAuthorityKeyIdentifier(leafPki, TestSetup.Base64UrlEncoder);
+        AuthorityKeyIdentifier? microsoftKeyIdentifier = MicrosoftX509Functions.GetAuthorityKeyIdentifier(leafPki);
+        AuthorityKeyIdentifier? bouncyCastleKeyIdentifier = BouncyCastleX509Functions.GetAuthorityKeyIdentifier(leafPki);
 
         Assert.IsNotNull(microsoftKeyIdentifier);
         Assert.IsNotNull(bouncyCastleKeyIdentifier);
@@ -121,8 +120,8 @@ internal sealed class BackendLeafKeyParityTests
         using PkiCertificateMemory rootPki = Fido2AttestationTestVectors.ToPkiCertificateMemory(rootCert.RawData);
 
         //CreateSelfSignedCa adds no AuthorityKeyIdentifier extension to the self-signed root.
-        Assert.IsNull(MicrosoftX509Functions.GetAuthorityKeyIdentifier(rootPki, TestSetup.Base64UrlEncoder));
-        Assert.IsNull(BouncyCastleX509Functions.GetAuthorityKeyIdentifier(rootPki, TestSetup.Base64UrlEncoder));
+        Assert.IsNull(MicrosoftX509Functions.GetAuthorityKeyIdentifier(rootPki));
+        Assert.IsNull(BouncyCastleX509Functions.GetAuthorityKeyIdentifier(rootPki));
     }
 
 

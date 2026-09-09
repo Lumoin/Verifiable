@@ -4,6 +4,8 @@ using System.Formats.Asn1;
 using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
+using Microsoft.Extensions.Time.Testing;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.TestInfrastructure;
 
@@ -48,7 +50,7 @@ internal sealed record OracleEvidenceRecord(
 /// Nothing here calls the surface it checks. The structures are decoded by an <see cref="AsnReader"/> in this
 /// file rather than through <see cref="EvidenceRecord"/>, the ordering rule and the node rule are written out
 /// here rather than taken from <see cref="EvidenceRecordHashTree"/>, and every hash value is taken through the
-/// BouncyCastle digest implementation (<see cref="BouncyCastleCryptographicFunctions.ComputeDigest"/>), which
+/// BouncyCastle digest implementation (<see cref="BouncyCastleCryptographicFunctionsAdapter.ComputeDigest"/>), which
 /// is a different implementation from the one the test host registers for the SHA family and therefore an
 /// independent answer to the same question. Digests are library carriers, never hand-rolled hashing.
 /// </para>
@@ -104,8 +106,7 @@ internal static class EvidenceRecordOracle
     /// <returns>The digest octets.</returns>
     internal static byte[] Hash(ReadOnlySpan<byte> input, PkiDigestAlgorithm algorithm)
     {
-        using DigestValue digest = BouncyCastleCryptographicFunctions.ComputeDigest(
-            input, algorithm.OutputByteLength, algorithm.DigestTag, BaseMemoryPool.Shared).Result;
+        using DigestValue digest = BouncyCastleCryptographicFunctions.ComputeDigest(input, algorithm.OutputByteLength, algorithm.DigestTag, BaseMemoryPool.Shared, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch)).Result;
 
         return digest.AsReadOnlySpan()[..algorithm.OutputByteLength].ToArray();
     }

@@ -23,5 +23,5 @@ public static class WellKnownEmptyMessageNames
     /// The empty Message Type URI — the value of the <c>type</c> header that identifies a message as the
     /// DIDComm Empty Message, whose <c>body</c> is the empty object <c>{}</c> (DIDComm v2.1 §The Empty Message).
     /// </summary>
-    public static readonly string EmptyType = Utf8Constants.ToInternedString(EmptyTypeUtf8);
+    public static string EmptyType { get; } = Utf8Constants.ToInternedString(EmptyTypeUtf8);
 }

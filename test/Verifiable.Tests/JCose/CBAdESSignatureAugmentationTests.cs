@@ -1,7 +1,7 @@
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Formats.Asn1;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using Microsoft.Extensions.Time.Testing;
 using Verifiable.Cbor;
 using Verifiable.Cryptography;
@@ -2365,6 +2365,8 @@ internal sealed class CBAdESSignatureAugmentationTests
 
                 byte[] gapFilledValDataElementBytes = ReadRawUnsignedHeaderElement(parsed.RawUnsignedHeaders!, index: 1);
 
+                //expectedImprintInput is an out-parameter target, assigned by TryBuild... below; a using
+                //declaration cannot target a variable assigned through an out parameter after declaration.
                 PooledMemory? expectedImprintInput = null;
                 bool built = false;
                 try
@@ -2554,7 +2556,8 @@ internal sealed class CBAdESSignatureAugmentationTests
     /// <returns>The encoded <c>UHeaderInstance</c> map bytes (label 1, unwrapped).</returns>
     private static byte[] BuildSignatureTimestampUHeaderInstance(byte[] tokenDerBytes)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
 
         writer.WriteStartMap(1); //UHeaderInstance: { 1 => sigTst }
         writer.WriteInt32(CBAdESUnsignedHeaderElement.SignatureTimestampLabel);
@@ -2569,7 +2572,7 @@ internal sealed class CBAdESSignatureAugmentationTests
         writer.WriteEndMap();
         writer.WriteEndMap();
 
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -2607,7 +2610,8 @@ internal sealed class CBAdESSignatureAugmentationTests
     /// <returns>The encoded <c>UHeaderInstance</c> map bytes (label 4, unwrapped -- the caller bstr-wraps it as an array element).</returns>
     private static byte[] BuildRefsUHeaderInstanceWithOcspProducedAt(string producedAtRfc3339, byte[] ocspResponseDigestBytes)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
 
         writer.WriteStartMap(1); //UHeaderInstance: { 4 => refs }
         writer.WriteInt32(CBAdESUnsignedHeaderElement.ReferencesLabel);
@@ -2645,7 +2649,7 @@ internal sealed class CBAdESSignatureAugmentationTests
         writer.WriteEndMap(); //end refs
         writer.WriteEndMap(); //end UHeaderInstance
 
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -2657,7 +2661,8 @@ internal sealed class CBAdESSignatureAugmentationTests
     /// <returns>The encoded <c>UHeaderInstance</c> map bytes (label 6, unwrapped).</returns>
     private static byte[] BuildRfsTstUHeaderInstance(byte[] tokenDerBytes)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
 
         writer.WriteStartMap(1); //UHeaderInstance: { 6 => rfsTst }
         writer.WriteInt32(CBAdESUnsignedHeaderElement.ReferencesTimestampLabel);
@@ -2672,7 +2677,7 @@ internal sealed class CBAdESSignatureAugmentationTests
         writer.WriteEndMap();
         writer.WriteEndMap();
 
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -2687,7 +2692,8 @@ internal sealed class CBAdESSignatureAugmentationTests
     {
         const int unknownLabel = 100;
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(unknownLabel);
 
@@ -2703,7 +2709,7 @@ internal sealed class CBAdESSignatureAugmentationTests
         writer.WriteEndMap();
 
         writer.WriteEndMap();
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -2715,7 +2721,8 @@ internal sealed class CBAdESSignatureAugmentationTests
     /// <returns>The encoded <c>uHeaders</c> array bytes.</returns>
     private static byte[] BuildRawUHeadersArray(params byte[][] uHeaderInstances)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartArray(uHeaderInstances.Length);
         foreach(byte[] instance in uHeaderInstances)
         {
@@ -2723,7 +2730,7 @@ internal sealed class CBAdESSignatureAugmentationTests
         }
 
         writer.WriteEndArray();
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -2750,8 +2757,9 @@ internal sealed class CBAdESSignatureAugmentationTests
             bool payloadIsPresent = parsed.PayloadIsPresent;
             byte[] payloadBytes = parsed.Payload.ToArray();
 
-            var writer = new CborWriter(CborConformanceMode.Canonical);
-            writer.WriteTag((CborTag)CoseTags.Sign1);
+            var writerBuffer = new ArrayBufferWriter<byte>();
+            var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
+            writer.WriteTag(new CborTag((ulong)CoseTags.Sign1));
             writer.WriteStartArray(4);
 
             writer.WriteByteString(protectedHeaderBytes);
@@ -2779,7 +2787,7 @@ internal sealed class CBAdESSignatureAugmentationTests
             writer.WriteByteString(signatureBytes);
             writer.WriteEndArray();
 
-            return writer.Encode();
+            return writerBuffer.WrittenSpan.ToArray();
         }
     }
 
@@ -2795,7 +2803,7 @@ internal sealed class CBAdESSignatureAugmentationTests
     /// <returns>That element's own encoded bytes, verbatim.</returns>
     private static byte[] ReadRawUnsignedHeaderElement(EncodedCBAdESUnsignedHeaders rawUnsignedHeaders, int index)
     {
-        var reader = new CborReader(rawUnsignedHeaders.AsReadOnlyMemory(), CborConformanceMode.Canonical);
+        var reader = new CborReader(rawUnsignedHeaders.AsReadOnlyMemory(), CborOptions.RfcCanonical);
         int? count = reader.ReadStartArray();
         Assert.IsNotNull(count);
 

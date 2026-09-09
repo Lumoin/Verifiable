@@ -15,7 +15,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// as defined in the specification.
 /// </para>
 /// <para>
-/// <b>Response parameters (Part 3, Section 30.2):</b>
+/// <b>Response parameters (Part 3, clause 30.2):</b>
 /// </para>
 /// <list type="bullet">
 ///   <item><description>moreData (TPMI_YES_NO) - flag indicating if more data is available.</description></item>

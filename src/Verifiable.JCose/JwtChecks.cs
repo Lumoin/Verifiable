@@ -292,6 +292,8 @@ public static class JwtChecks
             return false;
         }
 
+        //RFC 7518 section 3.4's fixed alg/crv pairing table, one pair per disjunct; a named predicate per
+        //pair would only rename the citation, not simplify it.
         return (WellKnownJwaValues.IsEs256(alg) && WellKnownCurveValues.IsP256(crv))
             || (WellKnownJwaValues.IsEs384(alg) && WellKnownCurveValues.IsP384(crv))
             || (WellKnownJwaValues.IsEs512(alg) && WellKnownCurveValues.IsP521(crv))

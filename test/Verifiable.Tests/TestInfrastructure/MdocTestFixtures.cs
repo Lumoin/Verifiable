@@ -1,5 +1,6 @@
 using System.Buffers;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
+using Verifiable.Cbor;
 using Verifiable.Core.Model.Mdoc;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -39,20 +40,22 @@ internal static class MdocTestFixtures
     /// <summary>Canonical-CBOR-encodes a text string as an mdoc element value.</summary>
     public static byte[] CborText(string value)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteTextString(value);
 
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
     }
 
 
     /// <summary>Canonical-CBOR-encodes the boolean <see langword="true"/> as an mdoc element value.</summary>
     public static byte[] CborBoolTrue()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteBoolean(true);
 
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
     }
 
 

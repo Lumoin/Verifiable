@@ -28,12 +28,12 @@ internal sealed class FlattenedJweMessageTests
 
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
-    private static readonly JwtHeaderSerializer JwtHeaderSerializer =
+    private static JwtHeaderSerializer JwtHeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)header,
             TestSetup.DefaultSerializationOptions);
 
-    private static readonly byte[] Plaintext =
+    private static byte[] Plaintext { get; } =
         Encoding.UTF8.GetBytes(/*lang=json,strict*/ "{\"type\":\"https://didcomm.org/basicmessage/2.0/message\"}");
 
     private const string RecipientKid = "did:example:recipient-0#key-1";
@@ -278,7 +278,7 @@ internal sealed class FlattenedJweMessageTests
             JwtHeaderSerializer,
             TestSetup.Base64UrlEncoder,
             CryptoFormatConversions.DefaultTagToEpkCrvConverter,
-            MicrosoftEntropyFunctions.GenerateNonce,
+            MicrosoftEntropyFunctionsAdapter.GenerateNonce,
             BouncyCastleKeyAgreementFunctions.EcdhEsMultiRecipientAgreementEncryptX25519Async,
             ConcatKdf.DefaultKeyDerivationDelegate,
             MicrosoftKeyAgreementFunctions.AesKeyWrapAsync,
@@ -313,7 +313,7 @@ internal sealed class FlattenedJweMessageTests
             JwtHeaderSerializer,
             TestSetup.Base64UrlEncoder,
             CryptoFormatConversions.DefaultTagToEpkCrvConverter,
-            MicrosoftEntropyFunctions.GenerateNonce,
+            MicrosoftEntropyFunctionsAdapter.GenerateNonce,
             BouncyCastleKeyAgreementFunctions.EcdhEsMultiRecipientAgreementEncryptX25519Async,
             ConcatKdf.DefaultKeyDerivationDelegate,
             MicrosoftKeyAgreementFunctions.AesKeyWrapAsync,
@@ -369,9 +369,9 @@ internal sealed class FlattenedJweMessageTests
     //idempotent, so any overlap is harmless.
     private sealed class AnoncryptSingleRecipient: IDisposable
     {
-        private readonly PublicKeyMemory recipientPublic;
-        private readonly PrivateKeyMemory recipientPrivate;
-        private readonly BaseMemoryPool pool;
+        private PublicKeyMemory RecipientPublic { get; }
+        private PrivateKeyMemory RecipientPrivate { get; }
+        private BaseMemoryPool Pool { get; }
         private bool isPrivateConsumed;
 
         public AnoncryptSingleRecipient(
@@ -381,9 +381,9 @@ internal sealed class FlattenedJweMessageTests
             BaseMemoryPool pool)
         {
             Message = message;
-            this.recipientPublic = recipientPublic;
-            this.recipientPrivate = recipientPrivate;
-            this.pool = pool;
+            this.RecipientPublic = recipientPublic;
+            this.RecipientPrivate = recipientPrivate;
+            this.Pool = pool;
         }
 
         public GeneralJweMessage Message { get; }
@@ -396,7 +396,7 @@ internal sealed class FlattenedJweMessageTests
             {
                 isPrivateConsumed = true;
 
-                return recipientPrivate;
+                return RecipientPrivate;
             }
         }
 
@@ -406,20 +406,20 @@ internal sealed class FlattenedJweMessageTests
         {
             get
             {
-                ReadOnlySpan<byte> bytes = recipientPrivate.AsReadOnlySpan();
-                IMemoryOwner<byte> owner = pool.Rent(bytes.Length);
+                ReadOnlySpan<byte> bytes = RecipientPrivate.AsReadOnlySpan();
+                IMemoryOwner<byte> owner = Pool.Rent(bytes.Length);
                 bytes.CopyTo(owner.Memory.Span);
 
-                return new PrivateKeyMemory(owner, recipientPrivate.Tag);
+                return new PrivateKeyMemory(owner, RecipientPrivate.Tag);
             }
         }
 
         public void Dispose()
         {
-            recipientPublic.Dispose();
+            RecipientPublic.Dispose();
             if(!isPrivateConsumed)
             {
-                recipientPrivate.Dispose();
+                RecipientPrivate.Dispose();
             }
         }
     }
@@ -429,10 +429,10 @@ internal sealed class FlattenedJweMessageTests
     //it via its own 'using'. Dispose releases the two recipients' key material.
     private sealed class TwoRecipientGeneral: IDisposable
     {
-        private readonly PublicKeyMemory firstPublic;
-        private readonly PrivateKeyMemory firstPrivate;
-        private readonly PublicKeyMemory secondPublic;
-        private readonly PrivateKeyMemory secondPrivate;
+        private PublicKeyMemory FirstPublic { get; }
+        private PrivateKeyMemory FirstPrivate { get; }
+        private PublicKeyMemory SecondPublic { get; }
+        private PrivateKeyMemory SecondPrivate { get; }
 
         public TwoRecipientGeneral(
             GeneralJweMessage message,
@@ -442,20 +442,20 @@ internal sealed class FlattenedJweMessageTests
             PrivateKeyMemory secondPrivate)
         {
             Message = message;
-            this.firstPublic = firstPublic;
-            this.firstPrivate = firstPrivate;
-            this.secondPublic = secondPublic;
-            this.secondPrivate = secondPrivate;
+            this.FirstPublic = firstPublic;
+            this.FirstPrivate = firstPrivate;
+            this.SecondPublic = secondPublic;
+            this.SecondPrivate = secondPrivate;
         }
 
         public GeneralJweMessage Message { get; }
 
         public void Dispose()
         {
-            firstPublic.Dispose();
-            firstPrivate.Dispose();
-            secondPublic.Dispose();
-            secondPrivate.Dispose();
+            FirstPublic.Dispose();
+            FirstPrivate.Dispose();
+            SecondPublic.Dispose();
+            SecondPrivate.Dispose();
         }
     }
 }

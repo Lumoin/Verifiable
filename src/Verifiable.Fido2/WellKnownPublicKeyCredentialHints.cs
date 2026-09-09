@@ -22,7 +22,7 @@ public static class WellKnownPublicKeyCredentialHints
     /// <summary>
     /// The <c>security-key</c> wire value.
     /// </summary>
-    public static readonly string SecurityKey = Utf8Constants.ToInternedString(SecurityKeyUtf8);
+    public static string SecurityKey { get; } = Utf8Constants.ToInternedString(SecurityKeyUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="ClientDevice"/>.</summary>
     public static ReadOnlySpan<byte> ClientDeviceUtf8 => "client-device"u8;
@@ -30,7 +30,7 @@ public static class WellKnownPublicKeyCredentialHints
     /// <summary>
     /// The <c>client-device</c> wire value.
     /// </summary>
-    public static readonly string ClientDevice = Utf8Constants.ToInternedString(ClientDeviceUtf8);
+    public static string ClientDevice { get; } = Utf8Constants.ToInternedString(ClientDeviceUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Hybrid"/>.</summary>
     public static ReadOnlySpan<byte> HybridUtf8 => "hybrid"u8;
@@ -38,7 +38,7 @@ public static class WellKnownPublicKeyCredentialHints
     /// <summary>
     /// The <c>hybrid</c> wire value.
     /// </summary>
-    public static readonly string Hybrid = Utf8Constants.ToInternedString(HybridUtf8);
+    public static string Hybrid { get; } = Utf8Constants.ToInternedString(HybridUtf8);
 
 
     /// <summary>

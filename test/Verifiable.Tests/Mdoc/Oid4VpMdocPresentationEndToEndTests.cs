@@ -1,5 +1,5 @@
 using System.Buffers;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using System.Security.Cryptography;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Mdoc;
@@ -37,8 +37,8 @@ namespace Verifiable.Tests.Mdoc;
 [TestClass]
 internal sealed class Oid4VpMdocPresentationEndToEndTests
 {
-    private static readonly string PidDocType = EudiPid.AttestationType;
-    private static readonly string PidNamespace = EudiPid.Mdoc.Namespace;
+    private static string PidDocType { get; } = EudiPid.AttestationType;
+    private static string PidNamespace { get; } = EudiPid.Mdoc.Namespace;
     private const string VerifierClientId = "https://verifier.example/oid4vp/client";
     private const string VerifierResponseUri = "https://verifier.example/oid4vp/response";
     private const string AuthorizationRequestNonce = "auth-req-nonce-7f2c";
@@ -68,7 +68,7 @@ internal sealed class Oid4VpMdocPresentationEndToEndTests
                 mdocGeneratedNonce.Memory[..Oid4VpMdocSessionTranscriptEncoder.MinimumMdocGeneratedNonceLength];
 
             ReadOnlyMemory<byte> sessionTranscript = Oid4VpMdocSessionTranscriptEncoder.Encode(
-                VerifierClientId, VerifierResponseUri, AuthorizationRequestNonce, nonceMemory.Span);
+                VerifierClientId, VerifierResponseUri, AuthorizationRequestNonce, nonceMemory.Span, BaseMemoryPool.Shared);
 
             //Full-disclosure presentation: wrap the issued document's
             //IssuerSigned as a view (no trimming), then device-sign over
@@ -111,7 +111,7 @@ internal sealed class Oid4VpMdocPresentationEndToEndTests
                 "Base64url round-trip of the mdoc_generated_nonce must be byte-identical.");
 
             ReadOnlyMemory<byte> reconstructedSessionTranscript = Oid4VpMdocSessionTranscriptEncoder.Encode(
-                VerifierClientId, VerifierResponseUri, AuthorizationRequestNonce, reconstructedNonceMemory.Span);
+                VerifierClientId, VerifierResponseUri, AuthorizationRequestNonce, reconstructedNonceMemory.Span, BaseMemoryPool.Shared);
             Assert.IsTrue(reconstructedSessionTranscript.Span.SequenceEqual(sessionTranscript.Span),
                 "Verifier-side reconstruction must be byte-identical to the wallet-side encoding.");
 
@@ -119,7 +119,7 @@ internal sealed class Oid4VpMdocPresentationEndToEndTests
                 issuerKeys.PublicKey, BaseMemoryPool.Shared, CoseSerialization.ParseCoseSign1, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
             Assert.IsTrue(isIssuerVerified);
 
-            MdocDigestBindingResult binding = issued.VerifyDigestBinding();
+            MdocDigestBindingResult binding = issued.VerifyDigestBinding(BaseMemoryPool.Shared);
             Assert.IsTrue(binding.IsValid, $"Digest binding must hold; got {binding}.");
 
             bool isDeviceVerified = await presented.VerifyDeviceSignedAsync(
@@ -145,9 +145,9 @@ internal sealed class Oid4VpMdocPresentationEndToEndTests
         RandomNumberGenerator.Fill(nonce);
 
         ReadOnlyMemory<byte> first = Oid4VpMdocSessionTranscriptEncoder.Encode(
-            VerifierClientId, VerifierResponseUri, AuthorizationRequestNonce, nonce);
+            VerifierClientId, VerifierResponseUri, AuthorizationRequestNonce, nonce, BaseMemoryPool.Shared);
         ReadOnlyMemory<byte> second = Oid4VpMdocSessionTranscriptEncoder.Encode(
-            VerifierClientId, VerifierResponseUri, AuthorizationRequestNonce, nonce);
+            VerifierClientId, VerifierResponseUri, AuthorizationRequestNonce, nonce, BaseMemoryPool.Shared);
 
         Assert.IsTrue(first.Span.SequenceEqual(second.Span),
             "SessionTranscript encoding must be deterministic for fixed inputs.");
@@ -161,9 +161,9 @@ internal sealed class Oid4VpMdocPresentationEndToEndTests
         RandomNumberGenerator.Fill(nonce);
 
         ReadOnlyMemory<byte> withOriginalClientId = Oid4VpMdocSessionTranscriptEncoder.Encode(
-            VerifierClientId, VerifierResponseUri, AuthorizationRequestNonce, nonce);
+            VerifierClientId, VerifierResponseUri, AuthorizationRequestNonce, nonce, BaseMemoryPool.Shared);
         ReadOnlyMemory<byte> withDifferentClientId = Oid4VpMdocSessionTranscriptEncoder.Encode(
-            "https://other-verifier.example/oid4vp/client", VerifierResponseUri, AuthorizationRequestNonce, nonce);
+            "https://other-verifier.example/oid4vp/client", VerifierResponseUri, AuthorizationRequestNonce, nonce, BaseMemoryPool.Shared);
 
         Assert.IsFalse(withOriginalClientId.Span.SequenceEqual(withDifferentClientId.Span),
             "Different client_id MUST yield different SessionTranscript bytes.");
@@ -188,7 +188,7 @@ internal sealed class Oid4VpMdocPresentationEndToEndTests
         byte[] tooShort = new byte[8];
         Assert.ThrowsExactly<ArgumentException>(() =>
             Oid4VpMdocSessionTranscriptEncoder.Encode(
-                VerifierClientId, VerifierResponseUri, AuthorizationRequestNonce, tooShort));
+                VerifierClientId, VerifierResponseUri, AuthorizationRequestNonce, tooShort, BaseMemoryPool.Shared));
     }
 
 
@@ -240,7 +240,7 @@ internal sealed class Oid4VpMdocPresentationEndToEndTests
 
     private static void AssertDeviceResponseBytesParse(ReadOnlySpan<byte> bytes)
     {
-        var reader = new CborReader(bytes.ToArray(), CborConformanceMode.Lax);
+        var reader = new CborReader(bytes.ToArray(), CborOptions.Lax);
         int? entries = reader.ReadStartMap();
         string? version = null;
         bool sawDocuments = false;

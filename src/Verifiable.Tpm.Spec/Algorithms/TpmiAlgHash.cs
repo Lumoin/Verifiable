@@ -19,7 +19,7 @@ namespace Verifiable.Tpm.Spec.Algorithms;
 /// <c>TPM_RC_HASH</c>.
 /// </para>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 9.31, Table 78.
+/// Specification reference: TPM 2.0 Library Part 2, clause 9.31, Table 77.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]

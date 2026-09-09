@@ -1,6 +1,7 @@
 using System;
+using System.Buffers;
 using System.Collections.Generic;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Cbor;
@@ -405,12 +406,13 @@ internal sealed class CBAdESCounterSignatureVisibilityTests
         using EncodedCoseCounterSignature encodedGenuine = CoseSerialization.WriteCounterSignatureV2(genuine, BaseMemoryPool.Shared);
         using EncodedCoseCounterSignature encodedOther = CoseSerialization.WriteCounterSignatureV2(other, BaseMemoryPool.Shared);
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartArray(2);
         writer.WriteEncodedValue(encodedGenuine.AsReadOnlySpan());
         writer.WriteEncodedValue(encodedOther.AsReadOnlySpan());
         writer.WriteEndArray();
-        byte[] arrayArmValue = writer.Encode();
+        byte[] arrayArmValue = writerBuffer.WrittenSpan.ToArray();
 
         var element = new CBAdESUnsignedHeaderElementFullCounterSignature(arrayArmValue);
 

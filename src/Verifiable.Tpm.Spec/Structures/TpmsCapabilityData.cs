@@ -23,7 +23,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 ///   <item><description>data (TPMU_CAPABILITIES) - the union data.</description></item>
 /// </list>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 10.11.1.
+/// Specification reference: TPM 2.0 Library Part 2, clause 10.9.2, Table 139 (Definition of TPMS_CAPABILITY_DATA Structure).
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -42,15 +42,15 @@ public sealed class TpmsCapabilityData: IDisposable
     public IReadOnlyList<TpmsAlgProperty>? Algorithms { get; }
 
     /// <summary>
-    /// Gets the handles (when Capability is TPM_CAP_HANDLES), the <c>TPML_HANDLE</c> arm of Table 135.
+    /// Gets the handles (when Capability is TPM_CAP_HANDLES), the <c>TPML_HANDLE</c> arm of Table 138.
     /// </summary>
     public TpmlHandle? Handles { get; }
 
     /// <summary>
-    /// Gets the command attributes (when Capability is TPM_CAP_COMMANDS), the <c>TPML_CCA</c> arm of Table 135.
+    /// Gets the command attributes (when Capability is TPM_CAP_COMMANDS), the <c>TPML_CCA</c> arm of Table 138.
     /// </summary>
     /// <remarks>
-    /// Table 135 selects <c>TPML_CCA</c> for <c>TPM_CAP_COMMANDS</c> alone: its elements are <c>TPMA_CC</c>
+    /// Table 138 selects <c>TPML_CCA</c> for <c>TPM_CAP_COMMANDS</c> alone: its elements are <c>TPMA_CC</c>
     /// attribute words whose low 16 bits are the command index, not the bare <c>TPM_CC</c> command codes
     /// <see cref="PhysicalPresenceCommands"/> and <see cref="AuditCommands"/> carry.
     /// </remarks>
@@ -58,13 +58,13 @@ public sealed class TpmsCapabilityData: IDisposable
 
     /// <summary>
     /// Gets the commands requiring physical presence (when Capability is TPM_CAP_PP_COMMANDS), the
-    /// <c>ppCommands</c> <c>TPML_CC</c> arm of Table 135.
+    /// <c>ppCommands</c> <c>TPML_CC</c> arm of Table 138.
     /// </summary>
     public TpmlCc? PhysicalPresenceCommands { get; }
 
     /// <summary>
     /// Gets the audited commands (when Capability is TPM_CAP_AUDIT_COMMANDS), the <c>auditCommands</c>
-    /// <c>TPML_CC</c> arm of Table 135.
+    /// <c>TPML_CC</c> arm of Table 138.
     /// </summary>
     public TpmlCc? AuditCommands { get; }
 
@@ -86,14 +86,14 @@ public sealed class TpmsCapabilityData: IDisposable
     /// <summary>
     /// Initializes capability data that carries the selector alone, with every union arm left unset.
     /// </summary>
-    /// <param name="capability">The <c>TPM_CAP</c> selector of Table 135.</param>
+    /// <param name="capability">The <c>TPM_CAP</c> selector of Table 138.</param>
     private TpmsCapabilityData(TpmCapConstants capability)
     {
         Capability = capability;
     }
 
     /// <summary>
-    /// Initializes capability data holding Table 135's <c>algorithms</c> arm.
+    /// Initializes capability data holding Table 138's <c>algorithms</c> arm.
     /// </summary>
     /// <param name="capability">The <c>TPM_CAP</c> selector, <c>TPM_CAP_ALGS</c>.</param>
     /// <param name="algorithms">The algorithm properties.</param>
@@ -104,7 +104,7 @@ public sealed class TpmsCapabilityData: IDisposable
     }
 
     /// <summary>
-    /// Initializes capability data holding Table 135's <c>handles</c> arm.
+    /// Initializes capability data holding Table 138's <c>handles</c> arm.
     /// </summary>
     /// <param name="capability">The <c>TPM_CAP</c> selector, <c>TPM_CAP_HANDLES</c>.</param>
     /// <param name="handles">The handle list. Ownership transfers to this instance.</param>
@@ -115,7 +115,7 @@ public sealed class TpmsCapabilityData: IDisposable
     }
 
     /// <summary>
-    /// Initializes capability data holding Table 135's <c>command</c> arm, the <c>TPML_CCA</c> attribute words.
+    /// Initializes capability data holding Table 138's <c>command</c> arm, the <c>TPML_CCA</c> attribute words.
     /// </summary>
     /// <param name="capability">The <c>TPM_CAP</c> selector, <c>TPM_CAP_COMMANDS</c>.</param>
     /// <param name="commandAttributes">The command attribute list. Ownership transfers to this instance.</param>
@@ -126,7 +126,7 @@ public sealed class TpmsCapabilityData: IDisposable
     }
 
     /// <summary>
-    /// Initializes capability data holding one of Table 135's two <c>TPML_CC</c> arms, chosen by
+    /// Initializes capability data holding one of Table 138's two <c>TPML_CC</c> arms, chosen by
     /// <paramref name="capability"/>: <c>ppCommands</c> for <c>TPM_CAP_PP_COMMANDS</c>, <c>auditCommands</c>
     /// otherwise.
     /// </summary>
@@ -146,7 +146,7 @@ public sealed class TpmsCapabilityData: IDisposable
     }
 
     /// <summary>
-    /// Initializes capability data holding Table 135's <c>assignedPCR</c> arm.
+    /// Initializes capability data holding Table 138's <c>assignedPCR</c> arm.
     /// </summary>
     /// <param name="capability">The <c>TPM_CAP</c> selector, <c>TPM_CAP_PCRS</c>.</param>
     /// <param name="pcrSelection">The PCR selection list.</param>
@@ -157,7 +157,7 @@ public sealed class TpmsCapabilityData: IDisposable
     }
 
     /// <summary>
-    /// Initializes capability data holding Table 135's <c>tpmProperties</c> arm.
+    /// Initializes capability data holding Table 138's <c>tpmProperties</c> arm.
     /// </summary>
     /// <param name="capability">The <c>TPM_CAP</c> selector, <c>TPM_CAP_TPM_PROPERTIES</c>.</param>
     /// <param name="tpmProperties">The tagged properties.</param>
@@ -168,7 +168,7 @@ public sealed class TpmsCapabilityData: IDisposable
     }
 
     /// <summary>
-    /// Initializes capability data holding Table 135's <c>eccCurves</c> arm.
+    /// Initializes capability data holding Table 138's <c>eccCurves</c> arm.
     /// </summary>
     /// <param name="capability">The <c>TPM_CAP</c> selector, <c>TPM_CAP_ECC_CURVES</c>.</param>
     /// <param name="eccCurves">The supported curve identifiers.</param>
@@ -269,7 +269,7 @@ public sealed class TpmsCapabilityData: IDisposable
         uint count = reader.ReadUInt32();
 
         //Each TPMS_ALG_PROPERTY is algId(2) + attributes(4); reject a count the buffer cannot hold before
-        //sizing the array, so a lying count cannot force an unbounded allocation (Part 2, §10.8).
+        //sizing the array, so a lying count cannot force an unbounded allocation (Part 2, clause 10.7).
         reader.EnsureCount(count, sizeof(ushort) + sizeof(uint));
 
         var algorithms = new TpmsAlgProperty[count];
@@ -284,7 +284,7 @@ public sealed class TpmsCapabilityData: IDisposable
 
     /// <summary>
     /// Parses the <c>TPM_CAP_HANDLES</c> arm: a <c>TPML_HANDLE</c> of loaded, persistent, or NV Index handles
-    /// (Part 2, clause 10.9.4, Table 122; Table 135's <c>handles</c> member).
+    /// (Part 2, clause 10.8.4, Table 125; Table 138's <c>handles</c> member).
     /// </summary>
     /// <param name="reader">The reader positioned at the list's count field.</param>
     /// <param name="capability">The capability selector already read.</param>
@@ -294,8 +294,8 @@ public sealed class TpmsCapabilityData: IDisposable
 
     /// <summary>
     /// Parses the <c>TPM_CAP_COMMANDS</c> arm: a <c>TPML_CCA</c> of <c>TPMA_CC</c> attribute words, the only
-    /// capability that returns command ATTRIBUTES rather than bare command codes (Part 2, clause 10.9.2,
-    /// Table 120; Table 135's <c>command</c> member).
+    /// capability that returns command ATTRIBUTES rather than bare command codes (Part 2, clause 10.8.2,
+    /// Table 123; Table 138's <c>command</c> member).
     /// </summary>
     /// <param name="reader">The reader positioned at the list's count field.</param>
     /// <param name="capability">The capability selector already read.</param>
@@ -305,7 +305,7 @@ public sealed class TpmsCapabilityData: IDisposable
 
     /// <summary>
     /// Parses the <c>TPM_CAP_PP_COMMANDS</c> and <c>TPM_CAP_AUDIT_COMMANDS</c> arms: a <c>TPML_CC</c> of bare
-    /// command codes (Part 2, clause 10.9.1, Table 119; Table 135's <c>ppCommands</c> and <c>auditCommands</c>
+    /// command codes (Part 2, clause 10.8.1, Table 122; Table 138's <c>ppCommands</c> and <c>auditCommands</c>
     /// members).
     /// </summary>
     /// <param name="reader">The reader positioned at the list's count field.</param>
@@ -325,7 +325,7 @@ public sealed class TpmsCapabilityData: IDisposable
         uint count = reader.ReadUInt32();
 
         //Each TPMS_TAGGED_PROPERTY is property(4) + value(4); reject a count the buffer cannot hold before
-        //sizing the array so a lying count cannot force an unbounded allocation (Part 2, §10.8).
+        //sizing the array so a lying count cannot force an unbounded allocation (Part 2, clause 10.7).
         reader.EnsureCount(count, sizeof(uint) + sizeof(uint));
 
         var properties = new TpmsTaggedProperty[count];
@@ -346,7 +346,7 @@ public sealed class TpmsCapabilityData: IDisposable
         uint count = reader.ReadUInt32();
 
         //Each TPM_ECC_CURVE is a 2-byte selector; reject a count the buffer cannot hold before sizing the
-        //array so a lying count cannot force an unbounded allocation (Part 2, §10.8).
+        //array so a lying count cannot force an unbounded allocation (Part 2, clause 10.7).
         reader.EnsureCount(count, sizeof(ushort));
 
         var curves = new TpmEccCurveConstants[count];

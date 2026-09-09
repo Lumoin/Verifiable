@@ -85,7 +85,7 @@ internal sealed class CtapAuthenticatorEnterpriseAttestationFlowTests
         using PkiCertificateMemory rootPki = Fido2AttestationTestVectors.ToPkiCertificateMemory(rootCertificate.RawData);
 
         using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator(
-            "ep-capstone-lifecycle", aaguid: aaguid, enterpriseAttestationProvisioning: provisioning);
+            "ep-capstone-lifecycle", BaseMemoryPool.Shared, aaguid: aaguid, enterpriseAttestationProvisioning: provisioning);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         CtapGetInfoResponse infoBeforeEnable = await CtapAuthenticatorGetInfoClient.GetInfoAsync(
@@ -156,7 +156,7 @@ internal sealed class CtapAuthenticatorEnterpriseAttestationFlowTests
 
         CtapEnterpriseAttestationProvisioning provisioning = CtapEnterpriseAttestationFixtures.BuildProvisioning(pool, [VendorListedRpId]);
         using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator(
-            "ep-capstone-vendor", enterpriseAttestationProvisioning: provisioning);
+            "ep-capstone-vendor", BaseMemoryPool.Shared, enterpriseAttestationProvisioning: provisioning);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         await SendAuthenticatorConfigAsync(
@@ -198,7 +198,7 @@ internal sealed class CtapAuthenticatorEnterpriseAttestationFlowTests
 
         CtapEnterpriseAttestationProvisioning provisioning = CtapEnterpriseAttestationFixtures.BuildProvisioning(pool, [VendorListedRpId]);
         using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator(
-            "ep-capstone-reset", enterpriseAttestationProvisioning: provisioning);
+            "ep-capstone-reset", BaseMemoryPool.Shared, enterpriseAttestationProvisioning: provisioning);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         await SendAuthenticatorConfigAsync(
@@ -278,6 +278,9 @@ internal sealed class CtapAuthenticatorEnterpriseAttestationFlowTests
         }
         finally
         {
+            //statement.X5c is a collection of disposables, not one disposable value: a using declaration
+            //disposes one variable's own value, not a collection's elements, so this foreach is the
+            //release point.
             if(statement.X5c is not null)
             {
                 foreach(PkiCertificateMemory certificate in statement.X5c)

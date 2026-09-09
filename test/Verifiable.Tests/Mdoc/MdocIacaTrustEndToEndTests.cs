@@ -1,5 +1,5 @@
 using System.Buffers;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Tests.TestInfrastructure;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
@@ -45,13 +45,13 @@ internal sealed class MdocIacaTrustEndToEndTests
     //Bit-identical to TestClock.CanonicalEpoch.AddDays(-7) (2026-05-25T12:00:00Z) —
     //the trust delegate's "now" for chain validation; the certs are valid for a
     //wide window (see CreateSelfSignedCa/CreateLeafCertificate) so this is stable.
-    private static readonly DateTimeOffset TrustResolutionValidationTime = TestClock.CanonicalEpoch.AddDays(-7);
+    private static DateTimeOffset TrustResolutionValidationTime { get; } = TestClock.CanonicalEpoch.AddDays(-7);
 
     //Family anchor: not a clean single-call TestClock.CanonicalEpoch offset
     //(2026-06-01T12:00:00Z is 7 days 4 hours after this signed instant), so
     //the one-year window anchors itself.
-    private static readonly DateTimeOffset SampleValiditySigned = new(2026, 5, 25, 8, 0, 0, TimeSpan.Zero);
-    private static readonly DateTimeOffset SampleValidityValidUntil = SampleValiditySigned.AddYears(1);
+    private static DateTimeOffset SampleValiditySigned { get; } = new(2026, 5, 25, 8, 0, 0, TimeSpan.Zero);
+    private static DateTimeOffset SampleValidityValidUntil { get; } = SampleValiditySigned.AddYears(1);
 
 
     [TestMethod]
@@ -390,7 +390,10 @@ internal sealed class MdocIacaTrustEndToEndTests
         //through full signing — keeps the extractor test focused.
         byte[] coseSign1 = BuildMinimalCoseSign1WithX5Chain(leafCert.RawData, rootCert.RawData);
 
-        IReadOnlyList<PkiCertificateMemory> chain = MdocCborX5ChainExtractor.Extract(
+        //chain is a collection of disposables, not one disposable value: a using declaration disposes one
+        //variable's own value, not a collection's elements, so the foreach below in the finally block is
+        //the release point.
+        IReadOnlyList<PkiCertificateMemory> chain = CoseSign1X5ChainExtractor.Extract(
             coseSign1, BaseMemoryPool.Shared);
 
         try
@@ -488,8 +491,9 @@ internal sealed class MdocIacaTrustEndToEndTests
 
     private static byte[] BuildMinimalCoseSign1WithX5Chain(byte[] leafDer, byte[] rootDer)
     {
-        var writer = new CborWriter(CborConformanceMode.Lax);
-        writer.WriteTag((CborTag)18); //COSE_Sign1
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.Lax);
+        writer.WriteTag(new CborTag(18)); //COSE_Sign1
 
         writer.WriteStartArray(4);
 
@@ -513,7 +517,7 @@ internal sealed class MdocIacaTrustEndToEndTests
 
         writer.WriteEndArray();
 
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
     }
 
 

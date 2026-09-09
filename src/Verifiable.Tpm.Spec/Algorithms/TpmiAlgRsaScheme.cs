@@ -17,7 +17,7 @@ namespace Verifiable.Tpm.Spec.Algorithms;
 /// <c>+</c>) — <c>TPM_ALG_NULL</c>. Unmarshaling any other value is <c>TPM_RC_VALUE</c>.
 /// </para>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 11.2.4.1, Table 189.
+/// Specification reference: TPM 2.0 Library Part 2, clause 11.2.4.1, Table 189.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]

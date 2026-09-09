@@ -391,6 +391,8 @@ public readonly struct XAdESDateTime: IEquatable<XAdESDateTime>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public bool Equals(XAdESDateTime other)
     {
+        //Value equality over every declared member, one field at a time: a ladder, not a candidate for an
+        //extracted predicate, since each conjunct already names its own field.
         return IsNegativeYear == other.IsNegativeYear
             && Year == other.Year
             && Month == other.Month

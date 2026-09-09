@@ -560,13 +560,10 @@ public static class AsicZipReading
         }
 
         string? archiveComment = null;
-        if(commentByteLength > 0)
+        if(commentByteLength > 0 && !TryDecodeUtf8(endRecord.Slice(EndOfCentralDirectoryByteLength, commentByteLength), out archiveComment))
         {
-            if(!TryDecodeUtf8(endRecord.Slice(EndOfCentralDirectoryByteLength, commentByteLength), out archiveComment))
-            {
-                //Clause 4.2 item 2 b: "File names and comments shall be encoded with ISO/IEC 10646 UNICODE UTF-8."
-                return Refused(AsicZipReadStatus.ArchiveMalformed);
-            }
+            //Clause 4.2 item 2 b: "File names and comments shall be encoded with ISO/IEC 10646 UNICODE UTF-8."
+            return Refused(AsicZipReadStatus.ArchiveMalformed);
         }
 
         directory.Capacity = entryCount;
@@ -1013,12 +1010,27 @@ public static class AsicZipReading
                     return ToResult(Refused(contentStatus, declared.Name));
                 }
 
+                DateTimeOffset? lastModified;
+                try
+                {
+                    lastModified = FromDosDateTime(declared.DosTime, declared.DosDate);
+                }
+                catch
+                {
+                    //content is not yet in entries, so the catch below (which disposes only entries'
+                    //own members) would otherwise leave it orphaned.
+                    content.Dispose();
+                    DisposeAll(entries);
+
+                    throw;
+                }
+
                 entries.Add(new AsicZipEntry
                 {
                     Name = declared.Name,
                     Content = content,
                     CompressionMethod = declared.CompressionMethod,
-                    LastModified = FromDosDateTime(declared.DosTime, declared.DosDate),
+                    LastModified = lastModified,
                     CompressedByteLength = declared.CompressedByteLength,
                     IsFolder = isFolder
                 });
@@ -1270,7 +1282,7 @@ public static class AsicZipReading
     private sealed class ReadOnlyMemoryStream: Stream
     {
         /// <summary>The octets this stream reads from.</summary>
-        private readonly ReadOnlyMemory<byte> source;
+        private ReadOnlyMemory<byte> Source { get; }
 
         /// <summary>How many octets have been read.</summary>
         private int position;
@@ -1280,7 +1292,7 @@ public static class AsicZipReading
         /// Initializes a new stream over octets the caller keeps alive for as long as the stream is used.
         /// </summary>
         /// <param name="source">The octets to read.</param>
-        public ReadOnlyMemoryStream(ReadOnlyMemory<byte> source) => this.source = source;
+        public ReadOnlyMemoryStream(ReadOnlyMemory<byte> source) => this.Source = source;
 
 
         /// <inheritdoc/>
@@ -1293,7 +1305,7 @@ public static class AsicZipReading
         public override bool CanWrite => false;
 
         /// <inheritdoc/>
-        public override long Length => source.Length;
+        public override long Length => Source.Length;
 
         /// <inheritdoc/>
         public override long Position
@@ -1302,7 +1314,7 @@ public static class AsicZipReading
             set
             {
                 ArgumentOutOfRangeException.ThrowIfNegative(value);
-                ArgumentOutOfRangeException.ThrowIfGreaterThan(value, (long)source.Length);
+                ArgumentOutOfRangeException.ThrowIfGreaterThan(value, (long)Source.Length);
 
                 position = (int)value;
             }
@@ -1327,8 +1339,8 @@ public static class AsicZipReading
         /// <inheritdoc/>
         public override int Read(Span<byte> buffer)
         {
-            int available = Math.Min(buffer.Length, source.Length - position);
-            source.Span.Slice(position, available).CopyTo(buffer);
+            int available = Math.Min(buffer.Length, Source.Length - position);
+            Source.Span.Slice(position, available).CopyTo(buffer);
             position += available;
 
             return available;
@@ -1336,7 +1348,7 @@ public static class AsicZipReading
 
 
         /// <inheritdoc/>
-        public override int ReadByte() => position < source.Length ? source.Span[position++] : -1;
+        public override int ReadByte() => position < Source.Length ? Source.Span[position++] : -1;
 
 
         /// <inheritdoc/>
@@ -1346,7 +1358,7 @@ public static class AsicZipReading
             {
                 SeekOrigin.Begin => offset,
                 SeekOrigin.Current => position + offset,
-                SeekOrigin.End => source.Length + offset,
+                SeekOrigin.End => Source.Length + offset,
                 _ => throw new ArgumentOutOfRangeException(nameof(origin))
             };
 

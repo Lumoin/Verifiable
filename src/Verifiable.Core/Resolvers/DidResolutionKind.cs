@@ -53,7 +53,7 @@ public readonly struct DidResolutionKind: IEquatable<DidResolutionKind>
     public override bool Equals(object? obj) => obj is DidResolutionKind other && Equals(other);
 
     /// <inheritdoc/>
-    public override int GetHashCode() => Value.GetHashCode();
+    public override int GetHashCode() => Value;
 
     /// <inheritdoc/>
     public override string ToString() => Value switch

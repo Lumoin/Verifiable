@@ -99,9 +99,9 @@ public readonly struct HttpResponseData: IEquatable<HttpResponseData>
     /// <summary>
     /// Response headers. Defaults to <see cref="ResponseHeaders.Empty"/>.
     /// Populated by the production HttpClient-based transport from
-    /// <c>HttpResponseMessage.Headers</c>. Consumed by future library work
-    /// (RFC 9449 DPoP nonce flow, OID4VCI deferred credential
-    /// <c>Retry-After</c>); the slot currently has no active consumers.
+    /// <c>HttpResponseMessage.Headers</c> and <c>HttpResponseMessage.Content.Headers</c>
+    /// — a repeated field line (RFC 9110 §5.3) is kept as multiple values in received
+    /// order, never comma-joined.
     /// </summary>
     public ResponseHeaders Headers { get; init; } = ResponseHeaders.Empty;
 
@@ -174,7 +174,7 @@ public static class HttpResponseDataKeys
     public static ReadOnlySpan<byte> StatusCodeUtf8 => "transport.status_code"u8;
 
     /// <summary>The HTTP status code as a string. Example: <c>"200"</c>.</summary>
-    public static readonly string StatusCode = Utf8Constants.ToInternedString(StatusCodeUtf8);
+    public static string StatusCode { get; } = Utf8Constants.ToInternedString(StatusCodeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="TraceParent"/>.</summary>
     public static ReadOnlySpan<byte> TraceParentUtf8 => "transport.traceparent"u8;
@@ -182,7 +182,7 @@ public static class HttpResponseDataKeys
     /// <summary>
     /// W3C TraceContext <c>traceparent</c> header value from the response.
     /// </summary>
-    public static readonly string TraceParent = Utf8Constants.ToInternedString(TraceParentUtf8);
+    public static string TraceParent { get; } = Utf8Constants.ToInternedString(TraceParentUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="TraceState"/>.</summary>
     public static ReadOnlySpan<byte> TraceStateUtf8 => "transport.tracestate"u8;
@@ -190,7 +190,7 @@ public static class HttpResponseDataKeys
     /// <summary>
     /// W3C TraceContext <c>tracestate</c> header value from the response.
     /// </summary>
-    public static readonly string TraceState = Utf8Constants.ToInternedString(TraceStateUtf8);
+    public static string TraceState { get; } = Utf8Constants.ToInternedString(TraceStateUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="ContentType"/>.</summary>
     public static ReadOnlySpan<byte> ContentTypeUtf8 => "transport.content_type"u8;
@@ -199,7 +199,7 @@ public static class HttpResponseDataKeys
     /// Response <c>Content-Type</c> header. Used to detect RFC 9457
     /// <c>application/problem+json</c> responses.
     /// </summary>
-    public static readonly string ContentType = Utf8Constants.ToInternedString(ContentTypeUtf8);
+    public static string ContentType { get; } = Utf8Constants.ToInternedString(ContentTypeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="RequestId"/>.</summary>
     public static ReadOnlySpan<byte> RequestIdUtf8 => "transport.request_id"u8;
@@ -208,5 +208,5 @@ public static class HttpResponseDataKeys
     /// Server-supplied request identifier from a vendor-specific header
     /// such as <c>X-Request-ID</c>.
     /// </summary>
-    public static readonly string RequestId = Utf8Constants.ToInternedString(RequestIdUtf8);
+    public static string RequestId { get; } = Utf8Constants.ToInternedString(RequestIdUtf8);
 }

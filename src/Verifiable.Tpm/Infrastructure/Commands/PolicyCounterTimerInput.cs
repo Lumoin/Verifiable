@@ -14,11 +14,11 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// restartCount, Safe — 25 octets, no padding), at <see cref="Offset"/>, compares to <see cref="OperandB"/> as
 /// specified by <see cref="Operation"/> (a TPM_EO comparison). The session's policyDigest is updated as
 /// <c>policyDigest = H(policyDigestold || TPM_CC_PolicyCounterTimer || H(operandB || offset || operation))</c>
-/// (TPM 2.0 Part 3, Section 23.10); see <see cref="TpmPolicyDigest.ExtendForCounterTimer"/>. On a trial session
+/// (TPM 2.0 Library Part 3, clause 23.10); see <see cref="TpmPolicyDigest.ExtendForCounterTimer"/>. On a trial session
 /// the comparison is skipped and only the digest is updated.
 /// </para>
 /// <para>
-/// Command structure (TPM 2.0 Part 3, Section 23.10):
+/// Command structure (TPM 2.0 Library Part 3, clause 23.10):
 /// </para>
 /// <list type="bullet">
 ///   <item><description>policySession (TPMI_SH_POLICY): The policy session handle (command handle, no authorization).</description></item>
@@ -48,8 +48,8 @@ public readonly record struct PolicyCounterTimerInput(
 
     /// <summary>
     /// Refuses an operand the <c>TPM2B_OPERAND</c> wire type cannot carry, so the caller learns it at
-    /// construction rather than from the TPM's <c>TPM_RC_SIZE</c> after a round trip. Part 2, clause 10.4.6,
-    /// Table 96 bounds <c>TPM2B_OPERAND</c> by the digest structure's own <c>sizeof(TPMU_HA)</c>.
+    /// construction rather than from the TPM's <c>TPM_RC_SIZE</c> after a round trip. Part 2, clause 10.3.6,
+    /// Table 94 bounds <c>TPM2B_OPERAND</c> by the digest structure's own <c>sizeof(TPMU_HA)</c>.
     /// </summary>
     /// <param name="candidate">The operand offered by the caller.</param>
     /// <returns><paramref name="candidate"/> when it is within the bound.</returns>
@@ -66,6 +66,15 @@ public readonly record struct PolicyCounterTimerInput(
 
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_PolicyCounterTimer;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <c>policySession</c> carries Auth Index None (TPM 2.0 Library Part 3, clause 23.10.2, Table 158) — the
+    /// first session in an authorization area over this command is a companion, never an authorizer, so a
+    /// decrypt or encrypt session's own <c>nonceTPM</c> never folds into session 0's command HMAC (TPM 2.0
+    /// Library Part 1, clause 16.6.5).
+    /// </remarks>
+    public bool IsFirstHandleAuthorized => false;
 
     /// <inheritdoc/>
     public int GetSerializedSize() =>

@@ -275,6 +275,9 @@ public readonly struct XAdESObjectIdentifier: IEquatable<XAdESObjectIdentifier>
             //Identifier is unconditionally consumed exactly once before this point is ever reached, so a
             //repeat of it is always a duplicate, unlike Description/DocumentationReferences which need the
             //hasX flag to tell "already consumed" apart from "not yet reached."
+            //One disjunct per xsd:sequence child this element can repeat (Identifier unconditionally, the
+            //rest gated on their own hasX flag per the remark above); a named predicate per child would
+            //only rename the grammar, not simplify it.
             bool isRepeat = scan == ElementScanResult.Found
                 && (XmlSignatureModelGrammar.IsElement(table, child, XAdESIdentifiers.XAdESNamespaceV132Utf8, "Identifier"u8)
                     || (hasDescription && XmlSignatureModelGrammar.IsElement(table, child, XAdESIdentifiers.XAdESNamespaceV132Utf8, "Description"u8))

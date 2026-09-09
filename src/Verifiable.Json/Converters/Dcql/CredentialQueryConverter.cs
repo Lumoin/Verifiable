@@ -143,6 +143,14 @@ public sealed class CredentialQueryConverter: JsonConverter<CredentialQuery>
                 "Each Claims Query requires an 'id' when 'claim_sets' is present (OID4VP 1.0 §6.3).");
         }
 
+        //OID4VP 1.0 §6.1: "trusted_authorities: OPTIONAL. A non-empty array of objects" — present
+        //but empty expresses no constraint at all and is refused rather than treated as absent.
+        if(trustedAuthorities is { Count: 0 })
+        {
+            throw new JsonException(
+                "The 'trusted_authorities' property must be a non-empty array when present (OpenID for Verifiable Presentations 1.0, Section 6.1).");
+        }
+
         return new CredentialQuery
         {
             Id = id,

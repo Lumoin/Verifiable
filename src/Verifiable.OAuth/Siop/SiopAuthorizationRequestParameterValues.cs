@@ -22,7 +22,7 @@ public static class SiopAuthorizationRequestParameterValues
     /// (space-separated) when requesting Verifiable Presentations alongside the ID
     /// Token per SIOPv2 §12 / OID4VP.
     /// </summary>
-    public static readonly string ResponseTypeIdToken = Utf8Constants.ToInternedString(ResponseTypeIdTokenUtf8);
+    public static string ResponseTypeIdToken { get; } = Utf8Constants.ToInternedString(ResponseTypeIdTokenUtf8);
 
 
     /// <summary>Returns <see langword="true"/> when <paramref name="value"/> is
@@ -42,5 +42,5 @@ public static class SiopAuthorizationRequestParameterValues
     /// Dynamic Discovery is performed, <c>aud</c> is instead the discovered
     /// <c>issuer</c> value.
     /// </summary>
-    public static readonly string StaticDiscoveryRequestObjectAudience = Utf8Constants.ToInternedString(StaticDiscoveryRequestObjectAudienceUtf8);
+    public static string StaticDiscoveryRequestObjectAudience { get; } = Utf8Constants.ToInternedString(StaticDiscoveryRequestObjectAudienceUtf8);
 }

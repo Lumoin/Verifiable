@@ -1,53 +1,43 @@
 using System;
 using System.Collections.Generic;
-using JsonPointerType = Verifiable.JsonPointer.JsonPointer;
 
 namespace Verifiable.Core.Model.SelectiveDisclosure;
 
 /// <summary>
-/// Bridges SD-JWT and SD-CWT disclosure types to the <see cref="CredentialPath"/>-based
-/// lattice operations for selective disclosure computation.
+/// Bridges a parsed <see cref="SdToken{TEnvelope}"/>'s <see cref="SdDisclosurePaths"/> to the
+/// <see cref="CredentialPath"/>-based lattice operations for selective disclosure computation.
 /// </summary>
 /// <remarks>
 /// <para>
-/// SD-JWT and SD-CWT disclosures are <c>(salt, claim_name, value)</c> triples.
-/// Each disclosure maps to a <see cref="CredentialPath"/> via its claim name or
-/// JSON Pointer location. This class performs that mapping and provides convenience
-/// methods for lattice construction, optimal selection, and digest validation.
-/// </para>
-/// <para>
-/// <strong>Claim name mapping:</strong> A disclosure with claim name <c>"given_name"</c>
-/// maps to <c>CredentialPath.FromJsonPointer("/given_name")</c>. For nested disclosures
-/// accessed via JSON Pointers, the pointer maps directly (e.g., <c>"/address/city"</c>).
-/// For array element disclosures that have no claim name, a synthetic pointer is
-/// generated from the array index.
+/// Every operation here reads the disclosure/path map the format-specific leaf computed at
+/// parse time (<c>Verifiable.Json.SdJwtPathExtraction</c> for SD-JWT,
+/// <c>Verifiable.Cbor.SdCwtPathExtraction</c> for SD-CWT) — the same path a nested disclosure
+/// resolves to for selection, for the DCQL available-path set, and for the verifier's
+/// disclosed-claims map. No site here synthesizes a path from a leaf claim name: the same
+/// name legitimately recurs at different depths with independent salts per
+/// <see href="https://www.rfc-editor.org/rfc/rfc9901">RFC 9901</see> §9.3, so only the walk
+/// over the signed payload can tell two occurrences apart.
 /// </para>
 /// </remarks>
 public static class SdDisclosureSelection
 {
     /// <summary>
-    /// Creates a disclosure lattice from a set of available disclosures.
+    /// Creates a disclosure lattice from a token's resolved disclosure paths.
     /// </summary>
-    /// <param name="allDisclosures">All disclosures available from the issuer.</param>
+    /// <param name="disclosurePaths">The token's resolved disclosure/path map.</param>
     /// <param name="mandatoryPaths">Paths to claims that must always be disclosed.</param>
     /// <returns>A bounded lattice for disclosure selection.</returns>
     public static SetDisclosureLattice<CredentialPath> CreateLattice(
-        IReadOnlyList<SdDisclosure> allDisclosures,
+        SdDisclosurePaths disclosurePaths,
         IEnumerable<CredentialPath>? mandatoryPaths = null)
     {
-        ArgumentNullException.ThrowIfNull(allDisclosures);
-
-        var allPaths = new HashSet<CredentialPath>();
-        for(int i = 0; i < allDisclosures.Count; i++)
-        {
-            allPaths.Add(DisclosureToPath(allDisclosures[i], i));
-        }
+        ArgumentNullException.ThrowIfNull(disclosurePaths);
 
         var mandatory = mandatoryPaths is not null
             ? new HashSet<CredentialPath>(mandatoryPaths)
             : [];
 
-        return new SetDisclosureLattice<CredentialPath>(allPaths, mandatory, ancestors: CredentialPath.Ancestry);
+        return new SetDisclosureLattice<CredentialPath>(disclosurePaths.Paths, mandatory, ancestors: CredentialPath.Ancestry);
     }
 
 
@@ -81,48 +71,20 @@ public static class SdDisclosureSelection
     /// Selects disclosures based on the selected <see cref="CredentialPath"/> set
     /// from the lattice computation.
     /// </summary>
-    /// <param name="allDisclosures">All available disclosures.</param>
+    /// <param name="disclosurePaths">The token's resolved disclosure/path map.</param>
     /// <param name="selectedPaths">Paths selected by the lattice operation.</param>
-    /// <returns>The filtered list of disclosures to include in the presentation.</returns>
+    /// <returns>The disclosures at the selected paths.</returns>
     public static IReadOnlyList<SdDisclosure> SelectDisclosures(
-        IReadOnlyList<SdDisclosure> allDisclosures,
+        SdDisclosurePaths disclosurePaths,
         IReadOnlySet<CredentialPath> selectedPaths)
     {
-        ArgumentNullException.ThrowIfNull(allDisclosures);
+        ArgumentNullException.ThrowIfNull(disclosurePaths);
         ArgumentNullException.ThrowIfNull(selectedPaths);
 
         var result = new List<SdDisclosure>();
-        for(int i = 0; i < allDisclosures.Count; i++)
+        foreach(CredentialPath path in selectedPaths)
         {
-            var path = DisclosureToPath(allDisclosures[i], i);
-            if(selectedPaths.Contains(path))
-            {
-                result.Add(allDisclosures[i]);
-            }
-        }
-
-        return result;
-    }
-
-
-    /// <summary>
-    /// Selects disclosures from a pointer-keyed dictionary based on the selected path set.
-    /// </summary>
-    /// <param name="allDisclosures">All disclosures with their JSON Pointer paths.</param>
-    /// <param name="selectedPaths">Paths selected by the lattice operation.</param>
-    /// <returns>The filtered list of disclosures to include in the presentation.</returns>
-    public static IReadOnlyList<SdDisclosure> SelectDisclosuresByPointer(
-        IReadOnlyDictionary<string, SdDisclosure> allDisclosures,
-        IReadOnlySet<CredentialPath> selectedPaths)
-    {
-        ArgumentNullException.ThrowIfNull(allDisclosures);
-        ArgumentNullException.ThrowIfNull(selectedPaths);
-
-        var result = new List<SdDisclosure>();
-        foreach(var (pointer, disclosure) in allDisclosures)
-        {
-            var path = CredentialPath.FromJsonPointer(pointer);
-            if(selectedPaths.Contains(path))
+            if(disclosurePaths.TryGetDisclosure(path, out SdDisclosure? disclosure))
             {
                 result.Add(disclosure);
             }
@@ -135,7 +97,7 @@ public static class SdDisclosureSelection
     /// <summary>
     /// Computes the optimal disclosure selection for a presentation.
     /// </summary>
-    /// <param name="allDisclosures">All available disclosures.</param>
+    /// <param name="disclosurePaths">The token's resolved disclosure/path map.</param>
     /// <param name="verifierRequestedPaths">Paths requested by the verifier.</param>
     /// <param name="userExcludedPaths">Paths the user wants to exclude.</param>
     /// <param name="mandatoryPaths">Paths that must always be disclosed.</param>
@@ -143,14 +105,14 @@ public static class SdDisclosureSelection
     /// A tuple containing the selected disclosures and whether all requirements were satisfied.
     /// </returns>
     public static (IReadOnlyList<SdDisclosure> Disclosures, bool SatisfiesRequirements) SelectOptimal(
-        IReadOnlyList<SdDisclosure> allDisclosures,
+        SdDisclosurePaths disclosurePaths,
         IEnumerable<CredentialPath>? verifierRequestedPaths = null,
         IEnumerable<CredentialPath>? userExcludedPaths = null,
         IEnumerable<CredentialPath>? mandatoryPaths = null)
     {
-        ArgumentNullException.ThrowIfNull(allDisclosures);
+        ArgumentNullException.ThrowIfNull(disclosurePaths);
 
-        var lattice = CreateLattice(allDisclosures, mandatoryPaths);
+        var lattice = CreateLattice(disclosurePaths, mandatoryPaths);
 
         var requested = verifierRequestedPaths is not null
             ? new HashSet<CredentialPath>(verifierRequestedPaths)
@@ -165,7 +127,7 @@ public static class SdDisclosureSelection
             verifierRequested: requested,
             userExclusions: excluded);
 
-        var selectedDisclosures = SelectDisclosures(allDisclosures, result.SelectedClaims);
+        var selectedDisclosures = SelectDisclosures(disclosurePaths, result.SelectedClaims);
 
         return (selectedDisclosures, result.SatisfiesRequirements);
     }
@@ -202,23 +164,5 @@ public static class SdDisclosureSelection
         }
 
         return true;
-    }
-
-
-    /// <summary>
-    /// Maps an <see cref="SdDisclosure"/> to its <see cref="CredentialPath"/>.
-    /// </summary>
-    /// <param name="disclosure">The disclosure to map.</param>
-    /// <param name="arrayIndex">The index used for synthetic paths when the disclosure has no claim name.</param>
-    /// <returns>The credential path for this disclosure.</returns>
-    private static CredentialPath DisclosureToPath(SdDisclosure disclosure, int arrayIndex)
-    {
-        if(disclosure.ClaimName is not null)
-        {
-            return CredentialPath.FromJsonPointer($"/{JsonPointerType.Escape(disclosure.ClaimName)}");
-        }
-
-        //Array element disclosure without a claim name: synthetic path.
-        return CredentialPath.FromJsonPointer($"/[{arrayIndex}]");
     }
 }

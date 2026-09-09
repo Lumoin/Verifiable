@@ -29,15 +29,15 @@ internal sealed class Oid4VciWalletOfferTests
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private const string ClientId = "https://issuer.client.test";
-    private static readonly Uri ClientBaseUri = new("https://issuer.client.test");
-    private static readonly Uri OfferIssuer = new("https://credential-issuer.example.com");
+    private static Uri ClientBaseUri { get; } = new("https://issuer.client.test");
+    private static Uri OfferIssuer { get; } = new("https://credential-issuer.example.com");
     private const string ConfigurationId = "UniversityDegree_dc_sd_jwt";
     private const string PreAuthorizedCode = "oaKazRN8I0IbtZ0C7JuMn5";
 
     /// <summary>The id the credential_offer_uri carries; the offer store is keyed by it.</summary>
     private const string OfferId = "GkurKxf5T0Y-mnPFCHqWOMiZi4VS138cQO_V7PZHAdM";
 
-    private static readonly ImmutableHashSet<CapabilityIdentifier> OfferCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> OfferCapabilities { get; } =
         ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.Oid4VciCredentialOfferEndpoint);
 
 

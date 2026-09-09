@@ -28,7 +28,7 @@ public static class SecurityEventTokenClaimNames
     /// mapped to event payload objects. REQUIRED in every SET.
     /// See <see href="https://www.rfc-editor.org/rfc/rfc8417#section-2.2">RFC 8417 §2.2</see>.
     /// </summary>
-    public static readonly string Events = Utf8Constants.ToInternedString(EventsUtf8);
+    public static string Events { get; } = Utf8Constants.ToInternedString(EventsUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Toe"/>.</summary>
     public static ReadOnlySpan<byte> ToeUtf8 => "toe"u8;
@@ -38,7 +38,7 @@ public static class SecurityEventTokenClaimNames
     /// occurred, as a JSON number of seconds from the Unix epoch. OPTIONAL.
     /// See <see href="https://www.rfc-editor.org/rfc/rfc8417#section-2.2">RFC 8417 §2.2</see>.
     /// </summary>
-    public static readonly string Toe = Utf8Constants.ToInternedString(ToeUtf8);
+    public static string Toe { get; } = Utf8Constants.ToInternedString(ToeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Txn"/>.</summary>
     public static ReadOnlySpan<byte> TxnUtf8 => "txn"u8;
@@ -48,7 +48,7 @@ public static class SecurityEventTokenClaimNames
     /// uses to correlate the SET with a transaction or process. OPTIONAL.
     /// See <see href="https://www.rfc-editor.org/rfc/rfc8417#section-2.2">RFC 8417 §2.2</see>.
     /// </summary>
-    public static readonly string Txn = Utf8Constants.ToInternedString(TxnUtf8);
+    public static string Txn { get; } = Utf8Constants.ToInternedString(TxnUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="SubId"/>.</summary>
     public static ReadOnlySpan<byte> SubIdUtf8 => "sub_id"u8;
@@ -59,7 +59,7 @@ public static class SecurityEventTokenClaimNames
     /// about, in place of the bare string <c>sub</c> claim. OPTIONAL.
     /// See <see href="https://www.rfc-editor.org/rfc/rfc9493#section-3">RFC 9493 §3</see>.
     /// </summary>
-    public static readonly string SubId = Utf8Constants.ToInternedString(SubIdUtf8);
+    public static string SubId { get; } = Utf8Constants.ToInternedString(SubIdUtf8);
 
 
     /// <summary>Whether <paramref name="claim"/> is <see cref="Events"/>.</summary>

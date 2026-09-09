@@ -20,11 +20,13 @@ internal sealed class CtapAuthenticatorSimulatorDisposalTests
     public TestContext TestContext { get; set; } = null!;
 
 
-    /// <summary>Calling <see cref="CtapAuthenticatorSimulator.Dispose"/> twice is safe — the second call is a no-op.</summary>
+    /// <summary>Calling <see cref="CtapAuthenticatorSimulator.Dispose"/> twice is safe — the second call is a
+    /// no-op; the two calls below are explicit (in addition to the <see langword="using"/> declaration's own
+    /// release at scope exit) because the repeated call is itself the behaviour under test.</summary>
     [TestMethod]
     public void DisposeIsIdempotent()
     {
-        CtapAuthenticatorSimulator simulator = CreateSimulator("dispose-idempotent");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("dispose-idempotent",BaseMemoryPool.Shared);
 
         simulator.Dispose();
         simulator.Dispose();
@@ -35,7 +37,7 @@ internal sealed class CtapAuthenticatorSimulatorDisposalTests
     [TestMethod]
     public async Task TransceiveAsyncAfterDisposeThrowsObjectDisposedException()
     {
-        CtapAuthenticatorSimulator simulator = CreateSimulator("dispose-then-transceive");
+        CtapAuthenticatorSimulator simulator = CreateSimulator("dispose-then-transceive",BaseMemoryPool.Shared);
         simulator.Dispose();
 
         byte[] request = [WellKnownCtapCommands.GetInfo];
@@ -52,7 +54,7 @@ internal sealed class CtapAuthenticatorSimulatorDisposalTests
     [TestMethod]
     public async Task DisposeReleasesEveryCredentialInTheStore()
     {
-        CtapAuthenticatorSimulator simulator = CreateSimulator("dispose-releases-store");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("dispose-releases-store",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         _ = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0x21), TestContext.CancellationToken, resident: true);

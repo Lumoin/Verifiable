@@ -3,12 +3,13 @@ using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Structures;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Tpm;
 
 /// <summary>
 /// Wire-format tests for <see cref="StartAuthSessionInput"/>, focused on the negotiated symmetric algorithm
-/// (TPMT_SYM_DEF) for session-based parameter encryption (TPM 2.0 Library Part 3, Section 11.1).
+/// (TPMT_SYM_DEF) for session-based parameter encryption (TPM 2.0 Library Part 3, clause 11.1).
 /// </summary>
 [TestClass]
 internal sealed class StartAuthSessionInputTests
@@ -16,7 +17,7 @@ internal sealed class StartAuthSessionInputTests
     [TestMethod]
     public void DefaultSymmetricSerializesAsNull()
     {
-        StartAuthSessionInput input = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(TpmAlgIdConstants.TPM_ALG_SHA256);
+        StartAuthSessionInput input = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(TpmAlgIdConstants.TPM_ALG_SHA256, TestEntropy.NewCounterStream(), BaseMemoryPool.Shared);
 
         Assert.IsTrue(input.Symmetric.IsNull, "An HMAC session created without a symmetric algorithm defaults to TPMT_SYM_DEF(NULL).");
 
@@ -28,7 +29,7 @@ internal sealed class StartAuthSessionInputTests
     public void XorSymmetricSerializesIntoParameterArea()
     {
         StartAuthSessionInput input = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(
-            TpmAlgIdConstants.TPM_ALG_SHA256, TpmtSymDef.Xor(TpmAlgIdConstants.TPM_ALG_SHA256));
+            TpmAlgIdConstants.TPM_ALG_SHA256, TestEntropy.NewCounterStream(), BaseMemoryPool.Shared, TpmtSymDef.Xor(TpmAlgIdConstants.TPM_ALG_SHA256));
 
         Assert.IsTrue(input.Symmetric.IsXor);
 
@@ -42,7 +43,7 @@ internal sealed class StartAuthSessionInputTests
     {
         const uint BindHandle = 0x80000001u;
         StartAuthSessionInput input = StartAuthSessionInput.CreateBoundUnsaltedHmacSession(
-            BindHandle, TpmAlgIdConstants.TPM_ALG_SHA384, TpmtSymDef.Xor(TpmAlgIdConstants.TPM_ALG_SHA384));
+            BindHandle, TpmAlgIdConstants.TPM_ALG_SHA384, TestEntropy.NewCounterStream(), BaseMemoryPool.Shared, TpmtSymDef.Xor(TpmAlgIdConstants.TPM_ALG_SHA384));
 
         TpmtSymDef parsed = RoundTripSymmetric(input);
         Assert.IsTrue(parsed.IsXor);
@@ -53,7 +54,7 @@ internal sealed class StartAuthSessionInputTests
     public void AesCfbSymmetricSerializesIntoParameterArea()
     {
         StartAuthSessionInput input = StartAuthSessionInput.CreateBoundUnsaltedHmacSession(
-            0x80000001u, TpmAlgIdConstants.TPM_ALG_SHA256, TpmtSymDef.Aes(128, TpmAlgIdConstants.TPM_ALG_CFB));
+            0x80000001u, TpmAlgIdConstants.TPM_ALG_SHA256, TestEntropy.NewCounterStream(), BaseMemoryPool.Shared, TpmtSymDef.Aes(128, TpmAlgIdConstants.TPM_ALG_CFB));
 
         TpmtSymDef parsed = RoundTripSymmetric(input);
         Assert.AreEqual(TpmAlgIdConstants.TPM_ALG_AES, parsed.Algorithm);
@@ -64,9 +65,9 @@ internal sealed class StartAuthSessionInputTests
     [TestMethod]
     public void SerializedSizeAccountsForXorSymmetric()
     {
-        StartAuthSessionInput nullSym = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(TpmAlgIdConstants.TPM_ALG_SHA256);
+        StartAuthSessionInput nullSym = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(TpmAlgIdConstants.TPM_ALG_SHA256, TestEntropy.NewCounterStream(), BaseMemoryPool.Shared);
         StartAuthSessionInput xorSym = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(
-            TpmAlgIdConstants.TPM_ALG_SHA256, TpmtSymDef.Xor(TpmAlgIdConstants.TPM_ALG_SHA256));
+            TpmAlgIdConstants.TPM_ALG_SHA256, TestEntropy.NewCounterStream(), BaseMemoryPool.Shared, TpmtSymDef.Xor(TpmAlgIdConstants.TPM_ALG_SHA256));
 
         //XOR is 4 octets (algorithm + keyBits) versus 2 octets for the null definition: a 2-octet difference,
         //given the nonceCaller length is identical (both derive from the same hash).

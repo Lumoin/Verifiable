@@ -37,7 +37,8 @@ namespace Verifiable.Cryptography
 
         /// <inheritdoc />
         [EditorBrowsable(EditorBrowsableState.Never)]
-        public override bool Equals([NotNullWhen(true)] object? obj) => (obj is PublicKeyMemory p) && Equals(p);
+        public override bool Equals([NotNullWhen(true)] object? obj) =>
+            obj is not null && GetType() == obj.GetType() && Equals((PublicKeyMemory)obj);
 
 
         /// <inheritdoc />

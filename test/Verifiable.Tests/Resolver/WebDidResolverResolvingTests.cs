@@ -291,10 +291,7 @@ internal sealed class WebDidResolverResolvingTests
     {
         var document = new DidDocument
         {
-            Context = new Verifiable.Core.Model.Common.Context
-            {
-                Contexts = [Verifiable.Core.Model.Common.Context.DidCore10]
-            },
+            Context = Verifiable.Core.Model.Common.Context.FromIris(Verifiable.Core.Model.Common.Context.DidCore10),
             Id = new GenericDidMethod(did)
         };
 
@@ -308,10 +305,7 @@ internal sealed class WebDidResolverResolvingTests
     {
         var document = new DidDocument
         {
-            Context = new Verifiable.Core.Model.Common.Context
-            {
-                Contexts = [Verifiable.Core.Model.Common.Context.DidCore10, Verifiable.Core.Model.Common.Context.Multikey10]
-            },
+            Context = Verifiable.Core.Model.Common.Context.FromIris(Verifiable.Core.Model.Common.Context.DidCore10, Verifiable.Core.Model.Common.Context.Multikey10),
             Id = new GenericDidMethod(did),
             VerificationMethod =
             [
@@ -336,10 +330,7 @@ internal sealed class WebDidResolverResolvingTests
     {
         var document = new DidDocument
         {
-            Context = new Verifiable.Core.Model.Common.Context
-            {
-                Contexts = [Verifiable.Core.Model.Common.Context.DidCore10, Verifiable.Core.Model.Common.Context.Multikey10]
-            },
+            Context = Verifiable.Core.Model.Common.Context.FromIris(Verifiable.Core.Model.Common.Context.DidCore10, Verifiable.Core.Model.Common.Context.Multikey10),
             Id = new GenericDidMethod(did),
             VerificationMethod =
             [
@@ -371,12 +362,12 @@ internal sealed class WebDidResolverResolvingTests
     //Bodies are carried as TaggedMemory<byte>, mirroring the production OutboundResponse shape.
     private sealed class RoutingTransport
     {
-        private readonly Dictionary<string, (int Status, string? Body)> routes;
+        private Dictionary<string, (int Status, string? Body)> Routes { get; }
 
 
         public RoutingTransport(Dictionary<string, (int Status, string? Body)> routes)
         {
-            this.routes = routes;
+            this.Routes = routes;
         }
 
 
@@ -387,7 +378,7 @@ internal sealed class WebDidResolverResolvingTests
         {
             Calls.Add(request);
 
-            if(!routes.TryGetValue(request.Target.AbsoluteUri, out (int Status, string? Body) route))
+            if(!Routes.TryGetValue(request.Target.AbsoluteUri, out (int Status, string? Body) route))
             {
                 route = (404, null);
             }

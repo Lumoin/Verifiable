@@ -167,9 +167,9 @@ internal sealed class AsicCapstoneFirewalledFlowTests
                 .Select(o => o.ProvenAt)];
             Assert.HasCount(2, byArchiveChain,
                 "Annex A.7 item 1 c b) and item 2 b) iii): every link of the chain references every file object the container carried when that link was added, so a data file is proved by both links.");
-            Assert.Contains((DateTimeOffset?)message.ContainerArchiveTimestampTime, byArchiveChain,
+            Assert.Contains(message.ContainerArchiveTimestampTime, byArchiveChain,
                 "The first link proves the data file existed at the instant its own token asserts.");
-            Assert.Contains((DateTimeOffset?)message.ContainerArchiveRenewalTime, byArchiveChain,
+            Assert.Contains(message.ContainerArchiveRenewalTime, byArchiveChain,
                 "And the renewal's token proves it again at the later instant, which is what a renewed chain is for.");
         }
 
@@ -835,7 +835,7 @@ internal sealed class AsicCapstoneFirewalledFlowTests
     private sealed class ReconstructedAsicVerifyingParty: IDisposable
     {
         /// <summary>The carriers this party rented, released in reverse order.</summary>
-        private readonly List<IDisposable> owned = [];
+        private List<IDisposable> Owned { get; } = [];
 
         /// <summary>Whether <see cref="Dispose"/> has already run.</summary>
         private bool disposed;
@@ -895,12 +895,12 @@ internal sealed class AsicCapstoneFirewalledFlowTests
             }
 
             disposed = true;
-            for(int i = owned.Count - 1; i >= 0; --i)
+            for(int i = Owned.Count - 1; i >= 0; --i)
             {
-                owned[i].Dispose();
+                Owned[i].Dispose();
             }
 
-            owned.Clear();
+            Owned.Clear();
         }
 
 
@@ -1030,7 +1030,7 @@ internal sealed class AsicCapstoneFirewalledFlowTests
         /// <returns>The same carrier.</returns>
         private T Own<T>(T carrier) where T: IDisposable
         {
-            owned.Add(carrier);
+            Owned.Add(carrier);
 
             return carrier;
         }

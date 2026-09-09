@@ -24,7 +24,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// } TPM2B_ID_OBJECT;
 /// </code>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 12.4.2, Table 207.
+/// Specification reference: TPM 2.0 Library Part 2, clause 12.4.3, Table 245.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -118,9 +118,16 @@ public sealed class Tpm2bIdObject: IDisposable
     /// <summary>
     /// Parses a credential blob from a TPM reader.
     /// </summary>
+    /// <remarks>
+    /// The declared size is checked against <see cref="MaxSize"/> and then <see cref="TpmReader.Remaining"/>
+    /// before any pooled buffer is rented, so a truncated or oversized frame throws without ever orphaning a
+    /// rental — the same ordering <see cref="Tpm2bDigest.Parse(ref TpmReader, BaseMemoryPool)"/> and
+    /// <see cref="Tpm2bPrivate.Parse(ref TpmReader, BaseMemoryPool)"/> use.
+    /// </remarks>
     /// <param name="reader">The reader.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The parsed credential blob.</returns>
+    /// <exception cref="InvalidOperationException">The declared size exceeds <see cref="MaxSize"/>, or exceeds the octets remaining in <paramref name="reader"/>.</exception>
     public static Tpm2bIdObject Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
@@ -134,6 +141,11 @@ public sealed class Tpm2bIdObject: IDisposable
         if(size > MaxSize)
         {
             throw new InvalidOperationException($"Credential blob size {size} exceeds maximum {MaxSize}.");
+        }
+
+        if(size > reader.Remaining)
+        {
+            throw new InvalidOperationException($"Credential blob size {size} exceeds the {reader.Remaining} octets remaining in the reader.");
         }
 
         IMemoryOwner<byte> storage = pool.Rent(size);

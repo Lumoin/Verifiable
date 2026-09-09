@@ -1,5 +1,5 @@
 using System.Buffers;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Mdoc;
 using Verifiable.Core.Dcql;
@@ -63,8 +63,8 @@ namespace Verifiable.Tests.FlowTests;
 [TestClass]
 internal sealed class DcqlMdocPresentationFlowTests
 {
-    private static readonly string PidDocType = EudiPid.AttestationType;
-    private static readonly string PidNamespace = EudiPid.Mdoc.Namespace;
+    private static string PidDocType { get; } = EudiPid.AttestationType;
+    private static string PidNamespace { get; } = EudiPid.Mdoc.Namespace;
     private const string VerifierClientId = "https://verifier.example/oid4vp/client";
     private const string VerifierResponseUri = "https://verifier.example/oid4vp/response";
     private const string AuthorizationRequestNonce = "auth-req-nonce-mdoc-01";
@@ -112,11 +112,11 @@ internal sealed class DcqlMdocPresentationFlowTests
             List<DcqlMatch<MdocDocument>> matches = DcqlEvaluator.Evaluate(
                 prepared,
                 credentials: [issued],
-                metadataExtractor: MdocDcqlAdapter.MetadataExtractor,
+                metadataExtractor: MdocDcqlAdapter.CreateMetadataExtractor(),
                 claimExtractor: MdocDcqlAdapter.ClaimExtractor).ToList();
 
             Assert.HasCount(1, matches);
-            Assert.AreEqual(EudiPid.DefaultCredentialQueryId, matches[0].CredentialQueryId);
+            Assert.AreEqual(EudiPid.DefaultCredentialQueryId, matches[0].CredentialQueryId.Value);
             Assert.HasCount(2, matches[0].MatchedPatterns);
 
             //Lift matched patterns into concrete CredentialPath values for trimming.
@@ -141,7 +141,7 @@ internal sealed class DcqlMdocPresentationFlowTests
             ReadOnlyMemory<byte> nonceMemory =
                 mdocGeneratedNonce.Memory[..Oid4VpMdocSessionTranscriptEncoder.MinimumMdocGeneratedNonceLength];
             ReadOnlyMemory<byte> sessionTranscript = Oid4VpMdocSessionTranscriptEncoder.Encode(
-                VerifierClientId, VerifierResponseUri, AuthorizationRequestNonce, nonceMemory.Span);
+                VerifierClientId, VerifierResponseUri, AuthorizationRequestNonce, nonceMemory.Span, BaseMemoryPool.Shared);
 
             //Device-sign the trimmed presentation against the SessionTranscript.
             //DeviceSignAsync folds (sign + attach) into one call and returns a
@@ -173,7 +173,7 @@ internal sealed class DcqlMdocPresentationFlowTests
             //the MSO commits to all five items, the wallet presents only two,
             //M.4's validator iterates the two presented items and finds each
             //in the MSO's valueDigests map.
-            MdocDigestBindingResult bindingResult = presented.VerifyDigestBinding();
+            MdocDigestBindingResult bindingResult = presented.VerifyDigestBinding(BaseMemoryPool.Shared);
             Assert.IsTrue(bindingResult.IsValid,
                 $"Digest binding on the trimmed presentation must hold. Got: {bindingResult}.");
             Assert.HasCount(2, bindingResult.ItemResults);
@@ -235,7 +235,7 @@ internal sealed class DcqlMdocPresentationFlowTests
             List<DcqlMatch<MdocDocument>> matches = DcqlEvaluator.Evaluate(
                 DcqlPreparer.Prepare(dcqlQuery),
                 credentials: [issued],
-                metadataExtractor: MdocDcqlAdapter.MetadataExtractor,
+                metadataExtractor: MdocDcqlAdapter.CreateMetadataExtractor(),
                 claimExtractor: MdocDcqlAdapter.ClaimExtractor).ToList();
 
             Assert.HasCount(0, matches);
@@ -295,7 +295,7 @@ internal sealed class DcqlMdocPresentationFlowTests
             Assert.AreEqual("id_card_number", trimmed.IssuerSigned.NameSpaces[domesticNamespace][0].ElementIdentifier);
 
             //Trimmed presentation must still verify against the MSO.
-            MdocDigestBindingResult binding = trimmed.VerifyDigestBinding();
+            MdocDigestBindingResult binding = trimmed.VerifyDigestBinding(BaseMemoryPool.Shared);
             Assert.IsTrue(binding.IsValid,
                 $"Trimmed domestic-namespace presentation must validate; got {binding}.");
         }

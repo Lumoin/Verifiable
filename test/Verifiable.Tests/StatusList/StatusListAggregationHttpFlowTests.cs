@@ -1,14 +1,19 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Time.Testing;
+using Verifiable.Core;
+using Verifiable.Core.OutboundFetch;
 using Verifiable.Core.StatusList;
 using Verifiable.Cryptography;
 using Verifiable.Foundation;
 using Verifiable.Json;
 using Verifiable.OAuth;
+using Verifiable.OAuth.StatusList;
+using Verifiable.Tests.OAuth;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -92,18 +97,29 @@ internal sealed class StatusListAggregationHttpFlowTests
         Assert.Contains(firstSubject, parsedAggregation.StatusLists, "The aggregation MUST list the first Status List Token's URI.");
         Assert.Contains(secondSubject, parsedAggregation.StatusLists, "The aggregation MUST list the second Status List Token's URI.");
 
+        using HttpClient statusListHttpClient = LoopbackTls.CreateSingleHopPinnedHttpClient(host.Certificate);
+        (OutboundTransportDelegate transport, Func<IReadOnlyList<string?>> contentTypes) = RecordingOutboundTransport.Wrap(
+            GuardedHttpClientTransport.BuildSingleHopTransport(statusListHttpClient));
+        ExchangeContext context = TestHostShell.ExchangeContextWith(TestHostShell.LoopbackOutboundFetchPolicy);
+        ResolveStatusListIssuerKeyDelegate resolveIssuerKey = (_, _) =>
+            ValueTask.FromResult<ResolvedStatusListIssuerKey?>(ResolvedStatusListIssuerKey.Borrowed(issuerPublic));
+        ResolveVerifiedStatusListTokenDelegate resolve = StatusListTokenResolvers.BuildResolving(
+            transport, context, resolveIssuerKey, TestSetup.Base64UrlDecoder, JwtPartJson.Default, BaseMemoryPool.Shared, Clock);
+
         var fetchedTokens = new List<StatusListToken>();
         try
         {
             foreach(string listUri in parsedAggregation.StatusLists)
             {
-                (string? contentType, StatusListToken fetched) = await StatusListTokenJwtFixtures
-                    .FetchAndParseJwtAsync(httpClient, listUri, issuerPublic, TestContext.CancellationToken).ConfigureAwait(false);
-                Assert.AreEqual(StatusListMediaTypes.StatusListJwtContentType, contentType, "Each listed Status List Token MUST be served with the exact statuslist+jwt media type.");
-                fetchedTokens.Add(fetched);
-
                 int revokedIndex = string.Equals(listUri, firstSubject, StringComparison.Ordinal) ? FirstRevokedIndex : SecondRevokedIndex;
-                byte status = StatusListValidation.GetStatus(fetched, new StatusListReference(revokedIndex, listUri), Clock.GetUtcNow());
+                var listReference = new StatusListReference(revokedIndex, listUri);
+
+                ResolvedStatusListToken? resolved = await resolve(
+                    StatusListFixtures.ContextFor(listReference), TestContext.CancellationToken).ConfigureAwait(false);
+                Assert.IsNotNull(resolved, $"'{listUri}' MUST resolve to a verified Status List Token.");
+                fetchedTokens.Add(resolved.Token);
+
+                byte status = StatusListValidation.GetStatus(resolved.Token, listReference, Clock.GetUtcNow());
                 Assert.AreEqual(StatusTypes.Invalid, status, $"The revoked index in '{listUri}' MUST evaluate as invalid.");
             }
 
@@ -111,6 +127,9 @@ internal sealed class StatusListAggregationHttpFlowTests
             Assert.IsTrue(host.WasRequested("/statuslist/1"), "The aggregation walk MUST have fetched the first list over the wire.");
             Assert.IsTrue(host.WasRequested("/statuslist/2"), "The aggregation walk MUST have fetched the second list over the wire.");
             Assert.AreEqual(3, host.TotalRequests, "Exactly one aggregation fetch plus one fetch per listed Status List Token MUST cross the socket.");
+            Assert.HasCount(2, contentTypes(), "Each listed Status List Token's fetch produced its own recorded response.");
+            Assert.IsTrue(contentTypes().All(contentType => string.Equals(contentType, StatusListMediaTypes.StatusListJwtContentType, StringComparison.Ordinal)),
+                "Each listed Status List Token MUST be served with the exact statuslist+jwt media type.");
         }
         finally
         {

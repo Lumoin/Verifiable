@@ -266,7 +266,7 @@ public static class PeerDidGenerator
         foreach(PeerDidPurposedKey key in keys)
         {
             builder.Append('.').Append(PurposeCode(key.Purpose));
-            builder.Append(MultibaseSerializer.EncodeKey(key.Key, base58Encoder));
+            builder.Append(MultibaseSerializer.EncodeKey(key.Key, base58Encoder, pool));
         }
 
         foreach(Service service in services)

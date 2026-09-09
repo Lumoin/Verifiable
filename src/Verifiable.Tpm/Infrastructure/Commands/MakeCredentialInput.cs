@@ -19,7 +19,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// just the EK public key, or on a TPM as here) to challenge an attestation key's binding to an endorsement key.
 /// </para>
 /// <para>
-/// Command structure (TPM 2.0 Part 3, Section 12.6):
+/// Command structure (TPM 2.0 Library Part 3, clause 12.6):
 /// </para>
 /// <list type="bullet">
 ///   <item><description>handle (TPMI_DH_OBJECT): The credential key (its public area encrypts the seed). No authorization.</description></item>
@@ -38,6 +38,23 @@ public sealed class MakeCredentialInput: ITpmCommandInput, IDisposable
 
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_MakeCredential;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <c>credential</c> (<c>TPM2B_DIGEST</c>) is the first entry of the parameter area and carries an explicit
+    /// size field (TPM 2.0 Library Part 3, clause 12.6, Table 28), which is what TPM 2.0 Library Part 1, clause
+    /// 18.1 requires of an encryptable parameter. A session without the <c>decrypt</c> attribute is unaffected.
+    /// </remarks>
+    public bool FirstCommandParameterIsEncryptable => true;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <c>handle</c> carries Auth Index None (TPM 2.0 Library Part 3, clause 12.6, Table 28) — the first
+    /// session in an authorization area over this command is a companion, never an authorizer, so a decrypt or
+    /// encrypt session's own <c>nonceTPM</c> never folds into session 0's command HMAC (TPM 2.0 Library Part 1,
+    /// clause 16.6.5).
+    /// </remarks>
+    public bool IsFirstHandleAuthorized => false;
 
     /// <summary>
     /// Gets the handle of the credential key whose public area protects the seed.

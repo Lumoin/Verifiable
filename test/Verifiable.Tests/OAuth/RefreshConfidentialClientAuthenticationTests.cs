@@ -174,7 +174,8 @@ internal sealed class RefreshConfidentialClientAuthenticationTests
                 clientKeys.PublicKey, alg, TestSetup.Base64UrlEncoder);
             string jwksJson = BuildJwksJson(jwk, SigningKeyId);
             DeclareServerSideAuthMethod(
-                host, material, ClientAuthenticationMethod.PrivateKeyJwt, clientJwks: jwksJson);
+                host, material, ClientAuthenticationMethod.PrivateKeyJwt,
+                clientJwks: jwksJson, assertionSigningAlgorithm: alg);
 
             host.Server.OAuth().ValidateClientCredentialsAsync =
                 PrivateKeyJwtClientAuthentication.BuildValidator(
@@ -431,10 +432,20 @@ internal sealed class RefreshConfidentialClientAuthenticationTests
     /// declared-client shape draft-ietf-oauth-client-id-metadata-document-02 §8.2 (CIMD-049/050) gates
     /// on, so a passing refresh proves the client attached the credential the server actually
     /// required. Uses the register-then-upgrade pattern the sibling grant suites use, because the
-    /// routing dictionaries are host-internal.
+    /// routing dictionaries are host-internal. Also declares <paramref name="method"/> on
+    /// <see cref="AuthorizationServerIntegration.ClientAuthenticationMethodsSupported"/> (RFC 8414,
+    /// Section 2) alongside <see cref="ClientAuthenticationMethod.None"/> — the token endpoint now
+    /// refuses a registration declaring a method it does not advertise before any validator runs,
+    /// so the advertisement must agree with what this test's registration declares. When
+    /// <paramref name="assertionSigningAlgorithm"/> is supplied it becomes the sole entry of
+    /// <see cref="AuthorizationServerIntegration.ClientAssertionSigningAlgorithmsSupported"/>.
     /// </summary>
     private static void DeclareServerSideAuthMethod(
-        TestHostShell host, VerifierKeyMaterial material, ClientAuthenticationMethod method, string? clientJwks = null)
+        TestHostShell host,
+        VerifierKeyMaterial material,
+        ClientAuthenticationMethod method,
+        string? clientJwks = null,
+        string? assertionSigningAlgorithm = null)
     {
         HostedAuthorizationServer hosted = host.Host("default");
         string segment = material.Registration.TenantId.Value;
@@ -450,6 +461,13 @@ internal sealed class RefreshConfidentialClientAuthenticationTests
         hosted.Server.UpdateClient(previous, updated, new ExchangeContext());
 
         material.Registration = updated;
+
+        hosted.Server.OAuth().ClientAuthenticationMethodsSupported =
+            [ClientAuthenticationMethod.None, method];
+        if(assertionSigningAlgorithm is not null)
+        {
+            hosted.Server.OAuth().ClientAssertionSigningAlgorithmsSupported = [assertionSigningAlgorithm];
+        }
     }
 
 

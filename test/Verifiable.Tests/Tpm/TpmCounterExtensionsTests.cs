@@ -12,6 +12,8 @@ using Verifiable.Tpm.Infrastructure.Sessions;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
+using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -23,7 +25,7 @@ namespace Verifiable.Tests.Tpm;
 /// <see cref="TpmInHouseSimulatorNvCounterTests"/> exercises directly with <see cref="NvIncrementInput"/>/
 /// <see cref="NvReadInput"/>/<see cref="NvDefineSpaceInput"/>/<see cref="NvUndefineSpaceInput"/>, except every
 /// define/increment/read/undefine step here goes exclusively through the verbs under test. TPM 2.0 Library Part 1,
-/// Section 37.2.6.3; Part 3, Sections 31.3.1, 31.7.1, 31.8.
+/// clause 34.2.6.3; Part 3, clauses 31.3.1, 31.7.1, 31.8.
 /// </summary>
 [TestClass]
 internal sealed class TpmCounterExtensionsTests
@@ -57,9 +59,8 @@ internal sealed class TpmCounterExtensionsTests
     {
         const int IncrementCount = 5;
 
-        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         TpmResult<NvDefineSpaceResponse> defineResult = await device.DefineCounterAsync(
             ReadOnlyMemory<byte>.Empty, CounterIndexHandle, CounterAuthBytes,
@@ -85,17 +86,16 @@ internal sealed class TpmCounterExtensionsTests
     /// Index to a known value, undefines it with <see cref="TpmDeviceExtensions.UndefineCounterAsync"/>, redefines
     /// the same handle with <see cref="TpmDeviceExtensions.DefineCounterAsync"/>, and verifies the first
     /// <see cref="TpmDeviceExtensions.IncrementCounterAsync"/> of the redefined Index seeds strictly above (exactly
-    /// one past) the deleted counter's last value - the phantom high-water mark (TPM 2.0 Library Part 1, Section
-    /// 37.2.6.3 NOTE 2/NOTE 6) proving delete-then-redefine can never roll a counter with this Name back.
+    /// one past) the deleted counter's last value - the phantom high-water mark (TPM 2.0 Library Part 1, clause
+    /// 34.2.6.3 NOTE 2/NOTE 6) proving delete-then-redefine can never roll a counter with this Name back.
     /// </summary>
     [TestMethod]
     public async Task RedefiningAfterUndefineThroughTheVerbsSeedsStrictlyAboveTheDeletedCountersLastValue()
     {
         const int IncrementsBeforeDelete = 3;
 
-        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         TpmResult<NvDefineSpaceResponse> defineResult = await device.DefineCounterAsync(
             ReadOnlyMemory<byte>.Empty, CounterIndexHandle, CounterAuthBytes,
@@ -134,17 +134,16 @@ internal sealed class TpmCounterExtensionsTests
     /// Verifies <see cref="TpmDeviceExtensions.IncrementCounterAsync"/> with a wrong Index authValue rejects with
     /// <c>TPM_RC_BAD_AUTH</c>. The Index is defined with <c>noDa: true</c> (dictionary-attack opted out) so this
     /// negative is a clean bad-authorization answer, uncomplicated by the dictionary-attack lockout ladder a
-    /// DA-protected Index would instead feed (TPM 2.0 Library Part 1, Section 17.8.1). The verb's default channel
+    /// DA-protected Index would instead feed (TPM 2.0 Library Part 1, clause 16.8.1). The verb's default channel
     /// is an HMAC session, so the mismatch is a genuine command-HMAC failure and the raw wire code
     /// carries the session-index modifier (TPM 2.0 Library Part 2, clause 6.6.2) - the base error is what
-    /// decodes to the bare constant.
+    /// the underlying constant decodes to once that modifier is stripped.
     /// </summary>
     [TestMethod]
     public async Task IncrementCounterAsyncWithWrongAuthOnANoDaIndexReturnsBadAuth()
     {
-        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         TpmResult<NvDefineSpaceResponse> defineResult = await device.DefineCounterAsync(
             ReadOnlyMemory<byte>.Empty, CounterIndexHandle, CounterAuthBytes, noDa: true,
@@ -164,19 +163,19 @@ internal sealed class TpmCounterExtensionsTests
     /// <summary>
     /// Pins <see cref="TpmDeviceExtensions.DefineCounterAsync"/>'s SECURE DEFAULT: with <c>noDa</c> left at its
     /// default the Index is dictionary-attack PROTECTED, so a wrong Index authValue is an auth-failure that feeds
-    /// the shared lockout counter (<c>TPM_RC_AUTH_FAIL</c>, TPM 2.0 Library Part 1, Section 17.8.3) rather than the
-    /// plain bad-authorization a <c>TPMA_NV_NO_DA</c> Index answers (<c>TPM_RC_BAD_AUTH</c>, Section 17.8.1 — the
+    /// the shared lockout counter (<c>TPM_RC_AUTH_FAIL</c>, TPM 2.0 Library Part 1, clause 16.8.3) rather than the
+    /// plain bad-authorization a <c>TPMA_NV_NO_DA</c> Index answers (<c>TPM_RC_BAD_AUTH</c>, clause 16.8.1 — the
     /// contrast <see cref="IncrementCounterAsyncWithWrongAuthOnANoDaIndexReturnsBadAuth"/> exercises). Flipping the
     /// default to opt every counter out of lockout protection therefore fails here rather than passing silently.
     /// The verb's default channel is an HMAC session, so the raw wire code carries the session-index
-    /// modifier (TPM 2.0 Library Part 2, clause 6.6.2) - the base error is what decodes to the bare constant.
+    /// modifier (TPM 2.0 Library Part 2, clause 6.6.2) - the base error is what the underlying constant decodes
+    /// to once that modifier is stripped.
     /// </summary>
     [TestMethod]
     public async Task DefineCounterAsyncDefaultsToDictionaryAttackProtected()
     {
-        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         TpmResult<NvDefineSpaceResponse> defineResult = await device.DefineCounterAsync(
             ReadOnlyMemory<byte>.Empty, CounterIndexHandle, CounterAuthBytes,
@@ -198,16 +197,15 @@ internal sealed class TpmCounterExtensionsTests
     /// <summary>
     /// Verifies the required behavioral contrast between the two read-side verbs on a freshly defined Counter
     /// Index: <see cref="TpmDeviceExtensions.ReadCounterAsync"/> rejects with <c>TPM_RC_NV_UNINITIALIZED</c>
-    /// (TPM 2.0 Library Part 3, Section 31.13.1) before any increment has ever run, while
+    /// (TPM 2.0 Library Part 3, clause 31.13.1) before any increment has ever run, while
     /// <see cref="TpmDeviceExtensions.IncrementCounterAsync"/> against that very same, still-unwritten Index
-    /// succeeds outright (Section 31.8.1's explicit non-error) and returns exactly <c>1</c>.
+    /// succeeds outright (clause 31.8.1's explicit non-error) and returns exactly <c>1</c>.
     /// </summary>
     [TestMethod]
     public async Task ReadCounterAsyncBeforeFirstIncrementFailsWhileIncrementCounterAsyncOnTheSameFreshIndexSucceeds()
     {
-        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         TpmResult<NvDefineSpaceResponse> defineResult = await device.DefineCounterAsync(
             ReadOnlyMemory<byte>.Empty, CounterIndexHandle, CounterAuthBytes,
@@ -229,7 +227,7 @@ internal sealed class TpmCounterExtensionsTests
 
     /// <summary>
     /// Regression proof that a Counter Index defined through <see cref="TpmDeviceExtensions.DefineCounterAsync"/>
-    /// still refuses a raw <c>TPM2_NV_Write()</c> with <c>TPM_RC_ATTRIBUTES</c> (TPM 2.0 Library Part 3, Section
+    /// still refuses a raw <c>TPM2_NV_Write()</c> with <c>TPM_RC_ATTRIBUTES</c> (TPM 2.0 Library Part 3, clause
     /// 31.7.1: the four update commands partition NV Index types; only <c>TPM2_NV_Increment()</c> may modify a
     /// Counter Index). This verb group has no write verb, so the negative is driven with the raw
     /// <see cref="NvWriteInput"/> through <see cref="TpmCommandExecutor"/> directly, mirroring
@@ -240,7 +238,7 @@ internal sealed class TpmCounterExtensionsTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         TpmResult<NvDefineSpaceResponse> defineResult = await device.DefineCounterAsync(
             ReadOnlyMemory<byte>.Empty, CounterIndexHandle, CounterAuthBytes,
@@ -268,7 +266,7 @@ internal sealed class TpmCounterExtensionsTests
     /// over the four verbs' DEFAULT channel is monotonic exactly as the all-password lifecycle (see
     /// <see cref="DefineThenIncrementRunThroughTheVerbsIsMonotonic"/>) is, and not one command the verbs
     /// compose ever carries <c>TPM_RS_PW</c> as its authorizing session - proving the default channel
-    /// genuinely rides a session rather than a password (TPM 2.0 Library Part 1, Sections 17.6.9/17.6.10).
+    /// genuinely rides a session rather than a password (TPM 2.0 Library Part 1, clauses 16.6.9/16.6.10).
     /// </summary>
     [TestMethod]
     public async Task DefineIncrementReadUndefineOverTheDefaultChannelRoundTripsMonotonicWithoutEverSendingAPasswordSession()
@@ -284,7 +282,7 @@ internal sealed class TpmCounterExtensionsTests
             return await simulator.SubmitAsync(command, commandPool, ct).ConfigureAwait(false);
         }
 
-        using TpmDevice device = TpmDevice.Create(CaptureAsync);
+        using TpmDevice device = TpmDevice.Create(CaptureAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         TpmResult<NvDefineSpaceResponse> defineResult = await device.DefineCounterAsync(
             ReadOnlyMemory<byte>.Empty, CounterIndexHandle, CounterAuthBytes, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -341,7 +339,7 @@ internal sealed class TpmCounterExtensionsTests
             return await simulator.SubmitAsync(command, commandPool, ct).ConfigureAwait(false);
         }
 
-        using TpmDevice device = TpmDevice.Create(CaptureAsync);
+        using TpmDevice device = TpmDevice.Create(CaptureAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         TpmResult<NvDefineSpaceResponse> defineResult = await device.DefineCounterWithPasswordAsync(
             ReadOnlyMemory<byte>.Empty, CounterIndexHandle, CounterAuthBytes, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -380,7 +378,7 @@ internal sealed class TpmCounterExtensionsTests
 
     /// <summary>
     /// The salted overload round-trips against an RSA tpmKey exactly as
-    /// the unsalted default does - the salt (TPM 2.0 Library Part 1, Section 17.6.11, equation 23) changes only
+    /// the unsalted default does - the salt (TPM 2.0 Library Part 1, clause 16.6.11, equation 23) changes only
     /// where the session key's entropy comes from, never the increment's return value (mirrors the Pin group's
     /// own salted-overload proof, <c>VerifyPinAsyncSaltedOverloadSucceedsAgainstAnRsaTpmKeyAndResetsPinCount</c>).
     /// </summary>
@@ -392,7 +390,7 @@ internal sealed class TpmCounterExtensionsTests
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(withRsaBackend: true).ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         TpmResult<NvDefineSpaceResponse> defineResult = await device.DefineCounterAsync(
             ReadOnlyMemory<byte>.Empty, CounterIndexHandle, CounterAuthBytes, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -452,7 +450,7 @@ internal sealed class TpmCounterExtensionsTests
         return reader.ReadUInt32(); //sessionHandle.
     }
 
-    /// <summary>The handle-area size of each Counter-group command the four verbs compose (TPM 2.0 Library Part 3, Sections 31.3/31.4/31.8/31.13).</summary>
+    /// <summary>The handle-area size of each Counter-group command the four verbs compose (TPM 2.0 Library Part 3, clauses 31.3/31.4/31.8/31.13).</summary>
     /// <param name="code">The command code to map.</param>
     /// <returns>The handle count, or -1 when the code is not one of this file's Counter commands.</returns>
     private static int CounterCommandHandleCount(TpmCcConstants code) => code switch
@@ -468,7 +466,7 @@ internal sealed class TpmCounterExtensionsTests
     /// Creates a simulator, powers it on, and brings it through <c>TPM2_Startup(CLEAR)</c> into the operational
     /// phase. When <paramref name="withRsaBackend"/> is set, the simulator is also wired with the ECC
     /// (BouncyCastle) and RSA (framework) signing backends a salted HMAC session's RSA <c>tpmKey</c> needs from
-    /// <c>TPM2_CreatePrimary()</c> (TPM 2.0 Library Part 1, clause 11.4.10.3).
+    /// <c>TPM2_CreatePrimary()</c> (TPM 2.0 Library Part 1, clause 16.6.11).
     /// </summary>
     /// <param name="withRsaBackend">When <see langword="true"/>, wires the ECC and RSA signing backends; otherwise the simulator carries neither.</param>
     /// <returns>The operational simulator.</returns>
@@ -476,8 +474,8 @@ internal sealed class TpmCounterExtensionsTests
     {
         var simulator = withRsaBackend
             ? new TpmSimulator(
-                "tpm-in-house-counter-verbs", signingBackend: BouncyCastleTpmEccSigningBackend.Create(), rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create())
-            : new TpmSimulator("tpm-in-house-counter-verbs");
+                "tpm-in-house-counter-verbs", signingBackend: BouncyCastleTpmEccSigningBackend.Create(), rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch))
+            : new TpmSimulator("tpm-in-house-counter-verbs", rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;

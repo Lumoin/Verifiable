@@ -51,8 +51,8 @@ public sealed class XAdESRevocationValues: IDisposable
     /// element before refusing with <see cref="XAdESReadFailure.EntryCountLimitExceeded"/> — a documented
     /// hardening bound, since each entry base64-decodes a full CRL/OCSP response and the schema's own
     /// <c>maxOccurs="unbounded"</c> content model sets no numeric limit. Chosen generously above any legitimate
-    /// validation-data set's own size; <c>XAdESGrowthBoundsCostTests.RevocationValuesEncapsulatedFloodIsRefusedWithinTheCeiling</c>
-    /// measures a flood one entry past this bound refusing well inside its own loose ceiling.
+    /// validation-data set's own size; <c>XAdESGrowthBoundsCostTests.RevocationValuesEncapsulatedFloodIsRefusedBeforeAnyEntryDecodes</c>
+    /// measures a flood one entry past this bound refusing with zero pool rents, since the count check runs before any entry decodes.
     /// </summary>
     public const int MaximumEncapsulatedEntryCount = 4096;
 
@@ -61,8 +61,8 @@ public sealed class XAdESRevocationValues: IDisposable
     /// list element before refusing with <see cref="XAdESReadFailure.EntryCountLimitExceeded"/> — shared by
     /// this type's own <c>OtherValues</c> and <see cref="XAdESCompleteRevocationRefs"/>'s <c>OtherRefs</c>
     /// (the method's own remarks). A documented hardening bound; the schema's own <c>maxOccurs="unbounded"</c>
-    /// content model sets no numeric limit; <c>XAdESGrowthBoundsCostTests.RevocationValuesUnmodeledFloodIsRefusedWithinTheCeiling</c>
-    /// measures a flood one entry past this bound refusing well inside its own loose ceiling.
+    /// content model sets no numeric limit; <c>XAdESGrowthBoundsCostTests.RevocationValuesUnmodeledFloodIsRefusedWithNoPooledRent</c>
+    /// measures a flood one entry past this bound refusing with no pooled rent, since an <c>OtherValue</c> entry carries no pooled content.
     /// </summary>
     public const int MaximumUnmodeledEntryCount = 4096;
 
@@ -233,6 +233,8 @@ public sealed class XAdESRevocationValues: IDisposable
 
             if(scan == ElementScanResult.Found)
             {
+                //One disjunct per xsd:sequence child this element can repeat; a named predicate per child
+                //would only rename the grammar, not simplify it.
                 bool isRepeat = (hasCrlValues && XmlSignatureModelGrammar.IsElement(table, child, XAdESIdentifiers.XAdESNamespaceV132Utf8, "CRLValues"u8))
                     || (hasOcspValues && XmlSignatureModelGrammar.IsElement(table, child, XAdESIdentifiers.XAdESNamespaceV132Utf8, "OCSPValues"u8))
                     || (hasOtherValues && XmlSignatureModelGrammar.IsElement(table, child, XAdESIdentifiers.XAdESNamespaceV132Utf8, "OtherValues"u8));

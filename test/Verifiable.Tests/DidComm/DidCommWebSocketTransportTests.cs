@@ -30,17 +30,17 @@ internal sealed class DidCommWebSocketTransportTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly BaseMemoryPool Pool = BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool { get; } = BaseMemoryPool.Shared;
 
     //A non-network resolution context; it only satisfies the SSRF-policy-carrying parameter (the WebSocket path
     //does not route through OutboundFetch, so no scheme/host policy applies to the loopback wss:// endpoint).
-    private static readonly ExchangeContext Context = new();
+    private static ExchangeContext Context { get; } = new();
 
     //A non-nested anoncrypt message never triggers nested-signature resolution; this satisfies the parameter.
-    private static readonly DidResolver NestedSignerResolver = new DidResolver(DidMethodSelectors.FromResolvers(
+    private static DidResolver NestedSignerResolver { get; } = new DidResolver(DidMethodSelectors.FromResolvers(
         ("did:example", (_, _, _, _) => ValueTask.FromResult(DidResolutionResult.Failure(DidResolutionErrors.NotFound)))));
 
-    private static readonly JwtHeaderSerializer HeaderSerializer =
+    private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)header,
             TestSetup.DefaultSerializationOptions);
@@ -88,7 +88,7 @@ internal sealed class DidCommWebSocketTransportTests
             HeaderSerializer,
             TestSetup.Base64UrlEncoder,
             CryptoFormatConversions.DefaultTagToEpkCrvConverter,
-            MicrosoftEntropyFunctions.GenerateNonce,
+            MicrosoftEntropyFunctionsAdapter.GenerateNonce,
             BouncyCastleKeyAgreementFunctions.EcdhEsMultiRecipientAgreementEncryptP256Async,
             ConcatKdf.DefaultKeyDerivationDelegate,
             MicrosoftKeyAgreementFunctions.AesKeyWrapAsync,

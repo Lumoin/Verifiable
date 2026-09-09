@@ -115,7 +115,7 @@ public readonly struct ClientAuthenticationMethod: IEquatable<ClientAuthenticati
     public static ClientAuthenticationMethod SpiffeJwt { get; } = new(8);
 
 
-    private static List<ClientAuthenticationMethod> methods { get; } =
+    private static List<ClientAuthenticationMethod> RegisteredMethods { get; } =
     [
         None,
         ClientSecretBasic,
@@ -129,7 +129,7 @@ public readonly struct ClientAuthenticationMethod: IEquatable<ClientAuthenticati
     ];
 
     /// <summary>Gets all registered authentication method values including any custom ones.</summary>
-    public static IReadOnlyList<ClientAuthenticationMethod> Methods => methods.AsReadOnly();
+    public static IReadOnlyList<ClientAuthenticationMethod> Methods => RegisteredMethods.AsReadOnly();
 
 
     /// <summary>
@@ -143,9 +143,9 @@ public readonly struct ClientAuthenticationMethod: IEquatable<ClientAuthenticati
     /// <exception cref="ArgumentException">Thrown when <paramref name="code"/> is already registered.</exception>
     public static ClientAuthenticationMethod Create(int code)
     {
-        for(int i = 0; i < methods.Count; ++i)
+        for(int i = 0; i < RegisteredMethods.Count; ++i)
         {
-            if(methods[i].Code == code)
+            if(RegisteredMethods[i].Code == code)
             {
                 throw new ArgumentException(
                     $"A client authentication method with code {code} is already registered.", nameof(code));
@@ -153,7 +153,7 @@ public readonly struct ClientAuthenticationMethod: IEquatable<ClientAuthenticati
         }
 
         ClientAuthenticationMethod newMethod = new(code);
-        methods.Add(newMethod);
+        RegisteredMethods.Add(newMethod);
         return newMethod;
     }
 

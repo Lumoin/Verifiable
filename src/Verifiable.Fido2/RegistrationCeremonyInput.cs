@@ -213,11 +213,11 @@ public sealed record RegistrationCeremonyInput: IDisposable
 
     /// <summary>
     /// The memory pool a registered <see cref="ExtensionOutputProcessDelegate"/> receives on its
-    /// <see cref="ExtensionOutputProcessingRequest"/> for working-buffer allocation. Defaults to
-    /// <see cref="BaseMemoryPool.Shared"/>, the library-wide default pool, so a relying party
-    /// only supplies one to route processor allocations through its own pool.
+    /// <see cref="ExtensionOutputProcessingRequest"/> for working-buffer allocation. Supplied by
+    /// the caller composing this ceremony input, so processor allocations route through the
+    /// caller's own pool.
     /// </summary>
-    public BaseMemoryPool ExtensionProcessingPool { get; init; } = BaseMemoryPool.Shared;
+    public required BaseMemoryPool ExtensionProcessingPool { get; init; }
 
 
     /// <summary>

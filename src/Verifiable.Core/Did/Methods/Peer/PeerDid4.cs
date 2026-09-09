@@ -137,6 +137,8 @@ internal static class PeerDid4
         }
         catch
         {
+            //A throwing deserializer is treated as a malformed embedded document, per this method's own
+            //remarks above, cancellation excepted above.
             return null;
         }
     }

@@ -510,9 +510,9 @@ public static class EllipticCurveConstants
     {
         public const int PointArrayLength = 32;
 
-        public static readonly BigInteger Prime = BigInteger.Parse("7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFED", NumberStyles.HexNumber, CultureInfo.InvariantCulture);
-        public static readonly BigInteger A = 486662;
-        public static readonly BigInteger B = 1;
+        public static BigInteger Prime { get; } = BigInteger.Parse("7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFED", NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+        public static BigInteger A { get; } = 486662;
+        public static BigInteger B { get; } = 1;
     }
 
 

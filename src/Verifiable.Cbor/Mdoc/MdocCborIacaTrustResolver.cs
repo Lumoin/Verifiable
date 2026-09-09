@@ -1,4 +1,5 @@
 using System.Buffers;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Core.Model.Mdoc;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
@@ -7,7 +8,7 @@ namespace Verifiable.Cbor.Mdoc;
 
 /// <summary>
 /// Default <see cref="ResolveMdocIssuerKeyDelegate"/> factory — composes
-/// <see cref="MdocCborX5ChainExtractor"/> with a caller-supplied
+/// <see cref="CoseSign1X5ChainExtractor"/> with a caller-supplied
 /// <see cref="ValidateCertificateChainAsyncDelegate"/> and trust-anchor list to
 /// produce a delegate the wallet/verifier can hand to
 /// <see cref="MdocCborIssuerAuthVerifier.VerifyAsync(MdocIssuerAuth, ResolveMdocIssuerKeyDelegate, System.Threading.CancellationToken)"/>.
@@ -64,6 +65,12 @@ public static class MdocCborIacaTrustResolver
     /// </param>
     /// <param name="pool">Memory pool for DER and key-material allocations.</param>
     /// <returns>The composed delegate.</returns>
+    /// <remarks>
+    /// <strong>Manual disposal, not a <see langword="using"/> declaration.</strong> The composed delegate's
+    /// <c>chain</c> is a per-certificate list, not one disposable value, and is declared <see langword="null"/>
+    /// until <see cref="CoseSign1X5ChainExtractor.Extract"/> returns it, so it is disposed in the delegate's
+    /// own <see langword="finally"/> rather than through a <see langword="using"/> declaration.
+    /// </remarks>
     public static ResolveMdocIssuerKeyDelegate Create(
         ValidateCertificateChainAsyncDelegate validateChain,
         IReadOnlyList<PkiCertificateMemory> trustAnchors,
@@ -81,7 +88,7 @@ public static class MdocCborIacaTrustResolver
             IReadOnlyList<PkiCertificateMemory>? chain = null;
             try
             {
-                chain = MdocCborX5ChainExtractor.Extract(issuerAuth.EncodedCoseSign1.AsReadOnlyMemory(), pool);
+                chain = CoseSign1X5ChainExtractor.Extract(issuerAuth.EncodedCoseSign1.AsReadOnlyMemory(), pool);
 
                 if(chain.Count == 0)
                 {
@@ -108,7 +115,7 @@ public static class MdocCborIacaTrustResolver
 
                 return MdocIacaTrustResolution.Success(leafKey);
             }
-            catch(System.Formats.Cbor.CborContentException ex)
+            catch(CborException ex)
             {
                 return MdocIacaTrustResolution.Failed(
                     MdocIacaTrustFailureReason.X5ChainMalformed, ex.Message);

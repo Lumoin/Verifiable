@@ -1,4 +1,5 @@
-using System.Formats.Cbor;
+using System.Buffers;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Core.Model.Mdoc;
 
 namespace Verifiable.Cbor.Mdoc;
@@ -60,16 +61,14 @@ public static class MdocCborIssuerSignedItemEncoder
         ArgumentNullException.ThrowIfNull(item);
 
         //ISO/IEC 18013-5 §9.1.2.4 lists the fields without prescribing map
-        //order; canonical CBOR sorts text-string keys lexicographically by
-        //bytewise comparison, so the emitted order is:
-        //  digestID (7) < elementIdentifier (17) < elementValue (12) < random (6)
-        //is wrong — text strings sort by bytewise comparison of the encoded
-        //form, which is length-first then content. Lengths: 8 = digestID,
-        //6 = random, 17 = elementIdentifier, 12 = elementValue. So canonical
-        //order is: random < elementValue < digestID < elementIdentifier.
-        //The CborWriter in Canonical mode handles the sorting; we feed in
-        //any order and it emits the canonical form.
-        var writer = new CborWriter(CborConformanceMode.Canonical, convertIndefiniteLengthEncodings: true);
+        //order. RFC 8949 §4.2.1 sorts map keys by encoded length first, then
+        //bytewise; the four text-string key lengths are 6 = random,
+        //12 = elementValue, 8 = digestID, 17 = elementIdentifier, so the
+        //canonical order is random < elementValue < digestID <
+        //elementIdentifier regardless of the order they are written here —
+        //the writer under RfcCanonical sorts every map on WriteEndMap.
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
 
         writer.WriteStartMap(4);
 
@@ -87,6 +86,6 @@ public static class MdocCborIssuerSignedItemEncoder
 
         writer.WriteEndMap();
 
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
     }
 }

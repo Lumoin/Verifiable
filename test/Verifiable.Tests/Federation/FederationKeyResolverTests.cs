@@ -142,11 +142,10 @@ internal sealed class FederationKeyResolverTests
 
 
     /// <summary>
-    /// Exploit regression (F2, Federation §3.1 <c>kid</c> MUST): a statement signed by a key the issuer
-    /// publishes but whose <c>kid</c> header has been STRIPPED must resolve to <see langword="null"/>, never
-    /// to a silently-chosen key. The pre-fix resolver returned the issuer's first jwks key (accepting any
-    /// key, defeating kid-pinning); the secure answer is a resolution miss so the malformed statement is
-    /// caught rather than verified under a guessed key.
+    /// Federation §3.1 makes <c>kid</c> a MUST: a statement signed by a key the issuer publishes but whose
+    /// <c>kid</c> header has been STRIPPED must resolve to <see langword="null"/>, never to a silently-chosen
+    /// key — accepting any key from the issuer's jwks defeats kid-pinning, so the secure answer is a
+    /// resolution miss, catching the malformed statement rather than verifying it under a guessed key.
     /// </summary>
     [TestMethod]
     public async Task StrippedKidResolvesToNullInsteadOfSilentlyPickingAKey()

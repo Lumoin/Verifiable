@@ -67,7 +67,7 @@ namespace Verifiable.Core.Model.Did
             //Add Header dictionary contents to hash.
             if(Header != null)
             {
-                foreach(var kvp in Header.OrderBy(x => x.Key))
+                foreach(var kvp in Header.OrderBy(x => x.Key, StringComparer.Ordinal))
                 {
                     hash.Add(kvp.Key);
                     hash.Add(kvp.Value);
@@ -77,7 +77,7 @@ namespace Verifiable.Core.Model.Did
             //Add Payload dictionary contents to hash.
             if(Payload != null)
             {
-                foreach(var kvp in Payload.OrderBy(x => x.Key))
+                foreach(var kvp in Payload.OrderBy(x => x.Key, StringComparer.Ordinal))
                 {
                     hash.Add(kvp.Key);
                     hash.Add(kvp.Value);

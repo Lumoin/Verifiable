@@ -36,8 +36,8 @@ internal sealed class JarAuthorizeByValueTests
     private const string TestSubject = "test-subject-001";
     private const string JarState = "state-jar-direct-01";
     private const string JarNonce = "nonce-jar-direct-01";
-    private static readonly Uri ClientBaseUri = new("https://client.example.com");
-    private static readonly Uri RegisteredRedirectUri = new("https://client.example.com/callback");
+    private static Uri ClientBaseUri { get; } = new("https://client.example.com");
+    private static Uri RegisteredRedirectUri { get; } = new("https://client.example.com/callback");
 
     private static ImmutableHashSet<CapabilityIdentifier> JarDirectCapabilities { get; } =
         ImmutableHashSet.Create(

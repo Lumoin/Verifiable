@@ -14,7 +14,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// <b>Wire format:</b> Single byte (BYTE).
 /// </para>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 9.2.
+/// Specification reference: TPM 2.0 Library Part 2, clause 9.2.
 /// </para>
 /// </remarks>
 /// <param name="Value">The raw byte value from the TPM.</param>

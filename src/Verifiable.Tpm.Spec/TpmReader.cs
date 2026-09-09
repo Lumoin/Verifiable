@@ -19,7 +19,7 @@ namespace Verifiable.Tpm.Spec;
 /// </remarks>
 public ref struct TpmReader
 {
-    private readonly ReadOnlySpan<byte> original;
+    private ReadOnlySpan<byte> Original { get; }
     private ReadOnlySpan<byte> remaining;
     private int consumed;
 
@@ -29,7 +29,7 @@ public ref struct TpmReader
     /// <param name="buffer">The buffer to read from.</param>
     public TpmReader(ReadOnlySpan<byte> buffer)
     {
-        original = buffer;
+        Original = buffer;
         remaining = buffer;
         consumed = 0;
     }
@@ -96,6 +96,20 @@ public ref struct TpmReader
     {
         ulong value = BinaryPrimitives.ReadUInt64BigEndian(remaining);
         Advance(sizeof(ulong));
+        return value;
+    }
+
+    /// <summary>
+    /// Reads a signed 8-bit integer (two's complement) — a single octet, so there is no endianness to
+    /// choose.
+    /// </summary>
+    /// <returns>The value.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when the buffer has no remaining bytes.</exception>
+    public sbyte ReadInt8()
+    {
+        sbyte value = unchecked((sbyte)remaining[..1][0]);
+        Advance(1);
+
         return value;
     }
 

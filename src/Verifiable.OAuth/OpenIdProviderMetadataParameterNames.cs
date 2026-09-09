@@ -23,7 +23,7 @@ public static class OpenIdProviderMetadataParameterNames
     /// <summary>
     /// URL of the OpenID Provider's UserInfo endpoint.
     /// </summary>
-    public static readonly string UserinfoEndpoint = Utf8Constants.ToInternedString(UserinfoEndpointUtf8);
+    public static string UserinfoEndpoint { get; } = Utf8Constants.ToInternedString(UserinfoEndpointUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="IdTokenSigningAlgValuesSupported"/>.</summary>
     public static ReadOnlySpan<byte> IdTokenSigningAlgValuesSupportedUtf8 => "id_token_signing_alg_values_supported"u8;
@@ -31,7 +31,7 @@ public static class OpenIdProviderMetadataParameterNames
     /// <summary>
     /// JSON array of supported ID Token signing algorithms.
     /// </summary>
-    public static readonly string IdTokenSigningAlgValuesSupported = Utf8Constants.ToInternedString(IdTokenSigningAlgValuesSupportedUtf8);
+    public static string IdTokenSigningAlgValuesSupported { get; } = Utf8Constants.ToInternedString(IdTokenSigningAlgValuesSupportedUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="SubjectTypesSupported"/>.</summary>
     public static ReadOnlySpan<byte> SubjectTypesSupportedUtf8 => "subject_types_supported"u8;
@@ -39,7 +39,7 @@ public static class OpenIdProviderMetadataParameterNames
     /// <summary>
     /// JSON array of supported subject identifier types.
     /// </summary>
-    public static readonly string SubjectTypesSupported = Utf8Constants.ToInternedString(SubjectTypesSupportedUtf8);
+    public static string SubjectTypesSupported { get; } = Utf8Constants.ToInternedString(SubjectTypesSupportedUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="ClaimsSupported"/>.</summary>
     public static ReadOnlySpan<byte> ClaimsSupportedUtf8 => "claims_supported"u8;
@@ -50,7 +50,7 @@ public static class OpenIdProviderMetadataParameterNames
     /// use the list to decide which claims to request; the OP is not
     /// guaranteed to populate every advertised claim for every request.
     /// </summary>
-    public static readonly string ClaimsSupported = Utf8Constants.ToInternedString(ClaimsSupportedUtf8);
+    public static string ClaimsSupported { get; } = Utf8Constants.ToInternedString(ClaimsSupportedUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="ClaimTypesSupported"/>.</summary>
     public static ReadOnlySpan<byte> ClaimTypesSupportedUtf8 => "claim_types_supported"u8;
@@ -63,5 +63,5 @@ public static class OpenIdProviderMetadataParameterNames
     /// is absent: <c>["normal"]</c>. The library emits the explicit field
     /// because aggregated / distributed claims are not implemented.
     /// </summary>
-    public static readonly string ClaimTypesSupported = Utf8Constants.ToInternedString(ClaimTypesSupportedUtf8);
+    public static string ClaimTypesSupported { get; } = Utf8Constants.ToInternedString(ClaimTypesSupportedUtf8);
 }

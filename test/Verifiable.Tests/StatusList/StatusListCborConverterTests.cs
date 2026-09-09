@@ -1,5 +1,5 @@
 using System.Buffers;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using Lumoin.Base;
 using Verifiable.Cbor;
 using Verifiable.Cbor.StatusList;
@@ -52,7 +52,7 @@ internal sealed class StatusListCborConverterTests
     /// </summary>
     /// <remarks>This value is typically set to a constant defined for test scenarios and should not be
     /// modified at runtime.</remarks>
-    private readonly DateTimeOffset BaseTime = StatusListTestConstants.BaseTime;
+    private DateTimeOffset BaseTime { get; } = StatusListTestConstants.BaseTime;
 
     /// <summary>
     /// Gets or sets the test context for the current test run.
@@ -67,11 +67,6 @@ internal sealed class StatusListCborConverterTests
     /// that require temporary buffers.</remarks>
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
-    /// <summary>
-    /// Provides the default options for CBOR serialization.
-    /// </summary>
-    private static readonly CborSerializerOptions Options = CborSerializerOptions.Default;
-
 
     [TestMethod]
     public void OneBitSpecVectorDeserializesCorrectly()
@@ -79,8 +74,8 @@ internal sealed class StatusListCborConverterTests
         byte[] specBytes = Convert.FromHexString(OneBitCborHex);
 
         var converter = new StatusListCborConverter(Pool);
-        var reader = new CborReader(specBytes, CborConformanceMode.Lax);
-        using var deserialized = converter.Read(ref reader, typeof(StatusListType), Options);
+        var reader = new CborReader(specBytes, CborOptions.Lax);
+        using var deserialized = converter.Read(reader);
 
         Assert.AreEqual(StatusListBitSize.OneBit, deserialized.BitSize);
         Assert.AreEqual(StatusTypes.Invalid, deserialized[0]);
@@ -99,12 +94,13 @@ internal sealed class StatusListCborConverterTests
         original[7] = StatusTypes.Invalid;
 
         var converter = new StatusListCborConverter(Pool);
-        var writer = new CborWriter(CborConformanceMode.Canonical);
-        converter.Write(writer, original, Options);
-        byte[] encoded = writer.Encode();
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
+        converter.Write(writer, original);
+        byte[] encoded = buffer.WrittenSpan.ToArray();
 
-        var reader = new CborReader(encoded, CborConformanceMode.Lax);
-        using var restored = converter.Read(ref reader, typeof(StatusListType), Options);
+        var reader = new CborReader(encoded, CborOptions.Lax);
+        using var restored = converter.Read(reader);
 
         Assert.AreEqual(StatusListBitSize.OneBit, restored.BitSize);
         Assert.AreEqual(StatusTypes.Invalid, restored[0]);
@@ -120,8 +116,8 @@ internal sealed class StatusListCborConverterTests
         byte[] specBytes = Convert.FromHexString(TwoBitCborHex);
 
         var converter = new StatusListCborConverter(Pool);
-        var reader = new CborReader(specBytes, CborConformanceMode.Lax);
-        using var deserialized = converter.Read(ref reader, typeof(StatusListType), Options);
+        var reader = new CborReader(specBytes, CborOptions.Lax);
+        using var deserialized = converter.Read(reader);
 
         Assert.AreEqual(StatusListBitSize.TwoBits, deserialized.BitSize);
         Assert.AreEqual(StatusTypes.Invalid, deserialized[0]);
@@ -137,12 +133,13 @@ internal sealed class StatusListCborConverterTests
         var converter = new StatusListReferenceCborConverter();
         var original = new StatusListReference(SuspendedCredentialIndex, ExampleTokenSubject);
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
-        converter.Write(writer, original, Options);
-        byte[] encoded = writer.Encode();
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
+        converter.Write(writer, original);
+        byte[] encoded = buffer.WrittenSpan.ToArray();
 
-        var reader = new CborReader(encoded, CborConformanceMode.Lax);
-        var decoded = converter.Read(ref reader, typeof(StatusListReference), Options);
+        var reader = new CborReader(encoded, CborOptions.Lax);
+        var decoded = converter.Read(reader);
 
         Assert.AreEqual(original, decoded);
     }
@@ -164,12 +161,13 @@ internal sealed class StatusListCborConverterTests
         };
 
         var converter = new StatusListTokenCborConverter(Pool);
-        var writer = new CborWriter(CborConformanceMode.Canonical);
-        converter.Write(writer, original, Options);
-        byte[] encoded = writer.Encode();
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
+        converter.Write(writer, original);
+        byte[] encoded = buffer.WrittenSpan.ToArray();
 
-        var reader = new CborReader(encoded, CborConformanceMode.Lax);
-        var decoded = converter.Read(ref reader, typeof(StatusListToken), Options);
+        var reader = new CborReader(encoded, CborOptions.Lax);
+        var decoded = converter.Read(reader);
 
         Assert.AreEqual(original.Subject, decoded.Subject);
         Assert.AreEqual(original.IssuedAt, decoded.IssuedAt);
@@ -190,12 +188,13 @@ internal sealed class StatusListCborConverterTests
         var original = new StatusListToken(ExampleTokenSubject, BaseTime, list);
 
         var converter = new StatusListTokenCborConverter(Pool);
-        var writer = new CborWriter(CborConformanceMode.Canonical);
-        converter.Write(writer, original, Options);
-        byte[] encoded = writer.Encode();
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
+        converter.Write(writer, original);
+        byte[] encoded = buffer.WrittenSpan.ToArray();
 
-        var reader = new CborReader(encoded, CborConformanceMode.Lax);
-        var decoded = converter.Read(ref reader, typeof(StatusListToken), Options);
+        var reader = new CborReader(encoded, CborOptions.Lax);
+        var decoded = converter.Read(reader);
 
         Assert.AreEqual(original.Subject, decoded.Subject);
         Assert.AreEqual(original.IssuedAt, decoded.IssuedAt);
@@ -206,56 +205,127 @@ internal sealed class StatusListCborConverterTests
     }
 
 
+    /// <summary>
+    /// "ttl: RECOMMENDED. … The value of the claim MUST be a positive number encoded in JSON as a
+    /// number." — the JSON tier's converter already refuses a non-positive <c>ttl</c> on read; the CWT
+    /// tier's own read must refuse the same value for symmetry, rather than accepting on the wire what
+    /// the model itself (since a non-positive <c>ttl</c> is refused at construction) could never have
+    /// written.
+    /// See <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list-21#section-5.1">Token Status List, Section 5.1</see>.
+    /// </summary>
+    [TestMethod]
+    public void StatusListTokenWithNonPositiveTimeToLiveThrowsCborContentException()
+    {
+        using var list = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
+        byte[] compressed = list.Compress();
+
+        //Map keys are written in ascending numeric order (2, 6, 65533, 65534), as
+        //CborConformanceMode.RfcCanonical requires.
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
+        writer.WriteStartMap(4);
+        writer.WriteInt32(StatusListCborConstants.Subject);
+        writer.WriteTextString(ExampleTokenSubject);
+        writer.WriteInt32(StatusListCborConstants.IssuedAt);
+        writer.WriteInt64(BaseTime.ToUnixTimeSeconds());
+        writer.WriteInt32(StatusListCborConstants.StatusList);
+        writer.WriteStartMap(2);
+        writer.WriteTextString(StatusListCborConstants.Bits);
+        writer.WriteInt32((int)StatusListBitSize.OneBit);
+        writer.WriteTextString(StatusListCborConstants.List);
+        writer.WriteByteString(compressed);
+        writer.WriteEndMap();
+        writer.WriteInt32(StatusListCborConstants.TimeToLive);
+        writer.WriteInt64(0);
+        writer.WriteEndMap();
+        byte[] encoded = buffer.WrittenSpan.ToArray();
+
+        var converter = new StatusListTokenCborConverter(Pool);
+        var reader = new CborReader(encoded, CborOptions.Lax);
+
+        Assert.ThrowsExactly<CborContentException>(() => converter.Read(reader));
+    }
+
+
     [TestMethod]
     public void StatusListMissingBitsThrowsCborContentException()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteTextString("lst");
         writer.WriteByteString([0x00]);
         writer.WriteEndMap();
-        byte[] encoded = writer.Encode();
+        byte[] encoded = buffer.WrittenSpan.ToArray();
 
         var converter = new StatusListCborConverter(Pool);
-        var reader = new CborReader(encoded, CborConformanceMode.Lax);
+        var reader = new CborReader(encoded, CborOptions.Lax);
 
         Assert.ThrowsExactly<CborContentException>(() =>
-            converter.Read(ref reader, typeof(StatusListType), Options));
+            converter.Read(reader));
     }
 
 
     [TestMethod]
     public void StatusListMissingLstThrowsCborContentException()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteTextString("bits");
         writer.WriteInt32(1);
         writer.WriteEndMap();
-        byte[] encoded = writer.Encode();
+        byte[] encoded = buffer.WrittenSpan.ToArray();
 
         var converter = new StatusListCborConverter(Pool);
-        var reader = new CborReader(encoded, CborConformanceMode.Lax);
+        var reader = new CborReader(encoded, CborOptions.Lax);
 
         Assert.ThrowsExactly<CborContentException>(() =>
-            converter.Read(ref reader, typeof(StatusListType), Options));
+            converter.Read(reader));
     }
 
 
     [TestMethod]
     public void ReferenceMissingIdxThrowsCborContentException()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteTextString("uri");
         writer.WriteTextString(ExampleTokenSubject);
         writer.WriteEndMap();
-        byte[] encoded = writer.Encode();
+        byte[] encoded = buffer.WrittenSpan.ToArray();
 
         var converter = new StatusListReferenceCborConverter();
-        var reader = new CborReader(encoded, CborConformanceMode.Lax);
+        var reader = new CborReader(encoded, CborOptions.Lax);
 
         Assert.ThrowsExactly<CborContentException>(() =>
-            converter.Read(ref reader, typeof(StatusListReference), Options));
-    }    
+            converter.Read(reader));
+    }
+
+
+    /// <summary>
+    /// "Each index identifies a contiguous block of bits in the byte array, with the blocks being
+    /// packed into bytes from the least significant bit (&quot;0&quot;) to the most significant bit
+    /// (&quot;7&quot;)." A <see cref="StatusListType"/> packed <see cref="BitOrder.MostSignificantFirst"/>
+    /// (the W3C Bitstring Status List's order) is refused rather than written as a Section 4.3 CBOR
+    /// map with its bytes copied as-is.
+    /// See <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list-21#section-4.1">Token Status List, Section 4.1</see>.
+    /// </summary>
+    [TestMethod]
+    public void WritingRefusesAListPackedMostSignificantFirst()
+    {
+        using var list = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool, BitOrder.MostSignificantFirst);
+        list[0] = StatusTypes.Invalid;
+
+        var converter = new StatusListCborConverter(Pool);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
+
+        var thrown = Assert.ThrowsExactly<ArgumentException>(() =>
+            converter.Write(writer, list));
+
+        Assert.AreEqual("value", thrown.ParamName, "The refusal must name the parameter carrying the wrongly ordered list.");
+        Assert.Contains("section-4.1", thrown.Message, StringComparison.OrdinalIgnoreCase, "The refusal must anchor to Section 4.1.");
+    }
 }

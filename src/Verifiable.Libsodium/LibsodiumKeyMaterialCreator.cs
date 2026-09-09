@@ -125,17 +125,26 @@ namespace Verifiable.Libsodium
             }
 
             IMemoryOwner<byte> privateKeyOwner = memoryPool.Rent(LibsodiumCrypto.X25519ScalarLength, AllocationKind.Pinned);
-            LibsodiumCrypto.RandomBytes(privateKeyOwner.Memory.Span[..LibsodiumCrypto.X25519ScalarLength]);
-
-            IMemoryOwner<byte> publicKeyOwner = memoryPool.Rent(LibsodiumCrypto.X25519PointLength);
-            int scalarMultResult = LibsodiumCrypto.ScalarMultBase(
-                publicKeyOwner.Memory.Span[..LibsodiumCrypto.X25519PointLength],
-                privateKeyOwner.Memory.Span[..LibsodiumCrypto.X25519ScalarLength]);
-            if(scalarMultResult != 0)
+            IMemoryOwner<byte>? publicKeyOwner = null;
+            try
             {
-                publicKeyOwner.Dispose();
+                LibsodiumCrypto.RandomBytes(privateKeyOwner.Memory.Span[..LibsodiumCrypto.X25519ScalarLength]);
+
+                publicKeyOwner = memoryPool.Rent(LibsodiumCrypto.X25519PointLength);
+                int scalarMultResult = LibsodiumCrypto.ScalarMultBase(
+                    publicKeyOwner.Memory.Span[..LibsodiumCrypto.X25519PointLength],
+                    privateKeyOwner.Memory.Span[..LibsodiumCrypto.X25519ScalarLength]);
+                if(scalarMultResult != 0)
+                {
+                    throw new CryptographicException("libsodium failed to derive an X25519 public key.");
+                }
+            }
+            catch
+            {
+                publicKeyOwner?.Dispose();
                 privateKeyOwner.Dispose();
-                throw new CryptographicException("libsodium failed to derive an X25519 public key.");
+
+                throw;
             }
 
             var publicKeyMemory = new PublicKeyMemory(publicKeyOwner, CryptoTags.X25519PublicKey);

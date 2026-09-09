@@ -105,7 +105,7 @@ public sealed record CBAdESImprintCountersignatureStructureContext: CBAdESImprin
 
 /// <summary>
 /// The three-way source union for <see cref="BuildPayloadTimestampMessageImprintInputDelegate"/> — a
-/// JCose-visible mirror of <c>Verifiable.Cbor.CBAdESPayloadImprintSource</c> (the S2 shared vocabulary that
+/// JCose-visible mirror of <c>Verifiable.Cbor.CBAdESPayloadImprintSource</c> (the shared vocabulary that
 /// type's own remarks document), since that Cbor-only type cannot appear in a JCose delegate's public
 /// signature. The Cbor-side adapter (<c>CBAdESLevelMessageImprintAdapters.BuildPayloadTimestampMessageImprintInput</c>)
 /// translates one arm of THIS type into the matching arm of the Cbor-only type before delegating straight
@@ -175,9 +175,10 @@ public sealed class CBAdESDetachedPayloadTimestampImprintSource : CBAdESPayloadT
 /// <summary>
 /// The <c>sigD</c>-present arm of <see cref="CBAdESPayloadTimestampImprintSource"/>: <see cref="ProcessedParBytes"/>
 /// is the ordered sequence of byte views already produced by clause 5.2.8.2.2's <c>pars</c>-processing
-/// algorithm (the S3 dereference seam, <see cref="CBAdESDetachedObjectDereferencing"/> — this type receives
-/// its output, it does not itself dereference anything). CB-5.2.6-06: the resulting concatenation is raw,
-/// with NO CBOR byte-string wrapping (contrast with the <c>arcTst</c> builder's own step 7).
+/// algorithm in <see cref="CBAdESDetachedObjectDereferencing"/> — this type receives that dereferenced
+/// output; it does not itself dereference a <c>pars</c> URI-reference. CB-5.2.6-06: the resulting
+/// concatenation is raw, with NO CBOR byte-string wrapping (contrast with the <c>arcTst</c> builder's own
+/// step 7).
 /// </summary>
 /// <param name="ProcessedParBytes">
 /// The ordered, already-dereferenced byte sequences to concatenate. Must be non-empty (CB-5.2.8-06). Each
@@ -214,7 +215,7 @@ public sealed class CBAdESSigDProcessedPayloadTimestampImprintSource : CBAdESPay
 
 /// <summary>
 /// Builds the <c>adoTst</c> message-imprint input (clause 5.2.6) from <paramref name="source"/>. A thin
-/// seam over <c>CBAdESMessageImprints.BuildPayloadTimestampMessageImprintInput</c> (Verifiable.Cbor, S2) —
+/// seam over <c>CBAdESMessageImprints.BuildPayloadTimestampMessageImprintInput</c> (implemented in Verifiable.Cbor) —
 /// zero algorithm re-implementation; see <see cref="CBAdESPayloadTimestampImprintSource"/>'s remarks for why
 /// this seam exists beside the Cbor-only builder rather than exposing it directly.
 /// </summary>
@@ -228,7 +229,7 @@ public delegate PooledMemory BuildPayloadTimestampMessageImprintInputDelegate(CB
 /// Builds the <c>sigRTst</c> message-imprint input (Annex A.1.2.1.2): the COSE signature value, followed by
 /// the <c>sigTst</c>/<c>refs</c> elements from <paramref name="uHeadersEncodedArray"/>, in wire order. A
 /// thin seam over <c>CBAdESMessageImprints.TryBuildSignatureAndReferencesTimestampMessageImprintInput</c>
-/// (Verifiable.Cbor, S2) — the shipped builder's own signature already avoids Cbor-only types, so the
+/// (implemented in Verifiable.Cbor) — the shipped builder's own signature already avoids Cbor-only types, so the
 /// Cbor-side implementation is a direct method-group assignment (zero adapter logic, zero algorithm
 /// re-implementation).
 /// </summary>
@@ -270,7 +271,7 @@ public delegate bool TryBuildSignatureAndReferencesTimestampMessageImprintInputD
 /// Builds the <c>rfsTst</c> message-imprint input (Annex A.1.2.2.2): identical to
 /// <see cref="TryBuildSignatureAndReferencesTimestampMessageImprintInputDelegate"/> minus the leading
 /// signature value. A thin seam over <c>CBAdESMessageImprints.TryBuildReferencesOnlyTimestampMessageImprintInput</c>
-/// (Verifiable.Cbor, S2) — same direct method-group registration as the <c>sigRTst</c> seam.
+/// (implemented in Verifiable.Cbor) — same direct method-group registration as the <c>sigRTst</c> seam.
 /// </summary>
 /// <param name="uHeadersEncodedArray">
 /// The encoded <c>uHeaders</c> CBOR array bytes from the layer the caller has already selected, or

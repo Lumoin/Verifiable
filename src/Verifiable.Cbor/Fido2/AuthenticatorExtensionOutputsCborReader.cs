@@ -1,4 +1,4 @@
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Fido2;
 
 namespace Verifiable.Cbor.Fido2;
@@ -45,7 +45,7 @@ public static class AuthenticatorExtensionOutputsCborReader
     {
         try
         {
-            var reader = new CborReader(authenticatorExtensionOutputs, CborConformanceMode.Ctap2Canonical);
+            var reader = new CborReader(authenticatorExtensionOutputs, CborOptions.Ctap2Canonical);
             int? entryCount = reader.ReadStartMap();
 
             var outputs = new List<Fido2ExtensionOutput>();
@@ -69,7 +69,7 @@ public static class AuthenticatorExtensionOutputsCborReader
 
             return outputs;
         }
-        catch(Exception exception) when(exception is CborContentException or InvalidOperationException or OverflowException or FormatException)
+        catch(Exception exception) when(exception is CborException or InvalidOperationException or OverflowException or FormatException)
         {
             throw new Fido2FormatException("The authenticator data extensions bytes are not valid CTAP2 canonical CBOR conforming to WebAuthn L3 section 9.5.", exception);
         }

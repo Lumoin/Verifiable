@@ -22,7 +22,7 @@ internal sealed class BlankNodeRelabelingW3CTests
     /// The HMAC key from W3C test vectors (Example 71).
     /// 32 bytes as required by HMAC-SHA256.
     /// </summary>
-    private static readonly byte[] W3CHmacKey = Convert.FromHexString(
+    private static byte[] W3CHmacKey { get; } = Convert.FromHexString(
         "00112233445566778899AABBCCDDEEFF00112233445566778899AABBCCDDEEFF");
 
 
@@ -97,7 +97,7 @@ internal sealed class BlankNodeRelabelingW3CTests
         string relabeled = await BlankNodeRelabeling.RelabelNQuadAsync(
             CanonicalStatement,
             W3CHmacKey,
-            MicrosoftHmacFunctions.ComputeHmacAsync,
+            MicrosoftHmacFunctionsAdapter.ComputeHmacAsync,
             TestSetup.Base64UrlEncoder,
             BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
@@ -123,7 +123,7 @@ internal sealed class BlankNodeRelabelingW3CTests
         string actual = await BlankNodeRelabeling.RelabelNQuadAsync(
             CanonicalStatement,
             W3CHmacKey,
-            MicrosoftHmacFunctions.ComputeHmacAsync,
+            MicrosoftHmacFunctionsAdapter.ComputeHmacAsync,
             TestSetup.Base64UrlEncoder,
             BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
@@ -149,7 +149,7 @@ internal sealed class BlankNodeRelabelingW3CTests
         string actual = await BlankNodeRelabeling.RelabelNQuadAsync(
             CanonicalStatement,
             W3CHmacKey,
-            MicrosoftHmacFunctions.ComputeHmacAsync,
+            MicrosoftHmacFunctionsAdapter.ComputeHmacAsync,
             TestSetup.Base64UrlEncoder,
             BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
@@ -175,7 +175,7 @@ internal sealed class BlankNodeRelabelingW3CTests
         string actual = await BlankNodeRelabeling.RelabelNQuadAsync(
             CanonicalStatement,
             W3CHmacKey,
-            MicrosoftHmacFunctions.ComputeHmacAsync,
+            MicrosoftHmacFunctionsAdapter.ComputeHmacAsync,
             TestSetup.Base64UrlEncoder,
             BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
@@ -201,7 +201,7 @@ internal sealed class BlankNodeRelabelingW3CTests
         string actual = await BlankNodeRelabeling.RelabelNQuadAsync(
             CanonicalStatement,
             W3CHmacKey,
-            MicrosoftHmacFunctions.ComputeHmacAsync,
+            MicrosoftHmacFunctionsAdapter.ComputeHmacAsync,
             TestSetup.Base64UrlEncoder,
             BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
@@ -229,7 +229,7 @@ internal sealed class BlankNodeRelabelingW3CTests
         RelabelingResult result = await BlankNodeRelabeling.RelabelNQuadsWithMapAsync(
             canonicalStatements,
             W3CHmacKey,
-            MicrosoftHmacFunctions.ComputeHmacAsync,
+            MicrosoftHmacFunctionsAdapter.ComputeHmacAsync,
             TestSetup.Base64UrlEncoder,
             BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
@@ -305,7 +305,7 @@ internal sealed class BlankNodeRelabelingW3CTests
         IReadOnlyList<string> actualRelabeled = await BlankNodeRelabeling.RelabelNQuadsAsync(
             canonicalStatements,
             W3CHmacKey,
-            MicrosoftHmacFunctions.ComputeHmacAsync,
+            MicrosoftHmacFunctionsAdapter.ComputeHmacAsync,
             TestSetup.Base64UrlEncoder,
             BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);

@@ -246,6 +246,8 @@ public readonly struct XAdESSignatureProductionPlaceV2: IEquatable<XAdESSignatur
 
         if(scan == ElementScanResult.Found)
         {
+            //One disjunct per xsd:sequence child this element can repeat; a named predicate per child
+            //would only rename the grammar, not simplify it.
             bool isRepeat = (hasCity && XmlSignatureModelGrammar.IsElement(table, child, XAdESIdentifiers.XAdESNamespaceV132Utf8, "City"u8))
                 || (hasStreetAddress && XmlSignatureModelGrammar.IsElement(table, child, XAdESIdentifiers.XAdESNamespaceV132Utf8, "StreetAddress"u8))
                 || (hasStateOrProvince && XmlSignatureModelGrammar.IsElement(table, child, XAdESIdentifiers.XAdESNamespaceV132Utf8, "StateOrProvince"u8))

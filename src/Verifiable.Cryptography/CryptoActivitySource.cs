@@ -41,5 +41,5 @@ public static class CryptoActivitySource
     /// The shared <see cref="ActivitySource"/> instance. All backends and
     /// <see cref="SensitiveMemory"/> subtypes use this source.
     /// </summary>
-    public static readonly ActivitySource Source = new(Name);
+    public static ActivitySource Source { get; } = new(Name);
 }

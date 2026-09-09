@@ -10,9 +10,9 @@ namespace Verifiable.Tests.Cryptography;
 internal sealed class SignatureTests
 {
     //Deterministic test bytes for signature content.
-    private static readonly byte[] SignatureBytes1 = [0x30, 0x44, 0x02, 0x20, 0xAB, 0xCD, 0xEF, 0x01];
-    private static readonly byte[] SignatureBytes2 = [0x30, 0x44, 0x02, 0x20, 0xFF, 0xEE, 0xDD, 0xCC];
-    private static readonly byte[] LongSignatureBytes =
+    private static byte[] SignatureBytes1 { get; } = [0x30, 0x44, 0x02, 0x20, 0xAB, 0xCD, 0xEF, 0x01];
+    private static byte[] SignatureBytes2 { get; } = [0x30, 0x44, 0x02, 0x20, 0xFF, 0xEE, 0xDD, 0xCC];
+    private static byte[] LongSignatureBytes { get; } =
     [
         0x30, 0x44, 0x02, 0x20, 0xAB, 0xCD, 0xEF, 0x01,
         0x23, 0x45, 0x67, 0x89, 0xDE, 0xAD, 0xBE, 0xEF,
@@ -64,6 +64,11 @@ internal sealed class SignatureTests
     }
 
 
+    /// <summary>
+    /// <see cref="Signature.Equals(object?)"/> reports <see langword="false"/> for a non-<see cref="Signature"/> object.
+    /// The comparisons are deliberately cross-type: they are the <see cref="object.Equals(object?)"/> contract's own
+    /// "different type" case, proved here with a bare <see cref="object"/> and a <see cref="string"/> operand.
+    /// </summary>
     [TestMethod]
     public void EqualsReturnsFalseForDifferentType()
     {
@@ -153,10 +158,13 @@ internal sealed class SignatureTests
     }
 
 
+    /// <summary>Disposing the same signature twice is safe; the two calls below are explicit (in addition to
+    /// the <see langword="using"/> declaration's own release at scope exit) because the repeated call is
+    /// itself the behaviour under test.</summary>
     [TestMethod]
     public void DisposeReleasesMemory()
     {
-        var sig = CreateSignature(SignatureBytes1, CryptoTags.P256Signature);
+        using var sig = CreateSignature(SignatureBytes1, CryptoTags.P256Signature);
         sig.Dispose();
 
         //Double dispose should not throw.

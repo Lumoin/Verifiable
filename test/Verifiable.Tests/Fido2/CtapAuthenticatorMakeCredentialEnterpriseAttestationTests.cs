@@ -2,6 +2,8 @@ using System;
 using System.Buffers;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
+using Lumoin.Veritas.Cbor;
+using Verifiable.Cbor;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Cbor.Fido2;
 using Verifiable.Cryptography;
@@ -68,7 +70,7 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
     [DataRow(7, DisplayName = "value 7 (out of range)")]
     public async Task EnterpriseAttestationOnNonCapableAuthenticatorReturnsInvalidParameterRegardlessOfValue(int enterpriseAttestationValue)
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator($"mc-ep-noncapable-{enterpriseAttestationValue}");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator($"mc-ep-noncapable-{enterpriseAttestationValue}",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool, enterpriseAttestation: enterpriseAttestationValue);
@@ -127,13 +129,18 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
     /// positive half) and does NOT verify against the newly minted CREDENTIAL's own public key (the
     /// 11's negative half — proving the certified mint never signs with the credential key).
     /// </summary>
+    /// <summary><c>provisioning</c>/<c>attestationPublicKey</c> are tuple-deconstruction targets, disposed
+    /// in the outer <see langword="finally"/> block below because a <see langword="using"/> declaration
+    /// cannot target one; <c>statement.X5c</c> is a collection of disposables, released by the inner
+    /// <see langword="foreach"/> in its own <see langword="finally"/> block for the same reason a
+    /// <see langword="using"/> declaration cannot target a collection's elements.</summary>
     [TestMethod]
     public async Task EnterpriseAttestationValueOneWithListedRpIdGrantsCertifiedAttestationSignedByAttestationKey()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         (CtapEnterpriseAttestationProvisioning provisioning, PublicKeyMemory attestationPublicKey) =
             CtapEnterpriseAttestationFixtures.BuildProvisioningWithAttestationPublicKey(pool);
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("mc-ep-value1-listed", enterpriseAttestationProvisioning: provisioning);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("mc-ep-value1-listed", BaseMemoryPool.Shared, enterpriseAttestationProvisioning: provisioning);
         try
         {
             var enableRequest = new CtapAuthenticatorConfigRequest(SubCommand: WellKnownCtapAuthenticatorConfigSubCommands.EnableEnterpriseAttestation);
@@ -257,6 +264,10 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
     /// matches an entry on the authenticator's pre-configured RP ID list" — proving value 2's own no-
     /// list-check disposition, independent of value 1's vendor-facilitated gate.
     /// </summary>
+    /// <summary><c>statement.X5c</c> is a collection of disposables, not one disposable value: a
+    /// <see langword="using"/> declaration disposes one variable's own value, not a collection's elements,
+    /// so the <see langword="foreach"/> in the <see langword="finally"/> block below is the release
+    /// point.</summary>
     [TestMethod]
     public async Task EnterpriseAttestationValueTwoWithUnlistedRpIdGrantsCertifiedAttestationWithoutListCheck()
     {
@@ -358,7 +369,7 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapAuthenticatorSimulator capableEnabledSimulator = await CtapEnterpriseAttestationFixtures.CreateCapableEnabledSimulatorAsync(
             "mc-ep-r15a-capable", pool, preConfiguredRpIds: null, TestContext.CancellationToken);
-        using CtapAuthenticatorSimulator nonCapableSimulator = CreateSimulator("mc-ep-r15a-noncapable");
+        using CtapAuthenticatorSimulator nonCapableSimulator = CreateSimulator("mc-ep-r15a-noncapable",BaseMemoryPool.Shared);
 
         CtapMakeCredentialResponse capableEnabledDecoded = await SendPlainMakeCredentialAsync(capableEnabledSimulator, pool);
         CtapMakeCredentialResponse nonCapableDecoded = await SendPlainMakeCredentialAsync(nonCapableSimulator, pool);
@@ -473,7 +484,7 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
     /// </summary>
     private static void AssertAttStmtKeyOrderIsAlgSigX5c(ReadOnlyMemory<byte> attStmt)
     {
-        var reader = new System.Formats.Cbor.CborReader(attStmt, System.Formats.Cbor.CborConformanceMode.Ctap2Canonical);
+        var reader = new CborReader(attStmt, CborOptions.Ctap2Canonical);
         int? entryCount = reader.ReadStartMap();
         Assert.AreEqual(3, entryCount);
 

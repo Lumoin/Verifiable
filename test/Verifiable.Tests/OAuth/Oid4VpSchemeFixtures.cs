@@ -32,22 +32,22 @@ internal static class Oid4VpSchemeFixtures
 {
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
-    private static readonly JwtHeaderSerializer JwtHeaderSerializer =
+    private static JwtHeaderSerializer JwtHeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)header, TestSetup.DefaultSerializationOptions);
 
-    private static readonly JwtPayloadSerializer JwtPayloadSerializer =
+    private static JwtPayloadSerializer JwtPayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)payload, TestSetup.DefaultSerializationOptions);
 
     /// <summary>Header deserializer mirroring the authorization server's wiring.</summary>
-    private static readonly JwtHeaderDeserializer HeaderDeserializer = static bytes =>
+    private static JwtHeaderDeserializer HeaderDeserializer { get; } = static bytes =>
         JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
             bytes, TestSetup.DefaultSerializationOptions)
         ?? throw new FormatException("Header JSON parsed to null.");
 
     /// <summary>Payload deserializer mirroring the authorization server's wiring.</summary>
-    private static readonly JwtPayloadDeserializer PayloadDeserializer = static bytes =>
+    private static JwtPayloadDeserializer PayloadDeserializer { get; } = static bytes =>
         JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
             bytes, TestSetup.DefaultSerializationOptions)
         ?? throw new FormatException("Payload JSON parsed to null.");
@@ -148,6 +148,7 @@ internal static class Oid4VpSchemeFixtures
             await new Verifiable.Core.Did.Methods.Key.KeyDidBuilder().BuildAsync(
                 vmKeys.PublicKey,
                 Verifiable.Core.Model.Did.CryptographicSuites.MultikeyVerificationMethodTypeInfo.Instance,
+                BaseMemoryPool.Shared,
                 includeDefaultContext: false,
                 cancellationToken).ConfigureAwait(false);
 
@@ -274,6 +275,9 @@ internal static class Oid4VpSchemeFixtures
         }
         finally
         {
+            //registrationChain is a collection of disposables, not one disposable value: a using
+            //declaration disposes one variable's own value, not a collection's elements, so this foreach
+            //is the release point.
             foreach(PkiCertificateMemory cert in registrationChain)
             {
                 cert.Dispose();
@@ -346,6 +350,9 @@ internal static class Oid4VpSchemeFixtures
         }
         finally
         {
+            //registrationChain is a collection of disposables, not one disposable value: a using
+            //declaration disposes one variable's own value, not a collection's elements, so this foreach
+            //is the release point.
             foreach(PkiCertificateMemory cert in registrationChain)
             {
                 cert.Dispose();

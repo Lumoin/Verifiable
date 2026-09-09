@@ -88,7 +88,6 @@ public static class JarmResponseValidation
         string? alg = null;
         string? kid = null;
         IReadOnlyDictionary<string, object>? claims = null;
-        bool isStructurallyValid = false;
 
         string[] parts = responseJwt.Split('.');
         if(parts.Length == 3 && parts[0].Length > 0 && parts[1].Length > 0)
@@ -102,16 +101,17 @@ public static class JarmResponseValidation
 
                 using IMemoryOwner<byte> payloadBytes = base64UrlDecoder(parts[1], memoryPool);
                 claims = payloadDeserializer(payloadBytes.Memory.Span);
-
-                isStructurallyValid = claims is not null;
             }
             catch(Exception ex) when(ex is FormatException or InvalidOperationException)
             {
-                isStructurallyValid = false;
+                claims = null;
             }
         }
 
-        if(!isStructurallyValid)
+        //The structural-validity check is this direct null pattern (rather than a
+        //separate bool) so the compiler's flow analysis proves every later reference
+        //to claims non-null, with no null-forgiving operator needed downstream.
+        if(claims is null)
         {
             return new JarmResponseValidationResult();
         }
@@ -119,7 +119,7 @@ public static class JarmResponseValidation
         //§2.4 step 2 + §4: iss must identify the expected issuer and, when a known-issuer
         //resolver is supplied, resolve to a known, uniquely-configured authorization server —
         //checked before any key resolution per the §5.1 DoS consideration.
-        bool isIssuerValid = claims!.TryGetValue(WellKnownJwtClaimNames.Iss, out object? issValue)
+        bool isIssuerValid = claims.TryGetValue(WellKnownJwtClaimNames.Iss, out object? issValue)
             && issValue is string iss
             && string.Equals(iss, expectedIssuer, StringComparison.Ordinal)
             && (isKnownAuthorizationServerIssuer is null || isKnownAuthorizationServerIssuer(iss));

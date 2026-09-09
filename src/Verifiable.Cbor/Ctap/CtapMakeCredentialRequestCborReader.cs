@@ -2,7 +2,7 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Cbor.Fido2;
 using Verifiable.Cryptography;
 using Verifiable.Fido2;
@@ -69,20 +69,20 @@ public static class CtapMakeCredentialRequestCborReader
         try
         {
             byte[] clientDataHashBytes = new CborReader(
-                RequireMember(parameters, WellKnownCtapMakeCredentialRequestKeys.ClientDataHash, "clientDataHash"), CborConformanceMode.Ctap2Canonical).ReadByteString();
+                RequireMember(parameters, WellKnownCtapMakeCredentialRequestKeys.ClientDataHash, "clientDataHash"), CborOptions.Ctap2Canonical, pool).ReadByteString();
 
             CtapPublicKeyCredentialRpEntity rp = CtapCommandEntityCborCodec.ReadRpEntity(
-                new CborReader(RequireMember(parameters, WellKnownCtapMakeCredentialRequestKeys.Rp, "rp"), CborConformanceMode.Ctap2Canonical));
+                new CborReader(RequireMember(parameters, WellKnownCtapMakeCredentialRequestKeys.Rp, "rp"), CborOptions.Ctap2Canonical, pool));
 
             user = CtapCommandEntityCborCodec.ReadUserEntity(
-                new CborReader(RequireMember(parameters, WellKnownCtapMakeCredentialRequestKeys.User, "user"), CborConformanceMode.Ctap2Canonical),
+                new CborReader(RequireMember(parameters, WellKnownCtapMakeCredentialRequestKeys.User, "user"), CborOptions.Ctap2Canonical, pool),
                 pool);
 
             List<PublicKeyCredentialParameters> pubKeyCredParams = CtapCommandEntityCborCodec.ReadParametersArray(
-                new CborReader(RequireMember(parameters, WellKnownCtapMakeCredentialRequestKeys.PubKeyCredParams, "pubKeyCredParams"), CborConformanceMode.Ctap2Canonical));
+                new CborReader(RequireMember(parameters, WellKnownCtapMakeCredentialRequestKeys.PubKeyCredParams, "pubKeyCredParams"), CborOptions.Ctap2Canonical, pool));
 
             excludeList = parameters.TryGetValue(WellKnownCtapMakeCredentialRequestKeys.ExcludeList, out ReadOnlyMemory<byte> excludeListCbor)
-                ? CtapCommandEntityCborCodec.ReadDescriptorArray(new CborReader(excludeListCbor, CborConformanceMode.Ctap2Canonical), pool)
+                ? CtapCommandEntityCborCodec.ReadDescriptorArray(new CborReader(excludeListCbor, CborOptions.Ctap2Canonical, pool), pool)
                 : null;
 
             //Assigned via an explicit if/else rather than a ternary: a ternary whose "present" branch is
@@ -113,14 +113,14 @@ public static class CtapMakeCredentialRequestCborReader
             }
 
             CtapCommandOptions? options = parameters.TryGetValue(WellKnownCtapMakeCredentialRequestKeys.Options, out ReadOnlyMemory<byte> optionsCbor)
-                ? CtapCommandEntityCborCodec.ReadOptions(new CborReader(optionsCbor, CborConformanceMode.Ctap2Canonical))
+                ? CtapCommandEntityCborCodec.ReadOptions(new CborReader(optionsCbor, CborOptions.Ctap2Canonical, pool))
                 : null;
 
             //See the remarks on the extensions member above for why this is an if/else, not a ternary.
             ReadOnlyMemory<byte>? pinUvAuthParam;
             if(parameters.TryGetValue(WellKnownCtapMakeCredentialRequestKeys.PinUvAuthParam, out ReadOnlyMemory<byte> pinUvAuthParamCbor))
             {
-                pinUvAuthParam = new CborReader(pinUvAuthParamCbor, CborConformanceMode.Ctap2Canonical).ReadByteString();
+                pinUvAuthParam = new CborReader(pinUvAuthParamCbor, CborOptions.Ctap2Canonical, pool).ReadByteString();
             }
             else
             {
@@ -128,15 +128,15 @@ public static class CtapMakeCredentialRequestCborReader
             }
 
             int? pinUvAuthProtocol = parameters.TryGetValue(WellKnownCtapMakeCredentialRequestKeys.PinUvAuthProtocol, out ReadOnlyMemory<byte> pinUvAuthProtocolCbor)
-                ? checked((int)new CborReader(pinUvAuthProtocolCbor, CborConformanceMode.Ctap2Canonical).ReadInt64())
+                ? checked((int)new CborReader(pinUvAuthProtocolCbor, CborOptions.Ctap2Canonical, pool).ReadInt64())
                 : null;
 
             int? enterpriseAttestation = parameters.TryGetValue(WellKnownCtapMakeCredentialRequestKeys.EnterpriseAttestation, out ReadOnlyMemory<byte> enterpriseAttestationCbor)
-                ? checked((int)new CborReader(enterpriseAttestationCbor, CborConformanceMode.Ctap2Canonical).ReadInt64())
+                ? checked((int)new CborReader(enterpriseAttestationCbor, CborOptions.Ctap2Canonical, pool).ReadInt64())
                 : null;
 
             List<string>? attestationFormatsPreference = parameters.TryGetValue(WellKnownCtapMakeCredentialRequestKeys.AttestationFormatsPreference, out ReadOnlyMemory<byte> attestationFormatsPreferenceCbor)
-                ? CtapCommandEntityCborCodec.ReadStringArray(new CborReader(attestationFormatsPreferenceCbor, CborConformanceMode.Ctap2Canonical))
+                ? CtapCommandEntityCborCodec.ReadStringArray(new CborReader(attestationFormatsPreferenceCbor, CborOptions.Ctap2Canonical, pool))
                 : null;
 
             //DigestValue.Create is deferred to this final step (every other member already decoded
@@ -162,7 +162,7 @@ public static class CtapMakeCredentialRequestCborReader
                 hmacSecret,
                 hmacSecretMc);
         }
-        catch(CborContentException exception)
+        catch(CborException exception)
         {
             DisposeAll(user, excludeList);
             throw new Fido2FormatException(Fido2FormatFailureKind.MalformedCbor, "The authenticatorMakeCredential request parameter bytes are not valid CTAP2 canonical CBOR.", exception);
@@ -222,7 +222,7 @@ public static class CtapMakeCredentialRequestCborReader
         //reader's: it reports whatever value arrived on the wire, including an explicit false.
         static (int? CredProtect, bool? MinPinLength, bool? LargeBlobKey, bool? HmacSecret, CtapGetAssertionHmacSecretInput? HmacSecretMc) ReadExtensionValues(ReadOnlyMemory<byte> extensionsCbor)
         {
-            var reader = new CborReader(extensionsCbor, CborConformanceMode.Ctap2Canonical);
+            var reader = new CborReader(extensionsCbor, CborOptions.Ctap2Canonical);
             int? entryCount = reader.ReadStartMap();
 
             int? credProtect = null;

@@ -77,7 +77,7 @@ internal sealed class Rfc7797JwsTests
             EncodeHeader,
             TestSetup.Base64UrlEncoder,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             BaseMemoryPool.Shared,
             unprotectedHeader: null,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -90,7 +90,7 @@ internal sealed class Rfc7797JwsTests
             base64UrlPayload: false,
             signature.SignatureBytes,
             TestSetup.Base64UrlEncoder,
-            MicrosoftCryptographicFunctions.VerifyP256Async,
+            MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             publicKey.AsReadOnlyMemory(),
             BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -102,7 +102,7 @@ internal sealed class Rfc7797JwsTests
             base64UrlPayload: true,
             signature.SignatureBytes,
             TestSetup.Base64UrlEncoder,
-            MicrosoftCryptographicFunctions.VerifyP256Async,
+            MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             publicKey.AsReadOnlyMemory(),
             BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -116,7 +116,7 @@ internal sealed class Rfc7797JwsTests
             base64UrlPayload: false,
             signature.SignatureBytes,
             TestSetup.Base64UrlEncoder,
-            MicrosoftCryptographicFunctions.VerifyP256Async,
+            MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             publicKey.AsReadOnlyMemory(),
             BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);

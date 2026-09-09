@@ -39,10 +39,10 @@ namespace Verifiable.Apdu;
     Justification = "Intentional factory pattern matching the established convention.")]
 public readonly struct ApduResult<T> : IEquatable<ApduResult<T>>
 {
-    private readonly T? value;
-    private readonly StatusWord statusWord;
-    private readonly uint transportErrorCode;
-    private readonly ResultKind kind;
+    private T? SuccessValue { get; }
+    private StatusWord CardStatusWord { get; }
+    private uint RawTransportErrorCode { get; }
+    private ResultKind Kind { get; }
 
     private enum ResultKind : byte
     {
@@ -53,50 +53,50 @@ public readonly struct ApduResult<T> : IEquatable<ApduResult<T>>
 
     private ApduResult(T value, StatusWord statusWord)
     {
-        this.value = value;
-        this.statusWord = statusWord;
-        kind = ResultKind.Success;
-        transportErrorCode = 0;
+        this.SuccessValue = value;
+        this.CardStatusWord = statusWord;
+        Kind = ResultKind.Success;
+        RawTransportErrorCode = 0;
     }
 
     private ApduResult(StatusWord statusWord)
     {
-        value = default;
-        this.statusWord = statusWord;
-        kind = ResultKind.CardError;
-        transportErrorCode = 0;
+        SuccessValue = default;
+        this.CardStatusWord = statusWord;
+        Kind = ResultKind.CardError;
+        RawTransportErrorCode = 0;
     }
 
     private ApduResult(uint transportErrorCode)
     {
-        value = default;
-        statusWord = default;
-        kind = ResultKind.TransportError;
-        this.transportErrorCode = transportErrorCode;
+        SuccessValue = default;
+        CardStatusWord = default;
+        Kind = ResultKind.TransportError;
+        this.RawTransportErrorCode = transportErrorCode;
     }
 
     /// <summary>
     /// Gets a value indicating whether the operation succeeded.
     /// </summary>
     [MemberNotNullWhen(true, nameof(Value))]
-    public bool IsSuccess => kind == ResultKind.Success;
+    public bool IsSuccess => Kind == ResultKind.Success;
 
     /// <summary>
     /// Gets a value indicating whether the card returned an error or warning status word.
     /// </summary>
-    public bool IsCardError => kind == ResultKind.CardError;
+    public bool IsCardError => Kind == ResultKind.CardError;
 
     /// <summary>
     /// Gets a value indicating whether transport to the card failed.
     /// </summary>
-    public bool IsTransportError => kind == ResultKind.TransportError;
+    public bool IsTransportError => Kind == ResultKind.TransportError;
 
     /// <summary>
     /// Gets the success value.
     /// </summary>
     /// <exception cref="InvalidOperationException">Thrown when accessing on a non-success result.</exception>
     public T Value => IsSuccess
-        ? value!
+        ? SuccessValue!
         : throw new InvalidOperationException(GetValueAccessErrorMessage());
 
     /// <summary>
@@ -107,7 +107,7 @@ public readonly struct ApduResult<T> : IEquatable<ApduResult<T>>
     /// </remarks>
     /// <exception cref="InvalidOperationException">Thrown when accessing on a transport error result.</exception>
     public StatusWord StatusWord => !IsTransportError
-        ? statusWord
+        ? CardStatusWord
         : throw new InvalidOperationException("Status word is not available for transport errors.");
 
     /// <summary>
@@ -115,37 +115,37 @@ public readonly struct ApduResult<T> : IEquatable<ApduResult<T>>
     /// </summary>
     /// <exception cref="InvalidOperationException">Thrown when accessing on a non-transport-error result.</exception>
     public uint TransportErrorCode => IsTransportError
-        ? transportErrorCode
+        ? RawTransportErrorCode
         : throw new InvalidOperationException("Transport error code is only available for transport errors.");
 
     /// <summary>
     /// Gets a value indicating whether the card response is a warning (<c>62xx</c> or <c>63xx</c>).
     /// </summary>
-    public bool IsWarning => IsCardError && statusWord.IsWarning;
+    public bool IsWarning => IsCardError && CardStatusWord.IsWarning;
 
     /// <summary>
     /// Gets a value indicating whether the card response is a retry counter warning (<c>63Cx</c>).
     /// </summary>
-    public bool IsRetryCounterWarning => IsCardError && statusWord.IsRetryCounterWarning;
+    public bool IsRetryCounterWarning => IsCardError && CardStatusWord.IsRetryCounterWarning;
 
     /// <summary>
     /// Gets the remaining retry count when <see cref="IsRetryCounterWarning"/> is <see langword="true"/>.
     /// </summary>
-    public int RemainingRetries => IsRetryCounterWarning ? statusWord.RetryCount : 0;
+    public int RemainingRetries => IsRetryCounterWarning ? CardStatusWord.RetryCount : 0;
 
     /// <summary>
     /// Gets a value indicating whether the error is security-related
     /// (<c>6982</c> security status not satisfied or <c>6983</c> authentication blocked).
     /// </summary>
     public bool IsSecurityError => IsCardError
-        && (statusWord.IsSecurityStatusNotSatisfied || statusWord.IsAuthenticationMethodBlocked);
+        && (CardStatusWord.IsSecurityStatusNotSatisfied || CardStatusWord.IsAuthenticationMethodBlocked);
 
     /// <summary>
     /// Gets a value indicating whether the referenced file, application, or data
     /// was not found (<c>6A82</c> or <c>6A88</c>).
     /// </summary>
     public bool IsNotFound => IsCardError
-        && (statusWord.IsFileOrAppNotFound || statusWord.IsReferencedDataNotFound);
+        && (CardStatusWord.IsFileOrAppNotFound || CardStatusWord.IsReferencedDataNotFound);
 
     /// <summary>
     /// Creates a successful result.
@@ -185,7 +185,7 @@ public readonly struct ApduResult<T> : IEquatable<ApduResult<T>>
     {
         if(IsSuccess)
         {
-            result = value!;
+            result = SuccessValue!;
             return true;
         }
 
@@ -210,11 +210,11 @@ public readonly struct ApduResult<T> : IEquatable<ApduResult<T>>
         ArgumentNullException.ThrowIfNull(onCardError);
         ArgumentNullException.ThrowIfNull(onTransportError);
 
-        return kind switch
+        return Kind switch
         {
-            ResultKind.Success => onSuccess(value!, statusWord),
-            ResultKind.CardError => onCardError(statusWord),
-            ResultKind.TransportError => onTransportError(transportErrorCode),
+            ResultKind.Success => onSuccess(SuccessValue!, CardStatusWord),
+            ResultKind.CardError => onCardError(CardStatusWord),
+            ResultKind.TransportError => onTransportError(RawTransportErrorCode),
             _ => throw new InvalidOperationException("Invalid result kind.")
         };
     }
@@ -229,11 +229,11 @@ public readonly struct ApduResult<T> : IEquatable<ApduResult<T>>
     {
         ArgumentNullException.ThrowIfNull(mapper);
 
-        return kind switch
+        return Kind switch
         {
-            ResultKind.Success => ApduResult<TNew>.Success(mapper(value!), statusWord),
-            ResultKind.CardError => ApduResult<TNew>.CardError(statusWord),
-            ResultKind.TransportError => ApduResult<TNew>.TransportError(transportErrorCode),
+            ResultKind.Success => ApduResult<TNew>.Success(mapper(SuccessValue!), CardStatusWord),
+            ResultKind.CardError => ApduResult<TNew>.CardError(CardStatusWord),
+            ResultKind.TransportError => ApduResult<TNew>.TransportError(RawTransportErrorCode),
             _ => throw new InvalidOperationException("Invalid result kind.")
         };
     }
@@ -241,17 +241,17 @@ public readonly struct ApduResult<T> : IEquatable<ApduResult<T>>
     /// <inheritdoc />
     public bool Equals(ApduResult<T> other)
     {
-        if(kind != other.kind)
+        if(Kind != other.Kind)
         {
             return false;
         }
 
-        return kind switch
+        return Kind switch
         {
-            ResultKind.Success => EqualityComparer<T>.Default.Equals(value, other.value)
-                && statusWord == other.statusWord,
-            ResultKind.CardError => statusWord == other.statusWord,
-            ResultKind.TransportError => transportErrorCode == other.transportErrorCode,
+            ResultKind.Success => EqualityComparer<T>.Default.Equals(SuccessValue, other.SuccessValue)
+                && CardStatusWord == other.CardStatusWord,
+            ResultKind.CardError => CardStatusWord == other.CardStatusWord,
+            ResultKind.TransportError => RawTransportErrorCode == other.RawTransportErrorCode,
             _ => false
         };
     }
@@ -260,11 +260,11 @@ public readonly struct ApduResult<T> : IEquatable<ApduResult<T>>
     public override bool Equals(object? obj) => obj is ApduResult<T> other && Equals(other);
 
     /// <inheritdoc />
-    public override int GetHashCode() => kind switch
+    public override int GetHashCode() => Kind switch
     {
-        ResultKind.Success => HashCode.Combine(kind, value, statusWord),
-        ResultKind.CardError => HashCode.Combine(kind, statusWord),
-        ResultKind.TransportError => HashCode.Combine(kind, transportErrorCode),
+        ResultKind.Success => HashCode.Combine(Kind, SuccessValue, CardStatusWord),
+        ResultKind.CardError => HashCode.Combine(Kind, CardStatusWord),
+        ResultKind.TransportError => HashCode.Combine(Kind, RawTransportErrorCode),
         _ => 0
     };
 
@@ -279,26 +279,26 @@ public readonly struct ApduResult<T> : IEquatable<ApduResult<T>>
     public static bool operator !=(ApduResult<T> left, ApduResult<T> right) => !left.Equals(right);
 
     /// <inheritdoc />
-    public override string ToString() => kind switch
+    public override string ToString() => Kind switch
     {
-        ResultKind.Success => $"Success({value}, SW=0x{statusWord.Value:X4})",
-        ResultKind.CardError => $"CardError(SW=0x{statusWord.Value:X4})",
-        ResultKind.TransportError => $"TransportError(0x{transportErrorCode:X8})",
+        ResultKind.Success => $"Success({SuccessValue}, SW=0x{CardStatusWord.Value:X4})",
+        ResultKind.CardError => $"CardError(SW=0x{CardStatusWord.Value:X4})",
+        ResultKind.TransportError => $"TransportError(0x{RawTransportErrorCode:X8})",
         _ => "Invalid"
     };
 
-    private string GetValueAccessErrorMessage() => kind switch
+    private string GetValueAccessErrorMessage() => Kind switch
     {
-        ResultKind.CardError => $"Cannot access Value on CardError result. SW=0x{statusWord.Value:X4}.",
-        ResultKind.TransportError => $"Cannot access Value on TransportError result. Error code: 0x{transportErrorCode:X8}.",
+        ResultKind.CardError => $"Cannot access Value on CardError result. SW=0x{CardStatusWord.Value:X4}.",
+        ResultKind.TransportError => $"Cannot access Value on TransportError result. Error code: 0x{RawTransportErrorCode:X8}.",
         _ => "Cannot access Value on non-success result."
     };
 
-    private string DebuggerDisplay => kind switch
+    private string DebuggerDisplay => Kind switch
     {
-        ResultKind.Success => $"Success: {value} (SW=0x{statusWord.Value:X4})",
-        ResultKind.CardError => $"Card Error: SW=0x{statusWord.Value:X4}",
-        ResultKind.TransportError => $"Transport Error: 0x{transportErrorCode:X8}",
+        ResultKind.Success => $"Success: {SuccessValue} (SW=0x{CardStatusWord.Value:X4})",
+        ResultKind.CardError => $"Card Error: SW=0x{CardStatusWord.Value:X4}",
+        ResultKind.TransportError => $"Transport Error: 0x{RawTransportErrorCode:X8}",
         _ => "Invalid"
     };
 }

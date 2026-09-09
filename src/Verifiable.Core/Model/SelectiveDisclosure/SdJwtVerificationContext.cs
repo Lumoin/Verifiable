@@ -18,12 +18,21 @@ namespace Verifiable.Core.Model.SelectiveDisclosure;
 /// </remarks>
 public sealed class SdJwtVerificationContext: IDisposable
 {
+    /// <summary>The pooled buffer holding the decoded redacted payload, owned by this context.</summary>
     private IMemoryOwner<byte> PayloadOwner { get; }
+
+    /// <summary>Whether the payload buffer has already been returned to the pool.</summary>
     private bool disposed;
 
+
+    /// <summary>
+    /// Creates the intermediate state the structural verification produced.
+    /// </summary>
+    /// <param name="payloadOwner">The pooled buffer holding the decoded redacted payload.</param>
+    /// <param name="boundPaths">The positions the holder-selected disclosures bound to.</param>
     internal SdJwtVerificationContext(
         IMemoryOwner<byte> payloadOwner,
-        IReadOnlyDictionary<SdDisclosure, CredentialPath> boundPaths)
+        SdDisclosurePaths boundPaths)
     {
         this.PayloadOwner = payloadOwner;
         BoundPaths = boundPaths;
@@ -39,7 +48,13 @@ public sealed class SdJwtVerificationContext: IDisposable
     /// The disclosures that bound to a path in the payload, keyed to their credential path.
     /// A holder-selected disclosure absent from this map had no matching digest in the payload.
     /// </summary>
-    public IReadOnlyDictionary<SdDisclosure, CredentialPath> BoundPaths { get; }
+    /// <remarks>
+    /// The keys are the caller's own <see cref="SdToken{TEnvelope}"/> disclosure instances,
+    /// borrowed rather than copied: identity here is reference identity, so a lookup answers only
+    /// for the very instances the verification was handed, and the map is meaningful only while
+    /// that token is alive.
+    /// </remarks>
+    public SdDisclosurePaths BoundPaths { get; }
 
     /// <inheritdoc/>
     public void Dispose()

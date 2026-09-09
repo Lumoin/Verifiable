@@ -1,5 +1,6 @@
 using System.Text;
 using Verifiable.Core;
+using Verifiable.Core.Transport;
 using Verifiable.JCose;
 
 namespace Verifiable.Vcalm;
@@ -43,7 +44,7 @@ public static class VcalmInteractionEndpoints
     /// The endpoint builder delegate. Pass this to
     /// <see cref="Verifiable.Server.ServerConfiguration.EndpointBuilders"/>.
     /// </summary>
-    public static readonly EndpointBuilderDelegate Builder = static (registration, context, ct) =>
+    public static EndpointBuilderDelegate Builder { get; } = static (registration, context, ct) =>
     {
         List<EndpointCandidate> candidates = [];
 
@@ -193,7 +194,7 @@ public static class VcalmInteractionEndpoints
     private static bool AcceptsJson(ExchangeContext context)
     {
         IncomingRequest? req = context.IncomingRequest;
-        if(req is null || !req.Headers.TryGetAll("Accept", out IReadOnlyList<string>? acceptValues) || acceptValues is null)
+        if(req is null || !req.Headers.TryGetAll(WellKnownHttpHeaderNames.Accept, out IReadOnlyList<string>? acceptValues) || acceptValues is null)
         {
             return false;
         }

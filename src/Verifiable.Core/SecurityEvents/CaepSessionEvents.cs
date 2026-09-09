@@ -15,25 +15,25 @@ public static class CaepSessionClaimNames
     public static ReadOnlySpan<byte> FpUaUtf8 => "fp_ua"u8;
 
     /// <summary><c>fp_ua</c> — OPTIONAL; user-agent fingerprint computed by the Transmitter (qualities, not identity).</summary>
-    public static readonly string FpUa = Utf8Constants.ToInternedString(FpUaUtf8);
+    public static string FpUa { get; } = Utf8Constants.ToInternedString(FpUaUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Acr"/>.</summary>
     public static ReadOnlySpan<byte> AcrUtf8 => "acr"u8;
 
     /// <summary><c>acr</c> — OPTIONAL; authentication context class reference, interpreted as in an OIDC ID Token.</summary>
-    public static readonly string Acr = Utf8Constants.ToInternedString(AcrUtf8);
+    public static string Acr { get; } = Utf8Constants.ToInternedString(AcrUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Amr"/>.</summary>
     public static ReadOnlySpan<byte> AmrUtf8 => "amr"u8;
 
     /// <summary><c>amr</c> — OPTIONAL; authentication methods reference array, interpreted as in an OIDC ID Token.</summary>
-    public static readonly string Amr = Utf8Constants.ToInternedString(AmrUtf8);
+    public static string Amr { get; } = Utf8Constants.ToInternedString(AmrUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="ExtId"/>.</summary>
     public static ReadOnlySpan<byte> ExtIdUtf8 => "ext_id"u8;
 
     /// <summary><c>ext_id</c> — OPTIONAL; external session identifier correlating to a broader session.</summary>
-    public static readonly string ExtId = Utf8Constants.ToInternedString(ExtIdUtf8);
+    public static string ExtId { get; } = Utf8Constants.ToInternedString(ExtIdUtf8);
 }
 
 

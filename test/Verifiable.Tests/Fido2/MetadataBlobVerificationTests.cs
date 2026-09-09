@@ -514,16 +514,10 @@ internal sealed class MetadataBlobVerificationTests
         MetadataBlobResult result = await VerifyAsync(blobBytes, [rootPki]);
 
         Assert.IsInstanceOfType<VerifiedMetadataBlobResult>(result);
-        MetadataBlob blob = ((VerifiedMetadataBlobResult)result).Blob;
-        try
-        {
-            Assert.IsFalse(MetadataBlobPayloadQueries.TryFindEntryByAaguid(blob.Payload, unlistedAaguid, out MetadataBlobPayloadEntry? entry));
-            Assert.IsNull(entry);
-        }
-        finally
-        {
-            blob.Dispose();
-        }
+        using MetadataBlob blob = ((VerifiedMetadataBlobResult)result).Blob;
+
+        Assert.IsFalse(MetadataBlobPayloadQueries.TryFindEntryByAaguid(blob.Payload, unlistedAaguid, out MetadataBlobPayloadEntry? entry));
+        Assert.IsNull(entry);
     }
 
 

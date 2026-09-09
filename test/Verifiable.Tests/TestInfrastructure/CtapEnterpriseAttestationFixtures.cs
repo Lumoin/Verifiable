@@ -221,7 +221,7 @@ internal static class CtapEnterpriseAttestationFixtures
     public static CtapAuthenticatorSimulator CreateCapableSimulator(
         string runId, BaseMemoryPool pool, IReadOnlyList<string>? preConfiguredRpIds = null, TimeProvider? timeProvider = null) =>
         CtapMakeCredentialGetAssertionFixtures.CreateSimulator(
-            runId, timeProvider: timeProvider, enterpriseAttestationProvisioning: BuildProvisioning(pool, preConfiguredRpIds));
+            runId, BaseMemoryPool.Shared, timeProvider: timeProvider, enterpriseAttestationProvisioning: BuildProvisioning(pool, preConfiguredRpIds));
 
 
     /// <summary>

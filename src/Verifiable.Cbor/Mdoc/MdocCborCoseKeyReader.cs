@@ -1,4 +1,4 @@
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using Verifiable.JCose;
 
 namespace Verifiable.Cbor.Mdoc;
@@ -50,7 +50,7 @@ public static class MdocCborCoseKeyReader
     /// </exception>
     public static CoseKey Read(ReadOnlySpan<byte> encodedCoseKey, out IReadOnlyList<int> labels)
     {
-        var reader = new CborReader(encodedCoseKey.ToArray(), CborConformanceMode.Lax);
+        var reader = new CborReader(encodedCoseKey.ToArray(), CborOptions.Lax);
         return ReadFromReader(reader, out labels);
     }
 

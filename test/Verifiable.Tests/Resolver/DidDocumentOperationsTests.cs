@@ -19,16 +19,16 @@ internal sealed class DidDocumentOperationsTests
     private const string Did = "did:web:example.com";
 
     /// <summary>The expected verification-method ids after a two-key union.</summary>
-    private static readonly string[] ExpectedKeyOneAndTwo = ["#key-1", "#key-2"];
+    private static string[] ExpectedKeyOneAndTwo { get; } = ["#key-1", "#key-2"];
 
     /// <summary>The expected service ids after a two-service union.</summary>
-    private static readonly string[] ExpectedServiceOneAndTwo = [Did + "#svc-1", Did + "#svc-2"];
+    private static string[] ExpectedServiceOneAndTwo { get; } = [Did + "#svc-1", Did + "#svc-2"];
 
     /// <summary>The expected controllers after a two-controller union.</summary>
-    private static readonly string[] ExpectedControllerAAndB = ["did:web:controller-a", "did:web:controller-b"];
+    private static string[] ExpectedControllerAAndB { get; } = ["did:web:controller-a", "did:web:controller-b"];
 
     /// <summary>The expected alsoKnownAs values after a two-value union.</summary>
-    private static readonly string[] ExpectedAkaAAndB = ["did:web:aka-a", "did:web:aka-b"];
+    private static string[] ExpectedAkaAAndB { get; } = ["did:web:aka-a", "did:web:aka-b"];
 
 
     /// <summary><c>setDidDocument</c> returns the supplied document wholesale, ignoring the current document.</summary>
@@ -63,14 +63,14 @@ internal sealed class DidDocumentOperationsTests
     public void AddUnionsVerificationMethodsPreservingIdentity()
     {
         DidDocument current = DocumentWith(Method("#key-1"));
-        current.Context = new Context { Contexts = [Context.DidCore11] };
+        current.Context = Context.FromIris(Context.DidCore11);
         DidDocument additions = DocumentWith(Method("#key-2"));
         additions.Id = (GenericDidMethod)"did:web:other.example";
 
         DidDocument result = DidDocumentOperations.Apply(current, WellKnownDidRegistrationValues.AddToDidDocument, additions);
 
         Assert.AreEqual(Did, result.Id!.Id, "Add preserves the current document's id, not the payload's.");
-        Assert.AreEqual(Context.DidCore11, result.Context!.Contexts![0], "Add preserves the current document's @context.");
+        Assert.AreEqual(Context.DidCore11, result.Context!.Entries[0].Iri, "Add preserves the current document's @context.");
         Assert.HasCount(2, result.VerificationMethod!);
         Assert.AreSequenceEqual(ExpectedKeyOneAndTwo, result.VerificationMethod!.Select(static method => method.Id).ToArray(), SequenceOrder.InAnyOrder);
     }

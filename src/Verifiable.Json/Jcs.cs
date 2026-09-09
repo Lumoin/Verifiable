@@ -398,7 +398,9 @@ public static class Jcs
         //For decimals, get the raw value and let the writer handle it.
         var doubleValue = element.GetDouble();
 
-        //Handle negative zero per RFC 8785 - should serialize as "0".
+        //Handle negative zero per RFC 8785 - should serialize as "0". The exact comparison is
+        //intentional and safe here: IEEE 754 defines -0.0 == 0.0, so this is the well-defined
+        //zero/negative-zero test, not a comparison of two independently computed values.
         if(doubleValue == 0.0)
         {
             writer.WriteNumberValue(0);

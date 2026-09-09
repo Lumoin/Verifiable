@@ -17,13 +17,14 @@ using Verifiable.Tpm.Spec.Attributes;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
 /// <summary>
 /// The pool accounting of the credential carriers a command authorization slot's <c>nonce</c> and <c>hmac</c>
-/// are read into — the two fields of <c>TPMS_AUTH_COMMAND</c> (TPM 2.0 Library Part 2, clause 10.13.2, Table
-/// 153) — for the command families whose slots reach a RESPONSE-SESSION ENTRY or a session-start effect rather
+/// are read into — the two fields of <c>TPMS_AUTH_COMMAND</c> (TPM 2.0 Library Part 2, clause 10.12.2, Table
+/// 156) — for the command families whose slots reach a RESPONSE-SESSION ENTRY or a session-start effect rather
 /// than the single-slot NV and hierarchy framing, plus the width rule the two caller-supplied
 /// <c>TPM2B_NONCE</c>/<c>TPM2B_ENCRYPTED_SECRET</c> command parameters of the session-start and policy families
 /// carry. Every proof drives the real wire through the production command path and reads real pool telemetry
@@ -67,7 +68,7 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierPart2Tests
 
     /// <summary>
     /// A caller-supplied <c>nonceTPM</c> one octet past <c>sizeof(TPMU_HA)</c> — the smallest value no
-    /// <c>TPM2B_NONCE</c> can carry (TPM 2.0 Library Part 2, clause 10.4.4, Table 94 over clause 10.4.2, Table 92).
+    /// <c>TPM2B_NONCE</c> can carry (TPM 2.0 Library Part 2, clause 10.3.4, Table 92 over clause 10.3.2, Table 90).
     /// </summary>
     private static byte[] PastBoundNonce { get; } = FilledNonZero(Tpm2bNonce.MaxSize + 1);
 
@@ -76,7 +77,7 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierPart2Tests
 
     /// <summary>
     /// An <c>encryptedSalt</c> one octet past <c>sizeof(TPMU_ENCRYPTED_SECRET)</c> — the smallest value no
-    /// <c>TPM2B_ENCRYPTED_SECRET</c> can carry (TPM 2.0 Library Part 2, clause 11.4.3, Table 210, page 180).
+    /// <c>TPM2B_ENCRYPTED_SECRET</c> can carry (TPM 2.0 Library Part 2, clause 11.4.3, Table 224, page 180).
     /// </summary>
     private static byte[] PastBoundEncryptedSalt { get; } = FilledNonZero(Tpm2bEncryptedSecret.MaxSize + 1);
 
@@ -87,9 +88,11 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierPart2Tests
     public TestContext TestContext { get; set; } = null!;
 
     /// <summary>
-    /// The credential carriers are rented as the parse's LAST act, so a <c>TPM2_GetRandom()</c> over a session
-    /// refused on a trailing octet no parameter accounts for (TPM 2.0 Library Part 3, clause 5.2) leaves nothing
-    /// outstanding at all.
+    /// The lone slot here claims none of <c>decrypt</c>, <c>encrypt</c> or <c>audit</c>, so the session-area
+    /// check refuses it, session-encoded, before the command's own parameters — including the trailing octet no
+    /// parameter accounts for — are ever read at all (TPM 2.0 Library Part 3, clause 5.5, step 4.4.2, which
+    /// precedes clause 5.8's parameter unmarshaling): the credential carriers this refusal rents are released
+    /// through the request's own <see cref="IDisposable.Dispose"/> on that path, so nothing is left outstanding.
     /// </summary>
     [TestMethod]
     public async Task GetRandomOverSessionRefusedAtTheParseRentsNoCredentialCarriers()
@@ -97,7 +100,7 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierPart2Tests
         using var trackingPool = new MeteredHousePool();
         BaseMemoryPool pool = trackingPool.Pool;
         using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-credential2-getrandom-parse").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         (uint sessionHandle, TpmSession session) = await StartUnboundSessionAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -114,18 +117,18 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierPart2Tests
             simulator, pool, TpmStConstants.TPM_ST_SESSIONS, TpmCcConstants.TPM_CC_GetRandom, [.. body]).ConfigureAwait(false);
 
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_SIZE, code,
-            "An octet no parameter accounts for is TPM_RC_SIZE at the wire read (Part 3, clause 5.2).");
+            SessionEncodedRc(TpmRcConstants.TPM_RC_ATTRIBUTES, sessionIndex: 0), code,
+            "A lone companion claiming nothing is refused at the session-area check, ahead of the parameters (TPM 2.0 Library Part 3, clause 5.5, step 4.4.2).");
         Assert.AreEqual(
             baseline, trackingPool.OutstandingCount,
-            "Both credential carriers are rented as the parse's last act, so a parse refused on a later wire check must rent neither.");
+            "The refused request's own Dispose releases both credential carriers, so nothing is left outstanding regardless of when they were rented.");
 
         await FlushAsync(tpm, registry, pool, sessionHandle).ConfigureAwait(false);
     }
 
     /// <summary>
     /// <c>TPM2_GetRandom()</c> over a session with the <c>encrypt</c> attribute (TPM 2.0 Library Part 3, clause
-    /// 16.1; Part 1, clause 19) returns both slot credentials on a refusal taken at the entry transition and on
+    /// 16.1; Part 1, clause 18) returns both slot credentials on a refusal taken at the entry transition and on
     /// an accepted round trip: the accepting continuation is the hmac's terminal owner, and the caller nonce is
     /// transferred into the response-encryption step, whose effect releases it once the keystream and the
     /// response HMAC have keyed their nonceOlder term on it.
@@ -136,7 +139,7 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierPart2Tests
         using var trackingPool = new MeteredHousePool();
         BaseMemoryPool pool = trackingPool.Pool;
         using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-credential2-getrandom").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         (uint sessionHandle, TpmSession session) = await StartEncryptingSessionAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -185,7 +188,7 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierPart2Tests
         using var trackingPool = new MeteredHousePool();
         BaseMemoryPool pool = trackingPool.Pool;
         using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-credential2-create", withEccBackend: true).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -250,7 +253,7 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierPart2Tests
         using var trackingPool = new MeteredHousePool();
         BaseMemoryPool pool = trackingPool.Pool;
         using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-credential2-create2", withEccBackend: true).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -288,12 +291,12 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierPart2Tests
 
     /// <summary>
     /// <c>TPM2_Create()</c> whose parent-authorizing slot is <c>TPM_RS_PW</c> alongside a <c>decrypt</c>
-    /// companion (TPM 2.0 Library Part 1, clause 16.6.4, Table 12 admits the attribute on a slot authorizing
+    /// companion (TPM 2.0 Library Part 1, clause 15.6.4, Table 15 admits the attribute on a slot authorizing
     /// nothing) builds a PLACEHOLDER response entry for slot 0 rather than a real one, so nothing takes that
     /// slot's caller nonce and the resume is its terminal owner.
     /// </summary>
     /// <remarks>
-    /// A password slot's caller nonce is structurally empty (Part 1, clause 16.6.4, Table 12) and therefore the
+    /// A password slot's caller nonce is structurally empty (Part 1, clause 15.6.4, Table 15) and therefore the
     /// dispose-immune sentinel, so what this proof measures on that slot is the credential rather than the
     /// nonce; the companion's own nonce is a real rental and still has to reach the sealing effect through its
     /// entry. Both are counted by the same balance.
@@ -304,7 +307,7 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierPart2Tests
         using var trackingPool = new MeteredHousePool();
         BaseMemoryPool pool = trackingPool.Pool;
         using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-credential2-createpw", withEccBackend: true).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -348,7 +351,7 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierPart2Tests
         using var trackingPool = new MeteredHousePool();
         BaseMemoryPool pool = trackingPool.Pool;
         using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-credential2-unseal", withEccBackend: true).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -396,12 +399,15 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierPart2Tests
 
     /// <summary>
     /// <c>TPM2_Unseal()</c> authorized by a policy session alone builds NO response-session entry at all — the
-    /// executor accepts a keyless policy session's no-sessions response (TPM 2.0 Library Part 1, clause 17.6) —
+    /// executor accepts a keyless policy session's no-sessions response (TPM 2.0 Library Part 1, clause 16.6) —
     /// so that exit is itself the terminal owner of the slot's caller nonce, which no entry ever takes.
     /// </summary>
     /// <remarks>
     /// The slot's nonce is deliberately the session's full digest width and non-zero, so it is a real rental: an
-    /// exit that transferred nothing and released nothing would leave the balance one carrier high.
+    /// exit that transferred nothing and released nothing would leave the balance one carrier high. The object is
+    /// sealed under an all-zero authPolicy — the one policy a session with no assertions satisfies, its
+    /// policyDigest being the Zero Digest of the session hash's width (TPM 2.0 Library Part 1, clause 16.7.8) —
+    /// so the policy gate passes on a genuine digest match rather than being bypassed.
     /// </remarks>
     [TestMethod]
     public async Task UnsealAuthorizedByAPolicySessionAloneReleasesItsSlotNonceAtTheArm()
@@ -409,11 +415,11 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierPart2Tests
         using var trackingPool = new MeteredHousePool();
         BaseMemoryPool pool = trackingPool.Pool;
         using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-credential2-unsealpolicy", withEccBackend: true).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, registry, pool).ConfigureAwait(false);
-        (uint itemHandle, _) = await SealAndLoadAsync(tpm, registry, pool, parent).ConfigureAwait(false);
+        (uint itemHandle, _) = await SealAndLoadAsync(tpm, registry, pool, parent, authPolicy: new byte[TpmPolicyDigest.Size(SessionAlg)]).ConfigureAwait(false);
         uint policySessionHandle = await StartPolicySessionAsync(tpm, registry, pool).ConfigureAwait(false);
 
         long baseline = trackingPool.OutstandingCount;
@@ -427,7 +433,7 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierPart2Tests
 
         Assert.AreEqual(
             TpmRcConstants.TPM_RC_SUCCESS, code,
-            "A policy session whose accumulated digest is not measured against an empty authPolicy authorizes the unseal (Part 1, clause 11.2, Table 5).");
+            "A policy session with no assertions holds the Zero Digest, which equals an all-zero authPolicy and authorizes the unseal (Part 1, clause 16.7.8; Part 4 CheckPolicyAuthSession).");
         Assert.AreEqual(
             baseline, trackingPool.OutstandingCount,
             "The policy-authorized exit builds no response-session entry, so it must release the slot's caller nonce at the arm.");
@@ -438,7 +444,7 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierPart2Tests
     }
 
     /// <summary>
-    /// <c>TPM2_PolicySecret()</c> authorized by an HMAC session (TPM 2.0 Library Part 3, Section 23.4.1) returns
+    /// <c>TPM2_PolicySecret()</c> authorized by an HMAC session (TPM 2.0 Library Part 3, clause 23.4.1) returns
     /// its slot credentials across a command-HMAC mismatch, an accepted call that mints no ticket, and an
     /// accepted call whose negative expiration mints a real <c>TPM_ST_AUTH_SECRET</c> ticket — the longest
     /// transfer chain these proofs drive, the caller nonce riding the authorizing-session entry through the fold
@@ -450,7 +456,7 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierPart2Tests
         using var trackingPool = new MeteredHousePool();
         BaseMemoryPool pool = trackingPool.Pool;
         using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-credential2-policysecret").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         uint policySessionHandle = await StartPolicySessionAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -517,16 +523,17 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierPart2Tests
 
     /// <summary>
     /// <c>TPM2_PolicySecret()</c>'s <c>nonceTPM</c> parameter is a <c>TPM2B_NONCE</c> (TPM 2.0 Library Part 3,
-    /// Table 129), and a <c>TPM2B_NONCE</c>'s buffer is bounded by <c>sizeof(TPMU_HA)</c> (Part 2, clause 10.4.4,
-    /// Table 94, which types it as a <c>TPM2B_DIGEST</c>, over clause 10.4.2, Table 92, whose implied check names
-    /// <c>TPM_RC_SIZE</c>): a declared width past that is a marshalling refusal at the wire read, BARE because
-    /// the octets belong to a command parameter rather than to a session.
+    /// Table 146), and a <c>TPM2B_NONCE</c>'s buffer is bounded by <c>sizeof(TPMU_HA)</c> (Part 2, clause 10.3.4,
+    /// Table 92, which types it as a <c>TPM2B_DIGEST</c>, over clause 10.3.2, Table 90, whose implied check names
+    /// <c>TPM_RC_SIZE</c>): a declared width past that is a marshalling refusal at the wire read, parameter-designated
+    /// (Part 2, clause 6.6.2, Table 15's P designation, at the parameter's own ordinal) because the octets belong
+    /// to a command parameter rather than to a session.
     /// </summary>
     /// <remarks>
     /// The refusal lands ahead of the comparison against the session's retained nonce, so it is answered
     /// identically on a trial session, which runs no nonceTPM comparison at all. The paired rung declares exactly
     /// the bound and reaches that comparison, which answers <c>TPM_RC_VALUE</c> instead (clause 23.2.2, printed
-    /// page 189, rule 1) — so only the declared width can account for the first refusal.
+    /// page 209, rule 1) — so only the declared width can account for the first refusal.
     /// </remarks>
     [TestMethod]
     public async Task PolicySecretWithACallerNonceTpmPastTheUnionBoundIsRefusedAtTheWireReadWithSize()
@@ -534,7 +541,7 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierPart2Tests
         using var trackingPool = new MeteredHousePool();
         BaseMemoryPool pool = trackingPool.Pool;
         using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-credential2-policysecret-nonce").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         uint policySessionHandle = await StartPolicySessionAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -543,26 +550,26 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierPart2Tests
 
         TpmRcConstants refused = await SubmitPolicySecretWithNonceTpmAsync(simulator, pool, policySessionHandle, PastBoundNonce).ConfigureAwait(false);
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_SIZE, refused,
-            "A nonceTPM parameter wider than sizeof(TPMU_HA) is TPM_RC_SIZE at the wire read (Part 2, clause 10.4.4, Table 94 over clause 10.4.2, Table 92).");
+            HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SIZE, 0), refused,
+            "Table 146: nonceTPM is TPM2_PolicySecret()'s first parameter (index 0); a width past sizeof(TPMU_HA) is TPM_RC_SIZE there (Part 2, clause 10.3.4, Table 92 over clause 10.3.2, Table 90).");
         Assert.AreEqual(
             baseline, trackingPool.OutstandingCount,
             "The refusal lands ahead of every rental, so the refused frame leaves nothing outstanding.");
 
         TpmRcConstants admitted = await SubmitPolicySecretWithNonceTpmAsync(simulator, pool, policySessionHandle, AdmissibleWidthNonce).ConfigureAwait(false);
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_VALUE, admitted,
-            "The identical frame one octet narrower passes the width rule and is judged by the session-nonce comparison instead, which answers TPM_RC_VALUE (Part 3, clause 23.2.2, printed page 189, rule 1), so only the declared width refused the first one.");
+            HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_VALUE, 0), admitted,
+            "The identical frame one octet narrower passes the width rule and is judged by the session-nonce comparison instead, which answers TPM_RC_VALUE (Part 3, clause 23.2.2, printed page 209, rule 1), so only the declared width refused the first one.");
 
-        //A trial session runs no nonceTPM comparison at all (Part 3, Section 23.4.1's carve-out is the
+        //A trial session runs no nonceTPM comparison at all (Part 3, clause 23.4.1's carve-out is the
         //authorization check alone), so it is the arm on which a value the structure cannot hold would otherwise
         //travel through unexamined. The width rule is structural and refuses it there too.
         uint trialSessionHandle = await StartTrialPolicySessionAsync(tpm, registry, pool).ConfigureAwait(false);
 
         TpmRcConstants trialRefused = await SubmitPolicySecretWithNonceTpmAsync(simulator, pool, trialSessionHandle, PastBoundNonce).ConfigureAwait(false);
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_SIZE, trialRefused,
-            "The width rule is a property of the structure, not of the session, so a trial session's own skipped comparison cannot admit a value no TPM2B_NONCE can hold.");
+            HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SIZE, 0), trialRefused,
+            "Table 146: nonceTPM is TPM2_PolicySecret()'s first parameter (index 0); the width rule is a property of the structure, not of the session, so a trial session's own skipped comparison cannot admit a value no TPM2B_NONCE can hold.");
 
         TpmRcConstants trialAdmitted = await SubmitPolicySecretWithNonceTpmAsync(simulator, pool, trialSessionHandle, AdmissibleWidthNonce).ConfigureAwait(false);
         Assert.AreEqual(
@@ -575,8 +582,8 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierPart2Tests
 
     /// <summary>
     /// <c>TPM2_PolicySigned()</c>'s <c>nonceTPM</c> parameter carries the same <c>TPM2B_NONCE</c> bound as
-    /// <c>TPM2_PolicySecret()</c>'s (TPM 2.0 Library Part 3, Table 127; Part 2, clause 10.4.4, Table 94 over
-    /// clause 10.4.2, Table 92) and is refused the same way at the wire read.
+    /// <c>TPM2_PolicySecret()</c>'s (TPM 2.0 Library Part 3, Table 146; Part 2, clause 10.3.4, Table 92 over
+    /// clause 10.3.2, Table 90) and is refused the same way at the wire read.
     /// </summary>
     [TestMethod]
     public async Task PolicySignedWithACallerNonceTpmPastTheUnionBoundIsRefusedAtTheWireReadWithSize()
@@ -584,7 +591,7 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierPart2Tests
         using var trackingPool = new MeteredHousePool();
         BaseMemoryPool pool = trackingPool.Pool;
         using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-credential2-policysigned-nonce", withEccBackend: true).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         uint policySessionHandle = await StartPolicySessionAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -593,8 +600,8 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierPart2Tests
 
         TpmRcConstants refused = await SubmitPolicySignedWithNonceTpmAsync(simulator, pool, policySessionHandle, PastBoundNonce).ConfigureAwait(false);
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_SIZE, refused,
-            "A nonceTPM parameter wider than sizeof(TPMU_HA) is TPM_RC_SIZE at the wire read, whichever policy assertion carries it.");
+            HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SIZE, 0), refused,
+            "Table 144: nonceTPM is TPM2_PolicySigned()'s first parameter (index 0); a width past sizeof(TPMU_HA) is TPM_RC_SIZE there, whichever policy assertion carries it.");
         Assert.AreEqual(
             baseline, trackingPool.OutstandingCount,
             "The refusal lands ahead of every rental, so the refused frame leaves nothing outstanding.");
@@ -613,12 +620,12 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierPart2Tests
     /// <summary>
     /// A trial-session <c>TPM2_PolicySigned()</c> carrying a NON-EMPTY <c>nonceTPM</c> returns that parameter's
     /// carrier to the pool: the trial arm folds the policyDigest without checking the signature or any parameter
-    /// (TPM 2.0 Library Part 3, Section 23.3), so nothing downstream takes the nonce and the arm itself is its
+    /// (TPM 2.0 Library Part 3, clause 23.3), so nothing downstream takes the nonce and the arm itself is its
     /// terminal owner.
     /// </summary>
     /// <remarks>
     /// The balance is taken after a FIRST assertion has already folded, because that first fold replaces the
-    /// session's shared zero-digest sentinel — which rents nothing (Part 3, Section 23.2.3's all-zero initial
+    /// session's shared zero-digest sentinel — which rents nothing (Part 3, clause 23.2.3's all-zero initial
     /// policyDigest) — with a real pooled digest. From there each further fold disposes the superseded digest as
     /// it installs its replacement, so a second identical assertion must leave the count exactly where the first
     /// left it.
@@ -629,7 +636,7 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierPart2Tests
         using var trackingPool = new MeteredHousePool();
         BaseMemoryPool pool = trackingPool.Pool;
         using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-credential2-policysigned-trial", withEccBackend: true).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse authObject = await CreateStorageParentAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -675,15 +682,15 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierPart2Tests
 
         TpmRcConstants refused = await SubmitStartAuthSessionAsync(simulator, pool, PastBoundNonce, []).ConfigureAwait(false);
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_SIZE, refused,
-            "A nonceCaller wider than sizeof(TPMU_HA) is TPM_RC_SIZE at the wire read (Part 2, clause 10.4.4, Table 94 over clause 10.4.2, Table 92).");
+            HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SIZE, 0), refused,
+            "Table 14: nonceCaller is TPM2_StartAuthSession()'s first parameter (index 0); a width past sizeof(TPMU_HA) is TPM_RC_SIZE there (Part 2, clause 10.3.4, Table 92 over clause 10.3.2, Table 90).");
         Assert.AreEqual(
             baseline, trackingPool.OutstandingCount,
             "The refusal lands ahead of every rental, so the refused frame leaves nothing outstanding.");
 
         TpmRcConstants admitted = await SubmitStartAuthSessionAsync(simulator, pool, AdmissibleWidthNonce, []).ConfigureAwait(false);
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_SIZE, admitted,
+            HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SIZE, 0), admitted,
             "Exactly the structural bound still exceeds the SHA-256 session's own digest ceiling, so the identical frame is refused by clause 11.1.1's rule instead.");
         Assert.AreEqual(
             baseline, trackingPool.OutstandingCount,
@@ -696,13 +703,13 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierPart2Tests
         TpmRcConstants widthAheadOfHash = await SubmitStartAuthSessionAsync(
             simulator, pool, PastBoundNonce, [], TpmAlgIdConstants.TPM_ALG_SHA1).ConfigureAwait(false);
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_SIZE, widthAheadOfHash,
-            "An unmarshalling refusal precedes the command's own authHash gate (Part 3, clause 5.8.2: an unmarshalling error means no command processing occurs).");
+            HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SIZE, 0), widthAheadOfHash,
+            "Table 14: nonceCaller is TPM2_StartAuthSession()'s first parameter (index 0); an unmarshalling refusal precedes the command's own authHash gate (Part 3, clause 5.8.2: an unmarshalling error means no command processing occurs).");
 
         TpmRcConstants hashGate = await SubmitStartAuthSessionAsync(
             simulator, pool, FilledNonZero(32), [], TpmAlgIdConstants.TPM_ALG_SHA1).ConfigureAwait(false);
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_HASH, hashGate,
+            HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_HASH, 4), hashGate,
             "The identical frame with a well-formed nonce reaches the authHash gate, so only the declared width moved the first answer.");
 
         Assert.AreEqual(
@@ -712,7 +719,7 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierPart2Tests
 
     /// <summary>
     /// <c>TPM2_StartAuthSession()</c>'s <c>encryptedSalt</c> is a <c>TPM2B_ENCRYPTED_SECRET</c>, whose secret is
-    /// bounded by <c>sizeof(TPMU_ENCRYPTED_SECRET)</c> (TPM 2.0 Library Part 2, clause 11.4.3, Table 210, page
+    /// bounded by <c>sizeof(TPMU_ENCRYPTED_SECRET)</c> (TPM 2.0 Library Part 2, clause 11.4.3, Table 224, page
     /// 180) — the widest asymmetrically protected seed the union holds — so a declared width past that is a
     /// marshalling refusal at the wire read, ahead of the <c>tpmKey</c>/salt consistency ladder.
     /// </summary>
@@ -732,15 +739,15 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierPart2Tests
 
         TpmRcConstants refused = await SubmitStartAuthSessionAsync(simulator, pool, FilledNonZero(32), PastBoundEncryptedSalt).ConfigureAwait(false);
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_SIZE, refused,
-            "An encryptedSalt wider than sizeof(TPMU_ENCRYPTED_SECRET) is TPM_RC_SIZE at the wire read (Part 2, clause 11.4.3, Table 210).");
+            HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SIZE, 1), refused,
+            "Table 14: encryptedSalt is TPM2_StartAuthSession()'s second parameter (index 1); a width past sizeof(TPMU_ENCRYPTED_SECRET) is TPM_RC_SIZE there (Part 2, clause 11.4.3, Table 224).");
         Assert.AreEqual(
             baseline, trackingPool.OutstandingCount,
             "The refusal lands ahead of every rental, so the refused frame leaves nothing outstanding.");
 
         TpmRcConstants admitted = await SubmitStartAuthSessionAsync(simulator, pool, FilledNonZero(32), AdmissibleWidthEncryptedSalt).ConfigureAwait(false);
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_VALUE,
+            HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_VALUE, 1),
             admitted,
             "The identical frame one octet narrower passes the width rule and is judged by the unsalted-request consistency rule instead, so only the declared width refused the first one.");
         Assert.AreEqual(
@@ -750,7 +757,7 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierPart2Tests
 
     /// <summary>
     /// A started, unbound, unsalted session leaves exactly ONE carrier outstanding — the nonceTPM it retains
-    /// (TPM 2.0 Library Part 1, clause 17.6.5) — even though its parse rents a caller-nonce carrier as well: the
+    /// (TPM 2.0 Library Part 1, clause 16.6.5) — even though its parse rents a caller-nonce carrier as well: the
     /// session records no caller nonce at all, so the session-start effect is that carrier's terminal owner and
     /// releases it inside the command.
     /// </summary>
@@ -760,7 +767,7 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierPart2Tests
         using var trackingPool = new MeteredHousePool();
         BaseMemoryPool pool = trackingPool.Pool;
         using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-credential2-start-balance").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         long baseline = trackingPool.OutstandingCount;
@@ -779,7 +786,7 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierPart2Tests
             "Flushing the session returns the retained nonceTPM carrier to the pool.");
     }
 
-    /// <summary>Renders a permanent entity's Name: its 4-octet big-endian handle value (Part 1, clause 14, Table 6).</summary>
+    /// <summary>Renders a permanent entity's Name: its 4-octet big-endian handle value (Part 1, clause 13, Table 9).</summary>
     /// <param name="handle">The entity's handle.</param>
     /// <returns>The handle-form Name.</returns>
     private static byte[] HandleFormName(uint handle)
@@ -822,7 +829,7 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierPart2Tests
     /// <summary>
     /// Appends a one-session authorization area whose <c>nonce</c> and <c>hmac</c> fields are written exactly as
     /// given, so a proof can present a slot no production session builder would produce (TPM 2.0 Library Part 2,
-    /// clause 10.13.2, Table 153).
+    /// clause 10.12.2, Table 156).
     /// </summary>
     /// <param name="body">The body being built.</param>
     /// <param name="sessionHandle">The session handle to name.</param>
@@ -871,7 +878,7 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierPart2Tests
 
     /// <summary>
     /// Hand-frames a <c>TPM2_PolicySigned()</c> whose <c>nonceTPM</c> parameter carries exactly the given octets;
-    /// the command takes no authorization area at all (TPM 2.0 Library Part 3, Section 23.3).
+    /// the command takes no authorization area at all (TPM 2.0 Library Part 3, clause 23.3).
     /// </summary>
     /// <param name="simulator">The simulator.</param>
     /// <param name="pool">The memory pool.</param>
@@ -956,14 +963,14 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierPart2Tests
     private async Task<(uint SessionHandle, TpmSession Session)> StartUnboundSessionAsync(
         TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool)
     {
-        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(SessionAlg);
+        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(SessionAlg, TestEntropy.NewCounterStream(), pool);
 
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             tpm, startInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession (unbound) failed: '{startResult.ResponseCode}'.");
 
         StartAuthSessionResponse started = startResult.Value;
-        var session = new TpmSession(new TpmHandle(started.SessionHandle.Value), started.NonceTPM, SessionAlg, pool)
+        var session = new TpmSession(new TpmHandle(started.SessionHandle.Value), started.NonceTPM, SessionAlg, TestEntropy.NewCounterStream(), pool)
         {
             SessionAttributes = TpmaSession.CONTINUE_SESSION
         };
@@ -999,14 +1006,14 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierPart2Tests
         TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, TpmaSession attributes)
     {
         TpmtSymDef symmetric = TpmtSymDef.Xor(SessionAlg);
-        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(SessionAlg, symmetric);
+        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(SessionAlg, TestEntropy.NewCounterStream(), pool, symmetric);
 
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             tpm, startInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession (symmetric) failed: '{startResult.ResponseCode}'.");
 
         StartAuthSessionResponse started = startResult.Value;
-        var session = new TpmSession(new TpmHandle(started.SessionHandle.Value), started.NonceTPM, SessionAlg, pool, symmetric)
+        var session = new TpmSession(new TpmHandle(started.SessionHandle.Value), started.NonceTPM, SessionAlg, TestEntropy.NewCounterStream(), pool, symmetric)
         {
             SessionAttributes = attributes
         };
@@ -1014,14 +1021,14 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierPart2Tests
         return (started.SessionHandle.Value, session);
     }
 
-    /// <summary>Starts a trial policy session, which accumulates a policyDigest but authorizes nothing (TPM 2.0 Library Part 1, clause 17.7).</summary>
+    /// <summary>Starts a trial policy session, which accumulates a policyDigest but authorizes nothing (TPM 2.0 Library Part 1, clause 16.7).</summary>
     /// <param name="tpm">The TPM device.</param>
     /// <param name="registry">The response codec registry.</param>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The session handle.</returns>
     private async Task<uint> StartTrialPolicySessionAsync(TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool)
     {
-        StartAuthSessionInput input = StartAuthSessionInputExtensions.CreateTrialPolicySession(SessionAlg);
+        StartAuthSessionInput input = StartAuthSessionInputExtensions.CreateTrialPolicySession(SessionAlg, TestEntropy.NewCounterStream(), pool);
 
         TpmResult<StartAuthSessionResponse> result = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             tpm, input, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
@@ -1039,7 +1046,7 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierPart2Tests
     /// <returns>The session handle.</returns>
     private async Task<uint> StartPolicySessionAsync(TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool)
     {
-        StartAuthSessionInput input = StartAuthSessionInput.CreateUnboundUnsaltedPolicySession(SessionAlg);
+        StartAuthSessionInput input = StartAuthSessionInput.CreateUnboundUnsaltedPolicySession(SessionAlg, TestEntropy.NewCounterStream(), pool);
 
         TpmResult<StartAuthSessionResponse> result = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             tpm, input, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
@@ -1086,12 +1093,13 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierPart2Tests
     /// <param name="registry">The response codec registry.</param>
     /// <param name="pool">The memory pool.</param>
     /// <param name="parent">The loaded storage parent.</param>
+    /// <param name="authPolicy">The sealed object's authPolicy, or empty (default) for an object no policy session can authorize.</param>
     /// <returns>The loaded object's transient handle and Name.</returns>
     private async Task<(uint ItemHandle, byte[] ItemName)> SealAndLoadAsync(
-        TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, CreatePrimaryResponse parent)
+        TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, CreatePrimaryResponse parent, ReadOnlyMemory<byte> authPolicy = default)
     {
         using Tpm2bSensitiveCreate inSensitive = Tpm2bSensitiveCreate.ForSealedData(SealedSecret, pool);
-        using Tpm2bPublic template = Tpm2bPublic.CreateSealedDataTemplate(SessionAlg, pool, authPolicy: default, noDa: true);
+        using Tpm2bPublic template = Tpm2bPublic.CreateSealedDataTemplate(SessionAlg, pool, authPolicy.Span, noDa: true);
         using CreateInput createInput = new(parent.ObjectHandle.Value, inSensitive, template, Tpm2bData.Empty, TpmlPcrSelection.Empty);
         using TpmPasswordSession parentAuth = TpmPasswordSession.CreateEmpty(pool);
 
@@ -1114,7 +1122,7 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierPart2Tests
 
     /// <summary>
     /// Builds a value of the given width whose every octet is non-zero, so no trailing-zero removal (TPM 2.0
-    /// Library Part 1, clause 17.6.4.3) can shorten it and no carrier it is read into is the shared empty
+    /// Library Part 1, clause 16.6.4.3) can shorten it and no carrier it is read into is the shared empty
     /// sentinel.
     /// </summary>
     /// <param name="length">The width in octets.</param>
@@ -1129,6 +1137,17 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierPart2Tests
 
         return value;
     }
+
+    /// <summary>
+    /// The format-one session-index encoding (TPM 2.0 Library Part 2, clause 6.6.2): RC + TPM_RC_S +
+    /// TPM_RC_n(0x100·(index+1)) — a local mirror of the production session-index encoding, transcribed
+    /// independently here since the production helper is private.
+    /// </summary>
+    /// <param name="baseRc">The base format-one response code.</param>
+    /// <param name="sessionIndex">The zero-based session index.</param>
+    /// <returns>The session-index-encoded response code.</returns>
+    private static TpmRcConstants SessionEncodedRc(TpmRcConstants baseRc, int sessionIndex) =>
+        (TpmRcConstants)((uint)baseRc + (uint)TpmRcConstants.TPM_RC_S + (0x100u * (uint)(sessionIndex + 1)));
 
     /// <summary>Builds the response codec registry these proofs drive the executor with.</summary>
     /// <returns>The registry.</returns>
@@ -1155,7 +1174,7 @@ internal sealed class TpmInHouseSimulatorSessionCredentialCarrierPart2Tests
     /// <returns>The operational simulator.</returns>
     private async Task<TpmSimulator> CreateOperationalAsync(BaseMemoryPool pool, string tpmId, bool withEccBackend = false)
     {
-        var simulator = new TpmSimulator(tpmId, signingBackend: withEccBackend ? BouncyCastleTpmEccSigningBackend.Create() : null);
+        var simulator = new TpmSimulator(tpmId, signingBackend: withEccBackend ? BouncyCastleTpmEccSigningBackend.Create() : null, rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         var input = new StartupInput(TpmSuConstants.TPM_SU_CLEAR);

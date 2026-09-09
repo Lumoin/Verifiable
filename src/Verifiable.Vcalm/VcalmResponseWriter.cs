@@ -286,9 +286,10 @@ public static class VcalmResponseWriter
             AppendInputResultField(sb, VcalmParameterNames.ValidUntil, outcome.ValidUntil, ref resultsFirst);
         }
 
-        //credentialSchema results are emitted as an empty array (schema validation is not yet
-        //implemented); the member is always present per the §3.3.1 results shape.
-        AppendEmptyArrayField(sb, VcalmParameterNames.CredentialSchema, ref resultsFirst);
+        //§3.3.1 results.credentialSchema[]: one {verified, input} item per evaluated credentialSchema
+        //object; the member is always present per the results shape and empty when the credential
+        //declares no schemas or the schema seams are unwired.
+        AppendSchemaResultsField(sb, VcalmParameterNames.CredentialSchema, outcome.SchemaResults, ref resultsFirst);
         AppendStatusResultsField(sb, VcalmParameterNames.CredentialStatus, outcome.StatusResults, ref resultsFirst);
         AppendInputResultArrayField(sb, VcalmParameterNames.Proof, outcome.ProofResults, ref resultsFirst);
 
@@ -459,6 +460,54 @@ public static class VcalmResponseWriter
 
 
     //A §3.3.1 results.credentialStatus[] array: { value, verified, input }.
+    /// <summary>
+    /// Appends the §3.3.1 <c>results.credentialSchema[]</c> array: each item is
+    /// <c>{verified, input}</c> where <c>input</c> is the examined <c>credentialSchema</c> object's
+    /// identifying members.
+    /// </summary>
+    /// <param name="sb">The builder receiving the JSON.</param>
+    /// <param name="key">The array member's key.</param>
+    /// <param name="results">The per-entry schema results, in entry order.</param>
+    /// <param name="first">Whether the receiving object has no earlier member.</param>
+    private static void AppendSchemaResultsField(
+        StringBuilder sb, string key, IReadOnlyList<VcalmSchemaResult> results, ref bool first)
+    {
+        if(!first)
+        {
+            sb.Append(',');
+        }
+
+        sb.Append('"');
+        JsonAppender.AppendEscapedString(sb, key);
+        sb.Append("\":[");
+
+        for(int i = 0; i < results.Count; ++i)
+        {
+            if(i > 0)
+            {
+                sb.Append(',');
+            }
+
+            sb.Append('{');
+            bool resultFirst = true;
+            JsonAppender.AppendBoolField(sb, VcalmParameterNames.Verified, results[i].Verified, ref resultFirst);
+
+            sb.Append(",\"");
+            JsonAppender.AppendEscapedString(sb, VcalmParameterNames.Input);
+            sb.Append("\":{");
+            bool inputFirst = true;
+            JsonAppender.AppendStringField(sb, VcalmParameterNames.Id, results[i].Id, ref inputFirst);
+            JsonAppender.AppendStringField(sb, VcalmParameterNames.Type, results[i].Type, ref inputFirst);
+            sb.Append('}');
+
+            sb.Append('}');
+        }
+
+        sb.Append(']');
+        first = false;
+    }
+
+
     private static void AppendStatusResultsField(
         StringBuilder sb, string key, IReadOnlyList<VcalmStatusResult> results, ref bool first)
     {

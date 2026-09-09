@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using Verifiable.Tests.TestInfrastructure;
@@ -23,8 +22,6 @@ internal sealed class XAdESCounterSignatureChainTests
     private const string SignatureMethodAlgorithm = "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256";
 
     private const string DigestMethodAlgorithm = "http://www.w3.org/2001/04/xmlenc#sha256";
-
-    private static readonly TimeSpan ResourceCaseCeiling = TimeSpan.FromSeconds(5);
 
 
     private static XmlNodeTable Parse(string document, BaseMemoryPool pool)
@@ -154,27 +151,41 @@ internal sealed class XAdESCounterSignatureChainTests
 
 
     /// <summary>
-    /// Proves the cost side of a hostile chain many times deeper than the bound refuses in well under a second, proving the walk's own work is bounded by <see
-    /// cref="XAdESCounterSignatureChain.MaximumChainNodeCount"/> rather than by the attacker's chosen depth — every rented buffer is returned once every disposable in the fixture is
-    /// disposed, observed through <see cref="MeteredHousePool"/> accounting. Anchored to <see
+    /// Proves the cost side, counted: a hostile chain many times deeper than the bound refuses with the walk's OWN work bounded by <see
+    /// cref="XAdESCounterSignatureChain.MaximumChainNodeCount"/> rather than by the attacker's chosen depth. The walk opens exactly <c>MaximumChainNodeCount</c>
+    /// nested <c>ds:Signature</c> occurrences (<see cref="XAdESCounterSignature.TryRead"/>) before refusing the next one; each occurrence decodes exactly two
+    /// base64 fields — its one <c>Reference</c>'s <c>DigestValue</c> and its own <c>SignatureValue</c>, both <c>"AQ=="</c> — and each such decode costs exactly
+    /// three pool rents (<see cref="XmlBase64Content.TryDecode"/>'s two <c>PooledStructList</c> scratch buffers plus <see cref="PooledMemory.FromBytes"/>'s own
+    /// copy), for <c>MaximumChainNodeCount &#215; 6</c> rents attributable to the walk. Measured as the delta across the call, so parsing the 150-hop fixture —
+    /// which the walk itself never touches — cannot dilute the signal the way a wall-clock ceiling would when parsing dominates the measured time. Every rented
+    /// buffer is returned once every disposable in the fixture is disposed. Anchored to <see
     /// href="https://www.etsi.org/deliver/etsi_en/319100_319199/31913201/01.03.01_60/en_31913201v010301p.pdf">ETSI EN 319 132-1 V1.3.1</see> clause 5.2.7.2.
     /// </summary>
     [TestMethod]
-    public void DeepHostileChainRefusesWithinTheCeiling()
+    public void DeepHostileChainRefusesAfterOpeningExactlyMaximumChainNodeCountSignatures()
     {
         //Far beyond the bound: the underlying XmlSpanReader.MaximumElementDepth (1024) already caps how deep
         //raw XML nesting can go, so this uses the deepest chain that still parses (each hop costs several
         //XML element levels) to prove the walk's OWN cost stays bounded well before that outer limit matters.
         const int Depth = 150;
+        const long RentsPerOpenedCounterSignature = 6L;
         using var metered = new MeteredHousePool();
-        var stopwatch = Stopwatch.StartNew();
-        using XmlNodeTable table = Parse(BuildLinearChain(Depth), metered.Pool);
-        using XmlSignature root = ReadRootSignature(table);
-        bool isWalked = XAdESCounterSignatureChain.TryWalk(table, root, metered.Pool, out _, out XAdESProcessingError error);
-        stopwatch.Stop();
+        long rentedBeforeWalk;
+        long rentedAfterWalk;
+        using(XmlNodeTable table = Parse(BuildLinearChain(Depth), metered.Pool))
+        {
+            using XmlSignature root = ReadRootSignature(table);
+            rentedBeforeWalk = metered.RentedCount;
+            bool isWalked = XAdESCounterSignatureChain.TryWalk(table, root, metered.Pool, out _, out XAdESProcessingError error);
 
-        Assert.IsFalse(isWalked, "A hostile chain far beyond the bound must be refused.");
-        Assert.AreEqual(XAdESProcessingFailure.CounterSignatureChainLimitExceeded, error.Failure);
-        Assert.IsLessThan(ResourceCaseCeiling, stopwatch.Elapsed, $"Walk took {stopwatch.Elapsed}, exceeding the loose ceiling {ResourceCaseCeiling}.");
+            Assert.IsFalse(isWalked, "A hostile chain far beyond the bound must be refused.");
+            Assert.AreEqual(XAdESProcessingFailure.CounterSignatureChainLimitExceeded, error.Failure);
+            rentedAfterWalk = metered.RentedCount;
+        }
+
+        Assert.AreEqual(
+            XAdESCounterSignatureChain.MaximumChainNodeCount * RentsPerOpenedCounterSignature, rentedAfterWalk - rentedBeforeWalk,
+            "The walk opens exactly MaximumChainNodeCount nested signatures before refusing the next one; the unbounded shape this bound fixes would open all 150.");
+        Assert.AreEqual(0L, metered.OutstandingCount, "Every rented buffer is returned once every disposable in the fixture is disposed.");
     }
 }

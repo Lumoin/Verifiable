@@ -237,13 +237,13 @@ public readonly struct EncodingScheme: IEquatable<EncodingScheme>
     public static EncodingScheme Jose { get; } = new EncodingScheme(9);
 
 
-    private static List<EncodingScheme> schemes { get; } = new([Der, Pem, EcCompressed, EcUncompressed, Pkcs1, Pkcs8, Raw, Cbor, Cose, Jose]);
+    private static List<EncodingScheme> RegisteredSchemes { get; } = new([Der, Pem, EcCompressed, EcUncompressed, Pkcs1, Pkcs8, Raw, Cbor, Cose, Jose]);
 
 
     /// <summary>
     /// Gets all registered encoding scheme values.
     /// </summary>
-    public static IReadOnlyList<EncodingScheme> Schemes => schemes.AsReadOnly();
+    public static IReadOnlyList<EncodingScheme> Schemes => RegisteredSchemes.AsReadOnly();
 
 
     /// <summary>
@@ -261,16 +261,16 @@ public readonly struct EncodingScheme: IEquatable<EncodingScheme>
     /// </remarks>
     public static EncodingScheme Create(int scheme)
     {
-        for(int i = 0; i < schemes.Count; ++i)
+        for(int i = 0; i < RegisteredSchemes.Count; ++i)
         {
-            if(schemes[i].Scheme == scheme)
+            if(RegisteredSchemes[i].Scheme == scheme)
             {
                 throw new ArgumentException("Scheme already exists.");
             }
         }
 
         var newScheme = new EncodingScheme(scheme);
-        schemes.Add(newScheme);
+        RegisteredSchemes.Add(newScheme);
 
         return newScheme;
     }

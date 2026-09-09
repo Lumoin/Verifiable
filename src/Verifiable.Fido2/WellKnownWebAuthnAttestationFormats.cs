@@ -30,7 +30,7 @@ public static class WellKnownWebAuthnAttestationFormats
     /// <remarks>
     /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-none-attestation">W3C Web Authentication Level 3, section 8.7: None Attestation Statement Format.</see>
     /// </remarks>
-    public static readonly string None = Utf8Constants.ToInternedString(NoneUtf8);
+    public static string None { get; } = Utf8Constants.ToInternedString(NoneUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Packed"/>.</summary>
     public static ReadOnlySpan<byte> PackedUtf8 => "packed"u8;
@@ -41,7 +41,7 @@ public static class WellKnownWebAuthnAttestationFormats
     /// <remarks>
     /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-packed-attestation">W3C Web Authentication Level 3, section 8.2: Packed Attestation Statement Format.</see>
     /// </remarks>
-    public static readonly string Packed = Utf8Constants.ToInternedString(PackedUtf8);
+    public static string Packed { get; } = Utf8Constants.ToInternedString(PackedUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Tpm"/>.</summary>
     public static ReadOnlySpan<byte> TpmUtf8 => "tpm"u8;
@@ -52,7 +52,7 @@ public static class WellKnownWebAuthnAttestationFormats
     /// <remarks>
     /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-tpm-attestation">W3C Web Authentication Level 3, section 8.3: TPM Attestation Statement Format.</see>
     /// </remarks>
-    public static readonly string Tpm = Utf8Constants.ToInternedString(TpmUtf8);
+    public static string Tpm { get; } = Utf8Constants.ToInternedString(TpmUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="AndroidKey"/>.</summary>
     public static ReadOnlySpan<byte> AndroidKeyUtf8 => "android-key"u8;
@@ -63,7 +63,7 @@ public static class WellKnownWebAuthnAttestationFormats
     /// <remarks>
     /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-android-key-attestation">W3C Web Authentication Level 3, section 8.4: Android Key Attestation Statement Format.</see>
     /// </remarks>
-    public static readonly string AndroidKey = Utf8Constants.ToInternedString(AndroidKeyUtf8);
+    public static string AndroidKey { get; } = Utf8Constants.ToInternedString(AndroidKeyUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="AndroidSafetyNet"/>.</summary>
     public static ReadOnlySpan<byte> AndroidSafetyNetUtf8 => "android-safetynet"u8;
@@ -74,7 +74,7 @@ public static class WellKnownWebAuthnAttestationFormats
     /// <remarks>
     /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-android-safetynet-attestation">W3C Web Authentication Level 3, section 8.5: Android SafetyNet Attestation Statement Format.</see>
     /// </remarks>
-    public static readonly string AndroidSafetyNet = Utf8Constants.ToInternedString(AndroidSafetyNetUtf8);
+    public static string AndroidSafetyNet { get; } = Utf8Constants.ToInternedString(AndroidSafetyNetUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="FidoU2f"/>.</summary>
     public static ReadOnlySpan<byte> FidoU2fUtf8 => "fido-u2f"u8;
@@ -85,7 +85,7 @@ public static class WellKnownWebAuthnAttestationFormats
     /// <remarks>
     /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-fido-u2f-attestation">W3C Web Authentication Level 3, section 8.6: FIDO U2f Attestation Statement Format.</see>
     /// </remarks>
-    public static readonly string FidoU2f = Utf8Constants.ToInternedString(FidoU2fUtf8);
+    public static string FidoU2f { get; } = Utf8Constants.ToInternedString(FidoU2fUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Apple"/>.</summary>
     public static ReadOnlySpan<byte> AppleUtf8 => "apple"u8;
@@ -97,7 +97,7 @@ public static class WellKnownWebAuthnAttestationFormats
     /// Registered in the IANA WebAuthn Attestation Statement Format Identifiers
     /// registry outside the core specification section list.
     /// </remarks>
-    public static readonly string Apple = Utf8Constants.ToInternedString(AppleUtf8);
+    public static string Apple { get; } = Utf8Constants.ToInternedString(AppleUtf8);
 
 
     /// <summary>Determines whether <paramref name="identifier"/> is <see cref="None"/>.</summary>

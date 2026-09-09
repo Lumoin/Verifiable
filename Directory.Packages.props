@@ -9,19 +9,38 @@
     The build system enforces that core libraries do not have hard dependencies on serialization libraries, making them interchangeable.
   -->
   <ItemGroup Label="Library">
-    <PackageVersion Include="Lumoin.Base" Version="0.0.9" />
+    <PackageVersion Include="Lumoin.Base" Version="0.0.12" />
     <PackageVersion Include="Lumoin.Base.Libsodium" Version="0.0.9" />
     <PackageVersion Include="Lumoin.Veridical.Core" Version="0.0.6" />
     <PackageVersion Include="Lumoin.Veridical.Hashing" Version="0.0.6" />
     <PackageVersion Include="Lumoin.Veridical.Backends.Managed" Version="0.0.6" />
     <PackageVersion Include="Lumoin.Veridical.Bbs" Version="0.0.6" />
+    <!-- Lumoin.Veritas pins point at the arc's local pre-release validation feed
+         (tempdocs/roadmap/veritas/local-feed, packed from the Veritas el-grind rung dbbfd7a4);
+         they swap to the published 0.0.2 at arc close. -->
+    <PackageVersion Include="Lumoin.Veritas.Core" Version="0.0.2-local.be47a9ff" />
+    <PackageVersion Include="Lumoin.Veritas.Json" Version="0.0.2-local.be47a9ff" />
+    <PackageVersion Include="Lumoin.Veritas.Json.Stj" Version="0.0.2-local.be47a9ff" />
+    <PackageVersion Include="Lumoin.Veritas.JsonPointer" Version="0.0.2-local.be47a9ff" />
+    <PackageVersion Include="Lumoin.Veritas.JsonSchema" Version="0.0.2-local.be47a9ff" />
+    <PackageVersion Include="Lumoin.Veritas.Jsonata" Version="0.0.2-local.be47a9ff" />
+    <PackageVersion Include="Lumoin.Veritas.Rdf" Version="0.0.2-local.be47a9ff" />
+    <PackageVersion Include="Lumoin.Veritas.NQuads" Version="0.0.2-local.be47a9ff" />
+    <PackageVersion Include="Lumoin.Veritas.LinkedData" Version="0.0.2-local.be47a9ff" />
+    <PackageVersion Include="Lumoin.Veritas.JsonLd" Version="0.0.2-local.be47a9ff" />
+    <PackageVersion Include="Lumoin.Veritas.Canonicalization" Version="0.0.2-local.be47a9ff" />
+    <PackageVersion Include="Lumoin.Veritas.Cbor" Version="0.0.2-local.be47a9ff" />
+    <PackageVersion Include="Lumoin.Veritas.Cid" Version="0.0.2-local.be47a9ff" />
+    <PackageVersion Include="Lumoin.Veritas.CborLd" Version="0.0.2-local.be47a9ff" />
+    <!-- Transitive pins for the Lumoin.Veritas.Core closure (CentralPackageTransitivePinningEnabled). -->
+    <PackageVersion Include="System.IO.Hashing" Version="10.0.11" />
+    <PackageVersion Include="System.Threading.RateLimiting" Version="10.0.11" />
     <PackageVersion Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="5.6.0" />
     <PackageVersion Include="Microsoft.Extensions.Caching.Memory" Version="10.0.11" />
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.11" />
     <PackageVersion Include="Microsoft.Sbom.Targets" Version="4.1.5" />
     <PackageVersion Include="BouncyCastle.Cryptography" Version="2.7.0" />
     <PackageVersion Include="System.Collections.Immutable" Version="10.0.11" />
-    <PackageVersion Include="System.Formats.Cbor" Version="10.0.11" />
     <PackageVersion Include="System.Net.Http.Json" Version="10.0.11" />
     <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.11" />
     <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.11" />
@@ -35,9 +54,6 @@
     take a dependency on directly.
   -->
   <ItemGroup Label="CLI">
-    <PackageVersion Include="dotNetRdf" Version="3.5.2" />
-    <!-- Transitive of dotNetRdf, pinned to a patched version to clear GHSA-pgww-w46g-26qg (vulnerable < 1.5.0). -->
-    <PackageVersion Include="AngleSharp" Version="1.7.1" />
     <PackageVersion Include="SimpleBase" Version="5.6.4" />
     <PackageVersion Include="System.CommandLine" Version="2.0.11" />
     <PackageVersion Include="ModelContextProtocol" Version="2.2.0" />

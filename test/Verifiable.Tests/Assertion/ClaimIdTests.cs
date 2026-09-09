@@ -1,6 +1,9 @@
 using System.Diagnostics.CodeAnalysis;
-using System.Reflection;
+using System.IO;
+using System.Linq;
+using System.Text.RegularExpressions;
 using Verifiable.Core.Assessment;
+using Verifiable.Tests.Foundation;
 
 
 namespace Verifiable.Tests.Assertion
@@ -12,13 +15,34 @@ namespace Verifiable.Tests.Assertion
     [TestClass]
     internal sealed class ClaimIdTests
     {
-        //TODO:
+        /// <summary>The repository-relative path declaring <see cref="ClaimId"/>'s static instances.</summary>
+        private const string ClaimIdPath = "src/Verifiable.Core/Assessment/ClaimId.cs";
+
+        /// <summary>Matches a declared <c>public static ClaimId X { get; } = new(code, "description");</c> allocation, in either the target-typed or fully-qualified constructor-call form.</summary>
+        private static Regex ClaimIdAllocationPattern { get; } = new(
+            @"public\s+static\s+ClaimId\s+(\w+)\s*\{\s*get;\s*\}\s*=\s*new(?:\s+ClaimId)?\(\s*(\d+)\s*,\s*""((?:[^""\\]|\\.)*)""\s*\)\s*;",
+            RegexOptions.Compiled);
+
+
         /// <summary>
-        /// This collects the library defined, or pre-defined, static instances of <see cref="ClaimId"/>.
+        /// Every library-defined static <see cref="ClaimId"/> allocation, found by a source scan of the
+        /// declaring file rather than by reflection over the loaded type — so a static added without a test
+        /// row still shows up in the count.
         /// </summary>
-        private static IEnumerable<PropertyInfo> AllClaimIdProperties => typeof(ClaimId)
-                .GetProperties(BindingFlags.Public | BindingFlags.Static)
-                .Where(prop => prop.PropertyType == typeof(ClaimId));
+        /// <returns>The property name, code and description of every declared allocation.</returns>
+        private static List<(string Name, int Code, string Description)> AllDeclaredClaimIdAllocations()
+        {
+            string repositoryRoot = SourceHygieneScanner.FindRepositoryRoot();
+            string text = File.ReadAllText(Path.Combine(repositoryRoot, ClaimIdPath));
+
+            List<(string Name, int Code, string Description)> allocations = [];
+            foreach(Match match in ClaimIdAllocationPattern.Matches(text))
+            {
+                allocations.Add((match.Groups[1].Value, int.Parse(match.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture), match.Groups[3].Value));
+            }
+
+            return allocations;
+        }
 
 
         /// <summary>
@@ -29,23 +53,14 @@ namespace Verifiable.Tests.Assertion
         public void AllStaticInstancesHaveUniqueNonEmptyDescriptions()
         {
             //This hold the descriptions to detect duplicates in case there are any.
-            var descriptions = new Dictionary<string, ClaimId>();
+            var descriptions = new Dictionary<string, string>();
 
-            foreach(var staticProperty in AllClaimIdProperties)
+            foreach((string name, _, string description) in AllDeclaredClaimIdAllocations())
             {
-                //1. Get the static instance of ClaimId.
-                ClaimId claimId2Instance = (ClaimId)staticProperty.GetValue(null)!;
+                Assert.IsFalse(string.IsNullOrWhiteSpace(description), $"{name} declares no description.");
+                Assert.IsFalse(descriptions.ContainsKey(description), $"Duplicate description found: {description} for {name} and {descriptions.GetValueOrDefault(description)}");
 
-                //2. Get its description.
-                var description = claimId2Instance.ToString();
-
-                //3. Check if the description is unique.
-                Assert.IsNotNull(description);
-                Assert.IsFalse(descriptions.ContainsKey(description), $"Duplicate description found: {description} for {staticProperty.Name} and {claimId2Instance}");
-
-                //Add the description to the dictionary indexed by the description so that
-                //potential duplicates can be detected.
-                descriptions.Add(description, claimId2Instance);
+                descriptions.Add(description, name);
             }
         }
 
@@ -84,7 +99,6 @@ namespace Verifiable.Tests.Assertion
                 { nameof(ClaimId.OkpAlgShouldNotBePresentForX25519), (201, "OkpAlgShouldNotBePresentForX25519") },
                 { nameof(ClaimId.OkpValidAlgAndCrvCombination), (202, "OkpValidAlgAndCrvCombination") },
                 { nameof(ClaimId.OkpAlgOptionalOrNotPresent), (204, "OkpAlgOptionalOrNotPresent") },
-                { nameof(ClaimId.DidCoreJsonLdUriAsFirst), (300, "DidCoreJsonLdUriAsFirst") },
                 { nameof(ClaimId.DidDocumentPrefix), (400, "DidDocumentPrefix") },
                 { nameof(ClaimId.KeyDidPrefix), (500, "KeyDidPrefix") },
                 { nameof(ClaimId.KeyDidIdEncoding), (501, "KeyDidIdEncoding") },
@@ -97,24 +111,29 @@ namespace Verifiable.Tests.Assertion
                 { nameof(ClaimId.KeyDidFragmentIdentifierRepetition), (508, "KeyDidFragmentIdentifierRepetition") },
                 { nameof(ClaimId.WebDidIdEncoding), (600, "WebDidIdEncoding") },
                 { nameof(ClaimId.WebDidIdFormat), (601, "WebDidIdFormat") },
-                { nameof(ClaimId.WebDidKeyFormat), (602, "WebDidKeyFormat") }
+                { nameof(ClaimId.WebDidKeyFormat), (602, "WebDidKeyFormat") },
+                { nameof(ClaimId.ContextFirstEntry), (1300, "ContextFirstEntry") },
+                { nameof(ClaimId.ContextEntriesAreUrlsOrDefinitions), (1301, "ContextEntriesAreUrlsOrDefinitions") },
+                { nameof(ClaimId.ContextKnownContexts), (1302, "ContextKnownContexts") },
+                { nameof(ClaimId.ContextNoDuplicateEntries), (1303, "ContextNoDuplicateEntries") },
+                { nameof(ClaimId.ContextPresent), (1304, "ContextPresent") },
+                { nameof(ClaimId.ContextFormIsOrderedSet), (1305, "ContextFormIsOrderedSet") },
+                { nameof(ClaimId.ContextUndefinedTermsLast), (1306, "ContextUndefinedTermsLast") },
+                { nameof(ClaimId.ContextNoVocabInDefinition), (1307, "ContextNoVocabInDefinition") },
+                { nameof(ClaimId.ContextDataIntegrityPresentWhenProofPresent), (1308, "ContextDataIntegrityPresentWhenProofPresent") },
+                { nameof(ClaimId.ContextEnvelopedPresentAndIncludesBaseContext), (1309, "ContextEnvelopedPresentAndIncludesBaseContext") }
             };
 
-            var reflectedIds = AllClaimIdProperties.ToDictionary(
-                prop => prop.Name,
-                prop =>
-                (
-                    ReflectedCode: ((ClaimId)prop.GetValue(null)!).Code,
-                    ReflectedDescription: ((ClaimId)prop.GetValue(null)!).ToString()
-                )
-            );
+            var declaredIds = AllDeclaredClaimIdAllocations().ToDictionary(
+                allocation => allocation.Name,
+                allocation => (allocation.Code, allocation.Description));
 
-            Assert.HasCount(expectedIds.Count, reflectedIds);
+            Assert.HasCount(expectedIds.Count, declaredIds);
             foreach(var expectedId in expectedIds)
             {
-                Assert.IsTrue(reflectedIds.ContainsKey(expectedId.Key), $"Missing predefined ID: {expectedId.Key}");
-                Assert.AreEqual(expectedId.Value.Code, reflectedIds[expectedId.Key].ReflectedCode);
-                Assert.AreEqual(expectedId.Value.Description, reflectedIds[expectedId.Key].ReflectedDescription);
+                Assert.IsTrue(declaredIds.ContainsKey(expectedId.Key), $"Missing predefined ID: {expectedId.Key}");
+                Assert.AreEqual(expectedId.Value.Code, declaredIds[expectedId.Key].Code);
+                Assert.AreEqual(expectedId.Value.Description, declaredIds[expectedId.Key].Description);
             }
         }
 
@@ -128,9 +147,9 @@ namespace Verifiable.Tests.Assertion
         {
             const int TestClaimCode = 100_001;
             const string TestDescription = "TestDescription";
-            var customCode1 = ClaimId.Create(TestClaimCode, TestDescription);
+            ClaimId.Create(TestClaimCode, TestDescription);
 
-            var exception = Assert.ThrowsExactly<ArgumentException>(() => ClaimId.Create(TestClaimCode, TestDescription));
+            Assert.ThrowsExactly<ArgumentException>(() => ClaimId.Create(TestClaimCode, TestDescription));
         }
 
 
@@ -256,6 +275,9 @@ namespace Verifiable.Tests.Assertion
             }
             catch(Exception thrown)
             {
+                //The racing outcome itself is what this test asserts on afterward; capturing whichever
+                //exception (if any) each concurrent attempt raised is the test's real assertion data, not a
+                //swallowed failure.
                 attempt.Outcomes[attempt.Index] = thrown;
             }
             finally
@@ -339,8 +361,16 @@ namespace Verifiable.Tests.Assertion
                     Assert.AreEqual(code, claimId.Code);
                     Assert.AreEqual(description, claimId.ToString());
                 }
-                catch(ArgumentOutOfRangeException) { }
-                catch(ArgumentException) { }
+                catch(ArgumentOutOfRangeException)
+                {
+                    //A generated code/description pair colliding with a previously registered ClaimId is
+                    //expected and harmless: the loop draws another pair and retries.
+                }
+                catch(ArgumentException)
+                {
+                    //Same as above: a collision with an already-registered code or description is expected
+                    //and harmless; the loop draws another pair and retries.
+                }
             }
         }
 

@@ -44,19 +44,19 @@ public static class TrustedListXmlParser
     public const int MaxCriteriaListDepth = 64;
 
     /// <summary>The TS 119 612 core schema namespace (root document, scheme/TSP/service structure, digital identities).</summary>
-    private static readonly XNamespace Tsl = "http://uri.etsi.org/02231/v2#";
+    private static XNamespace Tsl { get; } = "http://uri.etsi.org/02231/v2#";
 
     /// <summary>The XAdES 1.3.2 namespace (<c>ObjectIdentifierType</c>'s <c>Identifier</c>, and the signature's own <c>QualifyingProperties</c> read by the signature verifier, not this parser).</summary>
-    private static readonly XNamespace Xades132 = "http://uri.etsi.org/01903/v1.3.2#";
+    private static XNamespace Xades132 { get; } = "http://uri.etsi.org/01903/v1.3.2#";
 
     /// <summary>The Service Information Extensions namespace (<c>Qualifications</c>/<c>QualificationElement</c>/<c>CriteriaList</c>/<c>Qualifier</c>/<c>KeyUsage</c>/<c>PolicySet</c>).</summary>
-    private static readonly XNamespace Sie = "http://uri.etsi.org/TrstSvc/SvcInfoExt/eSigDir-1999-93-EC-TrustedList/#";
+    private static XNamespace Sie { get; } = "http://uri.etsi.org/TrstSvc/SvcInfoExt/eSigDir-1999-93-EC-TrustedList/#";
 
     /// <summary>The TS 119 612 additional-types namespace (<c>ExtendedKeyUsage</c>, <c>CertSubjectDNAttribute</c> — the <c>otherCriteriaList</c> leaves this parser recognises).</summary>
-    private static readonly XNamespace Tslx = "http://uri.etsi.org/02231/v2/additionaltypes#";
+    private static XNamespace Tslx { get; } = "http://uri.etsi.org/02231/v2/additionaltypes#";
 
     /// <summary>The built-in XML namespace carrying the <c>xml:lang</c> attribute every multilingual field uses.</summary>
-    private static readonly XNamespace XmlLang = XNamespace.Xml;
+    private static XNamespace XmlLang { get; } = XNamespace.Xml;
 
 
     /// <summary>

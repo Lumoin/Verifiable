@@ -8,7 +8,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// <remarks>
 /// <para>
 /// Produced by <c>TPM2_GetTime()</c>: attests the TPM's current time and clock/reset state, plus its firmware
-/// version (TPM 2.0 Library Part 3, Section 18.7).
+/// version (TPM 2.0 Library Part 3, clause 18.7).
 /// </para>
 /// <para>
 /// <b>Wire format:</b>
@@ -20,7 +20,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// } TPMS_TIME_ATTEST_INFO;
 /// </code>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 10.12.2, Table 122.
+/// Specification reference: TPM 2.0 Library Part 2, clause 10.11.2, Table 144.
 /// </para>
 /// </remarks>
 /// <param name="Time">The current TPM time and clock/reset state.</param>

@@ -57,15 +57,15 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
     private FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch);
 
     private const string ClientId = "https://all-capabilities.client.test";
-    private static readonly Uri ClientBaseUri = new("https://all-capabilities.client.test");
+    private static Uri ClientBaseUri { get; } = new("https://all-capabilities.client.test");
     private const string SubjectId = "subject-all-caps-1";
 
     //RegisterDpopClient hard-codes this as the single allowed redirect URI.
-    private static readonly Uri RedirectUri = new("https://client.example.com/callback");
+    private static Uri RedirectUri { get; } = new("https://client.example.com/callback");
 
     private const string VerifierClientId = "https://verifier.example.com";
-    private static readonly Uri VerifierBaseUri = new("https://verifier.example.com");
-    private static readonly ImmutableHashSet<CapabilityIdentifier> Oid4VpCapabilities =
+    private static Uri VerifierBaseUri { get; } = new("https://verifier.example.com");
+    private static ImmutableHashSet<CapabilityIdentifier> Oid4VpCapabilities { get; } =
         ImmutableHashSet.Create(
             WellKnownCapabilityIdentifiers.VcVerifiablePresentation,
             WellKnownCapabilityIdentifiers.OAuthJwksEndpoint,

@@ -41,8 +41,8 @@ internal sealed class WebVhDidResolverResolvingTests
     private const string SecondTime = "2025-02-01T00:00:00Z";
     private const string ThirdTime = "2025-03-01T00:00:00Z";
 
-    private static readonly EncodeDelegate Base58Encoder = DefaultCoderSelector.SelectEncoder(typeof(PublicKeyMultibase));
-    private static readonly DecodeDelegate Base58Decoder = DefaultCoderSelector.SelectDecoder(typeof(PublicKeyMultibase));
+    private static EncodeDelegate Base58Encoder { get; } = DefaultCoderSelector.SelectEncoder(typeof(PublicKeyMultibase));
+    private static DecodeDelegate Base58Decoder { get; } = DefaultCoderSelector.SelectDecoder(typeof(PublicKeyMultibase));
 
 
     public TestContext TestContext { get; set; } = null!;
@@ -1354,16 +1354,16 @@ internal sealed class WebVhDidResolverResolvingTests
     //A single-hop transport returning a canned (status, body) per absolute URL; an unknown URL is a 404.
     private sealed class RoutingTransport
     {
-        private readonly Dictionary<string, (int Status, string? Body)> routes;
+        private Dictionary<string, (int Status, string? Body)> Routes { get; }
 
         public RoutingTransport(Dictionary<string, (int Status, string? Body)> routes)
         {
-            this.routes = routes;
+            this.Routes = routes;
         }
 
         public OutboundTransportDelegate Delegate => (request, context, cancellationToken) =>
         {
-            if(!routes.TryGetValue(request.Target.AbsoluteUri, out (int Status, string? Body) route))
+            if(!Routes.TryGetValue(request.Target.AbsoluteUri, out (int Status, string? Body) route))
             {
                 route = (404, null);
             }

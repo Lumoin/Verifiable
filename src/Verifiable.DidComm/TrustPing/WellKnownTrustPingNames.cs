@@ -22,7 +22,7 @@ public static class WellKnownTrustPingNames
     public static ReadOnlySpan<byte> TrustPingProtocolUtf8 => "https://didcomm.org/trust-ping/2.0"u8;
 
     /// <summary>The protocol identifier URI (PIURI) of Trust Ping Protocol 2.0 (didcomm.org/trust-ping/2.0).</summary>
-    public static readonly string TrustPingProtocol = Utf8Constants.ToInternedString(TrustPingProtocolUtf8);
+    public static string TrustPingProtocol { get; } = Utf8Constants.ToInternedString(TrustPingProtocolUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="PingType"/>.</summary>
     public static ReadOnlySpan<byte> PingTypeUtf8 => "https://didcomm.org/trust-ping/2.0/ping"u8;
@@ -31,7 +31,7 @@ public static class WellKnownTrustPingNames
     /// The <c>ping</c> Message Type URI — the value of the <c>type</c> header that identifies a message as a
     /// Trust Ping Protocol 2.0 ping (didcomm.org/trust-ping/2.0 §ping).
     /// </summary>
-    public static readonly string PingType = Utf8Constants.ToInternedString(PingTypeUtf8);
+    public static string PingType { get; } = Utf8Constants.ToInternedString(PingTypeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="PingResponseType"/>.</summary>
     public static ReadOnlySpan<byte> PingResponseTypeUtf8 => "https://didcomm.org/trust-ping/2.0/ping-response"u8;
@@ -40,7 +40,7 @@ public static class WellKnownTrustPingNames
     /// The <c>ping-response</c> Message Type URI — the value of the <c>type</c> header that identifies a
     /// message as the response to a ping (didcomm.org/trust-ping/2.0 §ping-response).
     /// </summary>
-    public static readonly string PingResponseType = Utf8Constants.ToInternedString(PingResponseTypeUtf8);
+    public static string PingResponseType { get; } = Utf8Constants.ToInternedString(PingResponseTypeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="ResponseRequested"/>.</summary>
     public static ReadOnlySpan<byte> ResponseRequestedUtf8 => "response_requested"u8;
@@ -50,5 +50,5 @@ public static class WellKnownTrustPingNames
     /// whether the sender wants a <c>ping-response</c> back. When <see langword="false"/> the receiver MUST
     /// NOT respond (didcomm.org/trust-ping/2.0 §ping).
     /// </summary>
-    public static readonly string ResponseRequested = Utf8Constants.ToInternedString(ResponseRequestedUtf8);
+    public static string ResponseRequested { get; } = Utf8Constants.ToInternedString(ResponseRequestedUtf8);
 }

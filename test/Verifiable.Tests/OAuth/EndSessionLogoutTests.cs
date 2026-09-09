@@ -36,14 +36,14 @@ internal sealed class EndSessionLogoutTests
 
     private const string ClientId = "https://client.example.com";
     private const string SubjectId = "subject-logout-1";
-    private static readonly Uri ClientBaseUri = new("https://client.example.com");
-    private static readonly Uri RedirectUri = new("https://client.example.com/callback");
+    private static Uri ClientBaseUri { get; } = new("https://client.example.com");
+    private static Uri RedirectUri { get; } = new("https://client.example.com/callback");
 
     /// <summary>The post-logout URI TestHostShell registers for DPoP clients.</summary>
     private const string RegisteredPostLogout = "https://client.example.com/post-logout";
 
     /// <summary>DPoP-client defaults plus the RP-Initiated Logout capability.</summary>
-    private static readonly ImmutableHashSet<CapabilityIdentifier> LogoutCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> LogoutCapabilities { get; } =
         ImmutableHashSet.Create(
             WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
             WellKnownCapabilityIdentifiers.OAuthPushedAuthorization,

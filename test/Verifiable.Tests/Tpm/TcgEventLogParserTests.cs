@@ -68,6 +68,31 @@ internal class TcgEventLogParserTests
         Assert.IsNotNull(result.Value);
         Assert.AreEqual("Spec ID Event03", result.Value.SpecVersion);
         Assert.IsTrue(result.Value.DigestSizes.ContainsKey(TpmAlgIdConstants.TPM_ALG_SHA256));
+        Assert.AreEqual("Spec ID Event03", result.Value.Events[0].EventDataDescription);
+    }
+
+    /// <summary>
+    /// The TCG PC Client Platform Firmware Profile Specification &#167;10.2.1.1 fixes
+    /// "Spec ID Event03" as the exact byte string identifying the crypto-agile log format's
+    /// signature. A control character (U+0001) inserted into the 16-byte signature field produces
+    /// a byte-different signature that a culture-aware comparison could still treat as starting
+    /// with "Spec ID Event" (control characters are collation-ignorable under ICU); the ordinal
+    /// comparison must reject it.
+    /// </summary>
+    [TestMethod]
+    public void ParseNoActionEventDoesNotDescribeSignatureWithIgnorableControlCharacterAsSpecIdEvent()
+    {
+        //U+0001 (SOH), written by code point rather than as a literal source character. Inserted
+        //after "Spec" this occupies the 16-byte signature field exactly ("Spec" + 1 + " ID Event03"
+        //is 16 chars), so no trailing NUL padding masks it.
+        string tamperedSignature = "Spec" + (char)0x0001 + " ID Event03";
+        byte[] specIdEventData = BuildSpecIdEventData(signature: tamperedSignature);
+        byte[] log = BuildLegacyEvent(0, TcgEventType.EV_NO_ACTION, new byte[20], specIdEventData);
+
+        var result = TcgEventLogParser.Parse(log);
+
+        Assert.IsTrue(result.IsSuccess);
+        Assert.IsNull(result.Value!.Events[0].EventDataDescription);
     }
 
     [TestMethod]
@@ -268,17 +293,17 @@ internal class TcgEventLogParserTests
         return CombineEvents([firstEvent, cryptoAgileEvent]);
     }
 
-    private static byte[] BuildSpecIdEventData(ushort sha256DigestSize = 32)
+    private static byte[] BuildSpecIdEventData(ushort sha256DigestSize = 32, string signature = "Spec ID Event03")
     {
         //TCG_EfiSpecIdEvent: Signature(16) + PlatformClass(4) + SpecVersionMinor(1) +
         //SpecVersionMajor(1) + SpecErrata(1) + UintnSize(1) + NumberOfAlgorithms(4) +
         //DigestSizes(variable) + VendorInfoSize(1).
         var data = new List<byte>();
 
-        //Signature: "Spec ID Event03\0".
-        byte[] signature = new byte[16];
-        Encoding.ASCII.GetBytes("Spec ID Event03").CopyTo(signature, 0);
-        data.AddRange(signature);
+        //Signature: defaults to "Spec ID Event03\0"; a test can pass a different literal.
+        byte[] signatureBytes = new byte[16];
+        Encoding.ASCII.GetBytes(signature).CopyTo(signatureBytes, 0);
+        data.AddRange(signatureBytes);
 
         //PlatformClass (0 = client).
         data.AddRange(BitConverter.GetBytes((uint)0));

@@ -13,16 +13,18 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// <remarks>
 /// <para>
 /// Signs a digest with a loaded signing key. The signing key must have the <c>sign</c> attribute set,
-/// and the supplied <see cref="SignatureScheme"/> must be compatible with the key's type: TPM_ALG_ECDSA
-/// for an ECC key, TPM_ALG_RSASSA or TPM_ALG_RSAPSS for an RSA key.
+/// and the supplied <see cref="SignatureScheme"/> must be compatible with the key's type — TPM_ALG_ECDSA
+/// for an ECC key, TPM_ALG_RSASSA or TPM_ALG_RSAPSS for an RSA key, TPM_ALG_HMAC for a KEYEDHASH HMAC
+/// key (Table 115's "Signs/verifies the digest" row, clause 20.1) — or TPM_ALG_NULL, which requests the
+/// key's own default scheme (TPM 2.0 Library Part 3, clause 20.5).
 /// </para>
 /// <para>
-/// Command structure (TPM 2.0 Part 3, Section 20.2):
+/// Command structure (TPM 2.0 Library Part 3, clause 20.5):
 /// </para>
 /// <list type="bullet">
 ///   <item><description>keyHandle (TPMI_DH_OBJECT): Handle of the signing key. Requires authorization.</description></item>
 ///   <item><description>digest (TPM2B_DIGEST): The digest to sign. Must match the scheme's hash algorithm size.</description></item>
-///   <item><description>inScheme (TPMT_SIG_SCHEME): The signing scheme (algorithm + hash algorithm).</description></item>
+///   <item><description>inScheme (TPMT_SIG_SCHEME+): The signing scheme (algorithm + hash algorithm), or the bare TPM_ALG_NULL selector with no trailing hash detail (Part 2, clause 11.2.1.5, Table 183).</description></item>
 ///   <item><description>validation (TPMT_TK_HASHCHECK): Proof that the digest was created by the TPM. Use a NULL ticket when the digest was computed externally.</description></item>
 /// </list>
 /// </remarks>
@@ -37,6 +39,13 @@ public sealed class SignInput: ITpmCommandInput, IDisposable
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_Sign;
 
     /// <summary>
+    /// <c>digest</c> is the first command parameter and a sized <c>TPM2B_DIGEST</c> (TPM 2.0 Library Part 3,
+    /// clause 20.5, Table 122), so a session carrying the <c>decrypt</c> attribute may protect it (Part 1,
+    /// clause 18.1: "Any first parameter can be encrypted as long as the parameter has a size field").
+    /// </summary>
+    public bool FirstCommandParameterIsEncryptable => true;
+
+    /// <summary>
     /// Gets the handle of the signing key.
     /// </summary>
     public TpmiDhObject KeyHandle { get; }
@@ -47,12 +56,14 @@ public sealed class SignInput: ITpmCommandInput, IDisposable
     public ReadOnlyMemory<byte> Digest { get; }
 
     /// <summary>
-    /// Gets the signing scheme algorithm (TPMI_ALG_SIG_SCHEME): TPM_ALG_ECDSA, TPM_ALG_RSASSA, or TPM_ALG_RSAPSS.
+    /// Gets the signing scheme algorithm (TPMI_ALG_SIG_SCHEME): TPM_ALG_ECDSA, TPM_ALG_RSASSA, TPM_ALG_RSAPSS,
+    /// TPM_ALG_HMAC, or TPM_ALG_NULL to request the key's own default scheme.
     /// </summary>
     public TpmAlgIdConstants SignatureScheme { get; }
 
     /// <summary>
-    /// Gets the hash algorithm for the signing scheme.
+    /// Gets the hash algorithm for the signing scheme. Not framed on the wire when <see cref="SignatureScheme"/>
+    /// is TPM_ALG_NULL — Table 183's <c>[scheme]details</c> is absent entirely for the NULL scheme.
     /// </summary>
     public TpmAlgIdConstants SchemeHashAlg { get; }
 
@@ -61,7 +72,8 @@ public sealed class SignInput: ITpmCommandInput, IDisposable
     /// </summary>
     /// <remarks>
     /// Configures the command with a NULL validation ticket, which is required when
-    /// the digest was computed outside the TPM (TPM 2.0 Part 2, Section 10.7.3).
+    /// the digest was computed outside the TPM (TPM 2.0 Library Part 2, clause 10.6.7 (TPMT_TK_HASHCHECK), with
+    /// the NULL-ticket convention at clause 10.6.2).
     /// </remarks>
     /// <param name="keyHandle">The handle of the ECDSA signing key.</param>
     /// <param name="digest">The pre-computed digest bytes to sign.</param>
@@ -82,7 +94,8 @@ public sealed class SignInput: ITpmCommandInput, IDisposable
     /// </summary>
     /// <remarks>
     /// Configures the command with a NULL validation ticket, which is required when
-    /// the digest was computed outside the TPM (TPM 2.0 Part 2, Section 10.7.3).
+    /// the digest was computed outside the TPM (TPM 2.0 Library Part 2, clause 10.6.7 (TPMT_TK_HASHCHECK), with
+    /// the NULL-ticket convention at clause 10.6.2).
     /// </remarks>
     /// <param name="keyHandle">The handle of the RSA signing key.</param>
     /// <param name="digest">The pre-computed digest bytes to sign.</param>
@@ -103,7 +116,8 @@ public sealed class SignInput: ITpmCommandInput, IDisposable
     /// </summary>
     /// <remarks>
     /// Configures the command with a NULL validation ticket, which is required when
-    /// the digest was computed outside the TPM (TPM 2.0 Part 2, Section 10.7.3).
+    /// the digest was computed outside the TPM (TPM 2.0 Library Part 2, clause 10.6.7 (TPMT_TK_HASHCHECK), with
+    /// the NULL-ticket convention at clause 10.6.2).
     /// </remarks>
     /// <param name="keyHandle">The handle of the RSA signing key.</param>
     /// <param name="digest">The pre-computed digest bytes to sign.</param>
@@ -124,11 +138,12 @@ public sealed class SignInput: ITpmCommandInput, IDisposable
     /// </summary>
     /// <remarks>
     /// Configures the command with a NULL validation ticket, which is required when
-    /// the digest was computed outside the TPM (TPM 2.0 Part 2, Section 10.7.3).
+    /// the digest was computed outside the TPM (TPM 2.0 Library Part 2, clause 10.6.7 (TPMT_TK_HASHCHECK), with
+    /// the NULL-ticket convention at clause 10.6.2).
     /// </remarks>
     /// <param name="keyHandle">The handle of the signing key.</param>
     /// <param name="digest">The pre-computed digest bytes to sign.</param>
-    /// <param name="signatureScheme">The signing scheme algorithm (TPM_ALG_ECDSA, TPM_ALG_RSASSA, or TPM_ALG_RSAPSS).</param>
+    /// <param name="signatureScheme">The signing scheme algorithm (TPM_ALG_ECDSA, TPM_ALG_RSASSA, TPM_ALG_RSAPSS, or TPM_ALG_NULL for the key's own default scheme).</param>
     /// <param name="schemeHashAlg">The hash algorithm for the scheme.</param>
     /// <param name="pool">The memory pool for digest buffer allocation.</param>
     /// <returns>A new <see cref="SignInput"/>.</returns>
@@ -163,15 +178,17 @@ public sealed class SignInput: ITpmCommandInput, IDisposable
     /// <inheritdoc/>
     public int GetSerializedSize()
     {
-        //TPMT_SIG_SCHEME: scheme (UINT16) + hashAlg (UINT16).
-        const int TpmtSigSchemeSize = sizeof(ushort) + sizeof(ushort);
+        //TPMT_SIG_SCHEME (TPM 2.0 Library Part 2, clause 11.2.1.5, Table 183): scheme (UINT16) selector, plus a
+        //hashAlg (UINT16) detail pair only when the scheme is not TPM_ALG_NULL — Table 183's [scheme]details
+        //is absent entirely for the NULL scheme, so a NULL SignatureScheme omits the trailing octets.
+        int schemeSize = sizeof(ushort) + (SignatureScheme == TpmAlgIdConstants.TPM_ALG_NULL ? 0 : sizeof(ushort));
 
         //TPMT_TK_HASHCHECK: tag (UINT16) + hierarchy (UINT32) + TPM2B_DIGEST size (UINT16, = 0 for NULL ticket).
         const int TpmtTkHashcheckNullSize = sizeof(ushort) + sizeof(uint) + sizeof(ushort);
 
         return sizeof(uint) +                               //keyHandle (TPMI_DH_OBJECT)
                sizeof(ushort) + Digest.Length +             //TPM2B_DIGEST: size prefix + bytes
-               TpmtSigSchemeSize +
+               schemeSize +
                TpmtTkHashcheckNullSize;
     }
 
@@ -187,7 +204,13 @@ public sealed class SignInput: ITpmCommandInput, IDisposable
         writer.WriteUInt16((ushort)Digest.Length);
         writer.WriteBytes(Digest.Span);
         writer.WriteUInt16((ushort)SignatureScheme);
-        writer.WriteUInt16((ushort)SchemeHashAlg);
+
+        //Table 183's [scheme]details is present only for a non-NULL scheme — a NULL SignatureScheme selects no
+        //TPMU_SIG_SCHEME member at all, so SchemeHashAlg is not framed for it.
+        if(SignatureScheme != TpmAlgIdConstants.TPM_ALG_NULL)
+        {
+            writer.WriteUInt16((ushort)SchemeHashAlg);
+        }
 
         //NULL ticket: tag = TPM_ST_HASHCHECK, hierarchy = TPM_RH_NULL, digest size = 0.
         writer.WriteUInt16((ushort)TpmStConstants.TPM_ST_HASHCHECK);

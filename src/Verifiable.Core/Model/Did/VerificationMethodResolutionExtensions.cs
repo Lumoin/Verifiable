@@ -428,7 +428,7 @@ public static class VerificationMethodResolutionExtensions
             string resolvedReference = reference;
             if(reference.StartsWith('#') && document.Id is not null)
             {
-                resolvedReference = document.Id.ToString() + reference;
+                resolvedReference = document.Id + reference;
             }
 
             for(int i = 0; i < document.VerificationMethod.Length; i++)
@@ -609,28 +609,24 @@ public static class VerificationMethodResolutionExtensions
         }
 
         var normalizedId = id.StartsWith('#') && document.Id is not null
-            ? document.Id.ToString() + id
+            ? document.Id + id
             : id;
 
         for(int i = 0; i < references.Length; i++)
         {
             var reference = references[i];
 
-            if(reference.IsEmbeddedVerification && reference.EmbeddedVerification is not null)
+            if(reference.IsEmbeddedVerification && reference.EmbeddedVerification is not null
+                && (string.Equals(reference.EmbeddedVerification.Id, normalizedId, StringComparison.Ordinal) ||
+                    string.Equals(reference.EmbeddedVerification.Id, id, StringComparison.Ordinal)))
             {
-                if(string.Equals(reference.EmbeddedVerification.Id, normalizedId, StringComparison.Ordinal) ||
-                   string.Equals(reference.EmbeddedVerification.Id, id, StringComparison.Ordinal))
-                {
-                    return reference.EmbeddedVerification;
-                }
+                return reference.EmbeddedVerification;
             }
-            else if(reference.VerificationReferenceId is not null)
+            else if(reference.VerificationReferenceId is not null
+                && (string.Equals(reference.VerificationReferenceId, normalizedId, StringComparison.Ordinal) ||
+                    string.Equals(reference.VerificationReferenceId, id, StringComparison.Ordinal)))
             {
-                if(string.Equals(reference.VerificationReferenceId, normalizedId, StringComparison.Ordinal) ||
-                   string.Equals(reference.VerificationReferenceId, id, StringComparison.Ordinal))
-                {
-                    return document.ResolveVerificationMethodReference(reference.VerificationReferenceId);
-                }
+                return document.ResolveVerificationMethodReference(reference.VerificationReferenceId);
             }
         }
 

@@ -627,7 +627,8 @@ public sealed class CBAdESArchiveTimestampContext
 
     /// <summary>
     /// Gets the CB-AdES signature's own signing certificate, whose readability this call checks before
-    /// contacting any Time-Stamping Authority (the S4 pre-TSA precedent, <see cref="ReadSigningCertificateValidityOrThrow"/>).
+    /// contacting any Time-Stamping Authority — the same locally-derivable-failure-first precedent every
+    /// pre-TSA validity check in this augmentation follows (<see cref="ReadSigningCertificateValidityOrThrow"/>).
     /// </summary>
     public required PkiCertificateMemory SigningCertificate { get; init; }
 
@@ -808,18 +809,19 @@ public sealed class CBAdESStripReferencesContext
 /// <para>
 /// <strong>The precise splice guarantee — canonical-on-create, preserve-on-augment.</strong>
 /// The input wire bytes themselves are of course never mutated (a fresh <see cref="EncodedCoseSign1"/> is
-/// always returned), but an EARLIER revision of this remark additionally claimed no retained element's WIRE
-/// BYTES could ever change across an augmentation call — that claim was false: every verb below used to
-/// re-encode the WHOLE <c>uHeaders</c> array from the DECODED model
-/// (<see cref="EncodeCBAdESUnprotectedHeaderDelegate"/>), and a decoded-model re-encode is provably lossy for
-/// at least one retained CDDL union arm (<see cref="CBAdESSerialization.WriteTDate"/>'s whole-second,
-/// forced-<c>Z</c> writer collapses a sub-second or non-<c>Z</c>-offset wire <c>tdate</c>, and an opaque
-/// <see cref="Verifiable.Cryptography.Pki.CBAdESUnsignedHeaderElementUnknown"/> element is never modeled
-/// precisely enough to reproduce byte-for-byte from its decoded form at all). Every verb below now composes its
-/// new <c>uHeaders</c> unprotected-header dictionary through <see cref="TrySpliceCBAdESUnprotectedHeaderDelegate"/>
-/// instead: retained elements are copied CONTENT-verbatim from <see cref="CBAdESSign1ParseResult.RawUnsignedHeaders"/>
-/// — the raw wire bytes captured at parse — and only the genuinely NEW element this call itself builds is
-/// freshly encoded. <see cref="EncodeCBAdESUnprotectedHeaderDelegate"/> remains exactly right for CREATION
+/// always returned), and no retained element's own WIRE BYTES change across an augmentation call either:
+/// every verb below composes its new <c>uHeaders</c> unprotected-header dictionary through
+/// <see cref="TrySpliceCBAdESUnprotectedHeaderDelegate"/>, copying every retained element CONTENT-verbatim
+/// from <see cref="CBAdESSign1ParseResult.RawUnsignedHeaders"/> — the raw wire bytes captured at parse — and
+/// freshly encoding only the genuinely NEW element this call itself builds, never re-encoding a retained
+/// element from its DECODED model
+/// (<see cref="EncodeCBAdESUnprotectedHeaderDelegate"/>). A decoded-model re-encode of a retained element
+/// would be lossy for at least one CDDL union arm (<see cref="CBAdESSerialization.WriteTDate"/>'s
+/// whole-second, forced-<c>Z</c> writer collapses a sub-second or non-<c>Z</c>-offset wire <c>tdate</c>, and
+/// an opaque <see cref="Verifiable.Cryptography.Pki.CBAdESUnsignedHeaderElementUnknown"/> element is never
+/// modeled precisely enough to reproduce byte-for-byte from its decoded form at all) — the reason the splice
+/// delegate, not the encode delegate, carries every retained element here.
+/// <see cref="EncodeCBAdESUnprotectedHeaderDelegate"/> remains exactly right for CREATION
 /// (<see cref="CBAdESSignatureCreation.SignAsync(CBAdESProtectedHeaders, CBAdESSigningPayloadInput, CBAdESUnsignedHeaders?, EncodeCBAdESProtectedHeaderDelegate, EncodeCBAdESUnprotectedHeaderDelegate, BuildSigStructureDelegate, PrivateKeyMemory, CBAdESDetachedObjectDereferenceDelegate?, CBAdESDetachedObjectDereferenceContext?, CBAdESUnknownDetachedObjectMechanismDelegate?, BaseMemoryPool, CancellationToken)"/>
 /// builds <c>uHeaders</c> fresh every time — that path has no prior wire bytes to lose, so re-encoding from
 /// the decoded model it itself just constructed is not lossy) and is untouched by this change.
@@ -958,6 +960,13 @@ public static class CBAdESSignatureAugmentation
     /// comparison <see cref="EnsureSigningCertificateValidAtTimestamp"/> performs below, which stays
     /// post-acquisition because it needs the acquired token itself.
     /// </para>
+    /// <para>
+    /// <strong>Manual disposal, not a <see langword="using"/> declaration.</strong> <c>token</c> is declared
+    /// <see langword="null"/> before the try body and assigned only after the digest is computed inside it
+    /// (a <see langword="using"/> declaration accepts only a single assignment, at its own declaration); the
+    /// <see langword="finally"/> below disposes it on every exit path, including a throw from the
+    /// Time-Stamping Authority round trip itself.
+    /// </para>
     /// </remarks>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "container is wrapped into a new CBAdESSignatureTimestamp, then a new " +
@@ -1085,6 +1094,13 @@ public static class CBAdESSignatureAugmentation
     /// <exception cref="ArgumentException">When <see cref="CBAdESPayloadTimestampAcquisitionContext.Source"/> is a <see cref="CBAdESSigDReferencedPayloadTimestampAcquisitionSource"/> and <see cref="CBAdESPayloadTimestampAcquisitionContext.Dereference"/> or <see cref="CBAdESPayloadTimestampAcquisitionContext.DereferenceContext"/> is <see langword="null"/>.</exception>
     /// <exception cref="CBAdESDetachedObjectDereferenceException">When a referenced detached object could not be dereferenced.</exception>
     /// <exception cref="Verifiable.Cryptography.Pki.TimestampAcquisitionException">When the authority could not be reached, or the token it returned does not verify.</exception>
+    /// <remarks>
+    /// <strong>Manual disposal, not a <see langword="using"/> declaration.</strong> <c>reconstructedSigDPayload</c>
+    /// is assigned only inside the <c>sigD</c>-referenced switch arm, and <c>token</c> only after the message
+    /// imprint is computed — both declared <see langword="null"/> ahead of the try body, since a
+    /// <see langword="using"/> declaration accepts only a single assignment at its own declaration; the
+    /// <see langword="finally"/> below disposes whichever of the two is non-null on every exit path.
+    /// </remarks>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "container is wrapped into the returned new CBAdESPayloadTimestamp(container); the " +
             "method's own doc comment states the caller owns and disposes the returned component. Roslyn tracks " +
@@ -1426,23 +1442,43 @@ public static class CBAdESSignatureAugmentation
         ArgumentNullException.ThrowIfNull(pool);
 
         CBAdESSign1ParseResult parseResult = ParseOrThrow(parse, context.WireBytes, pool);
-        if(!HasReferencesElement(parseResult.UnsignedHeaders))
+        PooledMemory imprintInput;
+        try
         {
-            parseResult.Dispose();
-            throw new CBAdESAugmentationException(
-                CBAdESAugmentationFailureKind.ReferencesElementRequired,
-                "If the component refs is not present, the sigRTst CBOR map shall not be generated (ETSI TS 119 152-1 V1.1.1, Annex A.1.2.1.1, CB-A.1.2.1-03).");
-        }
+            if(!HasReferencesElement(parseResult.UnsignedHeaders))
+            {
+                parseResult.Dispose();
+                throw new CBAdESAugmentationException(
+                    CBAdESAugmentationFailureKind.ReferencesElementRequired,
+                    "If the component refs is not present, the sigRTst CBOR map shall not be generated (ETSI TS 119 152-1 V1.1.1, Annex A.1.2.1.1, CB-A.1.2.1-03).");
+            }
 
-        ReadOnlyMemory<byte>? uHeadersEncodedArray = parseResult.RawUnsignedHeaders?.AsReadOnlyMemory();
-        //Generation always builds the imprint over the pre-append snapshot -- every element parseResult.UnsignedHeaders
-        //already held -- which is already the correct prefix, so uHeadersSliceBound is null here.
-        if(!buildImprintInput(parseResult.Signature!.AsReadOnlyMemory(), uHeadersEncodedArray, uHeadersSliceBound: null, pool, out PooledMemory? imprintInput) || imprintInput is null)
+            ReadOnlyMemory<byte>? uHeadersEncodedArray = parseResult.RawUnsignedHeaders?.AsReadOnlyMemory();
+            //Generation always builds the imprint over the pre-append snapshot -- every element parseResult.UnsignedHeaders
+            //already held -- which is already the correct prefix, so uHeadersSliceBound is null here.
+            if(!buildImprintInput(parseResult.Signature!.AsReadOnlyMemory(), uHeadersEncodedArray, uHeadersSliceBound: null, pool, out PooledMemory? builtImprintInput) || builtImprintInput is null)
+            {
+                parseResult.Dispose();
+                throw new CBAdESAugmentationException(
+                    CBAdESAugmentationFailureKind.MessageImprintInputMalformed,
+                    "The sigRTst message-imprint input could not be built from this signature's own uHeaders (ETSI TS 119 152-1 V1.1.1, Annex A.1.2.1.2).");
+            }
+
+            imprintInput = builtImprintInput;
+        }
+        catch(CBAdESAugmentationException)
         {
+            //parseResult is already disposed by the branch that threw, above.
+            throw;
+        }
+        catch
+        {
+            //An unexpected failure reading parseResult's own carriers or from buildImprintInput, before
+            //ownership of parseResult reaches AppendReferencesFamilyTimestampAsync below (which disposes
+            //it in its own finally on every path once called) — parseResult is otherwise unowned here.
             parseResult.Dispose();
-            throw new CBAdESAugmentationException(
-                CBAdESAugmentationFailureKind.MessageImprintInputMalformed,
-                "The sigRTst message-imprint input could not be built from this signature's own uHeaders (ETSI TS 119 152-1 V1.1.1, Annex A.1.2.1.2).");
+
+            throw;
         }
 
         return await AppendReferencesFamilyTimestampAsync(
@@ -1493,23 +1529,43 @@ public static class CBAdESSignatureAugmentation
         ArgumentNullException.ThrowIfNull(pool);
 
         CBAdESSign1ParseResult parseResult = ParseOrThrow(parse, context.WireBytes, pool);
-        if(!HasReferencesElement(parseResult.UnsignedHeaders))
+        PooledMemory imprintInput;
+        try
         {
-            parseResult.Dispose();
-            throw new CBAdESAugmentationException(
-                CBAdESAugmentationFailureKind.ReferencesElementRequired,
-                "If the component refs is not present, the rfsTst CBOR map shall not be generated (ETSI TS 119 152-1 V1.1.1, Annex A.1.2.2.1, CB-A.1.2.2-03).");
-        }
+            if(!HasReferencesElement(parseResult.UnsignedHeaders))
+            {
+                parseResult.Dispose();
+                throw new CBAdESAugmentationException(
+                    CBAdESAugmentationFailureKind.ReferencesElementRequired,
+                    "If the component refs is not present, the rfsTst CBOR map shall not be generated (ETSI TS 119 152-1 V1.1.1, Annex A.1.2.2.1, CB-A.1.2.2-03).");
+            }
 
-        ReadOnlyMemory<byte>? uHeadersEncodedArray = parseResult.RawUnsignedHeaders?.AsReadOnlyMemory();
-        //Generation always builds the imprint over the pre-append snapshot -- the correct prefix already --
-        //so uHeadersSliceBound is null here; see AddSignatureAndReferencesTimestampAsync's identical remark.
-        if(!buildImprintInput(uHeadersEncodedArray, uHeadersSliceBound: null, pool, out PooledMemory? imprintInput) || imprintInput is null)
+            ReadOnlyMemory<byte>? uHeadersEncodedArray = parseResult.RawUnsignedHeaders?.AsReadOnlyMemory();
+            //Generation always builds the imprint over the pre-append snapshot -- the correct prefix already --
+            //so uHeadersSliceBound is null here; see AddSignatureAndReferencesTimestampAsync's identical remark.
+            if(!buildImprintInput(uHeadersEncodedArray, uHeadersSliceBound: null, pool, out PooledMemory? builtImprintInput) || builtImprintInput is null)
+            {
+                parseResult.Dispose();
+                throw new CBAdESAugmentationException(
+                    CBAdESAugmentationFailureKind.MessageImprintInputMalformed,
+                    "The rfsTst message-imprint input could not be built from this signature's own uHeaders (ETSI TS 119 152-1 V1.1.1, Annex A.1.2.2.2).");
+            }
+
+            imprintInput = builtImprintInput;
+        }
+        catch(CBAdESAugmentationException)
         {
+            //parseResult is already disposed by the branch that threw, above.
+            throw;
+        }
+        catch
+        {
+            //An unexpected failure reading parseResult's own carriers or from buildImprintInput, before
+            //ownership of parseResult reaches AppendReferencesFamilyTimestampAsync below (which disposes
+            //it in its own finally on every path once called) — parseResult is otherwise unowned here.
             parseResult.Dispose();
-            throw new CBAdESAugmentationException(
-                CBAdESAugmentationFailureKind.MessageImprintInputMalformed,
-                "The rfsTst message-imprint input could not be built from this signature's own uHeaders (ETSI TS 119 152-1 V1.1.1, Annex A.1.2.2.2).");
+
+            throw;
         }
 
         return await AppendReferencesFamilyTimestampAsync(
@@ -1692,7 +1748,7 @@ public static class CBAdESSignatureAugmentation
     /// <param name="parse">The fail-closed CBOR parse seam.</param>
     /// <param name="serialize">The CBOR re-serialization seam.</param>
     /// <param name="spliceUnprotectedHeader">The <c>uHeaders</c> unprotected-header raw-splice seam.</param>
-    /// <param name="buildImprintInput">The <c>arcTst</c> GENERATION-mode message-imprint-input seam (clause 5.3.5.3, Verifiable.Cbor, S2/S5).</param>
+    /// <param name="buildImprintInput">The <c>arcTst</c> GENERATION-mode message-imprint-input seam (clause 5.3.5.3), implemented in <c>Verifiable.Cbor</c>.</param>
     /// <param name="pool">The memory pool every carrier is rented from.</param>
     /// <param name="parseCounterSignatureHeaderValue">
     /// Decodes a counter-signature element's raw value bytes for CB-5.3.5.1-02's material-completeness check,
@@ -1715,8 +1771,8 @@ public static class CBAdESSignatureAugmentation
     /// (<see cref="CBAdESAugmentationFailureKind.ArchiveTimestampNotPermittedAtTargetLevel"/>, checked before
     /// any Time-Stamping Authority round trip); when
     /// <see cref="CBAdESArchiveTimestampContext.SigningCertificate"/> is not readable as an X.509 certificate
-    /// (<see cref="CBAdESAugmentationFailureKind.SigningCertificateMalformed"/>, likewise checked first — the
-    /// S4 pre-TSA precedent); when no <c>sigTst</c> instance is incorporated yet
+    /// (<see cref="CBAdESAugmentationFailureKind.SigningCertificateMalformed"/>, likewise checked before any
+    /// Time-Stamping Authority round trip); when no <c>sigTst</c> instance is incorporated yet
     /// (<see cref="CBAdESAugmentationFailureKind.ArchiveTimestampSignatureTimestampPrerequisiteMissing"/>,
     /// checked before any Time-Stamping Authority round trip — CB-6.3-21); when
     /// additional requirement (k) is not satisfied
@@ -1781,6 +1837,14 @@ public static class CBAdESSignatureAugmentation
     /// CB-A.1.1-30 failure before this gate is ever reached; only a resolvable one (or a signature with no
     /// <c>refs</c>/<c>valData</c>/<c>arcTst</c> disjunction at all) can reach gate (7)'s own refusal — the two
     /// gates are independently provable. A doomed call never bills a Time-Stamping Authority.
+    /// </para>
+    /// <para>
+    /// <strong>Manual disposal, not a <see langword="using"/> declaration.</strong> <c>payloadRented</c> is
+    /// bound by a tuple deconstruction from <see cref="CBAdESSignatureValidation.ResolvePayloadTimestampImprintSourceAsync"/>
+    /// (a <see langword="using"/> declaration accepts only a single simple declaration, never a deconstruction
+    /// target), and <c>acquiredTokens</c> is a per-leg <see cref="List{T}"/> of tokens rather than one
+    /// disposable value; the <see langword="finally"/> below disposes both on every exit path, including a
+    /// throw from any leg's own Time-Stamping Authority round trip.
     /// </para>
     /// </remarks>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
@@ -2197,6 +2261,12 @@ public static class CBAdESSignatureAugmentation
     /// <param name="pool">The memory pool every carrier is rented from.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The augmented signature's new wire bytes. The caller owns and disposes it.</returns>
+    /// <remarks>
+    /// <strong>Manual disposal, not a <see langword="using"/> declaration.</strong> <c>token</c> is declared
+    /// <see langword="null"/> ahead of the try body and assigned only after the digest is computed inside it
+    /// (a <see langword="using"/> declaration accepts only a single assignment at its own declaration); the
+    /// <see langword="finally"/> below disposes it on every exit path.
+    /// </remarks>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "container is wrapped into whichever sibling wrapper `kind` selects (a new " +
             "CBAdESSignatureAndReferencesTimestamp or CBAdESReferencesTimestamp), then into the matching " +

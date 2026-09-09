@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography.Text;
 
 namespace Verifiable.OAuth.Siop;
@@ -29,7 +30,7 @@ public static class SiopAuthorizationRequestParameterNames
     /// types the RP wants to obtain, in order of preference. SIOPv2 §9. The default
     /// when absent is <see cref="SiopIdTokenTypes.AttesterSignedIdToken"/>.
     /// </summary>
-    public static readonly string IdTokenType = Utf8Constants.ToInternedString(IdTokenTypeUtf8);
+    public static string IdTokenType { get; } = Utf8Constants.ToInternedString(IdTokenTypeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="ClientMetadataUri"/>.</summary>
     public static ReadOnlySpan<byte> ClientMetadataUriUtf8 => "client_metadata_uri"u8;
@@ -40,7 +41,9 @@ public static class SiopAuthorizationRequestParameterNames
     /// <c>client_metadata</c>, and MUST NOT be present when the RP passes its
     /// metadata via OpenID Federation 1.0 Automatic Registration.
     /// </summary>
-    public static readonly string ClientMetadataUri = Utf8Constants.ToInternedString(ClientMetadataUriUtf8);
+    [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
+        Justification = "This member is the wire parameter NAME 'client_metadata_uri' (compared and serialised as a string), not a dereferenceable System.Uri.")]
+    public static string ClientMetadataUri { get; } = Utf8Constants.ToInternedString(ClientMetadataUriUtf8);
 
 
     /// <summary>Returns <see langword="true"/> when <paramref name="value"/> is

@@ -36,19 +36,19 @@ internal sealed class SiopNonceReplayTests
     private const string RelyingPartyClientId = "https://rp.example.com";
     private const string SiopNonce = "n-siop-replay-01";
 
-    private static readonly Uri RelyingPartyBaseUri = new("https://rp.example.com");
+    private static Uri RelyingPartyBaseUri { get; } = new("https://rp.example.com");
 
-    private static readonly ImmutableHashSet<CapabilityIdentifier> SiopCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> SiopCapabilities { get; } =
         ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.SiopSelfIssuedOp);
 
-    private static readonly string[] AllowedSiopAlgorithms = [WellKnownJwaValues.Es256];
+    private static string[] AllowedSiopAlgorithms { get; } = [WellKnownJwaValues.Es256];
 
-    private static readonly JwtHeaderSerializer HeaderSerializer =
+    private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)header,
             TestSetup.DefaultSerializationOptions);
 
-    private static readonly JwtPayloadSerializer PayloadSerializer =
+    private static JwtPayloadSerializer PayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)payload,
             TestSetup.DefaultSerializationOptions);

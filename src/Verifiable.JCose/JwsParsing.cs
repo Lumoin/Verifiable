@@ -291,6 +291,8 @@ public static class JwsParsing
             }
             catch
             {
+                //This Try method's contract is to classify or fail — never throw — over untrusted wire
+                //bytes; any failure from the deserializer or the nested JSON-form parsers resolves to false.
                 return false;
             }
         }
@@ -306,6 +308,8 @@ public static class JwsParsing
             }
             catch
             {
+                //Same contract as the JSON-form branch above: any failure from ParseCompact over these
+                //untrusted wire bytes resolves to false rather than throwing.
                 return false;
             }
         }

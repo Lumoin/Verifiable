@@ -1,5 +1,5 @@
 using System.Buffers;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Core.Model.Mdoc;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -152,21 +152,14 @@ public static class MdocCborDeviceSignedSigner
 
     private static EncodedCoseProtectedHeader BuildProtectedHeader(int coseAlgorithm, BaseMemoryPool pool)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        using var buffer = new SlabBufferWriter(pool);
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(1); //label 1 = alg per RFC 9052 §3.1
         writer.WriteInt32(coseAlgorithm);
         writer.WriteEndMap();
 
-        int size = writer.BytesWritten;
-        IMemoryOwner<byte> owner = pool.Rent(size);
-        int written = writer.Encode(owner.Memory.Span);
-        if(written != size)
-        {
-            owner.Dispose();
-            throw new InvalidOperationException(
-                $"CborWriter.Encode wrote {written} bytes, expected {size}.");
-        }
+        IMemoryOwner<byte> owner = buffer.Detach();
 
         return new EncodedCoseProtectedHeader(owner, CryptoTags.CoseEncodedProtectedHeader);
     }
@@ -182,9 +175,10 @@ public static class MdocCborDeviceSignedSigner
     /// </summary>
     private static EncodedCoseSign1 SerializeCoseSign1WithNilPayload(CoseSign1Message message, BaseMemoryPool pool)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        using var buffer = new SlabBufferWriter(pool);
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
 
-        writer.WriteTag((CborTag)CoseTags.Sign1);
+        writer.WriteTag(new CborTag((ulong)CoseTags.Sign1));
         writer.WriteStartArray(4);
         writer.WriteByteString(message.ProtectedHeader.AsReadOnlySpan());
         writer.WriteStartMap(0);
@@ -193,15 +187,7 @@ public static class MdocCborDeviceSignedSigner
         writer.WriteByteString(message.Signature.AsReadOnlySpan());
         writer.WriteEndArray();
 
-        int size = writer.BytesWritten;
-        IMemoryOwner<byte> owner = pool.Rent(size);
-        int written = writer.Encode(owner.Memory.Span);
-        if(written != size)
-        {
-            owner.Dispose();
-            throw new InvalidOperationException(
-                $"CborWriter.Encode wrote {written} bytes, expected {size}.");
-        }
+        IMemoryOwner<byte> owner = buffer.Detach();
 
         return new EncodedCoseSign1(owner, CryptoTags.CoseEncodedSign1);
     }

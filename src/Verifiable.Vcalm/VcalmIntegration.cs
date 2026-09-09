@@ -425,6 +425,24 @@ public sealed class VcalmIntegration: ServerIntegration
     public VcalmTemplateEvaluatorRegistry VcalmTemplateEvaluators { get; set; } = new();
 
     /// <summary>
+    /// The §3.6.1 schema-validation mechanism registry the participate endpoint dispatches a step's
+    /// <c>presentationSchema</c> through, selected by the envelope's <c>type</c>. Ships empty: a
+    /// deployment registers a JSON Schema engine (e.g. the one from <c>Lumoin.Veritas</c>) under
+    /// <see cref="VcalmSchemaValidatorRegistry.JsonSchemaType"/>. A step that declares a
+    /// <c>presentationSchema</c> whose mechanism is not registered refuses presented presentations
+    /// (fail closed) — the workflow author demanded a check this instance cannot run.
+    /// </summary>
+    public VcalmSchemaValidatorRegistry VcalmSchemaValidators { get; set; } = new();
+
+    /// <summary>
+    /// Parses a §3.6.1 <c>presentationSchema</c> envelope's verbatim JSON into the neutral
+    /// <see cref="VcalmPresentationSchema"/>. Required when a workflow step declares a
+    /// <c>presentationSchema</c>; the default JSON implementation lives in <c>Verifiable.Json</c>.
+    /// When unwired, a schema-declaring step refuses presented presentations (fail closed).
+    /// </summary>
+    public ParseVcalmPresentationSchemaDelegate? ParseVcalmPresentationSchema { get; set; }
+
+    /// <summary>
     /// Parses a VCALM 1.0 §3.6.1 <c>POST /workflows</c> create-workflow request body into the neutral
     /// <see cref="VcalmWorkflowConfiguration"/>. Required when the
     /// <see cref="WellKnownVcalmCapabilities.VcalmAdministration"/> capability is allowed — the create

@@ -19,17 +19,14 @@ namespace Verifiable.Tests.Cryptography
 
             static byte[] simpleBase58Decoder(ReadOnlySpan<char> source) => Base58.Bitcoin.Decode(source.ToString());
 
-            var decodedVector1Owner = MultibaseSerializer.Decode(Vector1, codecHeaderLength: 2, simpleBase58Decoder, BaseMemoryPool.Shared);
+            using var decodedVector1Owner = MultibaseSerializer.Decode(Vector1, codecHeaderLength: 2, simpleBase58Decoder, BaseMemoryPool.Shared);
             var decodedVector1 = decodedVector1Owner.Memory.Span;
 
-            var multibaseEncodedPublicKey = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.Ed25519PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder);
-            var reEncodedVector1 = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.Ed25519PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder);
+            var reEncodedVector1 = MultibaseSerializer.Encode(decodedVector1, MulticodecHeaders.Ed25519PublicKey, MultibaseAlgorithms.Base58Btc, TestSetup.Base58Encoder, BaseMemoryPool.Shared);
             Assert.AreEqual(Vector1, reEncodedVector1);
 
-            decodedVector1Owner.Dispose();
-
             //Call the converter using a simple inline buffer allocation delegate.
-            var (algorithm, purpose, scheme, keyMaterial) = CryptoFormatConversions.DefaultBase58ToAlgorithmConverter(Vector1, BaseMemoryPool.Shared, TestSetup.Base58Decoder);
+            var (algorithm, purpose, _, keyMaterial) = CryptoFormatConversions.DefaultBase58ToAlgorithmConverter(Vector1, BaseMemoryPool.Shared, TestSetup.Base58Decoder);
 
             // Now you can assert on these values as needed.
             Assert.AreEqual(CryptoAlgorithm.Ed25519, algorithm);
@@ -47,7 +44,7 @@ namespace Verifiable.Tests.Cryptography
 
             // The delegate must decode Base58 data into bytes, remove the codec header,
             // and return an IMemoryOwner<byte> containing the final bytes.
-            var (algorithm, purpose, scheme, keyMaterial) = CryptoFormatConversions.DefaultBase58ToAlgorithmConverter(Vector1, BaseMemoryPool.Shared, TestSetup.Base58Decoder);
+            var (algorithm, purpose, _, keyMaterial) = CryptoFormatConversions.DefaultBase58ToAlgorithmConverter(Vector1, BaseMemoryPool.Shared, TestSetup.Base58Decoder);
 
             // Now you can assert on the returned values.
             Assert.AreEqual(CryptoAlgorithm.Ed25519, algorithm);

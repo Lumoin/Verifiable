@@ -33,11 +33,39 @@ public sealed record VcalmVerificationOutcome
     /// <summary>The §3.3.1 <c>results.credentialStatus[]</c> sub-results, in entry order. Empty when the credential has no status.</summary>
     public ImmutableArray<VcalmStatusResult> StatusResults { get; init; } = ImmutableArray<VcalmStatusResult>.Empty;
 
+    /// <summary>
+    /// The §3.3.1 <c>results.credentialSchema[]</c> sub-results, in entry order: one per
+    /// <c>credentialSchema</c> object evaluated. Empty when the credential declares no schemas or
+    /// the schema seams (<see cref="VcalmCredentialVerification.SchemaValidators"/> and
+    /// <see cref="VcalmCredentialVerification.ResolveSchemaDocument"/>) are unwired.
+    /// </summary>
+    public ImmutableArray<VcalmSchemaResult> SchemaResults { get; init; } = ImmutableArray<VcalmSchemaResult>.Empty;
+
     /// <summary>The §3.3.1 <c>results.proof[]</c> sub-results, in chain order.</summary>
     public ImmutableArray<VcalmInputResult> ProofResults { get; init; } = ImmutableArray<VcalmInputResult>.Empty;
 
     /// <summary>Every §3.8.1 ProblemDetail gathered for this credential — errors and warnings.</summary>
     public ImmutableArray<VcalmProblemDetail> ProblemDetails { get; init; } = ImmutableArray<VcalmProblemDetail>.Empty;
+}
+
+
+/// <summary>
+/// A §3.3.1 <c>results.credentialSchema[]</c> sub-result: the boolean <c>verified</c> collapse of
+/// the <see href="https://www.w3.org/TR/vc-json-schema/#evaluation">VC JSON Schema §4.2</see>
+/// tri-state (<c>true</c> only for Success) paired with the examined <c>credentialSchema</c>
+/// object's identifying members, which the response writer emits as the item's <c>input</c> object.
+/// </summary>
+[DebuggerDisplay("VcalmSchemaResult Verified={Verified} Id={Id}")]
+public sealed record VcalmSchemaResult
+{
+    /// <summary>The boolean collapse of the evaluation: <see langword="true"/> only for a Success outcome.</summary>
+    public required bool Verified { get; init; }
+
+    /// <summary>The examined entry's <c>id</c> URL.</summary>
+    public required string Id { get; init; }
+
+    /// <summary>The examined entry's mechanism <c>type</c>.</summary>
+    public required string Type { get; init; }
 }
 
 

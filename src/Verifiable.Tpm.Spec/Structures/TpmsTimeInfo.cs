@@ -16,7 +16,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// } TPMS_TIME_INFO;
 /// </code>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 10.11.6, Table 166.
+/// Specification reference: TPM 2.0 Library Part 2, clause 10.10.6, Table 143.
 /// </para>
 /// </remarks>
 /// <param name="Time">Time in milliseconds since the last <c>_TPM_Init</c> or <c>TPM2_Startup()</c>.</param>

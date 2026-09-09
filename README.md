@@ -31,7 +31,7 @@ The core value proposition is documents that can be distinctly identified, crypt
 | **Verifiable.Vcalm** | W3C Verifiable Credential API for Lifecycle Management (VCALM 1.0) | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Vcalm.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Vcalm/) |
 | **Verifiable.DidComm** | DIDComm Messaging v2.1: signed/encrypted messages, routing, out-of-band, discover features, pluggable transport | [![NuGet](https://img.shields.io/nuget/v/Verifiable.DidComm.svg?style=flat)](https://www.nuget.org/packages/Verifiable.DidComm/) |
 | **Verifiable.Json** | JSON serialization converters | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Json.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Json/) |
-| **Verifiable.Cbor** | CBOR serialization for COSE envelopes | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Cbor.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Cbor/) |
+| **Verifiable.Cbor** | COSE, CWT/SD-CWT, ISO/IEC 18013-5 mdoc, FIDO2/CTAP2, status-list and CB-AdES serializers over Lumoin.Veritas.Cbor | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Cbor.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Cbor/) |
 | **Verifiable.JsonPointer** | JSON Pointer (RFC 6901) and a first-party JSONata expression engine | [![NuGet](https://img.shields.io/nuget/v/Verifiable.JsonPointer.svg?style=flat)](https://www.nuget.org/packages/Verifiable.JsonPointer/) |
 | **Verifiable.BouncyCastle** | Cross-platform cryptography via BouncyCastle | [![NuGet](https://img.shields.io/nuget/v/Verifiable.BouncyCastle.svg?style=flat)](https://www.nuget.org/packages/Verifiable.BouncyCastle/) |
 | **Verifiable.Libsodium** | High-performance cryptography via a first-party libsodium binding | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Libsodium.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Libsodium/) |
@@ -59,7 +59,7 @@ The core value proposition is documents that can be distinctly identified, crypt
 
 **Hardware security.** TPM 2.0 integration for hardware-backed key storage, PCR reading, event log parsing, attestations, and other TPM functionality to come. The architecture extends to HSMs and cloud KMS services through the delegate pattern.
 
-**Serialization flexibility.** Core types remain agnostic to serialization format. JSON support via System.Text.Json and CBOR support via System.Formats.Cbor are provided in separate packages, enabling the same credential logic to work across both formats or any other.
+**Serialization flexibility.** Core types remain agnostic to serialization format. JSON support via System.Text.Json and CBOR support via Lumoin.Veritas.Cbor are provided in separate packages, enabling the same credential logic to work across both formats or any other.
 
 **Memory-safe key handling.** Sensitive cryptographic material is ring-fenced using dedicated types with support for custom memory allocation through `MemoryPool<T>`, enabling scenarios like mlocked memory regions.
 

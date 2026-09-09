@@ -265,12 +265,12 @@ public static class DidRegistrationTransitions
     /// </summary>
     /// <param name="runId">The execution/session identifier.</param>
     /// <param name="methodHandler">The method-specific handler.</param>
-    /// <param name="timeProvider">Optional time provider for trace timestamps.</param>
+    /// <param name="timeProvider">The time provider for trace timestamps.</param>
     /// <returns>A configured PDA ready to process registration inputs.</returns>
     public static PushdownAutomaton<RegistrationFlowState, RegistrationInput, string> CreateAutomaton(
         string runId,
         Func<RegistrationFlowState, RegistrationInput, CancellationToken, ValueTask<RegistrationFlowState>> methodHandler,
-        TimeProvider? timeProvider = null)
+        TimeProvider timeProvider)
     {
         return new PushdownAutomaton<RegistrationFlowState, RegistrationInput, string>(
             runId,

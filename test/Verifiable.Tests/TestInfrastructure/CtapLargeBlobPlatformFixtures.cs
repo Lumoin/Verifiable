@@ -2,11 +2,12 @@ using System;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Collections.Generic;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using System.IO;
 using System.IO.Compression;
 using System.Threading;
 using System.Threading.Tasks;
+using Verifiable.Cbor;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
@@ -253,7 +254,8 @@ internal static class CtapLargeBlobPlatformFixtures
     /// <returns>The complete serialized large-blob array bytes.</returns>
     public static byte[] BuildSerializedArrayWithSingleEntry(ReadOnlyMemory<byte> ciphertextWithTag, ReadOnlyMemory<byte> nonce, int origSize, BaseMemoryPool pool)
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        using var buffer = new SlabBufferWriter(pool);
+        var writer = new CborWriter(buffer, CborOptions.Ctap2Canonical);
         writer.WriteStartArray(1);
         writer.WriteStartMap(3);
         writer.WriteInt32(LargeBlobMapCiphertextKey);
@@ -264,7 +266,8 @@ internal static class CtapLargeBlobPlatformFixtures
         writer.WriteUInt64((ulong)origSize);
         writer.WriteEndMap();
         writer.WriteEndArray();
-        byte[] arrayBytes = writer.Encode();
+        using IMemoryOwner<byte> encoded = buffer.Detach();
+        byte[] arrayBytes = encoded.Memory.Span.ToArray();
 
         using DigestValue digest = CryptographicKeyEvents.ComputeDigest(arrayBytes, Sha256Length, CryptoTags.Sha256Digest, pool);
         byte[] serialized = new byte[arrayBytes.Length + TrailingHashLength];
@@ -286,7 +289,7 @@ internal static class CtapLargeBlobPlatformFixtures
     public static (byte[] CiphertextWithTag, byte[] Nonce, int OrigSize) DecodeSerializedArraySingleEntry(ReadOnlyMemory<byte> serializedArray)
     {
         ReadOnlyMemory<byte> arrayBytes = serializedArray[..^TrailingHashLength];
-        var reader = new CborReader(arrayBytes, CborConformanceMode.Ctap2Canonical);
+        var reader = new CborReader(arrayBytes, CborOptions.Ctap2Canonical);
         reader.ReadStartArray();
         int? memberCount = reader.ReadStartMap();
 

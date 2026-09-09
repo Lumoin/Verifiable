@@ -21,7 +21,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// The handle is not in the handle area but in the parameters area.
 /// </para>
 /// <para>
-/// See TPM 2.0 Part 3, Section 28.4 - TPM2_FlushContext.
+/// See TPM 2.0 Library Part 3, clause 28.4 - TPM2_FlushContext.
 /// </para>
 /// </remarks>
 public readonly record struct FlushContextInput: ITpmCommandInput

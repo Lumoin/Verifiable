@@ -404,6 +404,11 @@ public sealed class XAdESSignaturePolicyIdentifier: IDisposable
     /// <param name="error">The refusal on failure — see <see cref="XAdESSignaturePolicyId.TryRead"/> for the
     /// <see cref="XAdESSignaturePolicyIdentifierChoice.SignaturePolicyId"/> arm.</param>
     /// <returns><see langword="true"/> when the element was read.</returns>
+    /// <remarks>
+    /// <strong>Manual disposal, not a <see langword="using"/> declaration.</strong> <c>signaturePolicyId</c>
+    /// transfers ownership into <paramref name="value"/> on success — nulled just before the return so the
+    /// <see langword="finally"/> disposes it only when a later grammar check fails first.
+    /// </remarks>
     public static bool TryRead(XmlNodeTable table, int elementIndex, BaseMemoryPool pool, out XAdESSignaturePolicyIdentifier? value, out XAdESReadError error)
     {
         ArgumentNullException.ThrowIfNull(table);
@@ -472,6 +477,8 @@ public sealed class XAdESSignaturePolicyIdentifier: IDisposable
             scan = XmlSignatureModelGrammar.TryFindNextElementSibling(table, child, out int trailing);
             if(scan != ElementScanResult.EndOfChildren)
             {
+                //One disjunct per xsd:choice/xsd:sequence sibling this element can repeat; a named
+                //predicate per sibling would only rename the grammar, not simplify it.
                 bool isRepeat = scan == ElementScanResult.Found
                     && ((isSignaturePolicyId && XmlSignatureModelGrammar.IsElement(table, trailing, XAdESIdentifiers.XAdESNamespaceV132Utf8, "SignaturePolicyId"u8))
                         || (isSignaturePolicyImplied && XmlSignatureModelGrammar.IsElement(table, trailing, XAdESIdentifiers.XAdESNamespaceV132Utf8, "SignaturePolicyImplied"u8)));

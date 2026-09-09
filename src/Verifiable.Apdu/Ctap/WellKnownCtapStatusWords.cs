@@ -22,7 +22,7 @@ public static class WellKnownCtapStatusWords
     /// where the byte count rides in SW2, the sub-code here is a data-field byte the response
     /// framing/poll-loop layer decodes, not <see cref="StatusWord"/> itself.
     /// </remarks>
-    public static readonly StatusWord ResponseStatus =
+    public static StatusWord ResponseStatus { get; } =
         StatusWord.Create(0x9100, "NFCCTAP response status: still processing, issue NFCCTAP_GETRESPONSE.");
 
 

@@ -40,7 +40,7 @@ namespace Verifiable.Fido2.Tpm.Ctap.Authenticator.Custody;
 /// </para>
 /// <para>
 /// <b>Retire semantics.</b> <see cref="CtapSignatureCounterCustody.RetireCounterAsync"/> undefines the
-/// Index; the in-house simulator's phantom high-water mark (TPM 2.0 Library Part 1, Section 37.2.6.3 NOTE
+/// Index; the in-house simulator's phantom high-water mark (TPM 2.0 Library Part 1, clause 34.2.6.3 NOTE
 /// 2/NOTE 6) then guarantees that a LATER credential whose <c>creationSequence</c> collides with a retired
 /// one (an <c>authenticatorReset</c> restarts the mint-order sequence at zero) seeds its own first
 /// <see cref="CtapSignatureCounterCustody.EnsureCounterAsync"/> strictly above every value the retired Index

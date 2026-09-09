@@ -11,6 +11,7 @@ using Verifiable.Json;
 using Verifiable.Microsoft;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.JCose;
 
@@ -29,7 +30,7 @@ namespace Verifiable.Tests.JCose;
 /// TEXT's bytes (C5), then place that concatenation verbatim after <c>protected "."</c> (RFC 7515 §5.1) — using
 /// only the base64url ENCODE primitive, never <see cref="JAdESSignatureCreation"/>/<see cref="JAdESSignatureValidation"/>'s
 /// own signing-input assembly. The produced signature is verified against this independently-built input via the
-/// raw <see cref="MicrosoftCryptographicFunctions.VerifyP256Async"/> primitive directly — never through
+/// raw <see cref="MicrosoftCryptographicFunctionsAdapter.VerifyP256Async"/> primitive directly — never through
 /// <see cref="Jws.VerifySignatureAsync(string, System.ReadOnlyMemory{byte}, System.ReadOnlyMemory{byte}, EncodeDelegate, VerificationDelegate, System.ReadOnlyMemory{byte}, BaseMemoryPool, System.Threading.CancellationToken)"/>,
 /// so this proof never shares code with the (potentially buggy) composition it exists to catch.
 /// </remarks>
@@ -85,7 +86,7 @@ internal sealed class JAdESObjectIdByUriSigningInputCompositionOracleTests
             JAdESEtsiUJson.Encode,
             TestSetup.Base64UrlEncoder,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             DereferenceFromDictionaryAsync,
             context,
             unknownMechanismHandler: null,
@@ -102,8 +103,7 @@ internal sealed class JAdESObjectIdByUriSigningInputCompositionOracleTests
         string encodedB = TestSetup.Base64UrlEncoder(objectB);
         byte[] expectedSigningInput = Encoding.ASCII.GetBytes(protectedSegment + "." + encodedA + encodedB);
 
-        (bool oracleVerified, _) = await MicrosoftCryptographicFunctions.VerifyP256Async(
-            expectedSigningInput, signatureBytes, publicKey.AsReadOnlyMemory(), cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        (bool oracleVerified, _) = await MicrosoftCryptographicFunctions.VerifyP256Async(expectedSigningInput, signatureBytes, publicKey.AsReadOnlyMemory(), cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch)).ConfigureAwait(false);
 
         Assert.IsTrue(oracleVerified,
             "The produced signature must verify against the Signing Input assembled directly from " +
@@ -122,7 +122,7 @@ internal sealed class JAdESObjectIdByUriSigningInputCompositionOracleTests
             JAdESProtectedHeaderJson.DetectX5tPresence,
             JAdESEtsiUJson.TryParse,
             publicKey,
-            MicrosoftCryptographicFunctions.VerifyP256Async,
+            MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             TestSetup.Base64UrlDecoder,
             TestSetup.Base64UrlEncoder,
             DereferenceFromDictionaryAsync,

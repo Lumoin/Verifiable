@@ -15,27 +15,27 @@ internal sealed class KeriEventReaderTests
 {
     private const string Aid = "EPR7FWsN3tOM8PqfMap2FRfF4MFQ4v3ZXjBUcMVtvhmB";
 
-    private static readonly string[] SigningKeys =
+    private static string[] SigningKeys { get; } =
     [
         "DBFiIgoCOpJ_zW_OO0GdffhHfEvJWb1HxpDx95bFvufu",
         "DG-YwInLUxzVDD5z8SqZmS2FppXSB-ZX_f2bJC_ZnsM5",
         "DGIAk2jkC3xuLIe-DI9rcA0naevtZiKuU9wz91L_qBAV"
     ];
 
-    private static readonly string[] NextKeyDigests =
+    private static string[] NextKeyDigests { get; } =
     [
         "ELeFYMmuJb0hevKjhv97joA5bTfuA8E697cMzi8eoaZB",
         "ENY9GYShOjeh7qZUpIipKRHgrWcoR2WkJ7Wgj4wZx1YT",
         "EGyJ7y3TlewCW97dgBN-4pckhCqsni-zHNZ_G8zVerPG"
     ];
 
-    private static readonly string[] Backers =
+    private static string[] Backers { get; } =
     [
         "BGKV6v93ue5L5wsgk75t6j8TcdgABMN9x-eIyPi96J3B"
     ];
 
-    private static readonly string[] ConfigurationTraits = ["DID"];
-    private static readonly string[] NoTraits = [];
+    private static string[] ConfigurationTraits { get; } = ["DID"];
+    private static string[] NoTraits { get; } = [];
 
 
     /// <summary>

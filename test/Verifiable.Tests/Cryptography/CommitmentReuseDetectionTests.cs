@@ -18,7 +18,7 @@ internal sealed class CommitmentReuseDetectionTests
 
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
-    private static readonly Tag DigestTag = Tag.Create(HashAlgorithmName.SHA256);
+    private static Tag DigestTag { get; } = Tag.Create(HashAlgorithmName.SHA256);
 
 
     [TestMethod]
@@ -99,14 +99,14 @@ internal sealed class CommitmentReuseDetectionTests
     /// </summary>
     private sealed class InMemoryCommitmentStore
     {
-        private readonly HashSet<string> seen = new(StringComparer.Ordinal);
+        private HashSet<string> Seen { get; } = new(StringComparer.Ordinal);
 
         public ValueTask<bool> IsSeen(DigestValue commitment, CancellationToken cancellationToken) =>
-            ValueTask.FromResult(seen.Contains(Key(commitment)));
+            ValueTask.FromResult(Seen.Contains(Key(commitment)));
 
         public ValueTask Record(DigestValue commitment, CancellationToken cancellationToken)
         {
-            seen.Add(Key(commitment));
+            Seen.Add(Key(commitment));
 
             return ValueTask.CompletedTask;
         }

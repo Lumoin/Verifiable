@@ -12,8 +12,8 @@ namespace Verifiable.Tests.OAuth;
 [TestClass]
 internal sealed class JwtTemporalChecksTests
 {
-    private static readonly DateTimeOffset Now = new(2026, 6, 11, 12, 0, 0, TimeSpan.Zero);
-    private static readonly TimeSpan Skew = TimeSpan.FromSeconds(30);
+    private static DateTimeOffset Now { get; } = new(2026, 6, 11, 12, 0, 0, TimeSpan.Zero);
+    private static TimeSpan Skew { get; } = TimeSpan.FromSeconds(30);
 
 
     [TestMethod]

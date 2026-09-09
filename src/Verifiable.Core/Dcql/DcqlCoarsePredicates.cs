@@ -38,7 +38,7 @@ public record DcqlCoarsePredicates
     /// <summary>
     /// The credential query ID these predicates were extracted from.
     /// </summary>
-    public required string CredentialQueryId { get; init; }
+    public required CredentialQueryId CredentialQueryId { get; init; }
 
     /// <summary>
     /// The credential format that must match exactly.
@@ -64,33 +64,37 @@ public record DcqlCoarsePredicates
     /// </remarks>
     public IReadOnlySet<DcqlClaimPattern>? MustHavePatterns { get; init; }
 
-    /// <summary>
-    /// The credential's issuer must be one of these values, if specified.
-    /// </summary>
-    /// <remarks>
-    /// Extracted from trusted authority constraints. When null, no issuer constraint applies.
-    /// </remarks>
-    public IReadOnlySet<string>? MustMatchAnyIssuer { get; init; }
-
 
     /// <summary>
     /// Extracts coarse predicates from a DCQL credential query.
     /// </summary>
     /// <param name="credentialQuery">The credential query to extract from.</param>
     /// <returns>The coarse predicates.</returns>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="credentialQuery"/>'s <c>Id</c> fails
+    /// <see cref="Dcql.CredentialQueryId.TryCreate(string?, out CredentialQueryId?)"/> — an
+    /// identifier that leaves
+    /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-6.1">
+    /// OID4VP 1.0 §6.1</see> never evaluates.
+    /// </exception>
     public static DcqlCoarsePredicates Extract(CredentialQuery credentialQuery)
     {
         ArgumentNullException.ThrowIfNull(credentialQuery);
-        ArgumentNullException.ThrowIfNull(credentialQuery.Id);
         ArgumentNullException.ThrowIfNull(credentialQuery.Format);
+
+        if(!CredentialQueryId.TryCreate(credentialQuery.Id, out CredentialQueryId? credentialQueryId))
+        {
+            throw new ArgumentException(
+                $"Credential query ID '{credentialQuery.Id}' is not a valid OID4VP 1.0 §6.1 identifier.",
+                nameof(credentialQuery));
+        }
 
         return new DcqlCoarsePredicates
         {
-            CredentialQueryId = credentialQuery.Id,
+            CredentialQueryId = credentialQueryId,
             MustMatchFormat = credentialQuery.Format,
             MustMatchAnyType = ExtractTypeConstraints(credentialQuery),
-            MustHavePatterns = ExtractMustHavePatterns(credentialQuery),
-            MustMatchAnyIssuer = ExtractIssuerConstraints(credentialQuery)
+            MustHavePatterns = ExtractMustHavePatterns(credentialQuery)
         };
     }
 
@@ -149,28 +153,5 @@ public record DcqlCoarsePredicates
         }
 
         return patterns.Count > 0 ? patterns : null;
-    }
-
-
-    private static HashSet<string>? ExtractIssuerConstraints(CredentialQuery query)
-    {
-        if(query.TrustedAuthorities is null or { Count: 0 })
-        {
-            return null;
-        }
-
-        var issuers = new HashSet<string>();
-        foreach(var authority in query.TrustedAuthorities)
-        {
-            if(authority.Values is not null)
-            {
-                foreach(var issuer in authority.Values)
-                {
-                    issuers.Add(issuer);
-                }
-            }
-        }
-
-        return issuers.Count > 0 ? issuers : null;
     }
 }

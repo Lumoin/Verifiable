@@ -1,5 +1,5 @@
 using System.Buffers;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Fido2;
 
@@ -7,7 +7,7 @@ namespace Verifiable.Cbor.Fido2;
 
 /// <summary>
 /// The shipped default for <see cref="ParseAndroidKeyAttestationStatementDelegate"/>: decodes an
-/// <c>android-key</c> attestation statement's CBOR bytes using System.Formats.Cbor.
+/// <c>android-key</c> attestation statement's CBOR bytes.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -62,7 +62,7 @@ public static class AndroidKeyAttestationStatementCborReader
         List<PkiCertificateMemory>? x5c = null;
         try
         {
-            var reader = new CborReader(attestationStatement, CborConformanceMode.Ctap2Canonical);
+            var reader = new CborReader(attestationStatement, CborOptions.Ctap2Canonical, pool);
             int? entryCount = reader.ReadStartMap();
 
             int? alg = null;
@@ -102,7 +102,7 @@ public static class AndroidKeyAttestationStatementCborReader
 
             return new AndroidKeyAttestationStatement(alg.Value, sig.Value, x5c);
         }
-        catch(Exception exception) when(exception is CborContentException or InvalidOperationException or OverflowException or FormatException)
+        catch(Exception exception) when(exception is CborException or InvalidOperationException or OverflowException or FormatException)
         {
             DisposeAll(x5c);
             throw new Fido2FormatException("The android-key attestation statement bytes are not valid CTAP2 canonical CBOR conforming to the android-key attStmt syntax.", exception);

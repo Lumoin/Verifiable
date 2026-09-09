@@ -1,4 +1,4 @@
-﻿namespace Verifiable.Cesr;
+namespace Verifiable.Cesr;
 
 /// <summary>
 /// The exception thrown when CESR-encoded material is malformed: an unknown code, a wrong size, non-zero

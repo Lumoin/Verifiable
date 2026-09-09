@@ -5,7 +5,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// is the 10-byte header alone.
 /// </summary>
 /// <remarks>
-/// See TPM 2.0 Library Part 3, Section 23.6.
+/// See TPM 2.0 Library Part 3, clause 23.6.
 /// </remarks>
 public sealed class PolicyOrResponse: ITpmWireType
 {

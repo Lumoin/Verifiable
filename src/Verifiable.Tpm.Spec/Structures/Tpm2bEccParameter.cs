@@ -22,7 +22,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 ///   <item><description>Bytes 2+: buffer - the coordinate value (big-endian integer).</description></item>
 /// </list>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 10.2.5, Table 177.
+/// Specification reference: TPM 2.0 Library Part 2, clause 11.2.5.1, Table 197.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -76,12 +76,44 @@ public sealed class Tpm2bEccParameter: SensitiveMemory, ITpmWireType
     }
 
     /// <summary>
-    /// Parses an ECC parameter from a TPM reader.
+    /// Parses an ECC parameter from a TPM reader, renting <see cref="AllocationKind.Managed"/> storage — the
+    /// shape a public coordinate (an X or Y point member) needs, since it carries no secret.
     /// </summary>
+    /// <remarks>
+    /// The declared size is checked against <see cref="MaxSize"/> and then <see cref="TpmReader.Remaining"/>
+    /// before any pooled buffer is rented, so a truncated or oversized frame throws without ever orphaning a
+    /// rental — the same ordering <see cref="Tpm2bDigest.Parse(ref TpmReader, BaseMemoryPool)"/> and
+    /// <see cref="Tpm2bPrivate.Parse(ref TpmReader, BaseMemoryPool)"/> use. Delegates to
+    /// <see cref="Parse(ref TpmReader, BaseMemoryPool, AllocationKind)"/> with <see cref="AllocationKind.Managed"/>,
+    /// the rental a public coordinate takes.
+    /// </remarks>
     /// <param name="reader">The reader.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The parsed ECC parameter.</returns>
+    /// <exception cref="InvalidOperationException">The declared size exceeds <see cref="MaxSize"/>, or exceeds the octets remaining in <paramref name="reader"/>.</exception>
     public static Tpm2bEccParameter Parse(ref TpmReader reader, BaseMemoryPool pool)
+    {
+        return Parse(ref reader, pool, AllocationKind.Managed);
+    }
+
+    /// <summary>
+    /// Parses an ECC parameter from a TPM reader, renting storage of the caller-chosen
+    /// <paramref name="allocationKind"/> — <see cref="AllocationKind.Pinned"/> for the composite's ECC arm
+    /// (TPM 2.0 Library Part 2, clause 12.3.2.3, Table 239's <c>ecc</c> member: "the integer private key"),
+    /// which must not rest in relocatable memory the runtime could copy without clearing.
+    /// </summary>
+    /// <remarks>
+    /// The declared size is checked against <see cref="MaxSize"/> and then <see cref="TpmReader.Remaining"/>
+    /// before any pooled buffer is rented, so a truncated or oversized frame throws without ever orphaning a
+    /// rental — the same ordering <see cref="Tpm2bDigest.Parse(ref TpmReader, BaseMemoryPool)"/> and
+    /// <see cref="Tpm2bPrivate.Parse(ref TpmReader, BaseMemoryPool)"/> use.
+    /// </remarks>
+    /// <param name="reader">The reader.</param>
+    /// <param name="pool">The memory pool for allocating storage.</param>
+    /// <param name="allocationKind">The rental's allocation kind — pinned for a private scalar, managed for a public coordinate.</param>
+    /// <returns>The parsed ECC parameter.</returns>
+    /// <exception cref="InvalidOperationException">The declared size exceeds <see cref="MaxSize"/>, or exceeds the octets remaining in <paramref name="reader"/>.</exception>
+    public static Tpm2bEccParameter Parse(ref TpmReader reader, BaseMemoryPool pool, AllocationKind allocationKind)
     {
         ArgumentNullException.ThrowIfNull(pool);
         ushort size = reader.ReadUInt16();
@@ -96,7 +128,12 @@ public sealed class Tpm2bEccParameter: SensitiveMemory, ITpmWireType
             throw new InvalidOperationException($"ECC parameter size {size} exceeds maximum {MaxSize}.");
         }
 
-        IMemoryOwner<byte> storage = pool.Rent(size);
+        if(size > reader.Remaining)
+        {
+            throw new InvalidOperationException($"ECC parameter size {size} exceeds the {reader.Remaining} octets remaining in the reader.");
+        }
+
+        IMemoryOwner<byte> storage = pool.Rent(size, allocationKind);
         ReadOnlySpan<byte> source = reader.ReadBytes(size);
         source.CopyTo(storage.Memory.Span.Slice(0, size));
 

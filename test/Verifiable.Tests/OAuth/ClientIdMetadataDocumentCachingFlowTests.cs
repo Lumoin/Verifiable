@@ -322,12 +322,12 @@ internal sealed class ClientIdMetadataDocumentCachingFlowTests
     /// </summary>
     private sealed class SequencedResponseHandler
     {
-        private readonly Func<int, MinimalHttpResponse> responseFactory;
+        private Func<int, MinimalHttpResponse> ResponseFactory { get; }
         private int callIndex;
 
         public SequencedResponseHandler(Func<int, MinimalHttpResponse> responseFactory)
         {
-            this.responseFactory = responseFactory;
+            this.ResponseFactory = responseFactory;
         }
 
         public int CallCount => Volatile.Read(ref callIndex);
@@ -336,7 +336,7 @@ internal sealed class ClientIdMetadataDocumentCachingFlowTests
         {
             int index = Interlocked.Increment(ref callIndex) - 1;
 
-            return Task.FromResult(responseFactory(index));
+            return Task.FromResult(ResponseFactory(index));
         }
     }
 }

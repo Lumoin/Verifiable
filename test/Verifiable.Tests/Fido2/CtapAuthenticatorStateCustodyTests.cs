@@ -38,6 +38,9 @@ internal sealed class CtapAuthenticatorStateCustodyTests
     /// enrollment template; a non-initial serialized large-blob array; and every clientPIN/config field at
     /// a non-default value.
     /// </summary>
+    /// <summary><c>state</c>/<c>credential</c>/<c>bioTemplate</c> are tuple-deconstruction targets, disposed
+    /// in the <see langword="finally"/> block below because a <see langword="using"/> declaration cannot
+    /// target one.</summary>
     [TestMethod]
     public async Task SerializeParseRoundTripPreservesEveryMaximallyPopulatedPersistentField()
     {
@@ -62,7 +65,7 @@ internal sealed class CtapAuthenticatorStateCustodyTests
                 Assert.AreEqual(state.UvRetries, decoded.UvRetries);
                 Assert.AreEqual(state.IsForcePinChangeRequired, decoded.IsForcePinChangeRequired);
                 Assert.AreEqual(state.MinPinCodePointLength, decoded.MinPinCodePointLength);
-                Assert.AreSequenceEqual((string[])[.. state.MinPinLengthRpIds], (string[])[.. decoded.MinPinLengthRpIds]);
+                Assert.AreSequenceEqual(state.MinPinLengthRpIds.ToArray(), decoded.MinPinLengthRpIds.ToArray());
                 Assert.AreEqual(state.IsAlwaysUvEnabled, decoded.IsAlwaysUvEnabled);
                 Assert.AreEqual(state.IsEnterpriseAttestationEnabled, decoded.IsEnterpriseAttestationEnabled);
                 Assert.IsTrue(
@@ -202,8 +205,8 @@ internal sealed class CtapAuthenticatorStateCustodyTests
         try
         {
             //The writer emits each record's own credential id (two colliding entries here); the reader parses
-            //BOTH fully before the fold, so a pre-fix reader would overwrite the first with the second and
-            //return successfully — leaking the first's carriers. ThrowsExactly proves the fold now rejects it.
+            //BOTH fully before the fold: overwriting the first with the second and returning successfully
+            //would leak the first's carriers. ThrowsExactly proves the fold rejects the collision instead.
             using PooledMemory encoded = CtapAuthenticatorSnapshotCborWriter.Write(state, pool);
             CtapAuthenticatorSnapshotException exception = Assert.ThrowsExactly<CtapAuthenticatorSnapshotException>(
                 () => CtapAuthenticatorSnapshotCborReader.Read(encoded.AsReadOnlyMemory(), pool));
@@ -231,7 +234,7 @@ internal sealed class CtapAuthenticatorStateCustodyTests
         Guid originalAaguid = Guid.NewGuid();
         const string RunId = "custody-fingerprint-mismatch";
 
-        using(CtapAuthenticatorSimulator original = await CreateSimulatorWithCustodyAsync(RunId, store.CreateBundle(), originalAaguid, cancellationToken: cancellationToken))
+        using(CtapAuthenticatorSimulator original = await CreateSimulatorWithCustodyAsync(RunId, store.CreateBundle(), originalAaguid, BaseMemoryPool.Shared, cancellationToken: cancellationToken))
         {
             //Any state-changing command drives a persist; toggling alwaysUv via a minted PIN is more
             //machinery than this test needs, so a PIN establishment alone (which sets CurrentStoredPin, a
@@ -243,7 +246,7 @@ internal sealed class CtapAuthenticatorStateCustodyTests
 
         Guid differentAaguid = Guid.NewGuid();
         CtapAuthenticatorSnapshotException exception = await Assert.ThrowsExactlyAsync<CtapAuthenticatorSnapshotException>(() =>
-            CreateSimulatorWithCustodyAsync(RunId, store.CreateBundle(), differentAaguid, cancellationToken: cancellationToken).AsTask());
+            CreateSimulatorWithCustodyAsync(RunId, store.CreateBundle(), differentAaguid, BaseMemoryPool.Shared, cancellationToken: cancellationToken).AsTask());
         Assert.IsTrue(
             exception.Message.Contains("fingerprint", StringComparison.OrdinalIgnoreCase),
             $"the exception message should name the fingerprint check; was: '{exception.Message}'.");
@@ -269,7 +272,7 @@ internal sealed class CtapAuthenticatorStateCustodyTests
         const int DifferentFirmwareVersion = 2;
 
         using(CtapAuthenticatorSimulator original = await CreateSimulatorWithCustodyAsync(
-            RunId, store.CreateBundle(), aaguid, firmwareVersion: OriginalFirmwareVersion, cancellationToken: cancellationToken))
+            RunId, store.CreateBundle(), aaguid, BaseMemoryPool.Shared, firmwareVersion: OriginalFirmwareVersion, cancellationToken: cancellationToken))
         {
             await EstablishPinDirectAsync(original, BaseMemoryPool.Shared, "1234", CtapPinUvAuthProtocolId.Two);
         }
@@ -279,7 +282,7 @@ internal sealed class CtapAuthenticatorStateCustodyTests
         //Same AAGUID, different firmware version: the AAGUID disjunct holds, so only the FirmwareVersion
         //disjunct can reject — proving that half is live.
         CtapAuthenticatorSnapshotException exception = await Assert.ThrowsExactlyAsync<CtapAuthenticatorSnapshotException>(() =>
-            CreateSimulatorWithCustodyAsync(RunId, store.CreateBundle(), aaguid, firmwareVersion: DifferentFirmwareVersion, cancellationToken: cancellationToken).AsTask());
+            CreateSimulatorWithCustodyAsync(RunId, store.CreateBundle(), aaguid, BaseMemoryPool.Shared, firmwareVersion: DifferentFirmwareVersion, cancellationToken: cancellationToken).AsTask());
         Assert.IsTrue(
             exception.Message.Contains("fingerprint", StringComparison.OrdinalIgnoreCase),
             $"the exception message should name the fingerprint check; was: '{exception.Message}'.");
@@ -358,7 +361,7 @@ internal sealed class CtapAuthenticatorStateCustodyTests
         CoseKey protocolOneKeyAgreementBeforeDeath;
         int pinRetriesAfterMismatch;
 
-        using(CtapAuthenticatorSimulator instanceOne = await CreateSimulatorWithCustodyAsync(RunId, store.CreateBundle(), aaguid, cancellationToken: cancellationToken))
+        using(CtapAuthenticatorSimulator instanceOne = await CreateSimulatorWithCustodyAsync(RunId, store.CreateBundle(), aaguid, BaseMemoryPool.Shared, cancellationToken: cancellationToken))
         {
             await EstablishPinDirectAsync(instanceOne, pool, Pin, CtapPinUvAuthProtocolId.Two);
 
@@ -389,7 +392,7 @@ internal sealed class CtapAuthenticatorStateCustodyTests
 
         Assert.IsTrue(store.HasSnapshot(RunId), "instance 1's own commands must have persisted a snapshot before it was disposed.");
 
-        using(CtapAuthenticatorSimulator instanceTwo = await CreateSimulatorWithCustodyAsync(RunId, store.CreateBundle(), aaguid, cancellationToken: cancellationToken))
+        using(CtapAuthenticatorSimulator instanceTwo = await CreateSimulatorWithCustodyAsync(RunId, store.CreateBundle(), aaguid, BaseMemoryPool.Shared, cancellationToken: cancellationToken))
         {
             int pinRetriesAfterRehydrate = await GetPinRetriesDirectAsync(instanceTwo, pool, cancellationToken);
             Assert.AreEqual(pinRetriesAfterMismatch, pinRetriesAfterRehydrate, "pinRetries must carry across rehydration.");
@@ -437,7 +440,7 @@ internal sealed class CtapAuthenticatorStateCustodyTests
         const string RunId = "custody-persist-ordering";
         const string RpId = "custody-ordering.example";
 
-        using CtapAuthenticatorSimulator simulator = await CreateSimulatorWithCustodyAsync(RunId, store.CreateBundle(), aaguid, cancellationToken: cancellationToken);
+        using CtapAuthenticatorSimulator simulator = await CreateSimulatorWithCustodyAsync(RunId, store.CreateBundle(), aaguid, BaseMemoryPool.Shared, cancellationToken: cancellationToken);
 
         CtapMakeCredentialRequest makeCredentialRequest = BuildMakeCredentialRequest(
             pool, rpId: RpId, userId: BuildFixedBytes(16, 0xE0), options: new CtapCommandOptions(ResidentKey: true));
@@ -473,6 +476,67 @@ internal sealed class CtapAuthenticatorStateCustodyTests
         Assert.IsGreaterThanOrEqualTo(2, store.OperationLog.Count, "the assertion must have logged at least one custody operation before this test's own marker.");
         Assert.AreEqual("ResponseObserved", store.OperationLog[^1], "this test's own marker must be the log's last entry.");
         Assert.AreEqual($"Persist:{RunId}", store.OperationLog[^2], "the persist for the signCount-bumping assertion must be the entry immediately preceding this test's own post-response marker.");
+    }
+
+
+    /// <summary>
+    /// <see cref="CtapAuthenticatorState.Initial"/> mints its key-agreement key pairs and
+    /// <c>pinUvAuthToken</c>s from the pool the caller passes as <c>keyAgreementPool</c>, never a hidden
+    /// default; disposing the returned state returns every carrier it rented.
+    /// </summary>
+    [TestMethod]
+    public void InitialRentsKeyAgreementAndTokenMaterialFromThePassedPool()
+    {
+        using var trackingPool = new MeteredHousePool();
+
+        CtapAuthenticatorState state = CtapAuthenticatorState.Initial(Guid.NewGuid(), TestClock.CanonicalEpoch, keyAgreementPool: trackingPool.Pool);
+        Assert.IsGreaterThan(0L, trackingPool.RentedCount, "Initial must rent its key-agreement and token material from the passed pool.");
+
+        DisposeState(state);
+
+        Assert.AreEqual(0L, trackingPool.OutstandingCount, "Disposing the initial state must return every carrier it rented.");
+    }
+
+
+    /// <summary>
+    /// <see cref="CtapAuthenticatorState.PowerCycle"/> mints its FRESH key-agreement key pairs and
+    /// <c>pinUvAuthToken</c>s from the pool the caller passes, and disposes the superseded material itself;
+    /// disposing the returned state returns the fresh carriers.
+    /// </summary>
+    [TestMethod]
+    public void PowerCycleRentsFreshKeyAgreementAndTokenMaterialFromThePassedPool()
+    {
+        using var trackingPool = new MeteredHousePool();
+        CtapAuthenticatorState baseline = CtapAuthenticatorState.Initial(Guid.NewGuid(), TestClock.CanonicalEpoch, keyAgreementPool: trackingPool.Pool);
+
+        long rentedBeforePowerCycle = trackingPool.RentedCount;
+        CtapAuthenticatorState powered = baseline.PowerCycle(TestClock.CanonicalEpoch.AddMinutes(5), trackingPool.Pool);
+        Assert.IsGreaterThan(rentedBeforePowerCycle, trackingPool.RentedCount, "PowerCycle must rent fresh key-agreement and token material from the passed pool.");
+
+        DisposeState(powered);
+
+        Assert.AreEqual(0L, trackingPool.OutstandingCount, "Disposing the post-power-cycle state must return every carrier: PowerCycle itself disposes the superseded material.");
+    }
+
+
+    /// <summary>
+    /// <see cref="CtapAuthenticatorState.FactoryReset"/> rents its restored serialized large-blob array
+    /// from the pool the caller passes; disposing the returned state returns every carrier it and the
+    /// untouched key-agreement/token material (carried over from the baseline) rented.
+    /// </summary>
+    [TestMethod]
+    public void FactoryResetRentsFreshLargeBlobArrayMaterialFromThePassedPool()
+    {
+        using var trackingPool = new MeteredHousePool();
+        CtapAuthenticatorState baseline = CtapAuthenticatorState.Initial(Guid.NewGuid(), TestClock.CanonicalEpoch, keyAgreementPool: trackingPool.Pool);
+
+        long rentedBeforeReset = trackingPool.RentedCount;
+        CtapAuthenticatorState reset = baseline.FactoryReset(trackingPool.Pool);
+        Assert.IsGreaterThan(rentedBeforeReset, trackingPool.RentedCount, "FactoryReset must rent its restored serialized large-blob array from the passed pool.");
+
+        DisposeState(reset);
+
+        Assert.AreEqual(0L, trackingPool.OutstandingCount, "Disposing the post-reset state must return every carrier it and the untouched key-agreement/token material rented.");
     }
 
 

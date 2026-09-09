@@ -153,7 +153,7 @@ namespace Verifiable.Core.Did.Methods.Key
                     //The standard verification-method construction (id, type, controller, key format) is shared
                     //across every DID method builder; only the id format is method-specific.
                     VerificationMethod verificationMethod = DidBuilderExtensions.CreateVerificationMethod(
-                        keyInput.PublicKey, keyInput.VerificationMethodType, verificationMethodId, buildState.DidId);
+                        keyInput.PublicKey, keyInput.VerificationMethodType, verificationMethodId, buildState.DidId, buildState.Pool);
 
                     verificationMethods.Add(verificationMethod);
                 }
@@ -195,6 +195,7 @@ namespace Verifiable.Core.Did.Methods.Key
         /// The collection of key material inputs to use for creating the DID document.
         /// The first key in the collection is used to derive the DID identifier.
         /// </param>
+        /// <param name="pool">The memory pool the primary key's multibase encoding is rented from.</param>
         /// <param name="includeDefaultContext">
         /// If <c>true</c>, includes the default JSON-LD context in the DID document.
         /// This is useful for scenarios requiring JSON-LD processing.
@@ -224,10 +225,12 @@ namespace Verifiable.Core.Did.Methods.Key
         /// </remarks>
         public ValueTask<DidDocument> BuildAsync(
             IEnumerable<KeyMaterialInput> keyInputs,
+            BaseMemoryPool pool,
             bool includeDefaultContext = false,
             CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(keyInputs, nameof(keyInputs));
+            ArgumentNullException.ThrowIfNull(pool);
 
             var keyInputsList = keyInputs.ToList();
             if(keyInputsList.Count == 0)
@@ -245,7 +248,8 @@ namespace Verifiable.Core.Did.Methods.Key
                 algorithm,
                 purpose,
                 primaryKey.AsReadOnlySpan(),
-                DefaultCoderSelector.SelectEncoder(WellKnownKeyFormats.PublicKeyMultibase));
+                DefaultCoderSelector.SelectEncoder(WellKnownKeyFormats.PublicKeyMultibase),
+                pool);
 
             string didId = CreateDidId(encodedPublicKey);
 
@@ -257,7 +261,8 @@ namespace Verifiable.Core.Did.Methods.Key
                 VerificationMethodTypeInfo = keyInputsList[0].VerificationMethodType,
                 DidId = didId,
                 KeyInputs = keyInputsList,
-                CurrentVerificationMethodIndex = 0 //Will be updated during transformations.
+                CurrentVerificationMethodIndex = 0, //Will be updated during transformations.
+                Pool = pool
             };
 
             if(includeDefaultContext)
@@ -284,12 +289,14 @@ namespace Verifiable.Core.Did.Methods.Key
         /// </summary>
         /// <param name="publicKey">The public key material to use for creating the DID document.</param>
         /// <param name="verificationMethodType">The verification method type for the key representation.</param>
+        /// <param name="pool">The memory pool the key's multibase encoding is rented from.</param>
         /// <param name="includeDefaultContext">Whether to include the default JSON-LD context.</param>
         /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
         /// <returns>A <see cref="ValueTask{DidDocument}"/> containing the fully constructed DID document.</returns>
         public ValueTask<DidDocument> BuildAsync(
             PublicKeyMemory publicKey,
             VerificationMethodTypeInfo verificationMethodType,
+            BaseMemoryPool pool,
             bool includeDefaultContext = false,
             CancellationToken cancellationToken = default)
         {
@@ -302,7 +309,7 @@ namespace Verifiable.Core.Did.Methods.Key
                 }
             };
 
-            return BuildAsync(keyInputs, includeDefaultContext, cancellationToken);
+            return BuildAsync(keyInputs, pool, includeDefaultContext, cancellationToken);
         }
 
 
@@ -329,14 +336,9 @@ namespace Verifiable.Core.Did.Methods.Key
         {
             var document = new DidDocument
             {
-                Context = new Verifiable.Core.Model.Common.Context
-                {
-                    Contexts =
-                    [
-                        Verifiable.Core.Model.Common.Context.DidCore10,
-                        Verifiable.Core.Model.Common.Context.Multikey10
-                    ]
-                }
+                Context = Verifiable.Core.Model.Common.Context.FromIris(
+                    Verifiable.Core.Model.Common.Context.DidCore10,
+                    Verifiable.Core.Model.Common.Context.Multikey10)
             };
 
             return document;

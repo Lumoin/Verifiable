@@ -19,8 +19,10 @@ namespace Verifiable.Core.StatusList;
 /// </para>
 /// <para>
 /// Implementations may add caching, redirect handling, and rate limiting as appropriate.
-/// The specification requires clients to follow HTTP redirects and to respect <c>exp</c>
-/// and <c>ttl</c> claims over HTTP caching headers.
+/// "A response MAY also choose to redirect the client to another URI using an HTTP status
+/// code in the 3xx range, which clients SHOULD follow" (Section 8.2) — redirect handling is
+/// a MAY/SHOULD, not a requirement this delegate's caller must implement.
+/// See <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list-21#section-8.2">Token Status List, Section 8.2</see>.
 /// </para>
 /// </remarks>
 /// <param name="uri">The URI of the Status List Token to resolve.</param>

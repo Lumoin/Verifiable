@@ -23,7 +23,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// } TPMS_SENSITIVE_CREATE;
 /// </code>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 11.1.15, Table 168.
+/// Specification reference: TPM 2.0 Library Part 2, clause 11.1.15, Table 171.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -145,4 +145,11 @@ public sealed class TpmsSensitiveCreate: IDisposable
     }
 
     private string DebuggerDisplay => $"TPMS_SENSITIVE_CREATE(auth={UserAuth.Length}, data={Data.Length})";
+
+    /// <summary>
+    /// Returns the same metadata-only summary the debugger shows — the auth value's and sensitive
+    /// data's octet lengths, never the secret octets themselves — so an enclosing type's own
+    /// diagnostic string interpolation renders this instance meaningfully instead of its type name.
+    /// </summary>
+    public override string ToString() => DebuggerDisplay;
 }

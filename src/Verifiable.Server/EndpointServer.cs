@@ -50,10 +50,9 @@ public sealed class EndpointServer: IDisposable
     public required ServerIntegration Integration { get; init; }
 
     /// <summary>
-    /// The time source used for expiry, state timestamps, and event timestamps. Defaults
-    /// to <see cref="System.TimeProvider.System"/>.
+    /// The time source used for expiry, state timestamps, and event timestamps.
     /// </summary>
-    public TimeProvider TimeProvider { get; init; } = TimeProvider.System;
+    public required TimeProvider TimeProvider { get; init; }
 
     /// <summary>
     /// The protocol-neutral configuration of the host: the endpoint builders that define

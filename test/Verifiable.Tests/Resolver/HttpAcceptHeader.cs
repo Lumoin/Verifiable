@@ -17,11 +17,11 @@ namespace Verifiable.Tests.Resolver;
 /// </remarks>
 internal sealed class HttpAcceptHeader
 {
-    private readonly IReadOnlyList<MediaRange> ranges;
+    private IReadOnlyList<MediaRange> Ranges { get; }
 
     private HttpAcceptHeader(IReadOnlyList<MediaRange> ranges)
     {
-        this.ranges = ranges;
+        this.Ranges = ranges;
     }
 
 
@@ -43,7 +43,7 @@ internal sealed class HttpAcceptHeader
         //An absent or unparseable Accept is */* with quality 1: every representation is acceptable.
         if(parsed.Count == 0)
         {
-            parsed.Add(new MediaRange("*", "*", 1.0));
+            parsed.Add(new MediaRange("*", "*", 1.0m));
         }
 
         return new HttpAcceptHeader(parsed);
@@ -60,16 +60,16 @@ internal sealed class HttpAcceptHeader
         ArgumentNullException.ThrowIfNull(offers);
 
         string? best = null;
-        double bestQuality = 0.0;
+        decimal bestQuality = 0.0m;
         int bestSpecificity = -1;
 
         foreach(string offer in offers)
         {
-            (double quality, int specificity) = Match(offer);
+            (decimal quality, int specificity) = Match(offer);
 
             //A zero quality excludes the offer; among acceptable offers the highest quality wins, with a more
             //specific matching range breaking ties so a concrete media range outranks a wildcard.
-            if(quality > 0.0 && (quality > bestQuality || (quality == bestQuality && specificity > bestSpecificity)))
+            if(quality > 0.0m && (quality > bestQuality || (quality == bestQuality && specificity > bestSpecificity)))
             {
                 best = offer;
                 bestQuality = quality;
@@ -83,15 +83,15 @@ internal sealed class HttpAcceptHeader
 
     //The quality and match specificity of the best media range matching an offered media type. Specificity is 2
     //for an exact type/subtype match, 1 for a type/* match, 0 for */*, and -1 for no match.
-    private (double Quality, int Specificity) Match(string offer)
+    private (decimal Quality, int Specificity) Match(string offer)
     {
         int slashIndex = offer.IndexOf('/', StringComparison.Ordinal);
         string offerType = slashIndex >= 0 ? offer[..slashIndex] : offer;
         string offerSubtype = slashIndex >= 0 ? offer[(slashIndex + 1)..] : "*";
 
-        double quality = 0.0;
+        decimal quality = 0.0m;
         int specificity = -1;
-        foreach(MediaRange range in ranges)
+        foreach(MediaRange range in Ranges)
         {
             int rangeSpecificity = range.Specificity(offerType, offerSubtype);
             if(rangeSpecificity > specificity)
@@ -120,12 +120,12 @@ internal sealed class HttpAcceptHeader
         string type = slashIndex >= 0 ? mediaType[..slashIndex] : mediaType;
         string subtype = slashIndex >= 0 ? mediaType[(slashIndex + 1)..] : "*";
 
-        double quality = 1.0;
+        decimal quality = 1.0m;
         for(int i = 1; i < parts.Length; i++)
         {
             string parameter = parts[i].Trim();
             if(parameter.StartsWith("q=", StringComparison.OrdinalIgnoreCase)
-                && double.TryParse(parameter.AsSpan(2), NumberStyles.Float, CultureInfo.InvariantCulture, out double parsedQuality))
+                && decimal.TryParse(parameter.AsSpan(2), NumberStyles.Float, CultureInfo.InvariantCulture, out decimal parsedQuality))
             {
                 quality = parsedQuality;
             }
@@ -137,7 +137,7 @@ internal sealed class HttpAcceptHeader
     }
 
 
-    private readonly record struct MediaRange(string Type, string Subtype, double Quality)
+    private readonly record struct MediaRange(string Type, string Subtype, decimal Quality)
     {
         //The match specificity against an offered type/subtype: 2 for an exact match, 1 for type/*, 0 for */*,
         //and -1 when the range does not match the offer.

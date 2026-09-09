@@ -115,10 +115,10 @@ public readonly struct PolicyProfile: IEquatable<PolicyProfile>
     public static PolicyProfile Oid4VpVerifier { get; } = new(3);
 
 
-    private static List<PolicyProfile> profiles { get; } = [Fapi20, Haip10, Rfc6749WithPkce, Oid4VpVerifier];
+    private static List<PolicyProfile> RegisteredProfiles { get; } = [Fapi20, Haip10, Rfc6749WithPkce, Oid4VpVerifier];
 
     /// <summary>Gets all registered profile values including any custom ones.</summary>
-    public static IReadOnlyList<PolicyProfile> Profiles => profiles.AsReadOnly();
+    public static IReadOnlyList<PolicyProfile> Profiles => RegisteredProfiles.AsReadOnly();
 
 
     /// <summary>
@@ -141,9 +141,9 @@ public readonly struct PolicyProfile: IEquatable<PolicyProfile>
     /// </remarks>
     public static PolicyProfile Create(int code)
     {
-        for(int i = 0; i < profiles.Count; ++i)
+        for(int i = 0; i < RegisteredProfiles.Count; ++i)
         {
-            if(profiles[i].Code == code)
+            if(RegisteredProfiles[i].Code == code)
             {
                 throw new ArgumentException(
                     $"A policy profile with code {code} is already registered.", nameof(code));
@@ -151,7 +151,7 @@ public readonly struct PolicyProfile: IEquatable<PolicyProfile>
         }
 
         PolicyProfile newProfile = new(code);
-        profiles.Add(newProfile);
+        RegisteredProfiles.Add(newProfile);
         return newProfile;
     }
 

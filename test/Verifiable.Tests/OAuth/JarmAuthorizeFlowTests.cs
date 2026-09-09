@@ -31,9 +31,9 @@ internal sealed class JarmAuthorizeFlowTests
 
     private const string ClientId = "https://jarm.client.test";
 
-    private static readonly Uri ClientBaseUri = new("https://jarm.client.test");
+    private static Uri ClientBaseUri { get; } = new("https://jarm.client.test");
 
-    private static readonly Uri RedirectUri = new("https://client.example.com/callback");
+    private static Uri RedirectUri { get; } = new("https://client.example.com/callback");
 
     private const string SubjectId = "urn:uuid:end-user-42";
 
@@ -41,14 +41,14 @@ internal sealed class JarmAuthorizeFlowTests
 
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
-    private static readonly string[] AllowedAlgorithms = [WellKnownJwaValues.Es256];
+    private static string[] AllowedAlgorithms { get; } = [WellKnownJwaValues.Es256];
 
-    private static readonly ImmutableHashSet<CapabilityIdentifier> AuthCodeCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> AuthCodeCapabilities { get; } =
         ImmutableHashSet.Create(
             WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
             WellKnownCapabilityIdentifiers.OAuthPushedAuthorization);
 
-    private static readonly JwtPayloadDeserializer PayloadDeserializer =
+    private static JwtPayloadDeserializer PayloadDeserializer { get; } =
         static bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
             bytes, TestSetup.DefaultSerializationOptions)
             ?? throw new FormatException("Payload JSON parsed to null.");

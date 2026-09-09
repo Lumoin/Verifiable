@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Core.Model.Did;
+using Verifiable.Tests.TestInfrastructure;
 
 
 namespace Verifiable.Tests.Did
@@ -183,6 +184,27 @@ namespace Verifiable.Tests.Did
         public void ConstructorThrowsOnNullKey()
         {
             Assert.ThrowsExactly<ArgumentNullException>(() => new PublicKeyMultibase(null!));
+        }
+
+
+        /// <summary>
+        /// The <see cref="object.Equals(object?)"/>/<see cref="object.GetHashCode"/> contract requires
+        /// that <see cref="PublicKeyMultibase.GetHashCode"/> be computed with the same comparison
+        /// basis as <see cref="PublicKeyMultibase.Equals(KeyFormat?)"/> (ordinal, exact content). A
+        /// soft hyphen (U+00AD, a Unicode default-ignorable code point) inserted into the key
+        /// produces a byte-different string that a culture-aware comparison could still treat as
+        /// equal; both halves of the contract — <c>Equals</c> returning <see langword="false"/> and
+        /// <c>GetHashCode</c> differing — must hold for the type to behave correctly in hash
+        /// containers.
+        /// </summary>
+        [TestMethod]
+        public void KeyWithIgnorableCodePointIsNotEqualToOriginalAndHashesDiffer()
+        {
+            var tampered = new PublicKeyMultibase(Multibase1.Key.InsertIgnorableCodePointAt(1));
+
+            Assert.IsFalse(Multibase1.Equals(tampered));
+            Assert.IsFalse(Multibase1 == tampered);
+            Assert.AreNotEqual(Multibase1.GetHashCode(), tampered.GetHashCode());
         }
     }
 }

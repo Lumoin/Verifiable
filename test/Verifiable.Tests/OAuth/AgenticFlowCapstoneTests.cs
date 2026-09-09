@@ -68,6 +68,10 @@ namespace Verifiable.Tests.OAuth;
 /// Bearer tokens throughout, matching the event flow.
 /// </para>
 /// </remarks>
+//This capstone test is tightly coupled to CapstoneTopology by design: the topology fixture is the
+//single shared wiring (hosts, keys, clients) every scenario in this class drives end to end, so the
+//two types' extensive mutual reference is the intended shape of a capstone test, not a defect to
+//split apart.
 [TestClass]
 [DoNotParallelize]
 internal sealed class AgenticFlowCapstoneTests
@@ -94,21 +98,21 @@ internal sealed class AgenticFlowCapstoneTests
     /// <summary>The RFC 9068 <c>aud</c> AS2 stamps and RS2 expects.</summary>
     private const string Rs2Audience = "https://rs2.agentic.example";
 
-    private static readonly Uri ClientRedirectUri = new("https://agentic-client.example/callback");
+    private static Uri ClientRedirectUri { get; } = new("https://agentic-client.example/callback");
 
     /// <summary>The step-3 scope request: <c>openid</c> for the id_token plus both resource scopes.</summary>
-    private static readonly string Step3ScopeRequest =
+    private static string Step3ScopeRequest { get; } =
         $"{WellKnownScopes.OpenId} {Rs1RequiredScope} {Rs2RequiredScope}";
 
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     /// <summary>Serialises a JWT protected header to UTF-8 JSON bytes for client-side signing.</summary>
-    private static readonly JwtHeaderSerializer CapstoneHeaderSerializer =
+    private static JwtHeaderSerializer CapstoneHeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)header, TestSetup.DefaultSerializationOptions);
 
     /// <summary>Serialises a JWT payload to UTF-8 JSON bytes for client-side signing.</summary>
-    private static readonly JwtPayloadSerializer CapstonePayloadSerializer =
+    private static JwtPayloadSerializer CapstonePayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)payload, TestSetup.DefaultSerializationOptions);
 
@@ -1219,6 +1223,16 @@ internal sealed class AgenticFlowCapstoneTests
                 additionalAcceptedAudiences: [As1TokenEndpoint.OriginalString]);
             As2.Server.OAuth().ValidateClientCredentialsAsync = PrivateKeyJwtClientAuthentication.BuildValidator(
                 additionalAcceptedAudiences: [As2TokenEndpoint.OriginalString]);
+            //Both CIMD documents declare private_key_jwt; the token endpoint now refuses a declared
+            //method it does not advertise before any validator runs (RFC 8414, Section 2), so both
+            //hosts' advertisements must agree with the documents.
+            foreach(HostedAuthorizationServer host in new[] { As1, As2 })
+            {
+                AuthorizationServerIntegration authenticationOAuth = host.Server.OAuth();
+                authenticationOAuth.ClientAuthenticationMethodsSupported =
+                    [ClientAuthenticationMethod.None, ClientAuthenticationMethod.PrivateKeyJwt];
+                authenticationOAuth.ClientAssertionSigningAlgorithmsSupported = [algorithm];
+            }
 
             As1JwksKeys = await FetchJwksKeysAsync(
                 As1.SharedHttpClient!, As1.HttpBaseAddress!, Segment1, cancellationToken).ConfigureAwait(false);
@@ -1237,7 +1251,7 @@ internal sealed class AgenticFlowCapstoneTests
                 trustedIssuer: As1Issuer,
                 expectedAudience: Rs1Audience,
                 resolveVerificationKey: BuildMapResolver(As1JwksKeys),
-                verifySignature: MicrosoftCryptographicFunctions.VerifyP256Async,
+                verifySignature: MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
                 timeProvider: Time,
                 requiredScope: Rs1RequiredScope);
             await Rs1.StartHttpHostAsync(cancellationToken).ConfigureAwait(false);
@@ -1246,7 +1260,7 @@ internal sealed class AgenticFlowCapstoneTests
                 trustedIssuer: As2Issuer,
                 expectedAudience: Rs2Audience,
                 resolveVerificationKey: BuildMapResolver(As2JwksKeys),
-                verifySignature: MicrosoftCryptographicFunctions.VerifyP256Async,
+                verifySignature: MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
                 timeProvider: Time,
                 requiredScope: Rs2RequiredScope);
             await Rs2.StartHttpHostAsync(cancellationToken).ConfigureAwait(false);
@@ -1493,6 +1507,9 @@ internal sealed class AgenticFlowCapstoneTests
                 return null;
             }
 
+            //liveKeys.Values is a collection of disposables, not one disposable value: a using declaration
+            //disposes one variable's own value, not a collection's elements, so the foreach below in the
+            //finally block is the release point.
             Dictionary<string, PublicKeyMemory> liveKeys = await FetchJwksKeysAsync(
                 As1.SharedHttpClient!, As1.HttpBaseAddress!, Segment1, cancellationToken).ConfigureAwait(false);
             try
@@ -1504,7 +1521,7 @@ internal sealed class AgenticFlowCapstoneTests
 
                 bool isSignatureValid = await Jws.VerifyAsync(
                     token, TestSetup.Base64UrlDecoder, Pool, verificationKey,
-                    MicrosoftCryptographicFunctions.VerifyP256Async, cancellationToken).ConfigureAwait(false);
+                    MicrosoftCryptographicFunctionsAdapter.VerifyP256Async, cancellationToken).ConfigureAwait(false);
                 if(!isSignatureValid)
                 {
                     return null;
@@ -1650,7 +1667,7 @@ internal sealed class AgenticFlowCapstoneTests
 
             bool isSignatureValid = await Jws.VerifyAsync(
                 assertion, TestSetup.Base64UrlDecoder, Pool, verificationKey,
-                MicrosoftCryptographicFunctions.VerifyP256Async, cancellationToken).ConfigureAwait(false);
+                MicrosoftCryptographicFunctionsAdapter.VerifyP256Async, cancellationToken).ConfigureAwait(false);
             if(!isSignatureValid)
             {
                 return null;
@@ -1748,6 +1765,7 @@ internal sealed class AgenticFlowCapstoneTests
             };
 
             HttpClient httpClient = host.SharedHttpClient!;
+            FillEntropyDelegate fillEntropy = TestEntropy.NewCounterStream();
 
             OAuthClientInfrastructure infrastructure = OAuthClientInfrastructure.Create(
                 sendFormPostAsync: (endpoint, fields, headers, _, ct) =>
@@ -1772,7 +1790,10 @@ internal sealed class AgenticFlowCapstoneTests
                     ValueTask.FromResult(metadata),
                 resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,
                 base64UrlEncoder: TestSetup.Base64UrlEncoder,
-                timeProvider: timeProvider);
+                memoryPool: BaseMemoryPool.Shared,
+                timeProvider: timeProvider,
+                fillEntropy: fillEntropy,
+                generateIdentifierAsync: DefaultIdentifierGenerator.For(timeProvider, fillEntropy, BaseMemoryPool.Shared));
 
             ClientRegistration registration = new()
             {
@@ -1811,6 +1832,16 @@ internal sealed class AgenticFlowCapstoneTests
         }
 
 
+        /// <summary>
+        /// Reads a boxed epoch-seconds claim as a <see cref="DateTimeOffset"/>, accepting any
+        /// integer-valued numeric CLR type the payload deserializer may have produced. The
+        /// <c>== Math.Floor(…)</c> check tests whether a directly-deserialized <see cref="double"/>
+        /// already holds an exact integer value — no arithmetic is performed on the claim, so the
+        /// exact comparison carries no floating-point rounding risk.
+        /// </summary>
+        /// <param name="payload">The JWT payload to read the claim from.</param>
+        /// <param name="claimName">The claim name to read.</param>
+        /// <returns>The claim's value as a <see cref="DateTimeOffset"/>, or <see langword="null"/> when absent or not an integer-valued numeric.</returns>
         private static DateTimeOffset? ReadUnixSecondsClaim(JwtPayload payload, string claimName)
         {
             if(!payload.TryGetValue(claimName, out object? raw))

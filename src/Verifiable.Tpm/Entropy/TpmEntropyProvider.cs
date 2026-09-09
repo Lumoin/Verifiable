@@ -26,7 +26,7 @@ namespace Verifiable.Tpm;
 /// <see cref="CryptographicKeyEvents.Events"/>:
 /// </para>
 /// <code>
-/// var provider = new TpmEntropyProvider(device, pool);
+/// var provider = new TpmEntropyProvider(device, pool, timeProvider);
 /// CryptographicKeyFactory.RegisterFunction(
 ///     typeof(GenerateNonceDelegate), (GenerateNonceDelegate)provider.GenerateNonce, qualifier: "tpm");
 ///
@@ -76,14 +76,15 @@ public sealed class TpmEntropyProvider
     /// so events can be attributed and filtered.
     /// </param>
     /// <param name="timeProvider">The time source for event and observation timestamps.</param>
-    public TpmEntropyProvider(TpmDevice device, BaseMemoryPool pool, string? emittedBy = null, TimeProvider? timeProvider = null)
+    public TpmEntropyProvider(TpmDevice device, BaseMemoryPool pool, TimeProvider timeProvider, string? emittedBy = null)
     {
         ArgumentNullException.ThrowIfNull(device);
         ArgumentNullException.ThrowIfNull(pool);
+        ArgumentNullException.ThrowIfNull(timeProvider);
 
         this.Device = device;
         this.Pool = pool;
-        this.TimeProvider = timeProvider ?? TimeProvider.System;
+        this.TimeProvider = timeProvider;
         this.EmittedBy = string.IsNullOrWhiteSpace(emittedBy) ? nameof(TpmEntropyProvider) : emittedBy;
         Registry = new TpmResponseRegistry().Register(TpmCcConstants.TPM_CC_GetRandom, TpmResponseCodec.GetRandom);
     }
@@ -110,7 +111,7 @@ public sealed class TpmEntropyProvider
         EntropyHealthObservation health = currentHealth;
         Nonce result = Nonce.Generate(byteLength, tag, Fill, health, pool);
         Purpose purpose = tag.TryGet<Purpose>(out Purpose carried) ? carried : Purpose.Nonce;
-        CryptoEvent consumed = EntropyConsumedEvent.Create(EntropySource.Tpm, byteLength, purpose, health, EmittedBy, TimeProvider);
+        CryptoEvent consumed = EntropyConsumedEvent.Create(EntropySource.Tpm, byteLength, purpose, health, TimeProvider, EmittedBy);
 
         return (result, consumed);
     }
@@ -131,14 +132,14 @@ public sealed class TpmEntropyProvider
         EntropyHealthObservation health = currentHealth;
         Salt result = Salt.Generate(byteLength, tag, Fill, health, pool);
         Purpose purpose = tag.TryGet<Purpose>(out Purpose carried) ? carried : Purpose.Salt;
-        CryptoEvent consumed = EntropyConsumedEvent.Create(EntropySource.Tpm, byteLength, purpose, health, EmittedBy, TimeProvider);
+        CryptoEvent consumed = EntropyConsumedEvent.Create(EntropySource.Tpm, byteLength, purpose, health, TimeProvider, EmittedBy);
 
         return (result, consumed);
     }
 
     /// <summary>
     /// Assesses the entropy source's health by running <c>TPM2_SelfTest()</c> and mapping its response
-    /// code to an <see cref="EntropyHealthObservation"/> (TPM 2.0 Library Part 1, clause 10.3). The
+    /// code to an <see cref="EntropyHealthObservation"/> (TPM 2.0 Library Part 1, clause 9.3). The
     /// observation is retained as <see cref="CurrentHealth"/> and stamped on subsequent draws.
     /// </summary>
     /// <param name="cancellationToken">Token observed across the device round-trip.</param>
@@ -147,7 +148,7 @@ public sealed class TpmEntropyProvider
     {
         SelfTestResult selfTest = await SubmitSelfTestAsync(cancellationToken).ConfigureAwait(false);
 
-        //Map the self-test outcome (Part 1, clause 10.3): SUCCESS is healthy; TPM_RC_TESTING is a
+        //Map the self-test outcome (Part 1, clause 9.3): SUCCESS is healthy; TPM_RC_TESTING is a
         //warning (tests still in progress) so health is not yet determined; any other code is a genuine
         //failure. A transport loss yields no verdict at all, so it is likewise indeterminate — and its
         //evidence records the transport code, never a self-test code, so the two causes are not conflated.
@@ -180,7 +181,7 @@ public sealed class TpmEntropyProvider
         };
 
         currentHealth = observation;
-        EntropyHealthAssessedEvent assessed = EntropyHealthAssessedEvent.Create(EntropySource.Tpm, observation, EmittedBy, TimeProvider);
+        EntropyHealthAssessedEvent assessed = EntropyHealthAssessedEvent.Create(EntropySource.Tpm, observation, TimeProvider, EmittedBy);
 
         return (observation, assessed);
     }

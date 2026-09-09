@@ -250,6 +250,9 @@ public static class PolicyExchangeContextExtensions
         /// <c>iss</c> response parameter. Defaults to <see langword="true"/>
         /// (FAPI 2.0 §5.3.1.2).
         /// </summary>
+        //Kept as a ternary rather than the De Morgan-equivalent boolean expression (here and on the two
+        //other "defaults true" getters below): the ternary keeps the "policy key absent or the wrong
+        //shape" case reading as its own true-default, rather than folding it into a negated conjunction.
         public bool EmitIssOnRedirect =>
             context.TryGetValue(PolicyContextKeys.EmitIssOnRedirect, out object? v)
                 && v is bool b ? b : true;
@@ -265,6 +268,7 @@ public static class PolicyExchangeContextExtensions
         /// Gets whether <c>scope</c> is required on PKCE PAR / direct
         /// Authorize / JAR requests. Defaults to <see langword="true"/>.
         /// </summary>
+        //See EmitIssOnRedirect's remark above for why this stays a ternary.
         public bool ScopeRequiredOnRequest =>
             context.TryGetValue(PolicyContextKeys.ScopeRequiredOnRequest, out object? v)
                 && v is bool b ? b : true;
@@ -282,6 +286,7 @@ public static class PolicyExchangeContextExtensions
         /// paths and requires the client to push the request first. Defaults to
         /// <see langword="true"/> (FAPI 2.0 §5.2.2 mandates PAR).
         /// </summary>
+        //See EmitIssOnRedirect's remark above for why this stays a ternary.
         public bool RequirePushedAuthorizationRequests =>
             context.TryGetValue(PolicyContextKeys.RequirePushedAuthorizationRequests, out object? v)
                 && v is bool b ? b : true;
@@ -370,9 +375,12 @@ public static class PolicyExchangeContextExtensions
 
 
         /// <summary>
-        /// Gets the <c>jti</c> replay policy. Defaults to
-        /// <see cref="Server.JtiReplayPolicy.OptionalIfStorePresent"/> while the
-        /// replay-store surface is being finalised.
+        /// Gets the <c>jti</c> replay policy the <see cref="JtiReplayGuard"/> enforces. Defaults to
+        /// <see cref="Server.JtiReplayPolicy.OptionalIfStorePresent"/>: the guard consults the store
+        /// when one is wired and proves it can resolve what it records, and treats an unwired store as
+        /// a no-op. A store that cannot resolve what it saved yields
+        /// <see cref="JtiReplayOutcome.StoreUnavailable"/> under this policy and under
+        /// <see cref="Server.JtiReplayPolicy.Required"/> alike.
         /// </summary>
         public JtiReplayPolicy JtiReplayPolicy =>
             context.TryGetValue(PolicyContextKeys.JtiReplayPolicy, out object? v)

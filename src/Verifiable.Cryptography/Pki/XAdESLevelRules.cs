@@ -758,13 +758,13 @@ public readonly record struct XAdESLevelRuleContext
 /// </remarks>
 public static class XAdESLevelRules
 {
-    private static readonly HashSet<string> DataObjectFormatChildRequirementIds =
+    private static HashSet<string> DataObjectFormatChildRequirementIds { get; } =
     [
         "XA-6.3-t09", "XA-6.3-t10", "XA-6.3-t11", "XA-6.3-t12", "XA-6.3-t13"
     ];
 
     /// <summary>This closed vocabulary: every <see cref="AdESTableRow.Name"/> <see cref="XAdESBaselineLevelTable.Rows"/> registers, the only names <see cref="CheckOccurrenceDictionaryKeys"/> accepts.</summary>
-    private static readonly HashSet<string> KnownRowNames = BuildKnownRowNames();
+    private static HashSet<string> KnownRowNames { get; } = BuildKnownRowNames();
 
     private static HashSet<string> BuildKnownRowNames()
     {
@@ -1455,7 +1455,7 @@ public static class XAdESLevelRules
     /// </summary>
     private sealed class CandidateDigestIndex(IReadOnlyList<PkiCertificateMemory> candidates, BaseMemoryPool pool)
     {
-        private readonly Dictionary<string, Dictionary<string, int>> _digestIndexByAlgorithmOid = new(StringComparer.Ordinal);
+        private Dictionary<string, Dictionary<string, int>> DigestIndexByAlgorithmOid { get; } = new(StringComparer.Ordinal);
 
         /// <summary>
         /// Resolves <paramref name="digest"/>, declared under <paramref name="algorithm"/>, to the index of the
@@ -1471,10 +1471,10 @@ public static class XAdESLevelRules
                 return -1;
             }
 
-            if(!_digestIndexByAlgorithmOid.TryGetValue(algorithm.Oid, out Dictionary<string, int>? digestToIndex))
+            if(!DigestIndexByAlgorithmOid.TryGetValue(algorithm.Oid, out Dictionary<string, int>? digestToIndex))
             {
                 digestToIndex = await BuildIndexAsync(resolvedAlgorithm, cancellationToken).ConfigureAwait(false);
-                _digestIndexByAlgorithmOid[algorithm.Oid] = digestToIndex;
+                DigestIndexByAlgorithmOid[algorithm.Oid] = digestToIndex;
             }
 
             return digestToIndex.TryGetValue(Convert.ToHexStringLower(digest.AsReadOnlySpan()), out int matchIndex) ? matchIndex : -1;

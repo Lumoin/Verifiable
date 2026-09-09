@@ -102,6 +102,8 @@ internal sealed class CryptoFormatConversionsBrainpoolJwkTests
                 [WellKnownJwkMemberNames.Y] = jwk.Y!
             };
 
+            //keyMaterialOwner is a tuple-deconstruction target, disposed in the finally block below because a
+            //using declaration cannot target one.
             (CryptoAlgorithm roundTrippedAlgorithm, Purpose roundTrippedPurpose, EncodingScheme scheme, IMemoryOwner<byte> keyMaterialOwner) =
                 CryptoFormatConversions.DefaultJwkToAlgorithmConverter(
                     jwkDictionary,

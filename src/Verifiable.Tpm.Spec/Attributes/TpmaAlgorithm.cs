@@ -15,7 +15,7 @@ namespace Verifiable.Tpm.Spec.Attributes;
 /// Used in algorithm property lists returned by <c>TPM2_GetCapability(capability == TPM_CAP_ALGS)</c>.
 /// </para>
 /// <para>
-/// Specification: <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2: Structures, section 8.2 (TPMA_ALGORITHM).
+/// Specification: <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2: Structures, clause 8.2 (TPMA_ALGORITHM).
 /// </para>
 /// </remarks>
 [Flags]

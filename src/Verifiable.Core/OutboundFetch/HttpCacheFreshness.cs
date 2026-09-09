@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using Verifiable.Core.Transport;
 
 namespace Verifiable.Core.OutboundFetch;
 
@@ -61,18 +62,6 @@ public readonly record struct HttpCacheFreshness
     public bool MustRevalidate { get; }
 
 
-    /// <summary>The <c>Cache-Control</c> header name (RFC 9111 §5.2).</summary>
-    private const string CacheControlHeaderName = "Cache-Control";
-
-    /// <summary>The <c>Age</c> header name (RFC 9111 §5.1).</summary>
-    private const string AgeHeaderName = "Age";
-
-    /// <summary>The <c>Expires</c> header name (RFC 9111 §5.3).</summary>
-    private const string ExpiresHeaderName = "Expires";
-
-    /// <summary>The <c>Date</c> header name, used only as the Expires reference instant (RFC 9111 §4.2.1).</summary>
-    private const string DateHeaderName = "Date";
-
     private const string NoStoreDirective = "no-store";
     private const string NoCacheDirective = "no-cache";
     private const string MaxAgeDirective = "max-age";
@@ -99,8 +88,8 @@ public readonly record struct HttpCacheFreshness
     {
         ArgumentNullException.ThrowIfNull(response);
 
-        response.TryGetHeader(CacheControlHeaderName, out string? cacheControlValue);
-        CacheControlDirectives directives = ParseCacheControlDirectives(cacheControlValue);
+        CacheControlDirectives directives = ParseCacheControlDirectives(
+            response.Headers.GetValues(WellKnownHttpHeaderNames.CacheControl));
 
         if(directives.HasNoStore)
         {
@@ -127,23 +116,31 @@ public readonly record struct HttpCacheFreshness
     }
 
 
-    //Walks the Cache-Control field value once, splitting on top-level commas (a
-    //quoted-string argument, e.g. no-cache="Set-Cookie, X-Foo", is not split), and folding
-    //each "name[=value]" token into the accumulated directive state via ApplyDirective.
-    private static CacheControlDirectives ParseCacheControlDirectives(string? headerValue)
+    //RFC 9111 §5.2: "Cache-Control = #cache-directive" — the "#rule" ABNF extension (RFC 9110
+    //§5.6.1) denotes a comma-separated LIST, so a response carrying more than one Cache-Control
+    //field line carries more than one such list, every one of which the recipient folds together
+    //(RFC 9110 §5.3's recipient MAY-combine). Each line is walked once, splitting on top-level
+    //commas (a quoted-string argument, e.g. no-cache="Set-Cookie, X-Foo", is not split), and every
+    //"name[=value]" token across every line folds into the accumulated directive state via
+    //ApplyDirective — a no-store on a later line is not shadowed by an earlier max-age.
+    private static CacheControlDirectives ParseCacheControlDirectives(IReadOnlyList<string> headerValues)
     {
         CacheControlDirectives directives = default;
-        ReadOnlySpan<char> remaining = headerValue.AsSpan();
 
-        while(!remaining.IsEmpty)
+        foreach(string headerValue in headerValues)
         {
-            int commaIndex = FindTopLevelComma(remaining);
-            ReadOnlySpan<char> token = (commaIndex >= 0 ? remaining[..commaIndex] : remaining).Trim();
-            remaining = commaIndex >= 0 ? remaining[(commaIndex + 1)..] : ReadOnlySpan<char>.Empty;
+            ReadOnlySpan<char> remaining = headerValue.AsSpan();
 
-            if(!token.IsEmpty)
+            while(!remaining.IsEmpty)
             {
-                directives = ApplyDirective(directives, token);
+                int commaIndex = FindTopLevelComma(remaining);
+                ReadOnlySpan<char> token = (commaIndex >= 0 ? remaining[..commaIndex] : remaining).Trim();
+                remaining = commaIndex >= 0 ? remaining[(commaIndex + 1)..] : ReadOnlySpan<char>.Empty;
+
+                if(!token.IsEmpty)
+                {
+                    directives = ApplyDirective(directives, token);
+                }
             }
         }
 
@@ -250,7 +247,7 @@ public readonly record struct HttpCacheFreshness
     //first member, and an invalid value is ignored (treated as absent, i.e. zero).
     private static long ReadAgeSeconds(OutboundResponse response)
     {
-        if(!response.TryGetHeader(AgeHeaderName, out string? value) || value is not { Length: > 0 })
+        if(!response.Headers.TryGetValue(WellKnownHttpHeaderNames.Age, out string? value) || value is not { Length: > 0 })
         {
             return 0;
         }
@@ -270,7 +267,7 @@ public readonly record struct HttpCacheFreshness
     //message was received" (the RFC's fallback for an absent Date) is not available here.
     private static long? ReadExpiresMinusDateSeconds(OutboundResponse response)
     {
-        if(!response.TryGetHeader(ExpiresHeaderName, out string? expiresValue) || expiresValue is not { Length: > 0 })
+        if(!response.Headers.TryGetValue(WellKnownHttpHeaderNames.Expires, out string? expiresValue) || expiresValue is not { Length: > 0 })
         {
             return null;
         }
@@ -280,7 +277,7 @@ public readonly record struct HttpCacheFreshness
             return 0;
         }
 
-        if(!response.TryGetHeader(DateHeaderName, out string? dateValue)
+        if(!response.Headers.TryGetValue(WellKnownHttpHeaderNames.Date, out string? dateValue)
             || dateValue is not { Length: > 0 }
             || !TryParseHttpDate(dateValue, out DateTimeOffset date))
         {

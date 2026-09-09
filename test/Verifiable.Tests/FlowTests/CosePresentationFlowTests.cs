@@ -50,7 +50,7 @@ internal sealed class CosePresentationFlowTests
     private static JsonSerializerOptions JsonOptions { get; } = TestSetup.DefaultSerializationOptions;
     private static CredentialBuilder CredentialBuilder { get; } = new CredentialBuilder();
     private static KeyDidBuilder KeyDidBuilder { get; } = new KeyDidBuilder();
-    private static WebDidBuilder WebDidBuilder { get; } = new WebDidBuilder();
+    private static WebDidBuilder WebDidBuilder { get; } = new WebDidBuilder(BaseMemoryPool.Shared);
 
     private static FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(
         new DateTimeOffset(2024, 6, 15, 12, 0, 0, TimeSpan.Zero));
@@ -80,6 +80,7 @@ internal sealed class CosePresentationFlowTests
         var holderDidDocument = await KeyDidBuilder.BuildAsync(
             publicKey,
             testData.VerificationMethodTypeInfo,
+            BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var holderDid = holderDidDocument.Id!.ToString();
@@ -116,7 +117,7 @@ internal sealed class CosePresentationFlowTests
         //Holder wraps the COSE bytes as an EnvelopedVerifiableCredential (data: URL) in a presentation.
         var presentation = new VerifiablePresentation
         {
-            Context = new Context { Contexts = [Context.Credentials20] },
+            Context = Context.FromIris(Context.Credentials20),
             Type = ["VerifiablePresentation"],
             Holder = holderDid,
             EnvelopedVerifiableCredential =

@@ -1,12 +1,11 @@
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Fido2;
 
 namespace Verifiable.Cbor.Fido2;
 
 /// <summary>
 /// The shipped default for <see cref="ParseAttestationObjectDelegate"/>: splits a WebAuthn
-/// <c>attestationObject</c>'s CBOR bytes into its <c>fmt</c>/<c>attStmt</c>/<c>authData</c> parts
-/// using System.Formats.Cbor.
+/// <c>attestationObject</c>'s CBOR bytes into its <c>fmt</c>/<c>attStmt</c>/<c>authData</c> parts.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -57,7 +56,7 @@ public static class AttestationObjectCborReader
     {
         try
         {
-            var reader = new CborReader(attestationObject, CborConformanceMode.Ctap2Canonical);
+            var reader = new CborReader(attestationObject, CborOptions.Ctap2Canonical);
             int? entryCount = reader.ReadStartMap();
 
             string? format = null;
@@ -108,7 +107,7 @@ public static class AttestationObjectCborReader
 
             return new AttestationObjectParts(format, attestationStatement.Value, authenticatorData.Value);
         }
-        catch(Exception exception) when(exception is CborContentException or InvalidOperationException or OverflowException or FormatException)
+        catch(Exception exception) when(exception is CborException or InvalidOperationException or OverflowException or FormatException)
         {
             throw new Fido2FormatException("The attestationObject bytes are not valid CTAP2 canonical CBOR conforming to the attestationObject syntax.", exception);
         }
@@ -122,7 +121,7 @@ public static class AttestationObjectCborReader
         static ReadOnlyMemory<byte> ReadByteStringContentsAsSlice(CborReader reader)
         {
             ReadOnlyMemory<byte> encodedByteString = reader.ReadEncodedValue();
-            var probe = new CborReader(encodedByteString);
+            var probe = new CborReader(encodedByteString, CborOptions.Strict);
             byte[] contents = probe.ReadByteString();
             int contentOffset = encodedByteString.Length - contents.Length;
 

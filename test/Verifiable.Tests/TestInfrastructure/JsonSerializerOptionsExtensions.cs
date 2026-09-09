@@ -29,7 +29,7 @@ internal static class JsonSerializerOptionsExtensions
     public static JsonSerializerOptions ApplyVerifiableDefaults(this JsonSerializerOptions options, bool requireDcqlMeta = true)
     {
         options.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
-        options.PropertyNamingPolicy = new DefaultNamingNamingPolicy(Array.AsReadOnly([JsonNamingPolicy.CamelCase]));
+        options.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
         options.PropertyNameCaseInsensitive = true;
 
         //Source-generated serialization metadata for AOT compatibility.
@@ -83,6 +83,7 @@ internal static class JsonSerializerOptionsExtensions
         options.Converters.Add(new StatusListReferenceJsonConverter());
         options.Converters.Add(new StatusClaimJsonConverter());
         options.Converters.Add(new StatusListAggregationJsonConverter());
+        options.Converters.Add(new StatusListTokenJsonConverter(BaseMemoryPool.Shared));
 
         //DIDComm plaintext message converter — snake_case wire member names handled manually.
         options.Converters.Add(new DidCommMessageConverter());

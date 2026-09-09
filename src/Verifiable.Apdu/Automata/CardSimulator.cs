@@ -64,7 +64,7 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
     /// <summary>The SELECT P2 value requesting no response data (return no FCI), the eMRTD form.</summary>
     private const byte SelectNoResponseData = 0x0C;
 
-    /// <summary>The READ BINARY P1 bit that marks a short-EF-identifier reference (not modelled in this slice).</summary>
+    /// <summary>The READ BINARY P1 bit that marks a short-EF-identifier reference; short-EF-identifier addressing is not modelled.</summary>
     private const byte ReadBinaryShortEfBit = 0x80;
 
     /// <summary>The ISO/IEC 7816-4 class-byte bits that mark a command as Secure Messaging with a protected header.</summary>
@@ -232,9 +232,6 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
     /// <summary>The PACE session MAC key KSmac derived in the key-agreement round, owned by the card; <see langword="null"/> until derived. Used for the round-4 tokens, then transferred to the Secure Messaging session.</summary>
     private SymmetricKeyMemory? PaceMacKey { get; set; }
 
-    /// <summary>The counter backing the deterministic RNG default; advances once per drawn block.</summary>
-    private ulong RngCounter { get; set; }
-
     private bool disposed;
 
 
@@ -245,11 +242,10 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
     /// <param name="files">The elementary files the card serves (for example EF.COM, the data groups, EF.SOD). Borrowed — the caller retains ownership and disposes them; the last file registered for a given identifier wins.</param>
     /// <param name="rng">
     /// The random-number backend the card draws its nonces from. The simulator models the card's own RNG,
-    /// not the application entropy source, so the default is a deterministic counter stream seeded per
-    /// instance — reproducible for replay yet distinct across draws. Tests inject a fixed pattern; the
-    /// delegate must fill the entire destination span.
+    /// not the application entropy source, so the caller supplies a reproducible stream — tests pass
+    /// <c>TestEntropy.NewCounterStream()</c>. The delegate must fill the entire destination span.
     /// </param>
-    /// <param name="timeProvider">The time source for trace timestamps. Defaults to <see cref="System.TimeProvider.System"/>.</param>
+    /// <param name="timeProvider">The time source for trace timestamps.</param>
     /// <param name="paceCurve">
     /// A tag carrying the curve the card's PACE elliptic-curve operations run over, part of the card's
     /// personalisation. Required for the PACE mapping and key-agreement rounds; the encrypted-nonce round and
@@ -288,8 +284,8 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
     public CardSimulator(
         string cardId,
         IEnumerable<ElementaryFile> files,
-        FillEntropyDelegate? rng = null,
-        TimeProvider? timeProvider = null,
+        FillEntropyDelegate rng,
+        TimeProvider timeProvider,
         Tag? paceCurve = null,
         IEnumerable<ChipAuthenticationKey>? chipAuthenticationKeys = null,
         ActiveAuthenticationKey? activeAuthenticationKey = null,
@@ -299,9 +295,11 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(cardId);
         ArgumentNullException.ThrowIfNull(files);
+        ArgumentNullException.ThrowIfNull(rng);
+        ArgumentNullException.ThrowIfNull(timeProvider);
 
-        TimeProvider = timeProvider ?? TimeProvider.System;
-        Rng = rng ?? FillDeterministic;
+        TimeProvider = timeProvider;
+        Rng = rng;
         PaceCurve = paceCurve;
         ActiveAuthenticationKey = activeAuthenticationKey;
         PaceChipAuthenticationKey = paceChipAuthenticationKey;
@@ -437,6 +435,10 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
         {
             (IMemoryOwner<byte>? ownedData, ReadOnlyMemory<byte> responseData, StatusWord statusWord) =
                 await DispatchInnerCommandAsync(inner, pool, cancellationToken).ConfigureAwait(false);
+
+            //Not a using declaration: ownedData comes out of a tuple deconstruction, a shape the
+            //using declaration syntax does not accept; the try/finally disposes it exactly once on
+            //every exit path, including the throw path.
             try
             {
                 using ProtectedResponseApdu protectedResponse = await session.ProtectResponseAsync(responseData, statusWord, basePool, cancellationToken).ConfigureAwait(false);
@@ -698,6 +700,10 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
         (SymmetricKeyMemory encryptionKey, SymmetricKeyMemory macKey) =
             await BasicAccessControl.DeriveAccessKeysAsync(mrzInformation, basePool, cancellationToken).ConfigureAwait(false);
         using IMemoryOwner<byte> chipKeyingMaterial = basePool.Rent(ChipKeyingMaterialLength, AllocationKind.Pinned);
+
+        //Not using declarations: encryptionKey and macKey come out of a tuple deconstruction, a shape
+        //the using declaration syntax does not accept; the try/finally disposes both exactly once on
+        //every exit path, including the throw path.
         try
         {
             Rng(chipKeyingMaterial.Memory.Span[..ChipKeyingMaterialLength]);
@@ -779,6 +785,10 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
 
         (IMemoryOwner<byte> encryptedNonce, IMemoryOwner<byte> nonce) = await PaceCardResponder.EncryptNonceAsync(
             mrzInformation, Rng, basePool, cancellationToken).ConfigureAwait(false);
+
+        //Not a using declaration: encryptedNonce comes out of a tuple deconstruction, a shape the
+        //using declaration syntax does not accept; the try/finally disposes it exactly once on every
+        //exit path. nonce is not disposed here — it transfers to PaceNonce below.
         try
         {
             //Retain the nonce s for the mapping round, replacing any prior one.
@@ -1286,8 +1296,22 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
         DateOnly referenceDate = TerminalAuthenticationCurrentDate >= certificate.EffectiveDate
             ? TerminalAuthenticationCurrentDate
             : certificate.EffectiveDate;
-        CvcChainVerificationResult result = await CardVerifiableCertificateChain.VerifyOneAsync(
-            issuer, certificate, referenceDate, cancellationToken).ConfigureAwait(false);
+        CvcChainVerificationResult result;
+        try
+        {
+            result = await CardVerifiableCertificateChain.VerifyOneAsync(
+                issuer, certificate, referenceDate, cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            //certificate has not yet reached either disposal path below (the failure branch or the
+            //transfer to ImportedTerminalCertificate); a thrown verification exception leaves it
+            //otherwise unowned, so it is released here before the exception propagates.
+            certificate.Dispose();
+
+            throw;
+        }
+
         if(result != CvcChainVerificationResult.Valid)
         {
             certificate.Dispose();
@@ -1766,25 +1790,6 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
         IssuedChallenge?.Dispose();
         IssuedChallenge = null;
         IssuedChallengeLength = 0;
-    }
-
-
-    /// <summary>
-    /// The default deterministic RNG backend: a per-instance counter stream. Reproducible across runs yet
-    /// advancing across draws, so successive nonces differ. Not a real entropy source — the card's RNG is
-    /// part of the device model, not the application entropy provider.
-    /// </summary>
-    private void FillDeterministic(Span<byte> destination)
-    {
-        Span<byte> block = stackalloc byte[sizeof(ulong)];
-        for(int i = 0; i < destination.Length; i += sizeof(ulong))
-        {
-            BinaryPrimitives.WriteUInt64LittleEndian(block, RngCounter);
-            RngCounter++;
-
-            int take = Math.Min(sizeof(ulong), destination.Length - i);
-            block[..take].CopyTo(destination[i..(i + take)]);
-        }
     }
 
 
@@ -2341,7 +2346,7 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
     /// </summary>
     private static bool TryParseReadBinary(ReadOnlySpan<byte> command, byte p1, byte p2, [NotNullWhen(true)] out CardSimulatorInput? input)
     {
-        //The short-EF-identifier reference (high bit of P1 set) is not modelled in this slice; it is
+        //The short-EF-identifier reference (high bit of P1 set) is not modelled; it is
         //dispatched as an unsupported command so the rejection appears in the trace.
         if((p1 & ReadBinaryShortEfBit) != 0)
         {
@@ -2456,8 +2461,8 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
     private static ApduResult<ApduResponse> SerializeResponse(CardResponseIntent intent, BaseMemoryPool pool)
     {
         //A ChallengeResponse / BacAuthenticateResponse owns the pooled buffer the action executor produced;
-        //release it in the finally once its octets are copied into the wire response.
-        IMemoryOwner<byte>? ownedBuffer = intent switch
+        //it is released once its octets are copied into the wire response.
+        using IMemoryOwner<byte>? ownedBuffer = intent switch
         {
             ChallengeResponse challenge => challenge.Challenge,
             BacAuthenticateResponse authenticate => authenticate.Token,
@@ -2465,42 +2470,36 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
             ActiveAuthenticationResponse activeAuthentication => activeAuthentication.Signature,
             _ => null
         };
+
+        ReadOnlySpan<byte> data = intent switch
+        {
+            BinaryReadResponse read => read.Data.Span,
+            ChallengeResponse challenge => challenge.Challenge.Memory.Span[..challenge.Length],
+            BacAuthenticateResponse authenticate => authenticate.Token.Memory.Span[..authenticate.Length],
+            DynamicAuthenticationDataResponse dynamicAuthentication => dynamicAuthentication.Data.Memory.Span[..dynamicAuthentication.Length],
+            ActiveAuthenticationResponse activeAuthentication => activeAuthentication.Signature.Memory.Span[..activeAuthentication.Length],
+            _ => ReadOnlySpan<byte>.Empty
+        };
+        StatusWord statusWord = intent.StatusWord;
+        int total = data.Length + ApduConstants.StatusWordSize;
+
+        IMemoryOwner<byte> owner = pool.Rent(total);
         try
         {
-            ReadOnlySpan<byte> data = intent switch
-            {
-                BinaryReadResponse read => read.Data.Span,
-                ChallengeResponse challenge => challenge.Challenge.Memory.Span[..challenge.Length],
-                BacAuthenticateResponse authenticate => authenticate.Token.Memory.Span[..authenticate.Length],
-                DynamicAuthenticationDataResponse dynamicAuthentication => dynamicAuthentication.Data.Memory.Span[..dynamicAuthentication.Length],
-                ActiveAuthenticationResponse activeAuthentication => activeAuthentication.Signature.Memory.Span[..activeAuthentication.Length],
-                _ => ReadOnlySpan<byte>.Empty
-            };
-            StatusWord statusWord = intent.StatusWord;
-            int total = data.Length + ApduConstants.StatusWordSize;
+            Span<byte> span = owner.Memory.Span;
+            data.CopyTo(span);
+            span[data.Length] = statusWord.Sw1;
+            span[data.Length + 1] = statusWord.Sw2;
 
-            IMemoryOwner<byte> owner = pool.Rent(total);
-            try
-            {
-                Span<byte> span = owner.Memory.Span;
-                data.CopyTo(span);
-                span[data.Length] = statusWord.Sw1;
-                span[data.Length + 1] = statusWord.Sw2;
+            var response = new ApduResponse(owner, total);
 
-                var response = new ApduResponse(owner, total);
-
-                return ApduResult<ApduResponse>.Success(response, statusWord);
-            }
-            catch
-            {
-                owner.Dispose();
-
-                throw;
-            }
+            return ApduResult<ApduResponse>.Success(response, statusWord);
         }
-        finally
+        catch
         {
-            ownedBuffer?.Dispose();
+            owner.Dispose();
+
+            throw;
         }
     }
 

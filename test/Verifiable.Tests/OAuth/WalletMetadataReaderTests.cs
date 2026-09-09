@@ -104,7 +104,7 @@ internal sealed class WalletMetadataReaderTests
             "{\"jwks\":{\"keys\":[{\"kty\":\"EC\",\"x\":\"...\",\"y\":\"...\"}]" +
             ",\"authorization_encrypted_response_enc\":\"A128GCM\"";
 
-        (string? jwksJson, string? enc) =
+        (string? jwksJson, _) =
             WalletMetadataReader.ParseForJarEncryption(metadata);
 
         Assert.IsNull(jwksJson);

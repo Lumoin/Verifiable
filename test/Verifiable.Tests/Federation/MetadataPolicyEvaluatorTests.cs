@@ -10,7 +10,7 @@ namespace Verifiable.Tests.Federation;
 [TestClass]
 internal sealed class MetadataPolicyEvaluatorTests
 {
-    private static readonly EntityTypeIdentifier RpType =
+    private static EntityTypeIdentifier RpType { get; } =
         WellKnownEntityTypeIdentifiers.OpenIdRelyingParty;
 
 

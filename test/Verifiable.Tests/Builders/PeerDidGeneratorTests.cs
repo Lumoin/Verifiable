@@ -32,7 +32,7 @@ internal sealed class PeerDidGeneratorTests
 
     private const string KeyAgreementKey = "z6LSg8zQom395jKLrGiBNruB9MM6V8PWuf2FpEy4uRFiqQBR";
 
-    private static readonly ExchangeContext ResolutionContext = new();
+    private static ExchangeContext ResolutionContext { get; } = new();
 
     public TestContext TestContext { get; set; } = null!;
 
@@ -98,7 +98,7 @@ internal sealed class PeerDidGeneratorTests
         //covered via a stub deserializer.
         var inputDocument = new DidDocument
         {
-            Context = new Context { Contexts = [Context.DidCore10, Context.Multikey10] },
+            Context = Context.FromIris(Context.DidCore10, Context.Multikey10),
             VerificationMethod =
             [
                 new VerificationMethod { Id = "#key-2", Type = "Multikey", KeyFormat = new PublicKeyMultibase(KeyAgreementKey) }
@@ -161,7 +161,7 @@ internal sealed class PeerDidGeneratorTests
     {
         var inputDocument = new DidDocument
         {
-            Context = new Context { Contexts = [Context.DidCore10, Context.Multikey10] },
+            Context = Context.FromIris(Context.DidCore10, Context.Multikey10),
             VerificationMethod =
             [
                 new VerificationMethod { Id = "did:example:123456789abcdefghi#key-1", Type = "Multikey", KeyFormat = new PublicKeyMultibase(SigningKey) }
@@ -183,7 +183,7 @@ internal sealed class PeerDidGeneratorTests
     {
         var inputDocument = new DidDocument
         {
-            Context = new Context { Contexts = [Context.DidCore10, Context.Multikey10] },
+            Context = Context.FromIris(Context.DidCore10, Context.Multikey10),
             VerificationMethod =
             [
                 new VerificationMethod { Id = "#key-1", Type = "Multikey", KeyFormat = new PublicKeyMultibase(SigningKey) }
@@ -208,7 +208,7 @@ internal sealed class PeerDidGeneratorTests
     {
         var inputDocument = new DidDocument
         {
-            Context = new Context { Contexts = [Context.DidCore10, Context.Multikey10] },
+            Context = Context.FromIris(Context.DidCore10, Context.Multikey10),
             VerificationMethod =
             [
                 new VerificationMethod { Id = "#key-1", Type = "Multikey", Controller = "did:example:other", KeyFormat = new PublicKeyMultibase(SigningKey) }
@@ -425,7 +425,7 @@ internal sealed class PeerDidGeneratorTests
         //An input document per the spec: relative ids, no root id, controller omitted (filled on resolution).
         var document = new DidDocument
         {
-            Context = new Context { Contexts = [Context.DidCore10, Context.Multikey10] },
+            Context = Context.FromIris(Context.DidCore10, Context.Multikey10),
             VerificationMethod =
             [
                 new VerificationMethod { Id = "#key-1", Type = "Multikey", KeyFormat = new PublicKeyMultibase(SigningKey) }

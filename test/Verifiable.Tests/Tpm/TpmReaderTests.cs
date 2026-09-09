@@ -37,6 +37,8 @@ internal class TpmReaderTests
         }
         catch(ArgumentOutOfRangeException)
         {
+            //Reaching this block IS the assertion: ArgumentOutOfRangeException was thrown as expected; the
+            //preceding Assert.Fail fires only when ReadByte returns instead of throwing.
         }
     }
 

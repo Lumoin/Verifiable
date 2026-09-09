@@ -27,7 +27,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 ///   <item><description>Remaining: hmac (TPM2B_AUTH) - HMAC for verification.</description></item>
 /// </list>
 /// <para>
-/// See TPM 2.0 Library Specification, Part 2: Structures, Section 10.10.2.
+/// See TPM 2.0 Library Specification, Part 2: Structures, clause 10.12.3, Table 157 (Definition of TPMS_AUTH_RESPONSE Structure).
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]

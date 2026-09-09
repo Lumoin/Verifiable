@@ -14,7 +14,7 @@ public static class RiscAccountDisabledClaimNames
     public static ReadOnlySpan<byte> ReasonUtf8 => "reason"u8;
 
     /// <summary><c>reason</c> — OPTIONAL; why the account was disabled. See <see cref="RiscAccountDisabledReasonValues"/>.</summary>
-    public static readonly string Reason = Utf8Constants.ToInternedString(ReasonUtf8);
+    public static string Reason { get; } = Utf8Constants.ToInternedString(ReasonUtf8);
 }
 
 
@@ -29,13 +29,13 @@ public static class RiscAccountDisabledReasonValues
     public static ReadOnlySpan<byte> HijackingUtf8 => "hijacking"u8;
 
     /// <summary><c>hijacking</c>.</summary>
-    public static readonly string Hijacking = Utf8Constants.ToInternedString(HijackingUtf8);
+    public static string Hijacking { get; } = Utf8Constants.ToInternedString(HijackingUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="BulkAccount"/>.</summary>
     public static ReadOnlySpan<byte> BulkAccountUtf8 => "bulk-account"u8;
 
     /// <summary><c>bulk-account</c>.</summary>
-    public static readonly string BulkAccount = Utf8Constants.ToInternedString(BulkAccountUtf8);
+    public static string BulkAccount { get; } = Utf8Constants.ToInternedString(BulkAccountUtf8);
 }
 
 
@@ -48,7 +48,7 @@ public static class RiscIdentifierChangedClaimNames
     public static ReadOnlySpan<byte> NewValueUtf8 => "new-value"u8;
 
     /// <summary><c>new-value</c> (hyphenated on the wire) — OPTIONAL; the new value of the identifier.</summary>
-    public static readonly string NewValue = Utf8Constants.ToInternedString(NewValueUtf8);
+    public static string NewValue { get; } = Utf8Constants.ToInternedString(NewValueUtf8);
 }
 
 
@@ -61,25 +61,25 @@ public static class RiscCredentialCompromiseClaimNames
     public static ReadOnlySpan<byte> CredentialTypeUtf8 => "credential_type"u8;
 
     /// <summary><c>credential_type</c> — REQUIRED; the values of the CAEP credential-change <c>credential_type</c> (<see cref="CaepCredentialTypeValues"/>).</summary>
-    public static readonly string CredentialType = Utf8Constants.ToInternedString(CredentialTypeUtf8);
+    public static string CredentialType { get; } = Utf8Constants.ToInternedString(CredentialTypeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="EventTimestamp"/>.</summary>
     public static ReadOnlySpan<byte> EventTimestampUtf8 => "event_timestamp"u8;
 
     /// <summary><c>event_timestamp</c> — OPTIONAL; when the Transmitter discovered the compromise, as Unix seconds.</summary>
-    public static readonly string EventTimestamp = Utf8Constants.ToInternedString(EventTimestampUtf8);
+    public static string EventTimestamp { get; } = Utf8Constants.ToInternedString(EventTimestampUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="ReasonAdmin"/>.</summary>
     public static ReadOnlySpan<byte> ReasonAdminUtf8 => "reason_admin"u8;
 
     /// <summary><c>reason_admin</c> — OPTIONAL; why the event was generated, intended for administrators.</summary>
-    public static readonly string ReasonAdmin = Utf8Constants.ToInternedString(ReasonAdminUtf8);
+    public static string ReasonAdmin { get; } = Utf8Constants.ToInternedString(ReasonAdminUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="ReasonUser"/>.</summary>
     public static ReadOnlySpan<byte> ReasonUserUtf8 => "reason_user"u8;
 
     /// <summary><c>reason_user</c> — OPTIONAL; why the event was generated, intended for end-users.</summary>
-    public static readonly string ReasonUser = Utf8Constants.ToInternedString(ReasonUserUtf8);
+    public static string ReasonUser { get; } = Utf8Constants.ToInternedString(ReasonUserUtf8);
 }
 
 
@@ -280,7 +280,7 @@ public sealed record RiscIdentifierChangedEvent
 /// </summary>
 public static class RiscPayloadlessEvents
 {
-    private static readonly ReadOnlyDictionary<string, object> EmptyPayload = ReadOnlyDictionary<string, object>.Empty;
+    private static ReadOnlyDictionary<string, object> EmptyPayload { get; } = ReadOnlyDictionary<string, object>.Empty;
 
 
     /// <summary><c>account-credential-change-required</c> (§2.1): the subject was required to change a credential.</summary>

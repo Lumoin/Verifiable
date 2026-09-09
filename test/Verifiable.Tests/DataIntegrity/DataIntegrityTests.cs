@@ -50,7 +50,7 @@ internal sealed class DataIntegrityTests
 
     //Canonicalization here is in-memory; a default context yields the
     //secure-default SSRF policy and satisfies the policy-carrying parameter.
-    private static readonly ExchangeContext EmptyContext = new();
+    private static ExchangeContext EmptyContext { get; } = new();
 
     /// <summary>
     /// Ed25519 public key in Multikey format.
@@ -183,7 +183,7 @@ internal sealed class DataIntegrityTests
         var privateKeyBytes = MultibaseSerializer.Decode(SecretKeyMultibase, MulticodecHeaders.Ed25519PrivateKey.Length, TestSetup.Base58Decoder, BaseMemoryPool.Shared);
         using PrivateKeyMemory privateKeyMemory = new(privateKeyBytes, CryptoTags.Ed25519PrivateKey);
 
-        var signature = await privateKeyMemory.SignAsync(hashData, BouncyCastleCryptographicFunctions.SignEd25519Async, BaseMemoryPool.Shared).ConfigureAwait(false);
+        var signature = await privateKeyMemory.SignAsync(hashData, BouncyCastleCryptographicFunctionsAdapter.SignEd25519Async, BaseMemoryPool.Shared).ConfigureAwait(false);
         Assert.AreEqual(ExpectedSignatureHex, Convert.ToHexStringLower(signature.AsReadOnlySpan()), "Signature must match W3C test vector.");
 
         //Encode proofValue and verify.
@@ -216,7 +216,7 @@ internal sealed class DataIntegrityTests
         var signatureBytes = MultibaseSerializer.Decode(proofValue, 0, TestSetup.Base58Decoder, BaseMemoryPool.Shared);
         using var signatureToVerify = new Signature(signatureBytes, CryptoTags.Ed25519Signature);
 
-        bool isVerified = await publicKeyMemory.VerifyAsync(hashData, signatureToVerify, BouncyCastleCryptographicFunctions.VerifyEd25519Async).ConfigureAwait(false);
+        bool isVerified = await publicKeyMemory.VerifyAsync(hashData, signatureToVerify, BouncyCastleCryptographicFunctionsAdapter.VerifyEd25519Async).ConfigureAwait(false);
         Assert.IsTrue(isVerified, "Signature verification must succeed.");
 
         //Verify tamper detection.
@@ -225,7 +225,7 @@ internal sealed class DataIntegrityTests
         var tamperedHash = SHA256.HashData(Encoding.UTF8.GetBytes(tamperedCanonical));
         var tamperedHashData = proofOptionsHash.Concat(tamperedHash).ToArray();
 
-        bool isTamperedVerified = await publicKeyMemory.VerifyAsync(tamperedHashData, signatureToVerify, BouncyCastleCryptographicFunctions.VerifyEd25519Async).ConfigureAwait(false);
+        bool isTamperedVerified = await publicKeyMemory.VerifyAsync(tamperedHashData, signatureToVerify, BouncyCastleCryptographicFunctionsAdapter.VerifyEd25519Async).ConfigureAwait(false);
         Assert.IsFalse(isTamperedVerified, "Tampered credential verification must fail.");
     }
 
@@ -254,7 +254,7 @@ internal sealed class DataIntegrityTests
         var payloadBase64Url = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(credentialJson));
 
         var signingInput = $"{headerBase64Url}.{payloadBase64Url}";
-        var signature = await privateKeyMemory.SignAsync(Encoding.UTF8.GetBytes(signingInput), BouncyCastleCryptographicFunctions.SignEd25519Async, BaseMemoryPool.Shared).ConfigureAwait(false);
+        var signature = await privateKeyMemory.SignAsync(Encoding.UTF8.GetBytes(signingInput), BouncyCastleCryptographicFunctionsAdapter.SignEd25519Async, BaseMemoryPool.Shared).ConfigureAwait(false);
         var jwt = $"{signingInput}.{TestSetup.Base64UrlEncoder(signature.AsReadOnlySpan())}";
 
         //Verify JWT structure and signature.
@@ -265,7 +265,7 @@ internal sealed class DataIntegrityTests
         using var signatureBytesFromJwt = TestSetup.Base64UrlDecoder(parts[2], BaseMemoryPool.Shared);
         using var signatureToVerify = new Signature(signatureBytesFromJwt, CryptoTags.Ed25519Signature);
 
-        bool isValid = await publicKeyMemory.VerifyAsync(verificationInput, signatureToVerify, BouncyCastleCryptographicFunctions.VerifyEd25519Async).ConfigureAwait(false);
+        bool isValid = await publicKeyMemory.VerifyAsync(verificationInput, signatureToVerify, BouncyCastleCryptographicFunctionsAdapter.VerifyEd25519Async).ConfigureAwait(false);
         Assert.IsTrue(isValid, "JWT signature verification must succeed.");
 
         //Verify payload round-trips through VerifiableCredential model.

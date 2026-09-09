@@ -993,7 +993,7 @@ public static class CAdESSignatureAugmentation
         ArgumentOutOfRangeException.ThrowIfNegative(context.SignerIndex);
 
         PkiDigestAlgorithm algorithm = context.MessageImprintAlgorithm;
-        CmsSignedData extended = context.ValidationMaterial.IsEmpty
+        using CmsSignedData extended = context.ValidationMaterial.IsEmpty
             ? CmsSignedData.FromBytes(context.SignedData.AsReadOnlySpan(), pool)
             : AddValidationData(context.SignedData, context.SignerIndex, context.ValidationMaterial, pool);
         try
@@ -1037,10 +1037,6 @@ public static class CAdESSignatureAugmentation
                 CAdESAugmentationFailureKind.SignedDataMalformed,
                 "The signature could not be read to compute the ats-hash-index-v3 or the archive time-stamp's message imprint input (ETSI EN 319 122-1 clauses 5.5.2, 5.5.3).",
                 exception);
-        }
-        finally
-        {
-            extended.Dispose();
         }
     }
 

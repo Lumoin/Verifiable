@@ -92,8 +92,6 @@ namespace Verifiable.Tests
                 (Data: new byte[] { 0x48, 0x65, 0x6C, 0x6C }, ExpectedPadding: 2), // 4 bytes -> 2 padding chars
             };
 
-            ReadOnlySpan<byte> emptyCodecHeader = ReadOnlySpan<byte>.Empty;
-
             foreach(var (data, expectedPadding) in testCases)
             {
                 //Standard Base64 with padding.

@@ -451,7 +451,8 @@ public static class TcgEventLogParser
             description);
     }
 
-    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "<Pending>")]
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types",
+        Justification = "eventData is a raw event log record from an untrusted boot log; a malformed length-prefixed field or out-of-range index in any type-specific sub-parser yields no description rather than failing the whole log parse.")]
     private static string? TryParseEventData(uint eventType, byte[] eventData)
     {
         try
@@ -475,16 +476,26 @@ public static class TcgEventLogParser
         }
         catch
         {
+            //A malformed sub-record (length-prefixed string, structure count, or index) is untrusted boot
+            //log content; no description is the fail-closed answer rather than an escaping exception.
             return null;
         }
     }
 
+    /// <summary>
+    /// Reads a TCG_PCR_EVENT (SHA-1 log) EV_NO_ACTION payload's ASCII signature — the Spec ID Event
+    /// header's own name, or "StartupLocality" followed by one locality byte. The outer length check
+    /// (at least <see cref="SpecIdSignatureSize"/> bytes) bounds the signature read; the inner
+    /// "StartupLocality" branch re-checks length against <c>startupLocalitySize</c> (17) before indexing
+    /// byte 16, so the locality byte's own read is in bounds independently of the outer check.
+    /// </summary>
+    /// <param name="eventData">The event's raw data bytes.</param>
     private static string? TryParseNoAction(byte[] eventData)
     {
         if(eventData.Length >= SpecIdSignatureSize)
         {
             string sig = Encoding.ASCII.GetString(eventData, 0, SpecIdSignatureSize).TrimEnd('\0');
-            if(sig.StartsWith("Spec ID Event", StringComparison.InvariantCulture))
+            if(sig.StartsWith("Spec ID Event", StringComparison.Ordinal))
             {
                 return sig;
             }
@@ -627,7 +638,8 @@ public static class TcgEventLogParser
         return null;
     }
 
-    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "<Pending>")]
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types",
+        Justification = "pathData is a raw EFI device path from an untrusted boot log; a malformed node fails this node only, and the walk continues looking at the next one.")]
     private static string? TryExtractDevicePathString(byte[] pathData)
     {
         //EFI device path node: Type(1) + SubType(1) + Length(2) + Data(variable).

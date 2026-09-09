@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using Verifiable.Core.Assessment;
 using Verifiable.Fido2;
 using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Fido2;
 
@@ -154,7 +155,7 @@ internal sealed class Fido2UserHandleRuleTests
     /// <returns>The generated <see cref="ClaimIssueResult"/>.</returns>
     private Task<ClaimIssueResult> IssueClaimsAsync(AssertionCeremonyInput input)
     {
-        var issuer = new ClaimIssuer<AssertionCeremonyInput>("fido2-user-handle-rule-test", Fido2ValidationProfiles.AssertionRules());
+        var issuer = new ClaimIssuer<AssertionCeremonyInput>("fido2-user-handle-rule-test", Fido2ValidationProfiles.AssertionRules(), new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         return issuer.GenerateClaimsAsync(input, "fido2-user-handle-rule-test-correlation", TestContext.CancellationToken).AsTask();
     }

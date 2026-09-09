@@ -21,64 +21,64 @@ namespace Verifiable.Tests.TestDataProviders
     /// </remarks>
     internal static class TestKeyMaterialProvider
     {
-        private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> P256Source = new(() =>
+        private static Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> P256Source { get; } = new(() =>
             MicrosoftKeyMaterialCreator.CreateP256Keys(BaseMemoryPool.Shared));
 
-        private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> P384Source = new(() =>
+        private static Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> P384Source { get; } = new(() =>
             MicrosoftKeyMaterialCreator.CreateP384Keys(BaseMemoryPool.Shared));
 
-        private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> P521Source = new(() =>
+        private static Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> P521Source { get; } = new(() =>
             MicrosoftKeyMaterialCreator.CreateP521Keys(BaseMemoryPool.Shared));
 
-        private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> Secp256k1Source = new(() =>
+        private static Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> Secp256k1Source { get; } = new(() =>
             BouncyCastleKeyMaterialCreator.CreateSecp256k1Keys(BaseMemoryPool.Shared));
 
-        private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> Rsa2048Source = new(() =>
+        private static Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> Rsa2048Source { get; } = new(() =>
             MicrosoftKeyMaterialCreator.CreateRsa2048Keys(BaseMemoryPool.Shared));
 
-        private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> Rsa4096Source = new(() =>
+        private static Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> Rsa4096Source { get; } = new(() =>
             MicrosoftKeyMaterialCreator.CreateRsa4096Keys(BaseMemoryPool.Shared));
 
-        private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> Ed25519Source = new(() =>
+        private static Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> Ed25519Source { get; } = new(() =>
             BouncyCastleKeyMaterialCreator.CreateEd25519Keys(BaseMemoryPool.Shared));
 
-        private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> X25519Source = new(() =>
+        private static Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> X25519Source { get; } = new(() =>
             BouncyCastleKeyMaterialCreator.CreateX25519Keys(BaseMemoryPool.Shared));
 
-        private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> P256ExchangeSource = new(() =>
+        private static Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> P256ExchangeSource { get; } = new(() =>
             BouncyCastleKeyMaterialCreator.CreateP256ExchangeKeys(BaseMemoryPool.Shared));
 
-        private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> MlDsa44Source = new(() =>
+        private static Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> MlDsa44Source { get; } = new(() =>
             BouncyCastleKeyMaterialCreator.CreateMlDsa44Keys(BaseMemoryPool.Shared));
 
-        private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> MlDsa65Source = new(() =>
+        private static Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> MlDsa65Source { get; } = new(() =>
             BouncyCastleKeyMaterialCreator.CreateMlDsa65Keys(BaseMemoryPool.Shared));
 
-        private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> MlDsa87Source = new(() =>
+        private static Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> MlDsa87Source { get; } = new(() =>
             BouncyCastleKeyMaterialCreator.CreateMlDsa87Keys(BaseMemoryPool.Shared));
 
-        private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> MlKem512Source = new(() =>
+        private static Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> MlKem512Source { get; } = new(() =>
             BouncyCastleKeyMaterialCreator.CreateMlKem512Keys(BaseMemoryPool.Shared));
 
-        private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> MlKem768Source = new(() =>
+        private static Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> MlKem768Source { get; } = new(() =>
             BouncyCastleKeyMaterialCreator.CreateMlKem768Keys(BaseMemoryPool.Shared));
 
-        private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> MlKem1024Source = new(() =>
+        private static Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> MlKem1024Source { get; } = new(() =>
             BouncyCastleKeyMaterialCreator.CreateMlKem1024Keys(BaseMemoryPool.Shared));
 
-        private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> BrainpoolP224r1Source = new(() =>
+        private static Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> BrainpoolP224r1Source { get; } = new(() =>
             BouncyCastleKeyMaterialCreator.CreateBrainpoolP224r1Keys(BaseMemoryPool.Shared));
 
-        private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> BrainpoolP256r1Source = new(() =>
+        private static Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> BrainpoolP256r1Source { get; } = new(() =>
             BouncyCastleKeyMaterialCreator.CreateBrainpoolP256r1Keys(BaseMemoryPool.Shared));
 
-        private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> BrainpoolP320r1Source = new(() =>
+        private static Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> BrainpoolP320r1Source { get; } = new(() =>
             BouncyCastleKeyMaterialCreator.CreateBrainpoolP320r1Keys(BaseMemoryPool.Shared));
 
-        private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> BrainpoolP384r1Source = new(() =>
+        private static Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> BrainpoolP384r1Source { get; } = new(() =>
             BouncyCastleKeyMaterialCreator.CreateBrainpoolP384r1Keys(BaseMemoryPool.Shared));
 
-        private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> BrainpoolP512r1Source = new(() =>
+        private static Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> BrainpoolP512r1Source { get; } = new(() =>
             BouncyCastleKeyMaterialCreator.CreateBrainpoolP512r1Keys(BaseMemoryPool.Shared));
 
 

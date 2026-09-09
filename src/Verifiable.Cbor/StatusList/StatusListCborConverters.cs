@@ -1,6 +1,6 @@
 using System;
 using System.Buffers;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Core.StatusList;
 
 namespace Verifiable.Cbor.StatusList;
@@ -36,8 +36,10 @@ public sealed class StatusListCborConverter: CborConverter<Core.StatusList.Statu
     }
 
     /// <inheritdoc/>
-    public override Core.StatusList.StatusList Read(ref CborReader reader, Type typeToConvert, CborSerializerOptions options)
+    public override Core.StatusList.StatusList Read(CborReader reader)
     {
+        ArgumentNullException.ThrowIfNull(reader);
+
         int? mapLength = reader.ReadStartMap();
 
         int? bits = null;
@@ -95,10 +97,22 @@ public sealed class StatusListCborConverter: CborConverter<Core.StatusList.Statu
         return statusList;
     }
 
-    /// <inheritdoc/>
-    public override void Write(CborWriter writer, Core.StatusList.StatusList value, CborSerializerOptions options)
+    /// <summary>
+    /// Writes <paramref name="value"/> as the Section 4.3 CBOR map.
+    /// </summary>
+    /// <param name="writer">The CBOR writer.</param>
+    /// <param name="value">The Status List to write. Must be packed <c>LeastSignificantFirst</c>.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="value"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="value"/> is packed <c>MostSignificantFirst</c> (the W3C Bitstring
+    /// Status List's order) rather than the <c>LeastSignificantFirst</c> order Section 4.1 requires —
+    /// see <see cref="Core.StatusList.StatusList.EnsureIetfBitOrder"/>.
+    /// </exception>
+    public override void Write(CborWriter writer, Core.StatusList.StatusList value)
     {
+        ArgumentNullException.ThrowIfNull(writer);
         ArgumentNullException.ThrowIfNull(value);
+        Core.StatusList.StatusList.EnsureIetfBitOrder(value, nameof(value));
 
         int mapSize = value.AggregationUri is not null ? 3 : 2;
         writer.WriteStartMap(mapSize);
@@ -127,8 +141,10 @@ public sealed class StatusListCborConverter: CborConverter<Core.StatusList.Statu
 public sealed class StatusListReferenceCborConverter: CborConverter<StatusListReference>
 {
     /// <inheritdoc/>
-    public override StatusListReference Read(ref CborReader reader, Type typeToConvert, CborSerializerOptions options)
+    public override StatusListReference Read(CborReader reader)
     {
+        ArgumentNullException.ThrowIfNull(reader);
+
         int? mapLength = reader.ReadStartMap();
 
         int? idx = null;
@@ -174,8 +190,10 @@ public sealed class StatusListReferenceCborConverter: CborConverter<StatusListRe
     }
 
     /// <inheritdoc/>
-    public override void Write(CborWriter writer, StatusListReference value, CborSerializerOptions options)
+    public override void Write(CborWriter writer, StatusListReference value)
     {
+        ArgumentNullException.ThrowIfNull(writer);
+
         writer.WriteStartMap(2);
         writer.WriteTextString(StatusListCborConstants.Index);
         writer.WriteInt32(value.Index);
@@ -205,8 +223,10 @@ public sealed class StatusListTokenCborConverter: CborConverter<StatusListToken>
     }
 
     /// <inheritdoc/>
-    public override StatusListToken Read(ref CborReader reader, Type typeToConvert, CborSerializerOptions options)
+    public override StatusListToken Read(CborReader reader)
     {
+        ArgumentNullException.ThrowIfNull(reader);
+
         int? mapLength = reader.ReadStartMap();
 
         string? subject = null;
@@ -240,7 +260,7 @@ public sealed class StatusListTokenCborConverter: CborConverter<StatusListToken>
                     timeToLive = reader.ReadInt64();
                     break;
                 case StatusListCborConstants.StatusList:
-                    statusList = StatusListConverter.Read(ref reader, typeof(Core.StatusList.StatusList), options);
+                    statusList = StatusListConverter.Read(reader);
                     break;
                 default:
                     reader.SkipValue();
@@ -265,6 +285,16 @@ public sealed class StatusListTokenCborConverter: CborConverter<StatusListToken>
             CborThrowHelper.ThrowMissingRequiredMapKey(StatusListCborConstants.StatusList);
         }
 
+        //"ttl: RECOMMENDED. … The value of the claim MUST be a positive number encoded in JSON as a
+        //number." — the same rule the JSON tier's StatusListTokenJsonConverter refuses on, applied here
+        //for symmetry so a CWT-carried non-positive ttl is not silently accepted where a JWT-carried one
+        //would be refused.
+        if(timeToLive.HasValue && timeToLive.Value <= 0)
+        {
+            CborThrowHelper.ThrowCborContentException(
+                $"Map key {StatusListCborConstants.TimeToLive} ('ttl') MUST be a positive number.");
+        }
+
         return new StatusListToken(subject, DateTimeOffset.FromUnixTimeSeconds(issuedAt.Value), statusList)
         {
             TimeToLive = timeToLive,
@@ -275,8 +305,9 @@ public sealed class StatusListTokenCborConverter: CborConverter<StatusListToken>
     }
 
     /// <inheritdoc/>
-    public override void Write(CborWriter writer, StatusListToken value, CborSerializerOptions options)
+    public override void Write(CborWriter writer, StatusListToken value)
     {
+        ArgumentNullException.ThrowIfNull(writer);
         ArgumentNullException.ThrowIfNull(value);
 
         int mapSize = 3;
@@ -304,7 +335,7 @@ public sealed class StatusListTokenCborConverter: CborConverter<StatusListToken>
         }
 
         writer.WriteInt32(StatusListCborConstants.StatusList);
-        StatusListConverter.Write(writer, value.StatusList, options);
+        StatusListConverter.Write(writer, value.StatusList);
 
         writer.WriteEndMap();
     }

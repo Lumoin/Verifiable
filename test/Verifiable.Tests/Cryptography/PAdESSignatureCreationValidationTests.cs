@@ -601,7 +601,6 @@ internal sealed class PAdESSignatureCreationValidationTests
     private static PdfIncrementalUpdateAnchor LocatePlaceholderAnchor(byte[] document)
     {
         using PdfByteSurfaceParseResult located = PdfByteSurfaceReader.Locate(document, BaseMemoryPool.Shared);
-        PdfSignatureDictionary signature = located.SignatureDictionaries![0];
 
         //The document's own second signed segment ends with this revision's xref/trailer/startxref tail; the
         //new anchor's PriorXrefOffset is this revision's own startxref target, and PriorObjectCount is one past

@@ -45,14 +45,14 @@ namespace Verifiable.OAuth;
 public sealed class OutgoingFormFields: IReadOnlyCollection<KeyValuePair<string, string>>, IEquatable<OutgoingFormFields>
 {
     /// <summary>The backing store: an ordered list of key/value occurrences, preserving repeats.</summary>
-    private readonly List<KeyValuePair<string, string>> entries;
+    private List<KeyValuePair<string, string>> Entries { get; }
 
     /// <summary>
     /// Creates an empty <see cref="OutgoingFormFields"/> instance.
     /// </summary>
     public OutgoingFormFields()
     {
-        entries = [];
+        Entries = [];
     }
 
     /// <summary>
@@ -62,7 +62,7 @@ public sealed class OutgoingFormFields: IReadOnlyCollection<KeyValuePair<string,
     /// <param name="capacity">The initial number of occurrences the collection can contain.</param>
     public OutgoingFormFields(int capacity)
     {
-        entries = new List<KeyValuePair<string, string>>(capacity);
+        Entries = new List<KeyValuePair<string, string>>(capacity);
     }
 
     /// <summary>
@@ -77,7 +77,7 @@ public sealed class OutgoingFormFields: IReadOnlyCollection<KeyValuePair<string,
     {
         ArgumentNullException.ThrowIfNull(fields);
 
-        entries = [];
+        Entries = [];
         foreach((string key, string value) in fields)
         {
             this[key] = value;
@@ -86,7 +86,7 @@ public sealed class OutgoingFormFields: IReadOnlyCollection<KeyValuePair<string,
 
 
     /// <summary>The number of key/value occurrences present, counting every repeat.</summary>
-    public int Count => entries.Count;
+    public int Count => Entries.Count;
 
 
     /// <summary>
@@ -101,7 +101,7 @@ public sealed class OutgoingFormFields: IReadOnlyCollection<KeyValuePair<string,
     {
         get
         {
-            foreach(KeyValuePair<string, string> entry in entries)
+            foreach(KeyValuePair<string, string> entry in Entries)
             {
                 if(string.Equals(entry.Key, key, StringComparison.Ordinal))
                 {
@@ -113,8 +113,8 @@ public sealed class OutgoingFormFields: IReadOnlyCollection<KeyValuePair<string,
         }
         set
         {
-            entries.RemoveAll(entry => string.Equals(entry.Key, key, StringComparison.Ordinal));
-            entries.Add(new KeyValuePair<string, string>(key, value));
+            Entries.RemoveAll(entry => string.Equals(entry.Key, key, StringComparison.Ordinal));
+            Entries.Add(new KeyValuePair<string, string>(key, value));
         }
     }
 
@@ -133,7 +133,7 @@ public sealed class OutgoingFormFields: IReadOnlyCollection<KeyValuePair<string,
         ArgumentNullException.ThrowIfNull(key);
         ArgumentNullException.ThrowIfNull(value);
 
-        entries.Add(new KeyValuePair<string, string>(key, value));
+        Entries.Add(new KeyValuePair<string, string>(key, value));
     }
 
 
@@ -141,7 +141,7 @@ public sealed class OutgoingFormFields: IReadOnlyCollection<KeyValuePair<string,
     /// <param name="key">The parameter name.</param>
     public bool ContainsKey(string key)
     {
-        foreach(KeyValuePair<string, string> entry in entries)
+        foreach(KeyValuePair<string, string> entry in Entries)
         {
             if(string.Equals(entry.Key, key, StringComparison.Ordinal))
             {
@@ -162,7 +162,7 @@ public sealed class OutgoingFormFields: IReadOnlyCollection<KeyValuePair<string,
     public IReadOnlyList<string> GetValues(string key)
     {
         List<string> values = [];
-        foreach(KeyValuePair<string, string> entry in entries)
+        foreach(KeyValuePair<string, string> entry in Entries)
         {
             if(string.Equals(entry.Key, key, StringComparison.Ordinal))
             {
@@ -175,7 +175,7 @@ public sealed class OutgoingFormFields: IReadOnlyCollection<KeyValuePair<string,
 
 
     /// <inheritdoc/>
-    public IEnumerator<KeyValuePair<string, string>> GetEnumerator() => entries.GetEnumerator();
+    public IEnumerator<KeyValuePair<string, string>> GetEnumerator() => Entries.GetEnumerator();
 
 
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
@@ -193,10 +193,10 @@ public sealed class OutgoingFormFields: IReadOnlyCollection<KeyValuePair<string,
         //Order-independent multiset comparison: two field sets are equal when they carry the same
         //key/value occurrences the same number of times, regardless of the order Add/the indexer
         //appended them in.
-        List<KeyValuePair<string, string>> ordered = [.. entries
+        List<KeyValuePair<string, string>> ordered = [.. Entries
             .OrderBy(static entry => entry.Key, StringComparer.Ordinal)
             .ThenBy(static entry => entry.Value, StringComparer.Ordinal)];
-        List<KeyValuePair<string, string>> otherOrdered = [.. other.entries
+        List<KeyValuePair<string, string>> otherOrdered = [.. other.Entries
             .OrderBy(static entry => entry.Key, StringComparer.Ordinal)
             .ThenBy(static entry => entry.Value, StringComparer.Ordinal)];
 

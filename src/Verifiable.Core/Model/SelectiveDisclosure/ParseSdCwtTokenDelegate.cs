@@ -8,9 +8,13 @@ namespace Verifiable.Core.Model.SelectiveDisclosure;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Wired by the application to its SD-CWT implementation — typically
-/// <c>Verifiable.Cbor.Sd.SdCwtVpParsing.ParseEmbeddedSdCwt</c> with the
-/// application's salt tag and memory pool baked in. The returned token owns the
+/// Wired by the application to <c>Verifiable.Cbor.Sd.SdCwtVpParsing.ParseEmbeddedSdCwt</c> with the
+/// application's salt tag and memory pool baked in. That method normalizes a malformed-CBOR
+/// rejection to <see cref="System.FormatException"/> at its own public boundary rather than let
+/// <c>Lumoin.Veritas.Cbor.CborException</c> escape — a type the OID4VP verifier's
+/// Wallet-attributable-malformed classification cannot name (the project's CBOR-leaf layering rule
+/// bans that namespace outside <c>Verifiable.Cbor</c>). Implementations MUST throw
+/// <see cref="System.FormatException"/> for a wire-shape rejection. The returned token owns the
 /// parsed disclosures (and their salts); the caller disposes it.
 /// </para>
 /// </remarks>

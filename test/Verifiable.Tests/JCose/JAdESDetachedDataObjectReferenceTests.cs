@@ -1,10 +1,11 @@
 using System;
 using System.Buffers;
-using System.Collections.Generic;
+using System.IO;
 using System.Linq;
-using System.Reflection;
+using System.Text.RegularExpressions;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
+using Verifiable.Tests.Foundation;
 
 namespace Verifiable.Tests.JCose;
 
@@ -161,15 +162,9 @@ internal sealed class JAdESDetachedDataObjectReferenceTests
     public void ConstructingObjectIdByUriReferenceWithADigestBearingEntryThrows()
     {
         using DigestValue digest = CreateDigest(0x01);
-        var entry = new JAdESReferencedDataObject("https://example.org/objects/1", digest: digest);
-        try
-        {
-            Assert.ThrowsExactly<ArgumentException>(() => new JAdESObjectIdByUriReference([entry]));
-        }
-        finally
-        {
-            entry.Dispose();
-        }
+        using var entry = new JAdESReferencedDataObject("https://example.org/objects/1", digest: digest);
+
+        Assert.ThrowsExactly<ArgumentException>(() => new JAdESObjectIdByUriReference([entry]));
     }
 
 
@@ -262,15 +257,9 @@ internal sealed class JAdESDetachedDataObjectReferenceTests
     public void ConstructingObjectIdByUriHashReferenceWithEmptyHashAlgorithmThrows()
     {
         using DigestValue digest = CreateDigest(0x01);
-        var entry = new JAdESReferencedDataObject("https://example.org/objects/1", digest: digest);
-        try
-        {
-            Assert.ThrowsExactly<ArgumentException>(() => new JAdESObjectIdByUriHashReference(string.Empty, [entry]));
-        }
-        finally
-        {
-            entry.Dispose();
-        }
+        using var entry = new JAdESReferencedDataObject("https://example.org/objects/1", digest: digest);
+
+        Assert.ThrowsExactly<ArgumentException>(() => new JAdESObjectIdByUriHashReference(string.Empty, [entry]));
     }
 
 
@@ -333,14 +322,8 @@ internal sealed class JAdESDetachedDataObjectReferenceTests
     public void ConstructingUnknownDetachedDataObjectReferenceWithEmptyMechanismIdentifierThrows()
     {
         using var entry = new JAdESReferencedDataObject("https://example.org/objects/1");
-        try
-        {
-            Assert.ThrowsExactly<ArgumentException>(() => new JAdESUnknownDetachedDataObjectReference(string.Empty, [entry]));
-        }
-        finally
-        {
-            entry.Dispose();
-        }
+
+        Assert.ThrowsExactly<ArgumentException>(() => new JAdESUnknownDetachedDataObjectReference(string.Empty, [entry]));
     }
 
 
@@ -408,29 +391,49 @@ internal sealed class JAdESDetachedDataObjectReferenceTests
 
 
     /// <summary>
+    /// Matches a sealed <c>class</c> or <c>record</c> declaration base-listing
+    /// <see cref="JAdESDetachedDataObjectReference"/>, capturing the derived type's own name. The gap between
+    /// the name and the colon is <c>\s*</c>, which matches a newline as readily as a space, so a base list
+    /// wrapped onto its own line is caught the same as one written inline.
+    /// </summary>
+    private static Regex DerivedTypeDeclarationPattern { get; } = new(
+        @"(?m)^\s*(?:public|internal)\s+sealed\s+(?:class|record)\s+(\w+)\s*:\s*JAdESDetachedDataObjectReference\b",
+        RegexOptions.Compiled);
+
+    /// <summary>
     /// <see cref="JAdESDetachedDataObjectReference"/> is a CLOSED sum over exactly four arms — the three named
     /// mechanisms plus the open-extension <see cref="JAdESUnknownDetachedDataObjectReference"/> — no fifth arm
-    /// exists anywhere in the loaded assembly. Proves the "closed sum" claim structurally, not just by a switch
-    /// that happens to compile today.
+    /// exists anywhere under <c>src/Verifiable.Cryptography</c>. Proves the "closed sum" claim structurally as
+    /// a source scan of every <c>.cs</c> file under that project for a
+    /// <see cref="DerivedTypeDeclarationPattern"/> hit, rather than by enumerating the loaded assembly's types
+    /// at runtime — <see cref="JAdESDetachedDataObjectReference"/>'s own <c>private protected</c> constructor
+    /// restricts derivation to the declaring ASSEMBLY, not to its declaring file, so the scan matches that
+    /// boundary rather than the narrower one a single-file scan would assume.
     /// </summary>
     [TestMethod]
     public void DetachedDataObjectReferenceHasExactlyFourKnownDerivedTypes()
     {
-        Type baseType = typeof(JAdESDetachedDataObjectReference);
-        Type[] derivedTypes = baseType.Assembly.GetTypes()
-            .Where(candidate => candidate.IsSubclassOf(baseType))
-            .ToArray();
+        string repositoryRoot = SourceHygieneScanner.FindRepositoryRoot();
+        IReadOnlyList<string> cryptographyFiles = [.. SourceHygieneScanner.EnumerateSourceFilesUnder(repositoryRoot, "src")
+            .Where(static filePath => filePath.Replace('\\', '/').Contains("/Verifiable.Cryptography/", StringComparison.Ordinal))];
 
-        HashSet<Type> expected =
+        List<string> derivedTypeNames = [];
+        foreach(string filePath in cryptographyFiles)
+        {
+            string text = File.ReadAllText(filePath);
+            derivedTypeNames.AddRange(DerivedTypeDeclarationPattern.Matches(text).Select(static m => m.Groups[1].Value));
+        }
+
+        string[] expected =
         [
-            typeof(JAdESHttpHeadersReference),
-            typeof(JAdESObjectIdByUriReference),
-            typeof(JAdESObjectIdByUriHashReference),
-            typeof(JAdESUnknownDetachedDataObjectReference)
+            nameof(JAdESHttpHeadersReference),
+            nameof(JAdESObjectIdByUriReference),
+            nameof(JAdESObjectIdByUriHashReference),
+            nameof(JAdESUnknownDetachedDataObjectReference),
         ];
 
-        Assert.HasCount(4, derivedTypes);
-        Assert.IsTrue(expected.SetEquals(derivedTypes));
+        Assert.HasCount(4, derivedTypeNames, $"Expected exactly four arms declared against JAdESDetachedDataObjectReference; found {string.Join(", ", derivedTypeNames)}.");
+        Assert.IsTrue(expected.OrderBy(static n => n, StringComparer.Ordinal).SequenceEqual(derivedTypeNames.OrderBy(static n => n, StringComparer.Ordinal)));
     }
 
 

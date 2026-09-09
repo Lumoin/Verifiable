@@ -1,3 +1,5 @@
+using Verifiable.Core.StatusList;
+
 namespace Verifiable.Core.Model.Mdoc;
 
 /// <summary>
@@ -36,6 +38,14 @@ namespace Verifiable.Core.Model.Mdoc;
 /// wire bytes so verification (M.3) and digest binding (M.4) can both
 /// proceed.
 /// </para>
+/// <para>
+/// <see cref="Version"/>, <see cref="DigestAlgorithm"/>, <see cref="ValueDigests"/>,
+/// <see cref="DeviceKeyInfo"/>, <see cref="DocType"/>, and <see cref="ValidityInfo"/>
+/// are the six members ISO/IEC 18013-5:2021 §9.1.2.4 requires. <see cref="Status"/>
+/// is an optional seventh member specified by the second edition of ISO/IEC
+/// 18013-5, under ballot as a DIS (expected publication 2026-11-30) — carrying
+/// the credential's Token Status List status claim.
+/// </para>
 /// </remarks>
 public sealed class MdocMobileSecurityObject
 {
@@ -61,13 +71,20 @@ public sealed class MdocMobileSecurityObject
     /// <see cref="MdocDocument.DocType"/>.
     /// </param>
     /// <param name="validityInfo">The temporal bounds.</param>
+    /// <param name="status">
+    /// The optional <see cref="MdocMsoWellKnownKeys.Status"/> member — the
+    /// Token Status List status claim, specified by the second
+    /// edition of ISO/IEC 18013-5 (under ballot as a DIS). Absent from
+    /// ISO/IEC 18013-5:2021 MSOs.
+    /// </param>
     public MdocMobileSecurityObject(
         string version,
         string digestAlgorithm,
         IReadOnlyDictionary<string, IReadOnlyDictionary<uint, ReadOnlyMemory<byte>>> valueDigests,
         MdocDeviceKeyInfo deviceKeyInfo,
         string docType,
-        MdocValidityInfo validityInfo)
+        MdocValidityInfo validityInfo,
+        StatusClaim? status = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(version);
         ArgumentException.ThrowIfNullOrEmpty(digestAlgorithm);
@@ -82,6 +99,7 @@ public sealed class MdocMobileSecurityObject
         DeviceKeyInfo = deviceKeyInfo;
         DocType = docType;
         ValidityInfo = validityInfo;
+        Status = status;
     }
 
 
@@ -113,4 +131,25 @@ public sealed class MdocMobileSecurityObject
 
     /// <summary>The temporal bounds for the credential.</summary>
     public MdocValidityInfo ValidityInfo { get; }
+
+    /// <summary>
+    /// The optional <see cref="MdocMsoWellKnownKeys.Status"/> member — the
+    /// Token Status List status claim — or <see langword="null"/>
+    /// when the MSO carries no <c>status</c> member (every ISO/IEC
+    /// 18013-5:2021 MSO, and any second-edition MSO that opts out of a
+    /// revocation mechanism).
+    /// </summary>
+    /// <remarks>
+    /// Placement inside the Mobile Security Object is specified by the second
+    /// edition of ISO/IEC 18013-5, under ballot as a DIS (ISO/IEC DIS 18013-5;
+    /// expected publication 2026-11-30) — the published ISO/IEC 18013-5:2021
+    /// carries no <c>status</c> member. The placement is witnessed by the draft
+    /// EU implementing act amending the EAA implementing regulations: "its
+    /// MobileSecurityObject (MSO) shall contain the status structure ... which
+    /// contains MSO revocation information." The Status structure's own shape —
+    /// <see cref="StatusClaim"/>'s members — is normative in Token Status List
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list-21#section-6.3">
+    /// Section 6.3</see>.
+    /// </remarks>
+    public StatusClaim? Status { get; }
 }

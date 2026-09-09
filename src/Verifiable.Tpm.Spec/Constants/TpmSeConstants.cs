@@ -1,13 +1,13 @@
 namespace Verifiable.Tpm.Spec.Constants;
 
 /// <summary>
-/// TPM_SE constants (Table 25).
+/// TPM_SE constants (Table 23).
 /// </summary>
 /// <remarks>
 /// <para>
 /// Specification:
 /// <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>
-/// (Part 2: Structures, section "6 Constants", Table 25).
+/// (Part 2: Structures, section "6 Constants", Table 23).
 /// </para>
 /// </remarks>
 public enum TpmSeConstants : byte

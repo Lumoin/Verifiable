@@ -1,6 +1,8 @@
 using System.Buffers;
 using System.Text;
 using Verifiable.Core;
+using Verifiable.Core.Dcql;
+using Verifiable.Core.StatusList;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
 using Verifiable.JCose;
@@ -67,10 +69,43 @@ public static class SiopVerifierExecutor
     /// <param name="vpTokenCredentialQueryId">
     /// The DCQL credential query identifier the <c>vp_token</c> presentation is keyed under when
     /// extracting its claims (the §12 combined response presents a single credential).
+    /// <see langword="null"/> resolves to <see cref="SiopCombinedResponseCredentialQueryId"/>.
     /// </param>
     /// <param name="saltReuseSeam">
     /// SIOPv2 §12 combined-response seam: optional disclosure-salt-reuse detection for the
     /// <c>vp_token</c> (RFC 9901 §9.4). <see langword="null"/> when not opted into.
+    /// </param>
+    /// <param name="resolveVerifiedStatusListToken">
+    /// SIOPv2 §12 combined-response seam: resolves and verifies the IETF Token Status List token a
+    /// presented credential's <c>status.status_list</c> reference points at — the same seam
+    /// <see cref="Oid4Vp.HaipOid4VpVerifierExecutor"/> takes, run here through the identical
+    /// <see cref="Oid4Vp.Server.VpTokenCredentialStatus"/> step. <see langword="null"/> when the
+    /// deployment does not check credential status; a combined response whose credential references a
+    /// status list then fails closed with a configuration fault rather than silently skipping the check.
+    /// </param>
+    /// <param name="credentialStatusPolicy">
+    /// Decides, once per combined response and over every status the response's <c>vp_token</c>
+    /// surfaced, whether a determined status refuses the presentation (SD-JWT VC -18: "Verifier policy
+    /// decides…"). <see langword="null"/> uses <see cref="CredentialStatusPolicies.Surface"/> — a
+    /// determinable revoked or suspended status is recorded on the verified state but never refused.
+    /// </param>
+    /// <param name="statusListFreshnessPolicy">
+    /// The Section 8.3 step 4.b freshness policy applied to a resolved Status List Token's <c>iat</c>, or
+    /// <see langword="null"/> to skip the check (today's behavior). Threaded to
+    /// <see cref="Oid4Vp.Server.VpTokenCredentialStatus.CheckAsync"/>.
+    /// </param>
+    /// <param name="statusListCachingBounds">
+    /// The Section 11.5 refresh-interval floor and ceiling applied to a resolved Status List Token's
+    /// <c>ttl</c>, or <see langword="null"/> to leave it unclamped (today's behavior). Threaded to
+    /// <see cref="Oid4Vp.Server.VpTokenCredentialStatus.CheckAsync"/>.
+    /// </param>
+    /// <param name="unsupportedStatusMechanisms">
+    /// What to do with a presented credential whose <c>status</c> claim names only status mechanisms this
+    /// library does not evaluate. Defaults to <see cref="UnsupportedStatusMechanismDisposition.Refuse"/> —
+    /// Token Status List §8.3's "no statement about the status of the Referenced Token can be made and the
+    /// Referenced Token SHOULD be rejected"; pass <see cref="UnsupportedStatusMechanismDisposition.Surface"/>
+    /// to accept the presentation instead and read the mechanism names off
+    /// <see cref="Oid4Vp.Server.VpCredentialClaims.Status"/>.
     /// </param>
     /// <remarks>
     /// <para>
@@ -90,7 +125,18 @@ public static class SiopVerifierExecutor
     /// the vp_token seams closed over here, and enforces the §12 binding: the id_token nonce, the
     /// vp_token KB-JWT nonce, and the expected transaction nonce must all match, and the vp_token
     /// KB-JWT <c>aud</c> must equal the RP's Client ID. Any miss yields <see cref="SiopFlowFailed"/>
-    /// naming the failing check.
+    /// naming the failing check. A <c>vp_token</c> whose SD-JWT/KB-JWT parse fails, or whose
+    /// <c>status.status_list</c> reference does not adhere to the Token Status List §6.2 rules, is a
+    /// shape no conformant Wallet would produce; it is refused with
+    /// <see cref="VerifierFlowRefusalKind.Malformed"/> — <c>invalid_request</c> per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2.1">RFC 6749 §4.1.2.1</see> — the
+    /// same classification the OID4VP seat gives the identical Wallet-attributable shape, and the
+    /// <c>error_description</c> stays the fixed, non-revealing sentence
+    /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-15.9">OID4VP
+    /// 1.0 §15.9</see> asks for. Only once every one of the seven binding checks holds does the handler
+    /// read the credential's Token Status List status and apply <paramref name="credentialStatusPolicy"/>
+    /// — Token Status List §8.3's ordering: "the processing rules for Referenced Tokens … MUST precede
+    /// any evaluation of a Referenced Token's status".
     /// </para>
     /// </remarks>
     public static void Register(
@@ -106,8 +152,13 @@ public static class SiopVerifierExecutor
         ParseSdJwtTokenDelegate? parseSdJwtToken = null,
         ComputeSdJwtHashInputDelegate? computeSdJwtHashInput = null,
         ComputeDigestDelegate? computeDigest = null,
-        string vpTokenCredentialQueryId = SiopCombinedResponseCredentialQueryId,
-        CommitmentReuseDetectionSeam? saltReuseSeam = null)
+        CredentialQueryId? vpTokenCredentialQueryId = null,
+        CommitmentReuseDetectionSeam? saltReuseSeam = null,
+        ResolveVerifiedStatusListTokenDelegate? resolveVerifiedStatusListToken = null,
+        CredentialStatusPolicy? credentialStatusPolicy = null,
+        StatusListFreshnessPolicy? statusListFreshnessPolicy = null,
+        StatusListCachingBounds? statusListCachingBounds = null,
+        UnsupportedStatusMechanismDisposition unsupportedStatusMechanisms = UnsupportedStatusMechanismDisposition.Refuse)
     {
         ArgumentNullException.ThrowIfNull(executor);
         ArgumentNullException.ThrowIfNull(base64UrlDecoder);
@@ -116,7 +167,14 @@ public static class SiopVerifierExecutor
         ArgumentNullException.ThrowIfNull(payloadSerializer);
         ArgumentNullException.ThrowIfNull(pool);
         ArgumentNullException.ThrowIfNull(timeProvider);
-        ArgumentException.ThrowIfNullOrWhiteSpace(vpTokenCredentialQueryId);
+
+        CredentialQueryId resolvedVpTokenCredentialQueryId =
+            vpTokenCredentialQueryId ?? SiopCombinedResponseCredentialQueryId;
+
+        //SD-JWT VC -18: "Verifier policy decides…". Resolved once at registration time so every
+        //ValidateCombinedSiopResponse invocation applies the identical policy over its complete status
+        //map. The default never refuses — a determinable revoked/suspended status is still recorded.
+        CredentialStatusPolicy statusPolicy = credentialStatusPolicy ?? CredentialStatusPolicies.Surface;
 
         //SIOPv2 §9 Request Object signing. Signing is an EFFECT, so it runs here in the action
         //handler rather than in the pure PDA transition or the endpoint's BuildInputAsync — the
@@ -266,26 +324,43 @@ public static class SiopVerifierExecutor
                         expectedAudience, expectedNonce,
                         replayExpiresAt, cancellationToken).ConfigureAwait(false);
 
-                    if(nonceReplayOutcome == JtiReplayOutcome.Replayed)
+                    SiopFlowFailed? nonceReplayFailure = nonceReplayOutcome switch
                     {
-                        return new SiopFlowFailed
+                        //A replayed nonce is a Wallet-attributable input the RP cannot verify a second
+                        //time — SIOPv2 §11.2's cross-device replay defense rejects it, the same way an
+                        //unverifiable Authorization Response does on the OID4VP seat.
+                        JtiReplayOutcome.Replayed => new SiopFlowFailed
                         {
                             Reason =
                                 "Self-Issued ID Token nonce has already been seen in a previous "
                                 + "Authorization Response (SIOPv2 §11.2 cross-device replay).",
-                            FailedAt = now
-                        };
-                    }
-
-                    if(nonceReplayOutcome == JtiReplayOutcome.StoreUnavailable)
-                    {
-                        return new SiopFlowFailed
+                            FailedAt = now,
+                            Refusal = VerifierFlowRefusal.For(VerifierFlowRefusalKind.Unverifiable)
+                        },
+                        //A nonce the replay guard cannot track is not a shape a conformant Wallet
+                        //produces under this RP's policy — Malformed, not a Verifier fault.
+                        JtiReplayOutcome.Unacceptable => new SiopFlowFailed
+                        {
+                            Reason =
+                                "Self-Issued ID Token nonce exceeds the length the replay guard "
+                                + "can track (SIOPv2 §11.2).",
+                            FailedAt = now,
+                            Refusal = VerifierFlowRefusal.For(VerifierFlowRefusalKind.Malformed)
+                        },
+                        //No replay store configured under a Required policy is the deployment's own
+                        //configuration fault, not anything the Wallet did — stays a genuine 500 fault.
+                        JtiReplayOutcome.StoreUnavailable => new SiopFlowFailed
                         {
                             Reason =
                                 "Self-Issued ID Token nonce replay defense is required by policy but "
                                 + "no replay store is configured (SIOPv2 §11.2).",
                             FailedAt = now
-                        };
+                        },
+                        _ => null
+                    };
+                    if(nonceReplayFailure is not null)
+                    {
+                        return nonceReplayFailure;
                     }
                 }
 
@@ -298,6 +373,8 @@ public static class SiopVerifierExecutor
                 };
             }
 
+            //The §11.1 cryptographic/structural verdict is negative — a Wallet-attributable input the
+            //RP cannot verify, the SIOP twin of the OID4VP seat's Unverifiable classification.
             return new SiopFlowFailed
             {
                 Reason =
@@ -307,7 +384,8 @@ public static class SiopVerifierExecutor
                     + $"signature={result.IsSignatureValid}, subjectConfirmed={result.IsSubjectConfirmed}, "
                     + $"audience={result.IsAudienceValid}, nonce={result.IsNonceValid}, "
                     + $"unexpired={result.IsUnexpired}).",
-                FailedAt = now
+                FailedAt = now,
+                Refusal = VerifierFlowRefusal.For(VerifierFlowRefusalKind.Unverifiable)
             };
         }
 
@@ -354,18 +432,40 @@ public static class SiopVerifierExecutor
             //Verify the vp_token presentation with its production primitive — the same
             //SdJwtVpTokenVerification the OID4VP verifier flow runs: credential issuer signature,
             //KB-JWT signature against the cnf holder key, and sd_hash over the disclosed set.
-            VpTokenParsed parsed = await SdJwtVpTokenVerification.VerifyAsync(
-                action.VpToken,
-                vpTokenCredentialQueryId,
-                parseSdJwtToken,
-                computeSdJwtHashInput,
-                resolveIssuerKey,
-                computeDigest,
-                base64UrlDecoder,
-                base64UrlEncoder,
-                pool,
-                saltReuseSeam,
-                cancellationToken).ConfigureAwait(false);
+            //
+            //Wallet-attributable malformed-presentation detection mirrors the OID4VP seat's per-format
+            //dispatch (HaipOid4VpVerifierExecutor): an unparseable SD-JWT/KB-JWT or a status.status_list
+            //reference that fails Section 6.2's own rules is a shape no conformant Wallet would produce
+            //— Malformed, not a 500 fault. VerifyAsync throws many exception types for many reasons (a
+            //wrong issuer key, a bad signature); only FormatException — the library's own parse-exception
+            //type — is targeted here, so a non-format failure is left on the fault path.
+            VpTokenParsed parsed;
+            try
+            {
+                parsed = await SdJwtVpTokenVerification.VerifyAsync(
+                    action.VpToken,
+                    resolvedVpTokenCredentialQueryId,
+                    parseSdJwtToken,
+                    computeSdJwtHashInput,
+                    resolveIssuerKey,
+                    computeDigest,
+                    base64UrlDecoder,
+                    base64UrlEncoder,
+                    pool,
+                    saltReuseSeam,
+                    cancellationToken).ConfigureAwait(false);
+            }
+            catch(FormatException exception)
+            {
+                return new SiopFlowFailed
+                {
+                    Reason =
+                        $"Malformed vp_token presentation for credential query '{resolvedVpTokenCredentialQueryId}': "
+                        + exception.Message,
+                    FailedAt = now,
+                    Refusal = VerifierFlowRefusal.For(VerifierFlowRefusalKind.Malformed)
+                };
+            }
 
             //SIOPv2 §12 binding: the vp_token's KB-JWT MUST carry the same nonce the RP provided
             //(equal to the verified id_token nonce) and the RP's Client ID as aud. The id_token's
@@ -379,28 +479,72 @@ public static class SiopVerifierExecutor
             bool idTokenNonceBound = string.Equals(verifiedIdToken.Nonce, action.ExpectedNonce, StringComparison.Ordinal);
             bool saltReused = parsed.SaltReused;
 
-            if(credentialSignatureValid
+            if(!(credentialSignatureValid
                 && kbJwtSignatureValid
                 && sdHashValid
                 && vpNonceBound
                 && vpAudBound
                 && idTokenNonceBound
-                && !saltReused)
+                && !saltReused))
             {
-                //Both artifacts valid and bound to the same transaction. The authenticated SIOP
-                //subject (the id_token's verified sub) is carried forward; SIOPv2 §2.2.1: it is the
-                //SIOP subject key's thumbprint, unrelated to the credential's holder binding.
-                return verifiedIdToken with { VerifiedAt = now };
+                //The §12 binding conjunction is a Wallet-attributable verification verdict — a signature,
+                //hash, or binding check failed — the same Unverifiable classification the OID4VP seat
+                //answers for its own DCQL/claims/binding verdict failures.
+                return new SiopFlowFailed
+                {
+                    Reason =
+                        "SIOPv2 §12 combined response verification failed "
+                        + $"(credentialSignature={credentialSignatureValid}, kbJwtSignature={kbJwtSignatureValid}, "
+                        + $"sdHash={sdHashValid}, vpTokenNonceBound={vpNonceBound}, vpTokenAudBound={vpAudBound}, "
+                        + $"idTokenNonceBound={idTokenNonceBound}, saltReused={saltReused}).",
+                    FailedAt = now,
+                    Refusal = VerifierFlowRefusal.For(VerifierFlowRefusalKind.Unverifiable)
+                };
             }
 
-            return new SiopFlowFailed
+            //The seven-way binding holds; only now does Token Status List §8.3's ordering permit reading
+            //the credential's status ("the processing rules for Referenced Tokens … MUST precede any
+            //evaluation of a Referenced Token's status"). Run the identical shared step the OID4VP
+            //direct_post seat runs.
+            CredentialStatusCheck statusCheck = await VpTokenCredentialStatus.CheckAsync(
+                parsed, resolvedVpTokenCredentialQueryId, resolveVerifiedStatusListToken, now,
+                statusListFreshnessPolicy, statusListCachingBounds, unsupportedStatusMechanisms,
+                cancellationToken)
+                .ConfigureAwait(false);
+
+            if(statusCheck.Kind == CredentialStatusCheckKind.Undeterminable)
             {
-                Reason =
-                    "SIOPv2 §12 combined response verification failed "
-                    + $"(credentialSignature={credentialSignatureValid}, kbJwtSignature={kbJwtSignatureValid}, "
-                    + $"sdHash={sdHashValid}, vpTokenNonceBound={vpNonceBound}, vpTokenAudBound={vpAudBound}, "
-                    + $"idTokenNonceBound={idTokenNonceBound}, saltReused={saltReused}).",
-                FailedAt = now
+                return new SiopFlowFailed
+                {
+                    Reason = statusCheck.LogReason!,
+                    FailedAt = now,
+                    Refusal = statusCheck.Refusal!.Value
+                };
+            }
+
+            Dictionary<CredentialQueryId, CredentialStatusOutcome> credentialStatuses = new();
+            if(statusCheck.Kind == CredentialStatusCheckKind.Determined)
+            {
+                credentialStatuses[resolvedVpTokenCredentialQueryId] = statusCheck.Outcome!;
+            }
+
+            if(ApplyCredentialStatusPolicy(statusPolicy, credentialStatuses, now) is { } policyRefusal)
+            {
+                return policyRefusal;
+            }
+
+            //Both artifacts valid and bound to the same transaction, and any referenced credential
+            //status either did not apply or stood under the wired policy. The authenticated SIOP
+            //subject (the id_token's verified sub) is carried forward; SIOPv2 §2.2.1: it is the
+            //SIOP subject key's thumbprint, unrelated to the credential's holder binding.
+            return verifiedIdToken with
+            {
+                VerifiedAt = now,
+                Credentials = new Dictionary<CredentialQueryId, VpCredentialClaims>
+                {
+                    [resolvedVpTokenCredentialQueryId] = parsed.Credential
+                },
+                CredentialStatuses = credentialStatuses.Count > 0 ? credentialStatuses : null
             };
         });
 
@@ -455,7 +599,8 @@ public static class SiopVerifierExecutor
                 return new SiopFlowFailed
                 {
                     Reason = "The encrypted Self-Issued ID Token is not a compact JWE (no dot-separated segments).",
-                    FailedAt = timeProvider.GetUtcNow()
+                    FailedAt = timeProvider.GetUtcNow(),
+                    Refusal = VerifierFlowRefusal.For(VerifierFlowRefusalKind.Malformed)
                 };
             }
 
@@ -469,7 +614,8 @@ public static class SiopVerifierExecutor
                 return new SiopFlowFailed
                 {
                     Reason = "The Self-Issued ID Token JWE protected header does not contain the 'enc' parameter.",
-                    FailedAt = timeProvider.GetUtcNow()
+                    FailedAt = timeProvider.GetUtcNow(),
+                    Refusal = VerifierFlowRefusal.For(VerifierFlowRefusalKind.Malformed)
                 };
             }
 
@@ -490,58 +636,139 @@ public static class SiopVerifierExecutor
                     Reason =
                         $"The Self-Issued ID Token JWE 'enc' value '{enc}' is not in the Relying "
                         + "Party's advertised encrypted-response enc algorithms.",
-                    FailedAt = timeProvider.GetUtcNow()
+                    FailedAt = timeProvider.GetUtcNow(),
+                    Refusal = VerifierFlowRefusal.For(VerifierFlowRefusalKind.Malformed)
                 };
             }
 
-            //Recover the inner compact id_token JWS. AES-GCM tag verification inside DecryptAsync
-            //authenticates the protected header (the AAD) and the ciphertext; a tampered byte fails
-            //the tag check. The tag-mismatch is mapped to a terminal flow failure here — the inner
-            //plaintext is never recovered when the tag does not verify, so no inner token leaks, and
-            //the flow reaches SiopVerifierFlowFailedState rather than surfacing an unhandled
-            //cryptographic exception to the response endpoint.
-            using AeadMessage message = JweParsing.ParseCompact(
-                action.EncryptedIdToken,
-                WellKnownJweAlgorithms.EcdhEs,
-                enc,
-                base64UrlDecoder,
-                pool);
-
-            string innerIdToken;
-            try
-            {
-                using DecryptedContent decrypted = await message.DecryptAsync(
-                    decryptionKey, pool, cancellationToken).ConfigureAwait(false);
-
-                innerIdToken = Encoding.UTF8.GetString(decrypted.AsReadOnlySpan());
-            }
-            catch(System.Security.Cryptography.CryptographicException)
+            //Wallet-attributable malformed-response detection: an over-long compact JWE, or one
+            //ParseCompact itself rejects (RFC 7516 §3.1 shape, an invalid EPK, a bad IV/tag length), is
+            //a shape no conformant Wallet would produce — Malformed, not a 500 fault. The length bound
+            //is checked ahead of ParseCompact so an oversized value never reaches its own ArgumentException
+            //contract; the parse itself is caught by exactly the FormatException type it throws, the same
+            //targeted shape the OID4VP DecryptResponseAction handler uses.
+            if(action.EncryptedIdToken.Length > JweParsing.MaxCompactJweByteCount)
             {
                 return new SiopFlowFailed
                 {
                     Reason =
-                        "The Self-Issued ID Token JWE failed AES-GCM authentication-tag verification; "
-                        + "the ciphertext or protected header was tampered with, so no inner token was "
-                        + "recovered.",
-                    FailedAt = timeProvider.GetUtcNow()
+                        "The encrypted Self-Issued ID Token exceeds the "
+                        + $"{JweParsing.MaxCompactJweByteCount}-byte compact-serialization bound.",
+                    FailedAt = timeProvider.GetUtcNow(),
+                    Refusal = VerifierFlowRefusal.For(VerifierFlowRefusalKind.Malformed)
                 };
             }
 
-            //The decrypted plaintext is the bare compact Self-Issued ID Token JWS; run the SAME shared
-            //§11.1 + §11.2 validation the bare-JWS path runs, mapping the verdict identically.
-            return await ValidateIdTokenAsync(
-                innerIdToken, action.ExpectedAudience, action.ExpectedNonce,
-                action.AllowedAlgorithms, context, cancellationToken).ConfigureAwait(false);
+            AeadMessage message;
+            try
+            {
+                //Recover the inner compact id_token JWS. AES-GCM tag verification inside DecryptAsync
+                //authenticates the protected header (the AAD) and the ciphertext; a tampered byte fails
+                //the tag check. The tag-mismatch is mapped to a terminal flow failure here — the inner
+                //plaintext is never recovered when the tag does not verify, so no inner token leaks, and
+                //the flow reaches SiopVerifierFlowFailedState rather than surfacing an unhandled
+                //cryptographic exception to the response endpoint.
+                message = JweParsing.ParseCompact(
+                    action.EncryptedIdToken,
+                    WellKnownJweAlgorithms.EcdhEs,
+                    enc,
+                    base64UrlDecoder,
+                    pool);
+            }
+            catch(FormatException exception)
+            {
+                return new SiopFlowFailed
+                {
+                    Reason = $"The encrypted Self-Issued ID Token is not a well-formed compact JWE: {exception.Message}",
+                    FailedAt = timeProvider.GetUtcNow(),
+                    Refusal = VerifierFlowRefusal.For(VerifierFlowRefusalKind.Malformed)
+                };
+            }
+
+            using(message)
+            {
+                string innerIdToken;
+                try
+                {
+                    using DecryptedContent decrypted = await message.DecryptAsync(
+                        decryptionKey, pool, cancellationToken).ConfigureAwait(false);
+
+                    innerIdToken = Encoding.UTF8.GetString(decrypted.AsReadOnlySpan());
+                }
+                catch(System.Security.Cryptography.CryptographicException)
+                {
+                    return new SiopFlowFailed
+                    {
+                        Reason =
+                            "The Self-Issued ID Token JWE failed AES-GCM authentication-tag verification; "
+                            + "the ciphertext or protected header was tampered with, so no inner token was "
+                            + "recovered.",
+                        FailedAt = timeProvider.GetUtcNow(),
+                        Refusal = VerifierFlowRefusal.For(VerifierFlowRefusalKind.Malformed)
+                    };
+                }
+
+                //The decrypted plaintext is the bare compact Self-Issued ID Token JWS; run the SAME shared
+                //§11.1 + §11.2 validation the bare-JWS path runs, mapping the verdict identically.
+                return await ValidateIdTokenAsync(
+                    innerIdToken, action.ExpectedAudience, action.ExpectedNonce,
+                    action.AllowedAlgorithms, context, cancellationToken).ConfigureAwait(false);
+            }
         });
+    }
+
+
+    /// <summary>
+    /// Applies <paramref name="credentialStatusPolicy"/> once over the complete
+    /// <paramref name="credentialStatuses"/> map the §12 combined-response handler read, after the
+    /// seven-way id_token/vp_token binding has already been confirmed. SD-JWT VC -18: "Verifier policy
+    /// decides whether to reject or accept a presentation of a SD-JWT VC based on the status of the
+    /// Verifiable Digital Credential." Skipped entirely when the map is empty — nothing was surfaced to
+    /// judge. The SIOP-side sibling of <see cref="Oid4Vp.HaipOid4VpVerifierExecutor"/>'s equivalent step.
+    /// </summary>
+    /// <returns>
+    /// A <see cref="SiopFlowFailed"/> carrying <see cref="VerifierFlowRefusalKind.PolicyRefused"/> and the
+    /// policy's typed <see cref="CredentialStatusRefusal"/> when the policy refuses; otherwise
+    /// <see langword="null"/> to let the presentation stand.
+    /// </returns>
+    private static SiopFlowFailed? ApplyCredentialStatusPolicy(
+        CredentialStatusPolicy credentialStatusPolicy,
+        Dictionary<CredentialQueryId, CredentialStatusOutcome> credentialStatuses,
+        DateTimeOffset failedAt)
+    {
+        if(credentialStatuses.Count == 0)
+        {
+            return null;
+        }
+
+        CredentialStatusRefusal? refusal = credentialStatusPolicy(credentialStatuses);
+        if(refusal is null)
+        {
+            return null;
+        }
+
+        return new SiopFlowFailed
+        {
+            Reason = refusal.Description,
+            FailedAt = failedAt,
+            Refusal = VerifierFlowRefusal.For(VerifierFlowRefusalKind.PolicyRefused),
+            CredentialStatusRefusal = refusal
+        };
     }
 
 
     /// <summary>
     /// The default DCQL credential query identifier the SIOPv2 §12 combined response's
     /// <c>vp_token</c> presentation is keyed under when extracting its claims. The §12 combined
-    /// response presents a single credential, so a single fixed key suffices.
+    /// response presents a single credential, so a single fixed key suffices. The identifier is this
+    /// library's own choice — SIOPv2 1.0 §12 registers no credential query identifier — and conforms
+    /// to OpenID for Verifiable Presentations 1.0 §6.1's character rule; this member is the value's
+    /// single home, deliberately not a name-table constant, so every consumer takes the validated
+    /// <see cref="CredentialQueryId"/> rather than a raw string. A <c>sealed record</c>
+    /// is not a compile-time constant, so <c>Register</c>/<c>Create</c>'s <c>vpTokenCredentialQueryId</c>
+    /// parameters default to <see langword="null"/> and resolve to this value in the method body.
     /// </summary>
-    public const string SiopCombinedResponseCredentialQueryId = "siop_vp";
+    public static CredentialQueryId SiopCombinedResponseCredentialQueryId { get; } = new("siop_vp");
 
 
     /// <summary>
@@ -563,14 +790,21 @@ public static class SiopVerifierExecutor
         ParseSdJwtTokenDelegate? parseSdJwtToken = null,
         ComputeSdJwtHashInputDelegate? computeSdJwtHashInput = null,
         ComputeDigestDelegate? computeDigest = null,
-        string vpTokenCredentialQueryId = SiopCombinedResponseCredentialQueryId,
-        CommitmentReuseDetectionSeam? saltReuseSeam = null)
+        CredentialQueryId? vpTokenCredentialQueryId = null,
+        CommitmentReuseDetectionSeam? saltReuseSeam = null,
+        ResolveVerifiedStatusListTokenDelegate? resolveVerifiedStatusListToken = null,
+        CredentialStatusPolicy? credentialStatusPolicy = null,
+        StatusListFreshnessPolicy? statusListFreshnessPolicy = null,
+        StatusListCachingBounds? statusListCachingBounds = null,
+        UnsupportedStatusMechanismDisposition unsupportedStatusMechanisms = UnsupportedStatusMechanismDisposition.Refuse)
     {
         OAuthActionExecutor executor = new();
         Register(
             executor, base64UrlDecoder, base64UrlEncoder, headerSerializer, payloadSerializer,
             pool, timeProvider, resolveDidVerificationKey, resolveIssuerKey, parseSdJwtToken,
-            computeSdJwtHashInput, computeDigest, vpTokenCredentialQueryId, saltReuseSeam);
+            computeSdJwtHashInput, computeDigest, vpTokenCredentialQueryId, saltReuseSeam,
+            resolveVerifiedStatusListToken, credentialStatusPolicy,
+            statusListFreshnessPolicy, statusListCachingBounds, unsupportedStatusMechanisms);
 
         return executor;
     }

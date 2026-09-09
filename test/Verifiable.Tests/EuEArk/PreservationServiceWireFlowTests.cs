@@ -532,25 +532,25 @@ internal sealed class PreservationServiceWireFlowTests
         internal static string ProfileIdentifier { get; } = "https://preservation.example.test/profile/eark-ers";
 
         /// <summary>The packages this service stores, by preservation object identifier.</summary>
-        private readonly Dictionary<string, byte[]> packages = new(StringComparer.Ordinal);
+        private Dictionary<string, byte[]> Packages { get; } = new(StringComparer.Ordinal);
 
         /// <summary>The evidence this service holds, by preservation object identifier.</summary>
-        private readonly Dictionary<string, byte[]> evidences = new(StringComparer.Ordinal);
+        private Dictionary<string, byte[]> Evidences { get; } = new(StringComparer.Ordinal);
 
         /// <summary>The versions this service has produced, by preservation object identifier.</summary>
-        private readonly Dictionary<string, int> versions = new(StringComparer.Ordinal);
+        private Dictionary<string, int> Versions { get; } = new(StringComparer.Ordinal);
 
         /// <summary>The events this service has recorded, by preservation object identifier.</summary>
-        private readonly Dictionary<string, List<PreservationEvent>> traces = new(StringComparer.Ordinal);
+        private Dictionary<string, List<PreservationEvent>> Traces { get; } = new(StringComparer.Ordinal);
 
         /// <summary>The Time-Stamping Authority address this service renews against.</summary>
-        private readonly string tsaUri;
+        private string TsaUri { get; }
 
         /// <summary>The transport this service reaches that authority over.</summary>
-        private readonly FetchTimestampResponseAsyncDelegate fetchTimestampResponse;
+        private FetchTimestampResponseAsyncDelegate FetchTimestampResponse { get; }
 
         /// <summary>The clock this service stamps its trace events with.</summary>
-        private readonly TimeProvider timeProvider;
+        private TimeProvider TimeProvider { get; }
 
         /// <summary>How many submissions this service has stored, which is what its identifiers count.</summary>
         private int stored;
@@ -565,9 +565,9 @@ internal sealed class PreservationServiceWireFlowTests
             FetchTimestampResponseAsyncDelegate fetchTimestampResponse,
             TimeProvider timeProvider)
         {
-            this.tsaUri = tsaUri;
-            this.fetchTimestampResponse = fetchTimestampResponse;
-            this.timeProvider = timeProvider;
+            this.TsaUri = tsaUri;
+            this.FetchTimestampResponse = fetchTimestampResponse;
+            this.TimeProvider = timeProvider;
         }
 
 
@@ -710,10 +710,10 @@ internal sealed class PreservationServiceWireFlowTests
             byte[] submitted = request.PreservationObjects[0].Content.AsReadOnlySpan().ToArray();
             string identifier = string.Create(CultureInfo.InvariantCulture, $"po-{++stored}");
 
-            packages[identifier] = submitted;
-            evidences[identifier] = EvidenceOf(submitted);
-            versions[identifier] = 1;
-            traces[identifier] = [];
+            Packages[identifier] = submitted;
+            Evidences[identifier] = EvidenceOf(submitted);
+            Versions[identifier] = 1;
+            Traces[identifier] = [];
             Record(identifier, PreservationWellKnown.PreservePreservationObjectOperation, "the submitted Information Package was stored");
 
             return new PreservePreservationObjectResponse
@@ -732,7 +732,7 @@ internal sealed class PreservationServiceWireFlowTests
             Justification = "Ownership of the returned preservation object transfers to the response that carries it, whose own Dispose releases it.")]
         private RetrievePreservationObjectResponse Answer(RetrievePreservationObjectRequest request)
         {
-            if(!packages.TryGetValue(request.PreservationObjectId, out byte[]? stored))
+            if(!Packages.TryGetValue(request.PreservationObjectId, out byte[]? storedObject))
             {
                 return new RetrievePreservationObjectResponse
                 {
@@ -746,7 +746,7 @@ internal sealed class PreservationServiceWireFlowTests
             }
 
             bool wantsEvidence = string.Equals(request.SubjectOfRetrieval, PreservationWellKnown.EvidenceSubject, StringComparison.Ordinal);
-            byte[] payload = wantsEvidence ? evidences[request.PreservationObjectId] : stored;
+            byte[] payload = wantsEvidence ? Evidences[request.PreservationObjectId] : storedObject;
             Record(
                 request.PreservationObjectId,
                 PreservationWellKnown.RetrievePreservationObjectOperation,
@@ -784,7 +784,7 @@ internal sealed class PreservationServiceWireFlowTests
             UpdatePreservationObjectContainerRequest request,
             CancellationToken cancellationToken)
         {
-            if(!packages.TryGetValue(request.PreservationObjectId, out byte[]? stored))
+            if(!Packages.TryGetValue(request.PreservationObjectId, out byte[]? storedObject))
             {
                 return new UpdatePreservationObjectContainerResponse
                 {
@@ -797,9 +797,9 @@ internal sealed class PreservationServiceWireFlowTests
                 };
             }
 
-            byte[] provenance = ProvenanceOf(stored, rootFolderName: string.Empty, EArkCapstoneSource.ProvenanceEntryName);
+            byte[] provenance = ProvenanceOf(storedObject, rootFolderName: string.Empty, EArkCapstoneSource.ProvenanceEntryName);
 
-            using EvidenceRecord current = EvidenceRecord.Read(evidences[request.PreservationObjectId], BaseMemoryPool.Shared);
+            using EvidenceRecord current = EvidenceRecord.Read(Evidences[request.PreservationObjectId], BaseMemoryPool.Shared);
             using PreservationDigestList digestList = await PreservationProfileSource.DigestListAsync(
                 [provenance],
                 PkiDigestAlgorithm.Sha512,
@@ -811,8 +811,8 @@ internal sealed class PreservationServiceWireFlowTests
                 {
                     DigestList = digestList,
                     DataObjects = [provenance],
-                    TsaUri = tsaUri,
-                    FetchTimestampResponse = fetchTimestampResponse
+                    TsaUri = TsaUri,
+                    FetchTimestampResponse = FetchTimestampResponse
                 },
                 BaseMemoryPool.Shared,
                 cancellationToken).ConfigureAwait(false);
@@ -831,8 +831,8 @@ internal sealed class PreservationServiceWireFlowTests
                 };
             }
 
-            evidences[request.PreservationObjectId] = renewal.EvidenceRecord!.AsReadOnlySpan().ToArray();
-            string versionId = string.Create(CultureInfo.InvariantCulture, $"v{++versions[request.PreservationObjectId]}");
+            Evidences[request.PreservationObjectId] = renewal.EvidenceRecord!.AsReadOnlySpan().ToArray();
+            string versionId = string.Create(CultureInfo.InvariantCulture, $"v{++Versions[request.PreservationObjectId]}");
             Record(
                 request.PreservationObjectId,
                 PreservationWellKnown.UpdatePreservationObjectContainerOperation,
@@ -879,7 +879,7 @@ internal sealed class PreservationServiceWireFlowTests
                 BaseMemoryPool.Shared,
                 cancellationToken).ConfigureAwait(false);
 
-            if(request.Evidence.PreservationObjectId is string identifier && traces.ContainsKey(identifier))
+            if(request.Evidence.PreservationObjectId is string identifier && Traces.ContainsKey(identifier))
             {
                 Record(identifier, PreservationWellKnown.ValidateEvidenceOperation, verification.Status.ToString());
             }
@@ -908,7 +908,7 @@ internal sealed class PreservationServiceWireFlowTests
         /// <param name="request">The request.</param>
         /// <returns>The response.</returns>
         private RetrieveTraceResponse Answer(RetrieveTraceRequest request) =>
-            traces.TryGetValue(request.PreservationObjectId, out List<PreservationEvent>? recorded)
+            Traces.TryGetValue(request.PreservationObjectId, out List<PreservationEvent>? recorded)
                 ? new RetrieveTraceResponse
                 {
                     RequestId = request.RequestId,
@@ -932,9 +932,9 @@ internal sealed class PreservationServiceWireFlowTests
         /// <param name="operation">The operation that was performed.</param>
         /// <param name="detail">What the service did.</param>
         private void Record(string identifier, string operation, string detail) =>
-            traces[identifier].Add(new PreservationEvent
+            Traces[identifier].Add(new PreservationEvent
             {
-                Time = timeProvider.GetUtcNow(),
+                Time = TimeProvider.GetUtcNow(),
                 Subject = ProfileIdentifier,
                 Operation = operation,
                 Object = identifier,
@@ -977,10 +977,10 @@ internal sealed class PreservationServiceWireFlowTests
     private sealed class PreservationServiceClient
     {
         /// <summary>The client, already pinned to the preservation service host's certificate.</summary>
-        private readonly HttpClient httpClient;
+        private HttpClient HttpClient { get; }
 
         /// <summary>The service's base address.</summary>
-        private readonly Uri baseAddress;
+        private Uri BaseAddress { get; }
 
 
         /// <summary>Initializes a client over a pinned HTTP client.</summary>
@@ -988,8 +988,8 @@ internal sealed class PreservationServiceWireFlowTests
         /// <param name="baseAddress">The service's base address.</param>
         internal PreservationServiceClient(HttpClient httpClient, Uri baseAddress)
         {
-            this.httpClient = httpClient;
-            this.baseAddress = baseAddress;
+            this.HttpClient = httpClient;
+            this.BaseAddress = baseAddress;
         }
 
 
@@ -1028,8 +1028,8 @@ internal sealed class PreservationServiceWireFlowTests
             content.Headers.ContentType = new MediaTypeHeaderValue(
                 syntax == PreservationSyntax.Xml ? XmlMessageContentType : JsonMessageContentType);
 
-            using HttpResponseMessage httpResponse = await httpClient.PostAsync(
-                new Uri(baseAddress, path), content, cancellationToken).ConfigureAwait(false);
+            using HttpResponseMessage httpResponse = await HttpClient.PostAsync(
+                new Uri(BaseAddress, path), content, cancellationToken).ConfigureAwait(false);
 
             if(!httpResponse.IsSuccessStatusCode)
             {
@@ -1168,14 +1168,14 @@ internal sealed class PreservationServiceWireFlowTests
     private sealed class WireTimestampTransport
     {
         /// <summary>The client, already pinned to the Time-Stamping Authority host's certificate.</summary>
-        private readonly HttpClient httpClient;
+        private HttpClient WireClient { get; }
 
 
         /// <summary>Initializes a transport over a pinned client.</summary>
         /// <param name="httpClient">The client, already pinned to the authority host's certificate.</param>
         internal WireTimestampTransport(HttpClient httpClient)
         {
-            this.httpClient = httpClient;
+            this.WireClient = httpClient;
         }
 
 
@@ -1192,7 +1192,7 @@ internal sealed class PreservationServiceWireFlowTests
             HttpResponseMessage httpResponse;
             try
             {
-                httpResponse = await httpClient.PostAsync(new Uri(context.TsaUri), content, cancellationToken).ConfigureAwait(false);
+                httpResponse = await WireClient.PostAsync(new Uri(context.TsaUri), content, cancellationToken).ConfigureAwait(false);
             }
             catch(HttpRequestException)
             {
@@ -1223,14 +1223,14 @@ internal sealed class PreservationServiceWireFlowTests
     private sealed class WireOcspTransport
     {
         /// <summary>The client, already pinned to the OCSP responder host's certificate.</summary>
-        private readonly HttpClient httpClient;
+        private HttpClient WireClient { get; }
 
 
         /// <summary>Initializes a transport over a pinned client.</summary>
         /// <param name="httpClient">The client, already pinned to the responder host's certificate.</param>
         internal WireOcspTransport(HttpClient httpClient)
         {
-            this.httpClient = httpClient;
+            this.WireClient = httpClient;
         }
 
 
@@ -1247,7 +1247,7 @@ internal sealed class PreservationServiceWireFlowTests
             HttpResponseMessage httpResponse;
             try
             {
-                httpResponse = await httpClient.PostAsync(new Uri(context.ResponderUri), content, cancellationToken).ConfigureAwait(false);
+                httpResponse = await WireClient.PostAsync(new Uri(context.ResponderUri), content, cancellationToken).ConfigureAwait(false);
             }
             catch(HttpRequestException)
             {

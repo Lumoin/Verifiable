@@ -40,17 +40,20 @@ public static class FederationHttpTransport
     /// <param name="headerDeserializer">Deserializes the fetched statement's protected-header bytes.</param>
     /// <param name="payloadDeserializer">Deserializes the fetched statement's payload bytes.</param>
     /// <param name="base64UrlDecoder">Decodes the base64url segments of the fetched compact JWS.</param>
+    /// <param name="pool">The memory pool the fetched statement's decode buffers are rented from.</param>
     /// <returns>The composed fetch delegate.</returns>
     public static FetchEntityStatementDelegate BuildFetchEntityStatement(
         OutboundTransportDelegate transport,
         JwtHeaderDeserializer headerDeserializer,
         JwtPayloadDeserializer payloadDeserializer,
-        DecodeDelegate base64UrlDecoder)
+        DecodeDelegate base64UrlDecoder,
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(transport);
         ArgumentNullException.ThrowIfNull(headerDeserializer);
         ArgumentNullException.ThrowIfNull(payloadDeserializer);
         ArgumentNullException.ThrowIfNull(base64UrlDecoder);
+        ArgumentNullException.ThrowIfNull(pool);
 
         return (subject, fetchEndpoint, context, cancellationToken) =>
         {
@@ -65,7 +68,7 @@ public static class FederationHttpTransport
             };
 
             return GetAndParseAsync(
-                builder.Uri, transport, headerDeserializer, payloadDeserializer, base64UrlDecoder,
+                builder.Uri, transport, headerDeserializer, payloadDeserializer, base64UrlDecoder, pool,
                 context, cancellationToken);
         };
     }
@@ -80,17 +83,20 @@ public static class FederationHttpTransport
     /// <param name="headerDeserializer">Deserializes the fetched statement's protected-header bytes.</param>
     /// <param name="payloadDeserializer">Deserializes the fetched statement's payload bytes.</param>
     /// <param name="base64UrlDecoder">Decodes the base64url segments of the fetched compact JWS.</param>
+    /// <param name="pool">The memory pool the fetched statement's decode buffers are rented from.</param>
     /// <returns>The composed Entity Configuration fetch delegate.</returns>
     public static FetchEntityConfigurationDelegate BuildFetchEntityConfiguration(
         OutboundTransportDelegate transport,
         JwtHeaderDeserializer headerDeserializer,
         JwtPayloadDeserializer payloadDeserializer,
-        DecodeDelegate base64UrlDecoder)
+        DecodeDelegate base64UrlDecoder,
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(transport);
         ArgumentNullException.ThrowIfNull(headerDeserializer);
         ArgumentNullException.ThrowIfNull(payloadDeserializer);
         ArgumentNullException.ThrowIfNull(base64UrlDecoder);
+        ArgumentNullException.ThrowIfNull(pool);
 
         return (entity, context, cancellationToken) =>
         {
@@ -102,7 +108,7 @@ public static class FederationHttpTransport
             Uri target = WellKnownPaths.OpenIdFederation.ComputeUri(entity.Value);
 
             return GetAndParseAsync(
-                target, transport, headerDeserializer, payloadDeserializer, base64UrlDecoder,
+                target, transport, headerDeserializer, payloadDeserializer, base64UrlDecoder, pool,
                 context, cancellationToken);
         };
     }
@@ -120,6 +126,7 @@ public static class FederationHttpTransport
         JwtHeaderDeserializer headerDeserializer,
         JwtPayloadDeserializer payloadDeserializer,
         DecodeDelegate base64UrlDecoder,
+        BaseMemoryPool pool,
         ExchangeContext context,
         CancellationToken cancellationToken)
     {
@@ -154,6 +161,6 @@ public static class FederationHttpTransport
 
         string compactJws = Encoding.UTF8.GetString(response.Body.Span);
         return EntityStatementJwsReader.TryRead(
-            compactJws, headerDeserializer, payloadDeserializer, base64UrlDecoder, BaseMemoryPool.Shared);
+            compactJws, headerDeserializer, payloadDeserializer, base64UrlDecoder, pool);
     }
 }

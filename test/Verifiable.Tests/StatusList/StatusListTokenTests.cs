@@ -94,5 +94,25 @@ internal sealed class StatusListTokenTests
     {
         Assert.ThrowsExactly<ArgumentNullException>(() =>
             new StatusListToken(ExampleTokenSubject, BaseTime, null!));
-    }    
+    }
+
+
+    /// <summary>
+    /// "ttl: RECOMMENDED. … The value of the claim MUST be a positive number encoded in JSON as a
+    /// number." — the one home for this rule on the write side is the model itself, so a non-positive
+    /// value is refused at construction rather than only on a wire read.
+    /// See <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list-21#section-5.1">Token Status List, Section 5.1</see>.
+    /// </summary>
+    /// <param name="timeToLive">The non-positive value under test.</param>
+    [TestMethod]
+    [DataRow(0L)]
+    [DataRow(-1L)]
+    [DataRow(long.MinValue)]
+    public void TimeToLiveThatIsNotPositiveIsRefusedAtConstruction(long timeToLive)
+    {
+        using var list = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
+
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
+            new StatusListToken(ExampleTokenSubject, BaseTime, list) { TimeToLive = timeToLive });
+    }
 }

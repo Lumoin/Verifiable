@@ -299,14 +299,9 @@ public static class AsicContainerUri
                     || AdditionalUnreservedCharacters.Contains(character, StringComparison.Ordinal)
                     || character == AsicZipEntryNaming.Separator;
 
-                if(isUnreserved)
-                {
-                    _ = builder.Append(character);
-                }
-                else
-                {
-                    _ = builder.Append(PercentSign).Append(HexadecimalDigits[octet >> 4]).Append(HexadecimalDigits[octet & 0x0F]);
-                }
+                _ = isUnreserved
+                    ? builder.Append(character)
+                    : builder.Append(PercentSign).Append(HexadecimalDigits[octet >> 4]).Append(HexadecimalDigits[octet & 0x0F]);
             }
 
             return builder.ToString();

@@ -34,13 +34,13 @@ public sealed class ProblemCode: IEquatable<ProblemCode>
     //Codes — codes are compact identifiers, not free text).
     private const int MaximumLength = 256;
 
-    private readonly string[] tokens;
+    private string[] TokenArray { get; }
 
 
     private ProblemCode(string value, string[] tokens, ProblemSorter sorter)
     {
         Value = value;
-        this.tokens = tokens;
+        this.TokenArray = tokens;
         Sorter = sorter;
     }
 
@@ -68,13 +68,13 @@ public sealed class ProblemCode: IEquatable<ProblemCode>
     /// problem is an error: <c>p</c> (the whole protocol), <c>m</c> (the previous message only), or a
     /// formal state name from the sender's state machine (DIDComm v2.1 §Scope).
     /// </summary>
-    public string Scope => tokens[1];
+    public string Scope => TokenArray[1];
 
     /// <summary>The descriptor tokens — every token after the sorter and scope, progressively more specific (DIDComm v2.1 §Descriptors). May be empty.</summary>
-    public IReadOnlyList<string> Descriptors => tokens.Length > 2 ? tokens[2..] : [];
+    public IReadOnlyList<string> Descriptors => TokenArray.Length > 2 ? TokenArray[2..] : [];
 
     /// <summary>All tokens of the code, in order: sorter, scope, then descriptors.</summary>
-    public IReadOnlyList<string> Tokens => Array.AsReadOnly(tokens);
+    public IReadOnlyList<string> Tokens => Array.AsReadOnly(TokenArray);
 
 
     /// <summary>
@@ -168,7 +168,7 @@ public sealed class ProblemCode: IEquatable<ProblemCode>
         }
 
         string[] prefixTokens = prefix.Split('.');
-        if(prefixTokens.Length > tokens.Length)
+        if(prefixTokens.Length > TokenArray.Length)
         {
             return false;
         }
@@ -176,7 +176,7 @@ public sealed class ProblemCode: IEquatable<ProblemCode>
         for(int i = 0; i < prefixTokens.Length; ++i)
         {
             //An empty prefix token (e.g. a trailing dot) cannot match a non-empty code token.
-            if(!string.Equals(prefixTokens[i], tokens[i], StringComparison.Ordinal))
+            if(!string.Equals(prefixTokens[i], TokenArray[i], StringComparison.Ordinal))
             {
                 return false;
             }

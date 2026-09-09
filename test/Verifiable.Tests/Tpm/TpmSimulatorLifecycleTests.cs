@@ -13,6 +13,7 @@ using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Spec.Attributes;
 using Verifiable.Tpm.Spec.Constants;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -31,7 +32,7 @@ internal sealed class TpmSimulatorLifecycleTests
     [TestMethod]
     public void NewSimulatorIsPoweredOff()
     {
-        using var simulator = new TpmSimulator("tpm-new");
+        using var simulator = new TpmSimulator("tpm-new", rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         Assert.AreEqual(TpmLifecyclePhase.PoweredOff, simulator.CurrentPhase);
     }
@@ -39,7 +40,7 @@ internal sealed class TpmSimulatorLifecycleTests
     [TestMethod]
     public async Task CommandBeforePowerOnReturnsInitialize()
     {
-        using var simulator = new TpmSimulator("tpm-poweredoff");
+        using var simulator = new TpmSimulator("tpm-poweredoff", rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         TpmRcConstants responseCode = await SubmitForCodeAsync(simulator, new GetTestResultInput()).ConfigureAwait(false);
 
@@ -50,7 +51,7 @@ internal sealed class TpmSimulatorLifecycleTests
     [TestMethod]
     public async Task PowerOnMovesToInitializing()
     {
-        using var simulator = new TpmSimulator("tpm-init");
+        using var simulator = new TpmSimulator("tpm-init", rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -60,7 +61,7 @@ internal sealed class TpmSimulatorLifecycleTests
     [TestMethod]
     public async Task NonStartupCommandInInitializingReturnsInitialize()
     {
-        using var simulator = new TpmSimulator("tpm-await-startup");
+        using var simulator = new TpmSimulator("tpm-await-startup", rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         TpmRcConstants responseCode = await SubmitForCodeAsync(simulator, new GetTestResultInput()).ConfigureAwait(false);
@@ -72,7 +73,7 @@ internal sealed class TpmSimulatorLifecycleTests
     [TestMethod]
     public async Task StartupClearReachesOperational()
     {
-        using var simulator = new TpmSimulator("tpm-startup-clear");
+        using var simulator = new TpmSimulator("tpm-startup-clear", rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         TpmRcConstants responseCode = await SubmitForCodeAsync(simulator, new StartupInput(TpmSuConstants.TPM_SU_CLEAR)).ConfigureAwait(false);
@@ -84,19 +85,19 @@ internal sealed class TpmSimulatorLifecycleTests
     [TestMethod]
     public async Task StartupStateWithoutSavedStateReturnsValueAndStaysInitializing()
     {
-        using var simulator = new TpmSimulator("tpm-resume-nostate");
+        using var simulator = new TpmSimulator("tpm-resume-nostate", rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         TpmRcConstants responseCode = await SubmitForCodeAsync(simulator, new StartupInput(TpmSuConstants.TPM_SU_STATE)).ConfigureAwait(false);
 
-        Assert.AreEqual(TpmRcConstants.TPM_RC_VALUE, responseCode);
+        Assert.AreEqual(HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_VALUE, 0), responseCode, "Table 4: startupType is TPM2_Startup()'s sole parameter (parameter 1); TPM_SU_STATE without a saved state is parameter-encoded TPM_RC_VALUE at index 0.");
         Assert.AreEqual(TpmLifecyclePhase.Initializing, simulator.CurrentPhase);
     }
 
     [TestMethod]
     public async Task ResumePathReachesOperational()
     {
-        using var simulator = new TpmSimulator("tpm-resume");
+        using var simulator = new TpmSimulator("tpm-resume", rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(TpmRcConstants.TPM_RC_SUCCESS, await SubmitForCodeAsync(simulator, new StartupInput(TpmSuConstants.TPM_SU_CLEAR)).ConfigureAwait(false));
@@ -191,7 +192,7 @@ internal sealed class TpmSimulatorLifecycleTests
     {
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
 
-        //TPM2_MakeCredential is not modelled by this slice, so while operational it is rejected as an unknown
+        //TPM2_MakeCredential is not modelled, so while operational it is rejected as an unknown
         //command code. (TPM2_GetRandom is modelled and would instead succeed here.)
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using IMemoryOwner<byte> owner = pool.Rent(TpmHeader.HeaderSize);
@@ -208,7 +209,7 @@ internal sealed class TpmSimulatorLifecycleTests
     [TestMethod]
     public async Task TruncatedCommandReturnsCommandSize()
     {
-        using var simulator = new TpmSimulator("tpm-truncated");
+        using var simulator = new TpmSimulator("tpm-truncated", rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;
@@ -224,7 +225,7 @@ internal sealed class TpmSimulatorLifecycleTests
     [TestMethod]
     public async Task CommandWithMismatchedSizeFieldReturnsCommandSize()
     {
-        using var simulator = new TpmSimulator("tpm-size-mismatch");
+        using var simulator = new TpmSimulator("tpm-size-mismatch", rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;
@@ -240,7 +241,7 @@ internal sealed class TpmSimulatorLifecycleTests
     [TestMethod]
     public async Task CommandWithUnknownTagReturnsBadTag()
     {
-        using var simulator = new TpmSimulator("tpm-bad-tag");
+        using var simulator = new TpmSimulator("tpm-bad-tag", rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;
@@ -280,7 +281,7 @@ internal sealed class TpmSimulatorLifecycleTests
     [TestMethod]
     public async Task TraceEmitsOneEntryPerStep()
     {
-        using var simulator = new TpmSimulator("tpm-trace");
+        using var simulator = new TpmSimulator("tpm-trace", rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         var observer = new TestObserver<TraceEntry<TpmSimulatorState, TpmSimulatorInput>>();
         using IDisposable subscription = simulator.Subscribe(observer);
 
@@ -304,10 +305,10 @@ internal sealed class TpmSimulatorLifecycleTests
     [TestMethod]
     public async Task PlugsIntoTpmDeviceTransport()
     {
-        using var simulator = new TpmSimulator("tpm-device");
+        using var simulator = new TpmSimulator("tpm-device", rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using IMemoryOwner<byte> owner = RentCommand(new StartupInput(TpmSuConstants.TPM_SU_CLEAR), pool, out int length);
         TpmResult<TpmResponse> result = await device.SubmitAsync(owner.Memory[..length], pool, TestContext.CancellationToken).ConfigureAwait(false);
@@ -326,7 +327,7 @@ internal sealed class TpmSimulatorLifecycleTests
         const int RequestedBytes = 16;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
 
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmResponseRegistry registry = CreateRandomRegistry();
 
@@ -346,7 +347,7 @@ internal sealed class TpmSimulatorLifecycleTests
         const ushort OversizedRequest = 200;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
 
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmResponseRegistry registry = CreateRandomRegistry();
 
@@ -361,7 +362,7 @@ internal sealed class TpmSimulatorLifecycleTests
     [TestMethod]
     public async Task GetRandomBeforeStartupReturnsInitialize()
     {
-        using var simulator = new TpmSimulator("tpm-getrandom-init");
+        using var simulator = new TpmSimulator("tpm-getrandom-init", rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         TpmRcConstants responseCode = await SubmitForCodeAsync(simulator, new GetRandomInput(16)).ConfigureAwait(false);
@@ -393,7 +394,7 @@ internal sealed class TpmSimulatorLifecycleTests
     {
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
 
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmResponseRegistry registry = CreateRandomRegistry();
 
@@ -420,7 +421,7 @@ internal sealed class TpmSimulatorLifecycleTests
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
 
         //A GetRandom command framed without its UINT16 bytesRequested parameter cannot be unmarshalled,
-        //which the TPM reports as TPM_RC_INSUFFICIENT (Part 2, Table 4), not TPM_RC_SIZE.
+        //which the TPM reports as TPM_RC_INSUFFICIENT (Part 2, Table 2), not TPM_RC_SIZE.
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using IMemoryOwner<byte> owner = pool.Rent(TpmHeader.HeaderSize);
         Memory<byte> command = owner.Memory[..TpmHeader.HeaderSize];
@@ -430,7 +431,9 @@ internal sealed class TpmSimulatorLifecycleTests
 
         TpmRcConstants responseCode = await SubmitForCodeAsync(simulator, command).ConfigureAwait(false);
 
-        Assert.AreEqual(TpmRcConstants.TPM_RC_INSUFFICIENT, responseCode);
+        Assert.AreEqual(
+            HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_INSUFFICIENT, 0), responseCode,
+            "Table 75: bytesRequested is TPM2_GetRandom()'s sole parameter (index 0).");
     }
 
     [TestMethod]
@@ -439,7 +442,7 @@ internal sealed class TpmSimulatorLifecycleTests
         //An injected RNG backend that always throws models a hardware entropy failure.
         void ThrowingRng(Span<byte> destination) => throw new InvalidOperationException("entropy backend failed");
 
-        using var simulator = new TpmSimulator("tpm-rng-throws", TpmSelfTestBehavior.Passes, ThrowingRng);
+        using var simulator = new TpmSimulator("tpm-rng-throws",selfTest: TpmSelfTestBehavior.Passes,rng: ThrowingRng, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(TpmRcConstants.TPM_RC_SUCCESS, await SubmitForCodeAsync(simulator, new StartupInput(TpmSuConstants.TPM_SU_CLEAR)).ConfigureAwait(false));
 
@@ -469,7 +472,7 @@ internal sealed class TpmSimulatorLifecycleTests
         //The headline V.5a path: the client-side DA-parameters carrier reads the simulator's lockout
         //state end-to-end via TPM2_GetCapability(TPM_PROPERTIES), with no real hardware.
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         TpmResult<TpmDictionaryAttackParameters> result = await device.GetDictionaryAttackParametersAsync(pool, TestContext.CancellationToken).ConfigureAwait(false);
@@ -490,11 +493,11 @@ internal sealed class TpmSimulatorLifecycleTests
         _ = await SubmitForCodeAsync(simulator, new SelfTestInput(IsFullTest: false)).ConfigureAwait(false);
         Assert.AreEqual(TpmLifecyclePhase.FailureMode, simulator.CurrentPhase);
 
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmResponseRegistry registry = CreateCapabilityRegistry();
 
-        //Clause 10.4: Failure Mode admits TPM2_GetTestResult() and TPM2_GetCapability().
+        //Clause 9.4: Failure Mode admits TPM2_GetTestResult() and TPM2_GetCapability().
         TpmResult<GetCapabilityResponse> result = await TpmCommandExecutor.ExecuteAsync<GetCapabilityResponse>(
             device, GetCapabilityInput.ForTpmProperties(TpmPtConstants.TPM_PT_LOCKOUT_COUNTER), [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -505,7 +508,7 @@ internal sealed class TpmSimulatorLifecycleTests
     [TestMethod]
     public async Task GetCapabilityBeforeStartupReturnsInitialize()
     {
-        using var simulator = new TpmSimulator("tpm-getcap-init");
+        using var simulator = new TpmSimulator("tpm-getcap-init", rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         TpmRcConstants responseCode = await SubmitForCodeAsync(simulator, GetCapabilityInput.ForTpmProperties(TpmPtConstants.TPM_PT_LOCKOUT_COUNTER)).ConfigureAwait(false);
@@ -518,17 +521,17 @@ internal sealed class TpmSimulatorLifecycleTests
     {
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
 
-        //Only TPM_CAP_TPM_PROPERTIES is modelled this slice; another capability category is rejected.
+        //Only TPM_CAP_TPM_PROPERTIES is modelled; another capability category is rejected.
         TpmRcConstants responseCode = await SubmitForCodeAsync(simulator, GetCapabilityInput.ForAlgorithms()).ConfigureAwait(false);
 
-        Assert.AreEqual(TpmRcConstants.TPM_RC_VALUE, responseCode);
+        Assert.AreEqual(HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_VALUE, 0), responseCode, "Table 238: capability is TPM2_GetCapability()'s first parameter (parameter 1); an unsupported capability group is parameter-encoded TPM_RC_VALUE at index 0.");
     }
 
     [TestMethod]
     public async Task GetCapabilityPagesWhenWindowTruncated()
     {
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmResponseRegistry registry = CreateCapabilityRegistry();
 
@@ -548,7 +551,7 @@ internal sealed class TpmSimulatorLifecycleTests
     public async Task GetCapabilityPagingGathersEveryPropertyExactlyOnce()
     {
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmResponseRegistry registry = CreateCapabilityRegistry();
 
@@ -581,11 +584,14 @@ internal sealed class TpmSimulatorLifecycleTests
             more = response.MoreData.IsYes;
         }
 
-        //Four fixed identity properties, TPM_PT_NV_BUFFER_MAX (this TPM's own MAX_NV_BUFFER_SIZE — "the maximum
-        //data size in one NV write, NV read, NV extend, or NV certify command", Part 2, clause 6.13, Table 30),
-        //TPM_PT_PERMANENT and TPM_PT_STARTUP_CLEAR (the two TPMA-valued rows that report hierarchy and
-        //provisioning state, Part 2, clauses 8.6 and 8.7), and the four lockout properties.
-        Assert.HasCount(11, collected);
+        //Four fixed identity properties, TPM_PT_HR_TRANSIENT_MIN (this TPM's own object-slot count), the six
+        //context-management properties (TPM_PT_CONTEXT_GAP_MAX/HASH/SYM/SYM_SIZE and TPM_PT_MAX_OBJECT_CONTEXT/
+        //MAX_SESSION_CONTEXT, Part 2, clause 6.13, Table 28) and TPM_PT_NV_BUFFER_MAX (this TPM's own
+        //MAX_NV_BUFFER_SIZE — "the maximum data size in one NV write, NV read, NV extend, or NV certify command",
+        //same table), TPM_PT_PERMANENT and TPM_PT_STARTUP_CLEAR (the two TPMA-valued rows that report hierarchy
+        //and provisioning state, Part 2, clauses 8.6 and 8.7), TPM_PT_HR_TRANSIENT_AVAIL (the free object slots),
+        //and the four lockout properties.
+        Assert.HasCount(19, collected);
         for(int i = 1; i < collected.Count; i++)
         {
             Assert.IsGreaterThan(collected[i - 1], collected[i], "Paged properties must be strictly ascending across rounds.");
@@ -596,7 +602,7 @@ internal sealed class TpmSimulatorLifecycleTests
     public async Task GetCapabilityReportsNotInLockoutByDefault()
     {
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmResponseRegistry registry = CreateCapabilityRegistry();
 
@@ -623,7 +629,7 @@ internal sealed class TpmSimulatorLifecycleTests
 
     private async Task<TpmSimulator> CreateOperationalAsync(TpmSelfTestBehavior selfTest = TpmSelfTestBehavior.Passes)
     {
-        var simulator = new TpmSimulator("tpm-operational", selfTest);
+        var simulator = new TpmSimulator("tpm-operational",selfTest: selfTest, rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         TpmRcConstants startupCode = await SubmitForCodeAsync(simulator, new StartupInput(TpmSuConstants.TPM_SU_CLEAR)).ConfigureAwait(false);

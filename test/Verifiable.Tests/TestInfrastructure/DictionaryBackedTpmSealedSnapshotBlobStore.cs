@@ -34,7 +34,7 @@ namespace Verifiable.Tests.TestInfrastructure;
 internal sealed class DictionaryBackedTpmSealedSnapshotBlobStore
 {
     /// <summary>Every stored sealed blob's serialized bytes, by run id.</summary>
-    private readonly Dictionary<string, byte[]> sealedBlobsByRunId = [];
+    private Dictionary<string, byte[]> SealedBlobsByRunId { get; } = [];
 
     /// <summary>The total number of times <see cref="TryFetchSealedBlobAsync"/> has been called.</summary>
     public int FetchCallCount { get; private set; }
@@ -46,7 +46,7 @@ internal sealed class DictionaryBackedTpmSealedSnapshotBlobStore
     /// <summary>Whether a sealed blob is currently stored for <paramref name="runId"/>.</summary>
     /// <param name="runId">The run id to check.</param>
     /// <returns><see langword="true"/> if a sealed blob is stored; otherwise <see langword="false"/>.</returns>
-    public bool HasSealedBlob(string runId) => sealedBlobsByRunId.ContainsKey(runId);
+    public bool HasSealedBlob(string runId) => SealedBlobsByRunId.ContainsKey(runId);
 
 
     /// <summary>Attempts to fetch the sealed blob bytes stored for <paramref name="runId"/>. Has the <see cref="TryFetchSealedSnapshotBlobAsyncDelegate"/> shape.</summary>
@@ -58,7 +58,7 @@ internal sealed class DictionaryBackedTpmSealedSnapshotBlobStore
     {
         FetchCallCount++;
 
-        if(!sealedBlobsByRunId.TryGetValue(runId, out byte[]? bytes))
+        if(!SealedBlobsByRunId.TryGetValue(runId, out byte[]? bytes))
         {
             return ValueTask.FromResult<PooledMemory?>(null);
         }
@@ -75,7 +75,7 @@ internal sealed class DictionaryBackedTpmSealedSnapshotBlobStore
     /// <param name="cancellationToken">A cancellation token.</param>
     public ValueTask StoreSealedBlobAsync(string runId, PooledMemory sealedBlobBytes, CancellationToken cancellationToken)
     {
-        sealedBlobsByRunId[runId] = sealedBlobBytes.AsReadOnlySpan().ToArray();
+        SealedBlobsByRunId[runId] = sealedBlobBytes.AsReadOnlySpan().ToArray();
 
         return ValueTask.CompletedTask;
     }
@@ -86,7 +86,7 @@ internal sealed class DictionaryBackedTpmSealedSnapshotBlobStore
     /// <param name="cancellationToken">A cancellation token.</param>
     public ValueTask DeleteSealedBlobAsync(string runId, CancellationToken cancellationToken)
     {
-        sealedBlobsByRunId.Remove(runId);
+        SealedBlobsByRunId.Remove(runId);
 
         return ValueTask.CompletedTask;
     }
@@ -95,11 +95,11 @@ internal sealed class DictionaryBackedTpmSealedSnapshotBlobStore
     /// <summary>Returns a mutable copy of the bytes currently stored for <paramref name="runId"/>, for a test to tamper with before writing back via <see cref="ReplaceStoredBytes"/>.</summary>
     /// <param name="runId">The run id whose stored bytes to copy.</param>
     /// <returns>An independent copy of the stored bytes.</returns>
-    public byte[] GetStoredBytesCopy(string runId) => (byte[])sealedBlobsByRunId[runId].Clone();
+    public byte[] GetStoredBytesCopy(string runId) => (byte[])SealedBlobsByRunId[runId].Clone();
 
 
     /// <summary>Overwrites the bytes stored for <paramref name="runId"/> directly, bypassing <c>TpmSealedStateCustody</c>'s own seal path entirely — the fail-closed tamper capstone's own corruption seam.</summary>
     /// <param name="runId">The run id whose stored bytes to replace.</param>
     /// <param name="bytes">The replacement bytes.</param>
-    public void ReplaceStoredBytes(string runId, byte[] bytes) => sealedBlobsByRunId[runId] = bytes;
+    public void ReplaceStoredBytes(string runId, byte[] bytes) => SealedBlobsByRunId[runId] = bytes;
 }

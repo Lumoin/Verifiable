@@ -217,6 +217,8 @@ public sealed record OutboundFetchPolicy
 
         if(address.AddressFamily == AddressFamily.InterNetwork)
         {
+            //Each disjunct is its own IANA special-purpose or private block, named by the trailing
+            //comment; a named predicate per block would only rename the citation, not simplify it.
             byte[] b = address.GetAddressBytes();
             return b[0] == 0                                  //0.0.0.0/8 unspecified/this-host.
                 || b[0] == 10                                 //10.0.0.0/8 private.

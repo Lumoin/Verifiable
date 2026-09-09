@@ -89,7 +89,7 @@ public static class TpmDictionaryAttackExtensions
         ReadOnlyMemory<byte> lockoutAuthSupplied,
         CancellationToken cancellationToken)
     {
-        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = device.Pool;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_DictionaryAttackLockReset, TpmResponseCodec.DictionaryAttackLockReset);
 
@@ -108,7 +108,7 @@ public static class TpmDictionaryAttackExtensions
         uint newLockoutRecovery,
         CancellationToken cancellationToken)
     {
-        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = device.Pool;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_DictionaryAttackParameters, TpmResponseCodec.DictionaryAttackParameters);
 

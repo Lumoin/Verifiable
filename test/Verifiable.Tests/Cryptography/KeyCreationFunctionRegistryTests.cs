@@ -7,6 +7,8 @@ using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Microsoft;
+using Microsoft.Extensions.Time.Testing;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Cryptography;
 
@@ -155,7 +157,7 @@ internal sealed class KeyCreationFunctionRegistryTests
 
 
     /// <summary>
-    /// <see cref="MicrosoftKeyMaterialCreator.CreateKeysWithEvent"/> wraps <see cref="MicrosoftKeyMaterialCreator.CreateP384Keys"/>
+    /// <see cref="MicrosoftKeyMaterialCreatorAdapter.CreateKeysWithEvent"/> wraps <see cref="MicrosoftKeyMaterialCreator.CreateP384Keys"/>
     /// without changing that method's own signature, and packages a correctly-shaped
     /// <see cref="KeyMaterialGeneratedEvent"/> alongside the returned key pair. Tested directly, independent of
     /// the registry and the global event stream, since this adapter is a pure function.
@@ -163,8 +165,7 @@ internal sealed class KeyCreationFunctionRegistryTests
     [TestMethod]
     public void MicrosoftAdapterPackagesKeysAndEventTogether()
     {
-        (PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys, CryptoEvent? evt) = MicrosoftKeyMaterialCreator.CreateKeysWithEvent(
-            MicrosoftKeyMaterialCreator.CreateP384Keys, CryptoAlgorithm.P384, Purpose.Signing, BaseMemoryPool.Shared);
+        (PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys, CryptoEvent? evt) = MicrosoftKeyMaterialCreator.CreateKeysWithEvent(MicrosoftKeyMaterialCreator.CreateP384Keys, CryptoAlgorithm.P384, Purpose.Signing, BaseMemoryPool.Shared, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         using PublicKeyMemory publicKey = keys.PublicKey;
         using PrivateKeyMemory privateKey = keys.PrivateKey;
@@ -179,15 +180,14 @@ internal sealed class KeyCreationFunctionRegistryTests
 
 
     /// <summary>
-    /// <see cref="BouncyCastleKeyMaterialCreator.CreateKeysWithEvent"/> wraps
+    /// <see cref="BouncyCastleKeyMaterialCreatorAdapter.CreateKeysWithEvent"/> wraps
     /// <see cref="BouncyCastleKeyMaterialCreator.CreateMlDsa65Keys"/> the same way, proving the adapter shape is
     /// shared identically across both software backends.
     /// </summary>
     [TestMethod]
     public void BouncyCastleAdapterPackagesKeysAndEventTogether()
     {
-        (PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys, CryptoEvent? evt) = BouncyCastleKeyMaterialCreator.CreateKeysWithEvent(
-            BouncyCastleKeyMaterialCreator.CreateMlDsa65Keys, CryptoAlgorithm.MlDsa65, Purpose.Signing, BaseMemoryPool.Shared);
+        (PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys, CryptoEvent? evt) = BouncyCastleKeyMaterialCreator.CreateKeysWithEvent(BouncyCastleKeyMaterialCreator.CreateMlDsa65Keys, CryptoAlgorithm.MlDsa65, Purpose.Signing, BaseMemoryPool.Shared, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         using PublicKeyMemory publicKey = keys.PublicKey;
         using PrivateKeyMemory privateKey = keys.PrivateKey;

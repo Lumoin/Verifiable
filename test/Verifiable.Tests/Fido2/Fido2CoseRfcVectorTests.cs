@@ -148,7 +148,7 @@ internal sealed class Fido2CoseRfcVectorTests
             y: DecodeBase64Url(Es256PublicYBase64Url));
 
         Fido2AssertionOutcome outcome = await MintAndVerifyAssertionAsync(
-            privateScalar, credentialPublicKey, BouncyCastleCryptographicFunctions.SignP256Async, isEcdsaSignature: true, TestContext.CancellationToken);
+            privateScalar, credentialPublicKey, BouncyCastleCryptographicFunctionsAdapter.SignP256Async, isEcdsaSignature: true, TestContext.CancellationToken);
 
         Assert.IsTrue(outcome.SignatureValid);
         Assert.IsTrue(outcome.IsAcceptable);
@@ -172,7 +172,7 @@ internal sealed class Fido2CoseRfcVectorTests
             y: DecodeBase64Url(Es512PublicYBase64Url));
 
         Fido2AssertionOutcome outcome = await MintAndVerifyAssertionAsync(
-            privateScalar, credentialPublicKey, BouncyCastleCryptographicFunctions.SignP521Async, isEcdsaSignature: true, TestContext.CancellationToken);
+            privateScalar, credentialPublicKey, BouncyCastleCryptographicFunctionsAdapter.SignP521Async, isEcdsaSignature: true, TestContext.CancellationToken);
 
         Assert.IsTrue(outcome.SignatureValid);
         Assert.IsTrue(outcome.IsAcceptable);
@@ -194,7 +194,7 @@ internal sealed class Fido2CoseRfcVectorTests
             x: DecodeBase64Url(EdDsaPublicKeyBase64Url));
 
         Fido2AssertionOutcome outcome = await MintAndVerifyAssertionAsync(
-            privateSeed, credentialPublicKey, BouncyCastleCryptographicFunctions.SignEd25519Async, isEcdsaSignature: false, TestContext.CancellationToken);
+            privateSeed, credentialPublicKey, BouncyCastleCryptographicFunctionsAdapter.SignEd25519Async, isEcdsaSignature: false, TestContext.CancellationToken);
 
         Assert.IsTrue(outcome.SignatureValid);
         Assert.IsTrue(outcome.IsAcceptable);
@@ -253,7 +253,8 @@ internal sealed class Fido2CoseRfcVectorTests
             StoredSignCount = 0,
             StoredUvInitialized = true,
             CredentialId = assertedCredentialId,
-            AllowedCredentialIds = [CredentialId.Create([0x01, 0x02, 0x03, 0x04], BaseMemoryPool.Shared)]
+            AllowedCredentialIds = [CredentialId.Create([0x01, 0x02, 0x03, 0x04], BaseMemoryPool.Shared)],
+            ExtensionProcessingPool = BaseMemoryPool.Shared
         };
 
         return await Fido2AssertionVerifier.VerifyAsync(

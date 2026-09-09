@@ -61,10 +61,10 @@ public readonly struct ResolutionSource: IEquatable<ResolutionSource>
     public static ResolutionSource KeriAnchor { get; } = new(4);
 
 
-    private static IReadOnlyList<ResolutionSource> sources { get; } = [CertificateDigest, MethodResolved, CallerControllerArtifact, KeyAgreement, KeriAnchor];
+    private static IReadOnlyList<ResolutionSource> RegisteredSources { get; } = [CertificateDigest, MethodResolved, CallerControllerArtifact, KeyAgreement, KeriAnchor];
 
     /// <summary>Gets all resolution source values — a closed set; see the type remarks.</summary>
-    public static IReadOnlyList<ResolutionSource> Sources => sources;
+    public static IReadOnlyList<ResolutionSource> Sources => RegisteredSources;
 
 
     /// <inheritdoc/>

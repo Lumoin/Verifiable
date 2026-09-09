@@ -23,7 +23,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// } TPML_HANDLE;
 /// </code>
 /// <para>
-/// Part 2, Table 122 bounds <c>count</c> by the implementation-dependent <c>MAX_CAP_HANDLES</c>
+/// Part 2, Table 125 bounds <c>count</c> by the implementation-dependent <c>MAX_CAP_HANDLES</c>
 /// (<c>= MAX_CAP_DATA / sizeof(TPM_HANDLE)</c>) and names <c>TPM_RC_SIZE</c> as the response when it is
 /// exceeded. This carrier holds no pooled memory — each element is a 4-octet value type — so the bound
 /// enforced here is the buffer-capacity guard <see cref="TpmReader.EnsureCount"/> already applies to
@@ -31,7 +31,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// it can size an allocation.
 /// </para>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, clause 10.9.4, Table 122.
+/// Specification reference: TPM 2.0 Library Part 2, clause 10.8.4, Table 125.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -110,7 +110,7 @@ public sealed class TpmlHandle: ITpmWireType
         }
 
         //Each handle occupies 4 octets on the wire, so a count larger than the remaining buffer can hold is a
-        //malformed length and must not size the backing array (Part 2, §10.9.4).
+        //malformed length and must not size the backing array (Part 2, clause 10.8.4).
         reader.EnsureCount(count, sizeof(uint));
 
         var builder = ImmutableArray.CreateBuilder<TpmHandle>((int)count);

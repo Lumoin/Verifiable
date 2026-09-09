@@ -11,11 +11,11 @@ internal sealed class FederationEffectiveMetadataResolverTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly EntityTypeIdentifier RpType =
+    private static EntityTypeIdentifier RpType { get; } =
         WellKnownEntityTypeIdentifiers.OpenIdRelyingParty;
 
-    private static readonly string[] ExpectedOverriddenGrantTypes = ["authorization_code", "refresh_token"];
-    private static readonly string[] ExpectedTrimmedToAuthCode = ["authorization_code"];
+    private static string[] ExpectedOverriddenGrantTypes { get; } = ["authorization_code", "refresh_token"];
+    private static string[] ExpectedTrimmedToAuthCode { get; } = ["authorization_code"];
 
 
     [TestMethod]

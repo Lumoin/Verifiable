@@ -81,6 +81,9 @@ internal sealed class CAdESCountersignaturePropertyTests
 
         //Three further countersignatures of the same countersigned signer, minted once: each signing draws its own
         //randomness, so the three attribute values are distinct however many a sample appends.
+        //siblings is a collection of disposables, not one disposable value: a using declaration disposes
+        //one variable's own value, not a collection's elements, so the foreach below in the finally block
+        //is the release point.
         var siblings = new List<CmsAttribute>(3);
         try
         {
@@ -176,6 +179,9 @@ internal sealed class CAdESCountersignaturePropertyTests
         bool oneAtATime,
         CancellationToken cancellationToken)
     {
+        //appended is a collection of disposables, not one disposable value: a using declaration disposes
+        //one variable's own value, not a collection's elements, so the foreach below in the finally block
+        //is the release point.
         var appended = new List<CmsSignedData>(siblingCount);
         try
         {

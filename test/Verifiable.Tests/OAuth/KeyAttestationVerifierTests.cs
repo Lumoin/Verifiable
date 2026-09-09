@@ -27,8 +27,8 @@ internal sealed class KeyAttestationVerifierTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly DateTimeOffset NowInstant = TestClock.CanonicalEpoch;
-    private static readonly TimeSpan ClockSkew = TimeSpan.FromMinutes(5);
+    private static DateTimeOffset NowInstant { get; } = TestClock.CanonicalEpoch;
+    private static TimeSpan ClockSkew { get; } = TimeSpan.FromMinutes(5);
     private const string AttestationNonce = "attestation-nonce-7Qm2";
 
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
@@ -36,17 +36,17 @@ internal sealed class KeyAttestationVerifierTests
     private FakeTimeProvider TimeProvider { get; } = new(NowInstant);
 
     /// <summary>A JOSE-correct serializer that does NOT escape '+' (the character in key-attestation+jwt).</summary>
-    private static readonly System.Text.Json.JsonSerializerOptions JoseSerializationOptions =
+    private static System.Text.Json.JsonSerializerOptions JoseSerializationOptions { get; } =
         new(TestSetup.DefaultSerializationOptions)
         {
             Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
         };
 
-    private static readonly JwtHeaderSerializer HeaderSerializer =
+    private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)header, JoseSerializationOptions);
 
-    private static readonly JwtPayloadSerializer PayloadSerializer =
+    private static JwtPayloadSerializer PayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)payload, JoseSerializationOptions);
 

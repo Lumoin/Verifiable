@@ -2,9 +2,10 @@ using System;
 using System.Buffers;
 using System.Collections;
 using System.Collections.Generic;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using System.Threading;
 using System.Threading.Tasks;
+using Verifiable.Cbor;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Cbor.Fido2;
 using Verifiable.Cryptography;
@@ -69,7 +70,7 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("capstone-s9");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("capstone-s9",BaseMemoryPool.Shared);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         CtapGetInfoResponse getInfoResponse = await CtapAuthenticatorGetInfoClient.GetInfoAsync(
@@ -83,7 +84,7 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
                 WellKnownWebAuthnExtensionIdentifiers.LargeBlobKey,
                 WellKnownWebAuthnExtensionIdentifiers.MinPinLength
             },
-            (ICollection)new List<string>(getInfoResponse.Extensions!),
+            new List<string>(getInfoResponse.Extensions!),
             "getInfo must advertise exactly the 5-element extensions array, decoded from the wire.");
 
         await EstablishPinAsync(harness, pool, CtapPinUvAuthProtocolId.Two, cancellationToken).ConfigureAwait(false);
@@ -254,7 +255,7 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
         CancellationToken cancellationToken = TestContext.CancellationToken;
         byte[] salt1 = CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(32, 0x86);
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("capstone-mc");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("capstone-mc",BaseMemoryPool.Shared);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         using CtapPlatformPinSession mcSession = await CtapPinCryptoFixtures.EstablishSessionAsync(
@@ -316,7 +317,7 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("capstone-lifecycle");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("capstone-lifecycle",BaseMemoryPool.Shared);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         CtapMakeCredentialRequest mcRequest = CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialRequest(
@@ -333,7 +334,7 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
             credentialIdBytes = mcAuthenticatorData.AttestedCredentialData!.CredentialId.AsReadOnlySpan().ToArray();
         }
 
-        simulator.PowerCycle();
+        simulator.PowerCycle(BaseMemoryPool.Shared);
 
         byte[] salt1 = CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(32, 0x87);
         using CtapPlatformPinSession gaSession = await CtapPinCryptoFixtures.EstablishSessionAsync(
@@ -517,7 +518,7 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
     /// </summary>
     private static void AssertHmacSecretPinUvAuthProtocolMemberIsPresentOnTheWire(ReadOnlyMemory<byte> extensionsCbor, int expectedProtocol)
     {
-        var reader = new CborReader(extensionsCbor, CborConformanceMode.Ctap2Canonical);
+        var reader = new CborReader(extensionsCbor, CborOptions.Ctap2Canonical);
         int outerCount = reader.ReadStartMap()!.Value;
         for(int i = 0; i < outerCount; i++)
         {
@@ -572,10 +573,10 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
 
     /// <summary>Decodes a CBOR boolean item's value (the wire form <see cref="AuthenticatorExtensionOutputsCborReader"/> hands back, still type-prefixed).</summary>
     private static bool DecodeCborBoolean(ReadOnlyMemory<byte> encoded) =>
-        new CborReader(encoded, CborConformanceMode.Ctap2Canonical).ReadBoolean();
+        new CborReader(encoded, CborOptions.Ctap2Canonical).ReadBoolean();
 
 
     /// <summary>Decodes a CBOR byte-string item's raw content bytes (the wire form <see cref="AuthenticatorExtensionOutputsCborReader"/> hands back, still type/length-prefixed).</summary>
     private static byte[] DecodeCborByteString(ReadOnlyMemory<byte> encoded) =>
-        new CborReader(encoded, CborConformanceMode.Ctap2Canonical).ReadByteString();
+        new CborReader(encoded, CborOptions.Ctap2Canonical).ReadByteString();
 }

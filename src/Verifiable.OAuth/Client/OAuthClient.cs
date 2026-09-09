@@ -41,6 +41,7 @@ namespace Verifiable.OAuth.Client;
 ///     resolveAuthorizationServerMetadataAsync: ...,
 ///     resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,
 ///     base64UrlEncoder: ...,
+///     memoryPool: BaseMemoryPool.Shared,
 ///     timeProvider: TimeProvider.System);
 ///
 /// OAuthClient client = new(infrastructure);

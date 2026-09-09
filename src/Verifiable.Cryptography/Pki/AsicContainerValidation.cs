@@ -443,7 +443,7 @@ public sealed record AsicContainerValidationContext
 public sealed class AsicContainerValidationResult: IDisposable
 {
     /// <summary>The carriers this validation created and therefore owns, released in reverse order.</summary>
-    private readonly List<IDisposable> owned = [];
+    private List<IDisposable> Owned { get; } = [];
 
     /// <summary>Whether <see cref="Dispose"/> has already run.</summary>
     private bool disposed;
@@ -453,7 +453,7 @@ public sealed class AsicContainerValidationResult: IDisposable
     /// <param name="owned">The carriers the validation created, in creation order. Ownership transfers to this instance.</param>
     internal AsicContainerValidationResult(List<IDisposable> owned)
     {
-        this.owned = owned;
+        this.Owned = owned;
     }
 
 
@@ -500,12 +500,12 @@ public sealed class AsicContainerValidationResult: IDisposable
         }
 
         disposed = true;
-        for(int i = owned.Count - 1; i >= 0; --i)
+        for(int i = Owned.Count - 1; i >= 0; --i)
         {
-            owned[i].Dispose();
+            Owned[i].Dispose();
         }
 
-        owned.Clear();
+        Owned.Clear();
     }
 }
 
@@ -635,40 +635,40 @@ public static class AsicContainerValidation
     private sealed class ContainerValidationRun
     {
         /// <summary>The run's inputs.</summary>
-        private readonly AsicContainerValidationContext context;
+        private AsicContainerValidationContext Context { get; }
 
         /// <summary>The container's facts.</summary>
-        private readonly AsicContainerFacts facts;
+        private AsicContainerFacts Facts { get; }
 
         /// <summary>The carriers the run created, in creation order.</summary>
-        private readonly List<IDisposable> owned;
+        private List<IDisposable> Owned { get; }
 
         /// <summary>The memory pool every allocation is rented from.</summary>
-        private readonly BaseMemoryPool pool;
+        private BaseMemoryPool Pool { get; }
 
         /// <summary>The per-manifest conclusions, in container order.</summary>
-        private readonly List<AsicManifestValidation> manifests = [];
+        private List<AsicManifestValidation> Manifests { get; } = [];
 
         /// <summary>The parsed manifests, keyed by entry name; a manifest that did not parse is absent.</summary>
-        private readonly Dictionary<string, AsicManifest> parsedManifests = new(StringComparer.Ordinal);
+        private Dictionary<string, AsicManifest> ParsedManifests { get; } = new(StringComparer.Ordinal);
 
         /// <summary>The per-Evidence-Record conclusions, in container order.</summary>
-        private readonly List<AsicEvidenceRecordValidation> evidenceRecords = [];
+        private List<AsicEvidenceRecordValidation> ContainerEvidenceRecords { get; } = [];
 
         /// <summary>The per-time-assertion conclusions, in container order.</summary>
-        private readonly List<AsicTimeAssertionValidation> timeAssertions = [];
+        private List<AsicTimeAssertionValidation> TimeAssertions { get; } = [];
 
         /// <summary>The per-signature conclusions, in container order.</summary>
-        private readonly List<AsicSignatureValidation> signatures = [];
+        private List<AsicSignatureValidation> Signatures { get; } = [];
 
         /// <summary>The chain links, newest first.</summary>
-        private readonly List<AsicArchiveManifestChainLink> chain = [];
+        private List<AsicArchiveManifestChainLink> Chain { get; } = [];
 
         /// <summary>What the container protects.</summary>
-        private readonly List<AsicProtectedObject> protectedObjects = [];
+        private List<AsicProtectedObject> ProtectedObjects { get; } = [];
 
         /// <summary>The Evidence Record carriers the run read, keyed by the entry each was read from.</summary>
-        private readonly Dictionary<string, EvidenceRecord> readEvidenceRecords = new(StringComparer.Ordinal);
+        private Dictionary<string, EvidenceRecord> ReadEvidenceRecords { get; } = new(StringComparer.Ordinal);
 
 
         /// <summary>Initialises a run.</summary>
@@ -682,10 +682,10 @@ public static class AsicContainerValidation
             List<IDisposable> owned,
             BaseMemoryPool pool)
         {
-            this.context = context;
-            this.facts = facts;
-            this.owned = owned;
-            this.pool = pool;
+            this.Context = context;
+            this.Facts = facts;
+            this.Owned = owned;
+            this.Pool = pool;
         }
 
 
@@ -696,12 +696,12 @@ public static class AsicContainerValidation
         /// <param name="cancellationToken">A cancellation token.</param>
         public async ValueTask ValidateManifestsAsync(CancellationToken cancellationToken)
         {
-            for(int i = 0; i < facts.Manifests.Count; ++i)
+            for(int i = 0; i < Facts.Manifests.Count; ++i)
             {
-                AsicManifestFile manifest = facts.Manifests[i];
+                AsicManifestFile manifest = Facts.Manifests[i];
                 if(manifest.Role == AsicManifestRole.Ambiguous)
                 {
-                    manifests.Add(new AsicManifestValidation
+                    Manifests.Add(new AsicManifestValidation
                     {
                         EntryName = manifest.Entry.Name,
                         Role = manifest.Role,
@@ -712,9 +712,9 @@ public static class AsicContainerValidation
                     continue;
                 }
 
-                if(context.ParseManifest is null)
+                if(Context.ParseManifest is null)
                 {
-                    manifests.Add(new AsicManifestValidation
+                    Manifests.Add(new AsicManifestValidation
                     {
                         EntryName = manifest.Entry.Name,
                         Role = manifest.Role,
@@ -725,15 +725,15 @@ public static class AsicContainerValidation
                     continue;
                 }
 
-                AsicManifestParseResult parsed = await context.ParseManifest(
-                    new AsicManifestParseContext { Document = manifest.Entry.Content, Limits = context.ManifestParseLimits },
-                    pool,
+                AsicManifestParseResult parsed = await Context.ParseManifest(
+                    new AsicManifestParseContext { Document = manifest.Entry.Content, Limits = Context.ManifestParseLimits },
+                    Pool,
                     cancellationToken).ConfigureAwait(false);
                 if(!parsed.IsValid || parsed.Manifest is null)
                 {
                     using(parsed)
                     {
-                        manifests.Add(new AsicManifestValidation
+                        Manifests.Add(new AsicManifestValidation
                         {
                             EntryName = manifest.Entry.Name,
                             Role = manifest.Role,
@@ -752,13 +752,13 @@ public static class AsicContainerValidation
                 //deliberately not disposed here — the manifest it held is now the run's, and the result owns
                 //nothing else.
                 AsicManifest model = parsed.Manifest;
-                owned.Add(model);
-                parsedManifests[manifest.Entry.Name] = model;
+                Owned.Add(model);
+                ParsedManifests[manifest.Entry.Name] = model;
 
-                AsicManifestExtensionEvaluation extensions = context.ExtensionPolicy.Evaluate(model);
+                AsicManifestExtensionEvaluation extensions = Context.ExtensionPolicy.Evaluate(model);
                 if(!extensions.IsAccepted)
                 {
-                    manifests.Add(new AsicManifestValidation
+                    Manifests.Add(new AsicManifestValidation
                     {
                         EntryName = manifest.Entry.Name,
                         Role = manifest.Role,
@@ -813,7 +813,7 @@ public static class AsicContainerValidation
                             CultureInfo.InvariantCulture,
                             $"The SigReference '{model.SignatureReference.Uri}' does not name a container entry ({protectiveReference.Status}).");
                     }
-                    else if(facts.FindEntry(protectiveEntryName) is null)
+                    else if(Facts.FindEntry(protectiveEntryName) is null)
                     {
                         status = AsicContainerValidationStatus.ProtectiveObjectMissing;
                         reason = string.Create(CultureInfo.InvariantCulture, $"The SigReference names '{protectiveEntryName}', which the container does not carry.");
@@ -827,7 +827,7 @@ public static class AsicContainerValidation
                     }
                 }
 
-                manifests.Add(new AsicManifestValidation
+                Manifests.Add(new AsicManifestValidation
                 {
                     EntryName = manifest.Entry.Name,
                     Role = manifest.Role,
@@ -848,13 +848,13 @@ public static class AsicContainerValidation
         /// <param name="cancellationToken">A cancellation token.</param>
         public async ValueTask ValidateEvidenceRecordsAsync(CancellationToken cancellationToken)
         {
-            for(int i = 0; i < facts.EvidenceRecords.Count; ++i)
+            for(int i = 0; i < Facts.EvidenceRecords.Count; ++i)
             {
-                AsicEvidenceRecordFile file = facts.EvidenceRecords[i];
+                AsicEvidenceRecordFile file = Facts.EvidenceRecords[i];
                 string? manifestEntryName = FindManifestNaming(file.Entry.Name);
                 if(file.Form == AsicEvidenceRecordForm.Xml)
                 {
-                    evidenceRecords.Add(await ValidateXmlEvidenceRecordAsync(file, manifestEntryName, cancellationToken).ConfigureAwait(false));
+                    ContainerEvidenceRecords.Add(await ValidateXmlEvidenceRecordAsync(file, manifestEntryName, cancellationToken).ConfigureAwait(false));
 
                     continue;
                 }
@@ -863,7 +863,7 @@ public static class AsicContainerValidation
                 EvidenceRecord? record = TryReadEvidenceRecord(file.Entry);
                 if(record is null)
                 {
-                    evidenceRecords.Add(new AsicEvidenceRecordValidation
+                    ContainerEvidenceRecords.Add(new AsicEvidenceRecordValidation
                     {
                         EntryName = file.Entry.Name,
                         Form = file.Form,
@@ -877,10 +877,10 @@ public static class AsicContainerValidation
                     continue;
                 }
 
-                readEvidenceRecords[file.Entry.Name] = record;
+                ReadEvidenceRecords[file.Entry.Name] = record;
                 if(protectedEntryNames.Count == 0)
                 {
-                    evidenceRecords.Add(new AsicEvidenceRecordValidation
+                    ContainerEvidenceRecords.Add(new AsicEvidenceRecordValidation
                     {
                         EntryName = file.Entry.Name,
                         Form = file.Form,
@@ -898,7 +898,7 @@ public static class AsicContainerValidation
                 DateTimeOffset? initialArchiveTime = null;
                 for(int targetIndex = 0; targetIndex < protectedEntryNames.Count; ++targetIndex)
                 {
-                    AsicZipEntry? target = facts.FindEntry(protectedEntryNames[targetIndex]);
+                    AsicZipEntry? target = Facts.FindEntry(protectedEntryNames[targetIndex]);
                     if(target is null)
                     {
                         verificationStatus = EvidenceRecordVerificationStatus.DataObjectNotCovered;
@@ -908,7 +908,7 @@ public static class AsicContainerValidation
 
                     using EvidenceRecordVerification verification = await EvidenceRecords.VerifyAsync(
                         new EvidenceRecordVerificationContext { EvidenceRecord = record, DataObject = target.Content.AsReadOnlyMemory() },
-                        pool,
+                        Pool,
                         cancellationToken).ConfigureAwait(false);
                     initialArchiveTime ??= verification.InitialArchiveTime;
                     if(verification.Status == EvidenceRecordVerificationStatus.Verified)
@@ -922,7 +922,7 @@ public static class AsicContainerValidation
                 }
 
                 bool provedEverything = proven.Count == protectedEntryNames.Count && verificationStatus == EvidenceRecordVerificationStatus.Verified;
-                evidenceRecords.Add(new AsicEvidenceRecordValidation
+                ContainerEvidenceRecords.Add(new AsicEvidenceRecordValidation
                 {
                     EntryName = file.Entry.Name,
                     Form = file.Form,
@@ -971,8 +971,8 @@ public static class AsicContainerValidation
             string? manifestEntryName,
             CancellationToken cancellationToken)
         {
-            if(context.ParseXmlEvidenceRecord is not ParseEvidenceRecordXmlDelegate parse
-                || context.CanonicalizeXml is not CanonicalizeXmlEvidenceRecordDelegate canonicalize)
+            if(Context.ParseXmlEvidenceRecord is not ParseEvidenceRecordXmlDelegate parse
+                || Context.CanonicalizeXml is not CanonicalizeXmlEvidenceRecordDelegate canonicalize)
             {
                 return new AsicEvidenceRecordValidation
                 {
@@ -1001,7 +1001,7 @@ public static class AsicContainerValidation
             var dataObjects = new List<XmlEvidenceRecordDataObject>(protectedEntryNames.Count);
             for(int i = 0; i < protectedEntryNames.Count; ++i)
             {
-                AsicZipEntry? target = facts.FindEntry(protectedEntryNames[i]);
+                AsicZipEntry? target = Facts.FindEntry(protectedEntryNames[i]);
                 if(target is null)
                 {
                     return new AsicEvidenceRecordValidation
@@ -1022,9 +1022,9 @@ public static class AsicContainerValidation
                 new XmlEvidenceRecordParseContext
                 {
                     Document = file.Entry.Content.AsReadOnlyMemory(),
-                    Limits = context.XmlEvidenceRecordParseLimits
+                    Limits = Context.XmlEvidenceRecordParseLimits
                 },
-                pool,
+                Pool,
                 cancellationToken).ConfigureAwait(false);
             if(!parsed.IsValid || parsed.EvidenceRecord is not XmlEvidenceRecord evidenceRecord)
             {
@@ -1046,9 +1046,9 @@ public static class AsicContainerValidation
                     Document = file.Entry.Content.AsReadOnlyMemory(),
                     DataObjects = dataObjects,
                     Canonicalize = canonicalize,
-                    RequireDataObjectGroupExclusivity = context.RequireXmlEvidenceRecordGroupExclusivity
+                    RequireDataObjectGroupExclusivity = Context.RequireXmlEvidenceRecordGroupExclusivity
                 },
-                pool,
+                Pool,
                 cancellationToken).ConfigureAwait(false);
 
             bool verified = verification.Status == XmlEvidenceRecordVerificationStatus.Verified;
@@ -1088,13 +1088,13 @@ public static class AsicContainerValidation
         /// </remarks>
         public async ValueTask ValidateTimeAssertionsAsync(CancellationToken cancellationToken)
         {
-            for(int i = 0; i < facts.TimeAssertions.Count; ++i)
+            for(int i = 0; i < Facts.TimeAssertions.Count; ++i)
             {
-                AsicZipEntry token = facts.TimeAssertions[i];
+                AsicZipEntry token = Facts.TimeAssertions[i];
                 AsicZipEntry? protectedEntry = ResolveProtectedEntry(token.Name);
                 if(protectedEntry is null)
                 {
-                    timeAssertions.Add(new AsicTimeAssertionValidation
+                    TimeAssertions.Add(new AsicTimeAssertionValidation
                     {
                         EntryName = token.Name,
                         Status = AsicContainerValidationStatus.TimeAssertionNotValid,
@@ -1105,10 +1105,10 @@ public static class AsicContainerValidation
                 }
 
                 using PkiCertificateMemory tokenCarrier = CopyToken(token.Content.AsReadOnlySpan());
-                using TimestampTokenInfo info = await TimestampTokenInfo.ReadFromTokenAsync(tokenCarrier, pool, cancellationToken).ConfigureAwait(false);
+                using TimestampTokenInfo info = await TimestampTokenInfo.ReadFromTokenAsync(tokenCarrier, Pool, cancellationToken).ConfigureAwait(false);
                 if(!info.IsRead || info.MessageImprint is not DigestValue imprint)
                 {
-                    timeAssertions.Add(new AsicTimeAssertionValidation
+                    TimeAssertions.Add(new AsicTimeAssertionValidation
                     {
                         EntryName = token.Name,
                         ProtectedEntryName = protectedEntry.Name,
@@ -1124,14 +1124,14 @@ public static class AsicContainerValidation
                 if(imprintAlgorithm is PkiDigestAlgorithm algorithm)
                 {
                     using DigestValue computed = await CryptographicKeyEvents.ComputeDigestAsync(
-                        protectedEntry.Content.AsReadOnlyMemory(), algorithm.OutputByteLength, algorithm.DigestTag, pool,
+                        protectedEntry.Content.AsReadOnlyMemory(), algorithm.OutputByteLength, algorithm.DigestTag, Pool,
                         cancellationToken: cancellationToken).ConfigureAwait(false);
                     binds = computed.AsReadOnlySpan().SequenceEqual(imprint.AsReadOnlySpan());
                 }
 
                 if(!binds)
                 {
-                    timeAssertions.Add(new AsicTimeAssertionValidation
+                    TimeAssertions.Add(new AsicTimeAssertionValidation
                     {
                         EntryName = token.Name,
                         ProtectedEntryName = protectedEntry.Name,
@@ -1150,9 +1150,9 @@ public static class AsicContainerValidation
                 //ValidateSignaturesAsync gives a CAdES object under the same condition, and what this type's own
                 //documentation promises — rather than as valid, because a Valid here would enter the token's own
                 //genTime into the protected-objects report as an instant nothing authenticated.
-                if(context.SignatureInputs is not SignatureValidationInputs inputs || context.SignatureSeams is not SignatureValidationSeams seams)
+                if(Context.SignatureInputs is not SignatureValidationInputs inputs || Context.SignatureSeams is not SignatureValidationSeams seams)
                 {
-                    timeAssertions.Add(new AsicTimeAssertionValidation
+                    TimeAssertions.Add(new AsicTimeAssertionValidation
                     {
                         EntryName = token.Name,
                         ProtectedEntryName = protectedEntry.Name,
@@ -1165,12 +1165,12 @@ public static class AsicContainerValidation
                 }
 
                 var resources = new SignatureValidationResources();
-                owned.Add(resources);
+                Owned.Add(resources);
                 TimestampValidationResult tokenValidation = await TimestampValidation.ValidateAsync(
-                    tokenCarrier, inputs, CAdESSeams(seams), context.CurrentTime, resources, pool, cancellationToken).ConfigureAwait(false);
+                    tokenCarrier, inputs, CAdESSeams(seams), Context.CurrentTime, resources, Pool, cancellationToken).ConfigureAwait(false);
 
                 bool tokenValid = tokenValidation.Conclusion.Indication == BuildingBlockIndication.Passed;
-                timeAssertions.Add(new AsicTimeAssertionValidation
+                TimeAssertions.Add(new AsicTimeAssertionValidation
                 {
                     EntryName = token.Name,
                     ProtectedEntryName = protectedEntry.Name,
@@ -1193,9 +1193,9 @@ public static class AsicContainerValidation
         /// <param name="cancellationToken">A cancellation token.</param>
         public async ValueTask ValidateSignaturesAsync(CancellationToken cancellationToken)
         {
-            for(int i = 0; i < facts.Signatures.Count; ++i)
+            for(int i = 0; i < Facts.Signatures.Count; ++i)
             {
-                AsicZipEntry signature = facts.Signatures[i];
+                AsicZipEntry signature = Facts.Signatures[i];
                 AsicZipEntry? detachedContent = ResolveProtectedEntry(signature.Name);
                 if(detachedContent is null)
                 {
@@ -1209,7 +1209,7 @@ public static class AsicContainerValidation
                     continue;
                 }
 
-                if(context.SignatureInputs is not SignatureValidationInputs inputs || context.SignatureSeams is not SignatureValidationSeams seams)
+                if(Context.SignatureInputs is not SignatureValidationInputs inputs || Context.SignatureSeams is not SignatureValidationSeams seams)
                 {
                     AddSignatureValidation(new AsicSignatureValidation
                     {
@@ -1222,10 +1222,10 @@ public static class AsicContainerValidation
                     continue;
                 }
 
-                CmsSignedData signedData = CmsSignedData.FromBytes(signature.Content.AsReadOnlySpan(), pool);
-                owned.Add(signedData);
-                SignedContentMemory content = SignedContentMemory.FromBytes(detachedContent.Content.AsReadOnlySpan(), pool);
-                owned.Add(content);
+                CmsSignedData signedData = CmsSignedData.FromBytes(signature.Content.AsReadOnlySpan(), Pool);
+                Owned.Add(signedData);
+                SignedContentMemory content = SignedContentMemory.FromBytes(detachedContent.Content.AsReadOnlySpan(), Pool);
+                Owned.Add(content);
 
                 SignatureValidationOutcome outcome = await SignatureValidation.ValidateAsync(
                     inputs with
@@ -1235,10 +1235,10 @@ public static class AsicContainerValidation
                         EvidenceRecords = EvidenceRecordInputsFor(signature.Name)
                     },
                     CAdESSeams(seams),
-                    context.ProcessSelection,
-                    context.Capabilities,
-                    context.CurrentTime,
-                    pool,
+                    Context.ProcessSelection,
+                    Context.Capabilities,
+                    Context.CurrentTime,
+                    Pool,
                     cancellationToken).ConfigureAwait(false);
 
                 bool passed = outcome.Conclusion.Indication == SignatureValidationIndication.TotalPassed;
@@ -1287,8 +1287,8 @@ public static class AsicContainerValidation
         /// <param name="validation">The conclusion. Ownership transfers to the run.</param>
         private void AddSignatureValidation(AsicSignatureValidation validation)
         {
-            signatures.Add(validation);
-            owned.Add(validation);
+            Signatures.Add(validation);
+            Owned.Add(validation);
         }
 
 
@@ -1298,7 +1298,7 @@ public static class AsicContainerValidation
         /// </summary>
         public void WalkArchiveManifestChain()
         {
-            if(facts.FixedArchiveManifest is not AsicZipEntry newest)
+            if(Facts.FixedArchiveManifest is not AsicZipEntry newest)
             {
                 return;
             }
@@ -1307,9 +1307,9 @@ public static class AsicContainerValidation
             string? current = newest.Name;
             while(current is not null && visited.Add(current))
             {
-                if(!parsedManifests.TryGetValue(current, out AsicManifest? model))
+                if(!ParsedManifests.TryGetValue(current, out AsicManifest? model))
                 {
-                    chain.Add(new AsicArchiveManifestChainLink(current, TimestampEntryName: null, PreviousEntryName: null));
+                    Chain.Add(new AsicArchiveManifestChainLink(current, TimestampEntryName: null, PreviousEntryName: null));
 
                     break;
                 }
@@ -1335,7 +1335,7 @@ public static class AsicContainerValidation
                     break;
                 }
 
-                chain.Add(new AsicArchiveManifestChainLink(current, tokenEntryName, previous));
+                Chain.Add(new AsicArchiveManifestChainLink(current, tokenEntryName, previous));
                 current = previous;
             }
         }
@@ -1347,9 +1347,9 @@ public static class AsicContainerValidation
         /// </summary>
         public void StateProtectedObjects()
         {
-            for(int i = 0; i < manifests.Count; ++i)
+            for(int i = 0; i < Manifests.Count; ++i)
             {
-                AsicManifestValidation manifest = manifests[i];
+                AsicManifestValidation manifest = Manifests[i];
                 if(manifest.Status != AsicContainerValidationStatus.Valid || manifest.ProtectiveObjectEntryName is not string protectiveObject)
                 {
                     continue;
@@ -1370,7 +1370,7 @@ public static class AsicContainerValidation
                         continue;
                     }
 
-                    protectedObjects.Add(new AsicProtectedObject
+                    ProtectedObjects.Add(new AsicProtectedObject
                     {
                         EntryName = entryName,
                         ProtectedBy = kind,
@@ -1386,7 +1386,7 @@ public static class AsicContainerValidation
                 //guarantee the record does not make.
                 if(kind != AsicProtectionKind.EvidenceRecord)
                 {
-                    protectedObjects.Add(new AsicProtectedObject
+                    ProtectedObjects.Add(new AsicProtectedObject
                     {
                         EntryName = manifest.EntryName,
                         ProtectedBy = kind,
@@ -1398,49 +1398,49 @@ public static class AsicContainerValidation
 
             //An ASiC-S container carries no manifest: clause 4.3.3.2 item 4 makes the fixed names apply to the
             //single data file at the container root directly.
-            if(facts.Shape != AsicContainerShape.Simple || facts.Manifests.Count > 0 || facts.DataObjects.Count != 1)
+            if(Facts.Shape != AsicContainerShape.Simple || Facts.Manifests.Count > 0 || Facts.DataObjects.Count != 1)
             {
                 return;
             }
 
-            string dataFile = facts.DataObjects[0].Name;
-            for(int i = 0; i < signatures.Count; ++i)
+            string dataFile = Facts.DataObjects[0].Name;
+            for(int i = 0; i < Signatures.Count; ++i)
             {
-                if(signatures[i].Status == AsicContainerValidationStatus.Valid)
+                if(Signatures[i].Status == AsicContainerValidationStatus.Valid)
                 {
-                    protectedObjects.Add(new AsicProtectedObject
+                    ProtectedObjects.Add(new AsicProtectedObject
                     {
                         EntryName = dataFile,
                         ProtectedBy = AsicProtectionKind.CAdESSignature,
-                        ProtectiveObjectEntryName = signatures[i].EntryName
+                        ProtectiveObjectEntryName = Signatures[i].EntryName
                     });
                 }
             }
 
-            for(int i = 0; i < timeAssertions.Count; ++i)
+            for(int i = 0; i < TimeAssertions.Count; ++i)
             {
-                if(timeAssertions[i].Status == AsicContainerValidationStatus.Valid)
+                if(TimeAssertions[i].Status == AsicContainerValidationStatus.Valid)
                 {
-                    protectedObjects.Add(new AsicProtectedObject
+                    ProtectedObjects.Add(new AsicProtectedObject
                     {
                         EntryName = dataFile,
                         ProtectedBy = AsicProtectionKind.TimeAssertion,
-                        ProtectiveObjectEntryName = timeAssertions[i].EntryName,
-                        ProvenAt = timeAssertions[i].GenerationTime
+                        ProtectiveObjectEntryName = TimeAssertions[i].EntryName,
+                        ProvenAt = TimeAssertions[i].GenerationTime
                     });
                 }
             }
 
-            for(int i = 0; i < evidenceRecords.Count; ++i)
+            for(int i = 0; i < ContainerEvidenceRecords.Count; ++i)
             {
-                if(evidenceRecords[i].Status == AsicContainerValidationStatus.Valid)
+                if(ContainerEvidenceRecords[i].Status == AsicContainerValidationStatus.Valid)
                 {
-                    protectedObjects.Add(new AsicProtectedObject
+                    ProtectedObjects.Add(new AsicProtectedObject
                     {
                         EntryName = dataFile,
                         ProtectedBy = AsicProtectionKind.EvidenceRecord,
-                        ProtectiveObjectEntryName = evidenceRecords[i].EntryName,
-                        ProvenAt = evidenceRecords[i].InitialArchiveTime
+                        ProtectiveObjectEntryName = ContainerEvidenceRecords[i].EntryName,
+                        ProvenAt = ContainerEvidenceRecords[i].InitialArchiveTime
                     });
                 }
             }
@@ -1456,49 +1456,52 @@ public static class AsicContainerValidation
             AsicContainerValidationStatus status = AsicContainerValidationStatus.Valid;
             string? reason = null;
 
+            //A precedence ladder over clause 4.4.4.2's statuses, each severity checked in its own pass
+            //and never replaced by a lower one found later; the ladder mirrors the clause's own ordering,
+            //not a candidate for a single combined pass.
             //A digest mismatch is unconditional (clause 4.4.4.2 item d) and therefore outranks every other
             //status: it is looked for first and never replaced.
-            for(int i = 0; i < manifests.Count; ++i)
+            for(int i = 0; i < Manifests.Count; ++i)
             {
-                if(manifests[i].Status == AsicContainerValidationStatus.DigestMismatch)
+                if(Manifests[i].Status == AsicContainerValidationStatus.DigestMismatch)
                 {
-                    return Result(AsicContainerValidationStatus.DigestMismatch, manifests[i].FailureReason);
+                    return Result(AsicContainerValidationStatus.DigestMismatch, Manifests[i].FailureReason);
                 }
             }
 
-            for(int i = 0; i < manifests.Count && status == AsicContainerValidationStatus.Valid; ++i)
+            for(int i = 0; i < Manifests.Count && status == AsicContainerValidationStatus.Valid; ++i)
             {
-                if(manifests[i].Status != AsicContainerValidationStatus.Valid)
+                if(Manifests[i].Status != AsicContainerValidationStatus.Valid)
                 {
-                    status = manifests[i].Status;
-                    reason = manifests[i].FailureReason;
+                    status = Manifests[i].Status;
+                    reason = Manifests[i].FailureReason;
                 }
             }
 
-            for(int i = 0; i < evidenceRecords.Count && status == AsicContainerValidationStatus.Valid; ++i)
+            for(int i = 0; i < ContainerEvidenceRecords.Count && status == AsicContainerValidationStatus.Valid; ++i)
             {
-                if(evidenceRecords[i].Status != AsicContainerValidationStatus.Valid)
+                if(ContainerEvidenceRecords[i].Status != AsicContainerValidationStatus.Valid)
                 {
-                    status = evidenceRecords[i].Status;
-                    reason = evidenceRecords[i].FailureReason;
+                    status = ContainerEvidenceRecords[i].Status;
+                    reason = ContainerEvidenceRecords[i].FailureReason;
                 }
             }
 
-            for(int i = 0; i < timeAssertions.Count && status == AsicContainerValidationStatus.Valid; ++i)
+            for(int i = 0; i < TimeAssertions.Count && status == AsicContainerValidationStatus.Valid; ++i)
             {
-                if(timeAssertions[i].Status != AsicContainerValidationStatus.Valid)
+                if(TimeAssertions[i].Status != AsicContainerValidationStatus.Valid)
                 {
-                    status = timeAssertions[i].Status;
-                    reason = timeAssertions[i].FailureReason;
+                    status = TimeAssertions[i].Status;
+                    reason = TimeAssertions[i].FailureReason;
                 }
             }
 
-            for(int i = 0; i < signatures.Count && status == AsicContainerValidationStatus.Valid; ++i)
+            for(int i = 0; i < Signatures.Count && status == AsicContainerValidationStatus.Valid; ++i)
             {
-                if(signatures[i].Status != AsicContainerValidationStatus.Valid)
+                if(Signatures[i].Status != AsicContainerValidationStatus.Valid)
                 {
-                    status = signatures[i].Status;
-                    reason = signatures[i].FailureReason;
+                    status = Signatures[i].Status;
+                    reason = Signatures[i].FailureReason;
                 }
             }
 
@@ -1509,9 +1512,9 @@ public static class AsicContainerValidation
             }
 
             if(status == AsicContainerValidationStatus.Valid
-                && facts.Signatures.Count == 0
-                && facts.TimeAssertions.Count == 0
-                && facts.EvidenceRecords.Count == 0)
+                && Facts.Signatures.Count == 0
+                && Facts.TimeAssertions.Count == 0
+                && Facts.EvidenceRecords.Count == 0)
             {
                 status = AsicContainerValidationStatus.NoProtectiveObject;
                 reason = "The container carries no CAdES object, no time assertion and no Evidence Record, so nothing in it is protected.";
@@ -1526,17 +1529,17 @@ public static class AsicContainerValidation
         /// <param name="reason">Why, when it is not <see cref="AsicContainerValidationStatus.Valid"/>.</param>
         /// <returns>The result.</returns>
         private AsicContainerValidationResult Result(AsicContainerValidationStatus status, string? reason) =>
-            new(owned)
+            new(Owned)
             {
                 Status = status,
                 ReadStatus = AsicZipReadStatus.Read,
-                Facts = facts,
-                Manifests = manifests,
-                Signatures = signatures,
-                TimeAssertions = timeAssertions,
-                EvidenceRecords = evidenceRecords,
-                ArchiveManifestChain = chain,
-                ProtectedObjects = protectedObjects,
+                Facts = Facts,
+                Manifests = Manifests,
+                Signatures = Signatures,
+                TimeAssertions = TimeAssertions,
+                EvidenceRecords = ContainerEvidenceRecords,
+                ArchiveManifestChain = Chain,
+                ProtectedObjects = ProtectedObjects,
                 FailureReason = status == AsicContainerValidationStatus.Valid ? null : reason
             };
 
@@ -1556,7 +1559,7 @@ public static class AsicContainerValidation
         /// a disagreement between two of this library's own caps.
         /// </remarks>
         private AsicContainerUriResolution ResolveReference(string? reference) =>
-            AsicContainerUri.Resolve(reference, context.ManifestParseLimits.MaximumUriLength, context.ReadLimits.MaximumEntryNameByteLength);
+            AsicContainerUri.Resolve(reference, Context.ManifestParseLimits.MaximumUriLength, Context.ReadLimits.MaximumEntryNameByteLength);
 
 
         /// <summary>
@@ -1581,7 +1584,7 @@ public static class AsicContainerValidation
                 };
             }
 
-            AsicZipEntry? entry = facts.FindEntry(entryName);
+            AsicZipEntry? entry = Facts.FindEntry(entryName);
             if(entry is null)
             {
                 return new AsicDataObjectReferenceValidation
@@ -1594,7 +1597,7 @@ public static class AsicContainerValidation
             }
 
             using DigestValue computed = await CryptographicKeyEvents.ComputeDigestAsync(
-                entry.Content.AsReadOnlyMemory(), reference.DigestAlgorithm.OutputByteLength, reference.DigestAlgorithm.DigestTag, pool,
+                entry.Content.AsReadOnlyMemory(), reference.DigestAlgorithm.OutputByteLength, reference.DigestAlgorithm.DigestTag, Pool,
                 cancellationToken: cancellationToken).ConfigureAwait(false);
 
             return new AsicDataObjectReferenceValidation
@@ -1619,22 +1622,22 @@ public static class AsicContainerValidation
         {
             if(manifestEntryName is null)
             {
-                return facts.Shape == AsicContainerShape.Simple && facts.DataObjects.Count == 1
-                    ? [facts.DataObjects[0].Name]
+                return Facts.Shape == AsicContainerShape.Simple && Facts.DataObjects.Count == 1
+                    ? [Facts.DataObjects[0].Name]
                     : [];
             }
 
-            for(int i = 0; i < manifests.Count; ++i)
+            for(int i = 0; i < Manifests.Count; ++i)
             {
-                if(!string.Equals(manifests[i].EntryName, manifestEntryName, StringComparison.Ordinal))
+                if(!string.Equals(Manifests[i].EntryName, manifestEntryName, StringComparison.Ordinal))
                 {
                     continue;
                 }
 
-                var targets = new List<string>(manifests[i].DataObjectReferences.Count);
-                for(int referenceIndex = 0; referenceIndex < manifests[i].DataObjectReferences.Count; ++referenceIndex)
+                var targets = new List<string>(Manifests[i].DataObjectReferences.Count);
+                for(int referenceIndex = 0; referenceIndex < Manifests[i].DataObjectReferences.Count; ++referenceIndex)
                 {
-                    if(manifests[i].DataObjectReferences[referenceIndex].EntryName is string entryName)
+                    if(Manifests[i].DataObjectReferences[referenceIndex].EntryName is string entryName)
                     {
                         targets.Add(entryName);
                     }
@@ -1654,11 +1657,11 @@ public static class AsicContainerValidation
         /// <returns>The manifest's entry name, or <see langword="null"/> when none names it.</returns>
         private string? FindManifestNaming(string entryName)
         {
-            for(int i = 0; i < manifests.Count; ++i)
+            for(int i = 0; i < Manifests.Count; ++i)
             {
-                if(string.Equals(manifests[i].ProtectiveObjectEntryName, entryName, StringComparison.Ordinal))
+                if(string.Equals(Manifests[i].ProtectiveObjectEntryName, entryName, StringComparison.Ordinal))
                 {
-                    return manifests[i].EntryName;
+                    return Manifests[i].EntryName;
                 }
             }
 
@@ -1676,11 +1679,11 @@ public static class AsicContainerValidation
         {
             if(FindManifestNaming(protectiveObjectEntryName) is string manifestEntryName)
             {
-                return facts.FindEntry(manifestEntryName);
+                return Facts.FindEntry(manifestEntryName);
             }
 
-            return facts.Shape == AsicContainerShape.Simple && facts.Manifests.Count == 0 && facts.DataObjects.Count == 1
-                ? facts.DataObjects[0]
+            return Facts.Shape == AsicContainerShape.Simple && Facts.Manifests.Count == 0 && Facts.DataObjects.Count == 1
+                ? Facts.DataObjects[0]
                 : null;
         }
 
@@ -1694,13 +1697,13 @@ public static class AsicContainerValidation
         private List<EvidenceRecordValidationInput> EvidenceRecordInputsFor(string signatureEntryName)
         {
             List<EvidenceRecordValidationInput>? inputs = null;
-            for(int i = 0; i < evidenceRecords.Count; ++i)
+            for(int i = 0; i < ContainerEvidenceRecords.Count; ++i)
             {
-                AsicEvidenceRecordValidation record = evidenceRecords[i];
+                AsicEvidenceRecordValidation record = ContainerEvidenceRecords[i];
                 if(record.Status != AsicContainerValidationStatus.Valid
-                    || !readEvidenceRecords.TryGetValue(record.EntryName, out EvidenceRecord? carrier)
+                    || !ReadEvidenceRecords.TryGetValue(record.EntryName, out EvidenceRecord? carrier)
                     || !Protects(record, signatureEntryName)
-                    || facts.FindEntry(signatureEntryName) is not AsicZipEntry signature)
+                    || Facts.FindEntry(signatureEntryName) is not AsicZipEntry signature)
                 {
                     continue;
                 }
@@ -1749,8 +1752,8 @@ public static class AsicContainerValidation
         {
             try
             {
-                EvidenceRecord record = EvidenceRecord.Read(entry.Content.AsReadOnlySpan(), pool);
-                owned.Add(record);
+                EvidenceRecord record = EvidenceRecord.Read(entry.Content.AsReadOnlySpan(), Pool);
+                Owned.Add(record);
 
                 return record;
             }
@@ -1786,11 +1789,11 @@ public static class AsicContainerValidation
         {
             if(kind == AsicProtectionKind.CAdESSignature)
             {
-                for(int i = 0; i < signatures.Count; ++i)
+                for(int i = 0; i < Signatures.Count; ++i)
                 {
-                    if(string.Equals(signatures[i].EntryName, protectiveObjectEntryName, StringComparison.Ordinal))
+                    if(string.Equals(Signatures[i].EntryName, protectiveObjectEntryName, StringComparison.Ordinal))
                     {
-                        return signatures[i].Status == AsicContainerValidationStatus.Valid;
+                        return Signatures[i].Status == AsicContainerValidationStatus.Valid;
                     }
                 }
 
@@ -1799,22 +1802,22 @@ public static class AsicContainerValidation
 
             if(kind == AsicProtectionKind.EvidenceRecord)
             {
-                for(int i = 0; i < evidenceRecords.Count; ++i)
+                for(int i = 0; i < ContainerEvidenceRecords.Count; ++i)
                 {
-                    if(string.Equals(evidenceRecords[i].EntryName, protectiveObjectEntryName, StringComparison.Ordinal))
+                    if(string.Equals(ContainerEvidenceRecords[i].EntryName, protectiveObjectEntryName, StringComparison.Ordinal))
                     {
-                        return evidenceRecords[i].Status == AsicContainerValidationStatus.Valid;
+                        return ContainerEvidenceRecords[i].Status == AsicContainerValidationStatus.Valid;
                     }
                 }
 
                 return false;
             }
 
-            for(int i = 0; i < timeAssertions.Count; ++i)
+            for(int i = 0; i < TimeAssertions.Count; ++i)
             {
-                if(string.Equals(timeAssertions[i].EntryName, protectiveObjectEntryName, StringComparison.Ordinal))
+                if(string.Equals(TimeAssertions[i].EntryName, protectiveObjectEntryName, StringComparison.Ordinal))
                 {
-                    return timeAssertions[i].Status == AsicContainerValidationStatus.Valid;
+                    return TimeAssertions[i].Status == AsicContainerValidationStatus.Valid;
                 }
             }
 
@@ -1832,11 +1835,11 @@ public static class AsicContainerValidation
         {
             if(kind == AsicProtectionKind.EvidenceRecord)
             {
-                for(int i = 0; i < evidenceRecords.Count; ++i)
+                for(int i = 0; i < ContainerEvidenceRecords.Count; ++i)
                 {
-                    if(string.Equals(evidenceRecords[i].EntryName, protectiveObjectEntryName, StringComparison.Ordinal))
+                    if(string.Equals(ContainerEvidenceRecords[i].EntryName, protectiveObjectEntryName, StringComparison.Ordinal))
                     {
-                        return evidenceRecords[i].InitialArchiveTime;
+                        return ContainerEvidenceRecords[i].InitialArchiveTime;
                     }
                 }
 
@@ -1850,11 +1853,11 @@ public static class AsicContainerValidation
                 return null;
             }
 
-            for(int i = 0; i < timeAssertions.Count; ++i)
+            for(int i = 0; i < TimeAssertions.Count; ++i)
             {
-                if(string.Equals(timeAssertions[i].EntryName, protectiveObjectEntryName, StringComparison.Ordinal))
+                if(string.Equals(TimeAssertions[i].EntryName, protectiveObjectEntryName, StringComparison.Ordinal))
                 {
-                    return timeAssertions[i].GenerationTime;
+                    return TimeAssertions[i].GenerationTime;
                 }
             }
 
@@ -1871,9 +1874,9 @@ public static class AsicContainerValidation
         private bool ChainIsBroken()
         {
             int archiveManifests = 0;
-            for(int i = 0; i < facts.Manifests.Count; ++i)
+            for(int i = 0; i < Facts.Manifests.Count; ++i)
             {
-                archiveManifests += facts.Manifests[i].Role == AsicManifestRole.Archive ? 1 : 0;
+                archiveManifests += Facts.Manifests[i].Role == AsicManifestRole.Archive ? 1 : 0;
             }
 
             if(archiveManifests == 0)
@@ -1881,14 +1884,14 @@ public static class AsicContainerValidation
                 return false;
             }
 
-            if(facts.FixedArchiveManifest is null || chain.Count != archiveManifests)
+            if(Facts.FixedArchiveManifest is null || Chain.Count != archiveManifests)
             {
                 return true;
             }
 
-            for(int i = 0; i < chain.Count; ++i)
+            for(int i = 0; i < Chain.Count; ++i)
             {
-                AsicArchiveManifestChainLink link = chain[i];
+                AsicArchiveManifestChainLink link = Chain[i];
                 if(link.TimestampEntryName is null)
                 {
                     return true;
@@ -1912,7 +1915,7 @@ public static class AsicContainerValidation
         /// <returns>The carrier, which the caller disposes.</returns>
         private PkiCertificateMemory CopyToken(ReadOnlySpan<byte> token)
         {
-            IMemoryOwner<byte> owner = pool.Rent(Math.Max(token.Length, 1));
+            IMemoryOwner<byte> owner = Pool.Rent(Math.Max(token.Length, 1));
             try
             {
                 token.CopyTo(owner.Memory.Span);

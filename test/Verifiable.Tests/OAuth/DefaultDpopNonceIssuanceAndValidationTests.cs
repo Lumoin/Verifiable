@@ -18,9 +18,9 @@ internal sealed class DefaultDpopNonceIssuanceAndValidationTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly DateTimeOffset NowInstant = TestClock.CanonicalEpoch.AddDays(-18);
-    private static readonly TenantId TestTenant = new("test-tenant");
-    private static readonly Uri DefaultAudience = new("https://issuer.test/abcd1234");
+    private static DateTimeOffset NowInstant { get; } = TestClock.CanonicalEpoch.AddDays(-18);
+    private static TenantId TestTenant { get; } = new("test-tenant");
+    private static Uri DefaultAudience { get; } = new("https://issuer.test/abcd1234");
 
     private FakeTimeProvider TimeProvider { get; } = new(NowInstant);
 
@@ -200,7 +200,7 @@ internal sealed class DefaultDpopNonceIssuanceAndValidationTests
         return new SymmetricKey(
             material,
             Guid.NewGuid().ToString("N"),
-            MicrosoftHmacFunctions.ComputeHmacAsync,
-            MicrosoftHmacFunctions.VerifyHmacAsync);
+            MicrosoftHmacFunctionsAdapter.ComputeHmacAsync,
+            MicrosoftHmacFunctionsAdapter.VerifyHmacAsync);
     }
 }

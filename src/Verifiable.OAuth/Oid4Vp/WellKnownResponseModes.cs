@@ -24,7 +24,7 @@ public static class WellKnownResponseModes
     /// Response parameters form-encoded directly to the <c>response_uri</c> endpoint.
     /// Per OID4VP 1.0 §8.2.
     /// </summary>
-    public static readonly string DirectPost = Utf8Constants.ToInternedString(DirectPostUtf8);
+    public static string DirectPost { get; } = Utf8Constants.ToInternedString(DirectPostUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="DirectPostJwt"/>.</summary>
     public static ReadOnlySpan<byte> DirectPostJwtUtf8 => "direct_post.jwt"u8;
@@ -35,7 +35,7 @@ public static class WellKnownResponseModes
     /// the <c>response_uri</c> endpoint. Required by HAIP 1.0 for the
     /// cross-device encrypted response flow. Per OID4VP 1.0 §8.3.1.
     /// </summary>
-    public static readonly string DirectPostJwt = Utf8Constants.ToInternedString(DirectPostJwtUtf8);
+    public static string DirectPostJwt { get; } = Utf8Constants.ToInternedString(DirectPostJwtUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="DcApi"/>.</summary>
     public static ReadOnlySpan<byte> DcApiUtf8 => "dc_api"u8;
@@ -44,7 +44,7 @@ public static class WellKnownResponseModes
     /// The <c>dc_api</c> response mode. Used with the W3C Digital Credentials API.
     /// Per OID4VP 1.0 Appendix A.
     /// </summary>
-    public static readonly string DcApi = Utf8Constants.ToInternedString(DcApiUtf8);
+    public static string DcApi { get; } = Utf8Constants.ToInternedString(DcApiUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="DcApiJwt"/>.</summary>
     public static ReadOnlySpan<byte> DcApiJwtUtf8 => "dc_api.jwt"u8;
@@ -53,7 +53,7 @@ public static class WellKnownResponseModes
     /// The <c>dc_api.jwt</c> response mode. Encrypted variant of <see cref="DcApi"/>.
     /// Per OID4VP 1.0 Appendix A.
     /// </summary>
-    public static readonly string DcApiJwt = Utf8Constants.ToInternedString(DcApiJwtUtf8);
+    public static string DcApiJwt { get; } = Utf8Constants.ToInternedString(DcApiJwtUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Fragment"/>.</summary>
     public static ReadOnlySpan<byte> FragmentUtf8 => "fragment"u8;
@@ -63,7 +63,7 @@ public static class WellKnownResponseModes
     /// specified and the <c>redirect_uri</c> is used. NOT RECOMMENDED by EWC RFC002
     /// for cross-device flows. Per OAuth 2.0 Multiple Response Types.
     /// </summary>
-    public static readonly string Fragment = Utf8Constants.ToInternedString(FragmentUtf8);
+    public static string Fragment { get; } = Utf8Constants.ToInternedString(FragmentUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Query"/>.</summary>
     public static ReadOnlySpan<byte> QueryUtf8 => "query"u8;
@@ -77,7 +77,7 @@ public static class WellKnownResponseModes
     /// <see cref="DirectPostJwt"/> instead because cross-device has no
     /// redirect URI to navigate the user-agent to.
     /// </summary>
-    public static readonly string Query = Utf8Constants.ToInternedString(QueryUtf8);
+    public static string Query { get; } = Utf8Constants.ToInternedString(QueryUtf8);
 
 
     /// <summary>Returns <see langword="true"/> when <paramref name="value"/> is

@@ -28,8 +28,8 @@ internal sealed class AuthorizeStateEchoTests
 
     private const string ClientId = "https://client.example.com";
     private const string SubjectId = "subject-state-1";
-    private static readonly Uri ClientBaseUri = new("https://client.example.com");
-    private static readonly Uri RedirectUri = new("https://client.example.com/callback");
+    private static Uri ClientBaseUri { get; } = new("https://client.example.com");
+    private static Uri RedirectUri { get; } = new("https://client.example.com/callback");
 
     /// <summary>A state value with characters that MUST be percent-encoded on the wire.</summary>
     private const string StateWithSpecialChars = "csrf token/value&more=raw";

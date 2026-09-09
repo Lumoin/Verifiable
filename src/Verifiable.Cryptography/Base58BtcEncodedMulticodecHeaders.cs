@@ -196,7 +196,7 @@ namespace Verifiable.Cryptography
         /// <returns>
         /// <see langword="true"/> if the material starts with the specified header; otherwise, <see langword="false"/>.
         /// </returns>
-        public static bool MatchesHeader(ReadOnlySpan<char> base58Material, ReadOnlySpan<char> header) => base58Material.StartsWith(header, StringComparison.InvariantCulture);
+        public static bool MatchesHeader(ReadOnlySpan<char> base58Material, ReadOnlySpan<char> header) => base58Material.StartsWith(header, StringComparison.Ordinal);
 
 
         /// <summary>

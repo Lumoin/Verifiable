@@ -49,8 +49,26 @@ namespace Verifiable.OAuth.Oid4Vp.Server;
 ///   </item>
 ///   <item>
 ///     <description>
-///       Any non-terminal state + <see cref="Fail"/> -> <see cref="VerifierFlowFailedState"/>.
-///       Terminal failure.
+///       Any non-terminal state other than <see cref="VerifierWalletErrorReceivedState"/> +
+///       <see cref="Fail"/> -> <see cref="VerifierFlowFailedState"/>. Terminal failure. A recorded
+///       Wallet error response is excluded so a later <see cref="Fail"/> cannot overwrite it.
+///     </description>
+///   </item>
+///   <item>
+///     <description>
+///       Any non-terminal state other than <see cref="VerifierWalletErrorReceivedState"/> +
+///       <see cref="VerifierPresentationRefused"/> -> <see cref="VerifierFlowFailedState"/> carrying
+///       the typed refusal, so the <c>direct_post</c> endpoint answers RFC 6749 §4.1.2.1 (HTTP 400).
+///       Terminal failure. A recorded Wallet error response is excluded for the same reason.
+///     </description>
+///   </item>
+///   <item>
+///     <description>
+///       <see cref="VerifierJarServedState"/> or <see cref="VerifierParReceivedState"/> +
+///       <see cref="WalletErrorResponsePosted"/> -> <see cref="VerifierWalletErrorReceivedState"/>. The
+///       Wallet POSTed an Authorization Error Response (OID4VP 1.0 §8.2) instead of a
+///       response/vp_token; the <c>direct_post</c> endpoint answers HTTP 200 per §8.2's own MUST.
+///       Terminal success.
 ///     </description>
 ///   </item>
 /// </list>
@@ -68,8 +86,10 @@ public static class Oid4VpVerifierFlowTransitions
             TransitionResult<FlowState, Oid4VpVerifierStackSymbol>? result =
                 (state, input) switch
                 {
-                    //Any non-terminal state + Fail -> VerifierFlowFailed.
-                    (not (PresentationVerifiedState or VerifierFlowFailedState), Fail fail) =>
+                    //Any non-terminal state + Fail -> VerifierFlowFailed. A Wallet error response
+                    //already recorded on VerifierWalletErrorReceivedState is terminal too — it is
+                    //excluded here so a later Fail cannot overwrite the recorded §8.2 error.
+                    (not (PresentationVerifiedState or VerifierFlowFailedState or VerifierWalletErrorReceivedState), Fail fail) =>
                         Transition(
                             new VerifierFlowFailedState
                             {
@@ -83,6 +103,26 @@ public static class Oid4VpVerifierFlowTransitions
                             },
                             StackAction<Oid4VpVerifierStackSymbol>.None,
                             "Fail"),
+
+                    //Any non-terminal state + VerifierPresentationRefused -> VerifierFlowFailed carrying the
+                    //typed refusal, so the direct_post endpoint answers RFC 6749 §4.1.2.1 (HTTP 400) not 500.
+                    //Excludes VerifierWalletErrorReceivedState for the same reason as the Fail arm above.
+                    (not (PresentationVerifiedState or VerifierFlowFailedState or VerifierWalletErrorReceivedState), VerifierPresentationRefused refused) =>
+                        Transition(
+                            new VerifierFlowFailedState
+                            {
+                                FlowId = state.FlowId,
+                                ExpectedIssuer = state.ExpectedIssuer,
+                                EnteredAt = refused.FailedAt,
+                                ExpiresAt = state.ExpiresAt,
+                                Kind = FlowKind.Oid4VpVerifierServer,
+                                Reason = refused.LogReason,
+                                Refusal = refused.Refusal,
+                                CredentialStatusRefusal = refused.CredentialStatusRefusal,
+                                FailedAt = refused.FailedAt
+                            },
+                            StackAction<Oid4VpVerifierStackSymbol>.None,
+                            "VerifierPresentationRefused"),
 
                     //Sentinel + ServerParReceived -> VerifierParReceived.
                     //The PAR endpoint validated the request and sent request_uri to the
@@ -269,7 +309,7 @@ public static class Oid4VpVerifierFlowTransitions
                                 EnteredAt = verified.VerifiedAt,
                                 ExpiresAt = received.ExpiresAt,
                                 Kind = FlowKind.Oid4VpVerifierServer,
-                                Claims = verified.Claims,
+                                Credentials = verified.Credentials,
                                 CredentialStatuses = verified.CredentialStatuses,
                                 VerifiedAt = verified.VerifiedAt,
                                 RedirectUri = verified.RedirectUri
@@ -289,7 +329,7 @@ public static class Oid4VpVerifierFlowTransitions
                                 EnteredAt = verified.VerifiedAt,
                                 ExpiresAt = unencryptedReceived.ExpiresAt,
                                 Kind = FlowKind.Oid4VpVerifierServer,
-                                Claims = verified.Claims,
+                                Credentials = verified.Credentials,
                                 CredentialStatuses = verified.CredentialStatuses,
                                 VerifiedAt = verified.VerifiedAt,
                                 RedirectUri = verified.RedirectUri
@@ -297,9 +337,48 @@ public static class Oid4VpVerifierFlowTransitions
                             StackAction<Oid4VpVerifierStackSymbol>.None,
                             "PresentationVerified"),
 
+                    //VerifierJarServed + WalletErrorResponsePosted -> VerifierWalletErrorReceived.
+                    //The Wallet POSTed an Authorization Error Response (OID4VP 1.0 §8.2) instead of a
+                    //response/vp_token; the endpoint records it and answers HTTP 200 per §8.2's own MUST.
+                    (VerifierJarServedState served, WalletErrorResponsePosted walletError) =>
+                        Transition(
+                            new VerifierWalletErrorReceivedState
+                            {
+                                FlowId = served.FlowId,
+                                ExpectedIssuer = served.ExpectedIssuer,
+                                EnteredAt = walletError.ReceivedAt,
+                                ExpiresAt = served.ExpiresAt,
+                                Kind = FlowKind.Oid4VpVerifierServer,
+                                Error = walletError.Error,
+                                ErrorDescription = walletError.ErrorDescription,
+                                ReceivedAt = walletError.ReceivedAt,
+                                RedirectUri = walletError.RedirectUri
+                            },
+                            StackAction<Oid4VpVerifierStackSymbol>.None,
+                            "VerifierWalletErrorReceived"),
+
+                    //Same as above, the OID4VP 1.0 §5.9.3 redirect_uri prefix (no-JAR) path.
+                    (VerifierParReceivedState received, WalletErrorResponsePosted walletError) =>
+                        Transition(
+                            new VerifierWalletErrorReceivedState
+                            {
+                                FlowId = received.FlowId,
+                                ExpectedIssuer = received.ExpectedIssuer,
+                                EnteredAt = walletError.ReceivedAt,
+                                ExpiresAt = received.ExpiresAt,
+                                Kind = FlowKind.Oid4VpVerifierServer,
+                                Error = walletError.Error,
+                                ErrorDescription = walletError.ErrorDescription,
+                                ReceivedAt = walletError.ReceivedAt,
+                                RedirectUri = walletError.RedirectUri
+                            },
+                            StackAction<Oid4VpVerifierStackSymbol>.None,
+                            "VerifierWalletErrorReceived"),
+
                     //Terminal states — PDA halts.
                     (PresentationVerifiedState, _) => null,
                     (VerifierFlowFailedState, _) => null,
+                    (VerifierWalletErrorReceivedState, _) => null,
 
                     _ => null
                 };

@@ -19,7 +19,7 @@ internal sealed class DidResolverIntegrationTests
 
     //These resolvers do no network I/O at this layer, so a default context suffices;
     //it exists only to satisfy the SSRF-policy-carrying parameter.
-    private static readonly ExchangeContext EmptyContext = new();
+    private static ExchangeContext EmptyContext { get; } = new();
 
     public TestContext TestContext { get; set; } = null!;
 

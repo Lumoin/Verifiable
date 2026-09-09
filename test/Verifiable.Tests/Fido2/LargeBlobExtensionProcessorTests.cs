@@ -5,6 +5,7 @@ using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
 
 using static Verifiable.Tests.Fido2.Fido2TestVectors;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Fido2;
 
@@ -322,7 +323,7 @@ internal sealed class LargeBlobExtensionProcessorTests
     /// <summary>Runs <see cref="Fido2ValidationProfiles.RegistrationRules"/> through a real <see cref="ClaimIssuer{TInput}"/>.</summary>
     private Task<ClaimIssueResult> IssueRegistrationClaimsAsync(RegistrationCeremonyInput input)
     {
-        var issuer = new ClaimIssuer<RegistrationCeremonyInput>("largeblob-extension-processor-test", Fido2ValidationProfiles.RegistrationRules());
+        var issuer = new ClaimIssuer<RegistrationCeremonyInput>("largeblob-extension-processor-test", Fido2ValidationProfiles.RegistrationRules(), new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         return issuer.GenerateClaimsAsync(input, "largeblob-extension-processor-test-correlation", TestContext.CancellationToken).AsTask();
     }
@@ -352,7 +353,7 @@ internal sealed class LargeBlobExtensionProcessorTests
     /// <summary>Runs <see cref="Fido2ValidationProfiles.AssertionRules"/> through a real <see cref="ClaimIssuer{TInput}"/>.</summary>
     private Task<ClaimIssueResult> IssueAssertionClaimsAsync(AssertionCeremonyInput input)
     {
-        var issuer = new ClaimIssuer<AssertionCeremonyInput>("largeblob-extension-processor-test", Fido2ValidationProfiles.AssertionRules());
+        var issuer = new ClaimIssuer<AssertionCeremonyInput>("largeblob-extension-processor-test", Fido2ValidationProfiles.AssertionRules(), new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         return issuer.GenerateClaimsAsync(input, "largeblob-extension-processor-test-correlation", TestContext.CancellationToken).AsTask();
     }

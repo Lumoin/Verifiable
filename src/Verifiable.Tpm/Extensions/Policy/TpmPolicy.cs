@@ -33,10 +33,13 @@ public sealed record TpmPolicy(IReadOnlyList<TpmPolicyAssertion> Assertions)
     /// </summary>
     /// <param name="policyHash">The session's policy hash algorithm.</param>
     /// <param name="destination">Receives the policyDigest; must be at least <see cref="TpmPolicyDigest.Size"/> bytes.</param>
+    /// <param name="pool">The memory pool every fold's hash-input scratch buffer is rented from.</param>
     /// <returns>The number of digest bytes written.</returns>
-    public int ComputeDigest(TpmAlgIdConstants policyHash, Span<byte> destination)
+    /// <exception cref="ArgumentNullException"><paramref name="pool"/> is <see langword="null"/>.</exception>
+    public int ComputeDigest(TpmAlgIdConstants policyHash, Span<byte> destination, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(Assertions);
+        ArgumentNullException.ThrowIfNull(pool);
 
         int size = TpmPolicyDigest.Size(policyHash);
         Span<byte> running = destination[..size];
@@ -48,15 +51,24 @@ public sealed record TpmPolicy(IReadOnlyList<TpmPolicyAssertion> Assertions)
         {
             _ = Assertions[i] switch
             {
-                CommandCodePolicyAssertion a => TpmPolicyDigest.ExtendForCommandCode(running, a.CommandCode, policyHash, running),
-                AuthValuePolicyAssertion => TpmPolicyDigest.ExtendForAuthValue(running, policyHash, running),
-                SecretPolicyAssertion a => ExtendSecret(running, a.AuthHandle, policyHash),
-                NvPolicyAssertion a => TpmPolicyDigest.ExtendForNv(running, a.OperandB.Span, a.Offset, (ushort)a.Operation, a.NvName.Span, policyHash, running),
-                CounterTimerPolicyAssertion a => TpmPolicyDigest.ExtendForCounterTimer(running, a.OperandB.Span, a.Offset, (ushort)a.Operation, policyHash, running),
-                OrPolicyAssertion a => TpmPolicyDigest.ExtendForOr(a.BranchDigests, policyHash, running),
-                PcrPolicyAssertion a => ExtendPcr(running, a, policyHash),
-                SignedPolicyAssertion a => TpmPolicyDigest.ExtendForSigned(running, a.AuthName.Span, a.PolicyRef.Span, policyHash, running),
-                AuthorizePolicyAssertion a => TpmPolicyDigest.ExtendForAuthorize(a.KeySign.Span, a.PolicyRef.Span, policyHash, running),
+                CommandCodePolicyAssertion a => TpmPolicyDigest.ExtendForCommandCode(running, a.CommandCode, policyHash, running, pool),
+                AuthValuePolicyAssertion => TpmPolicyDigest.ExtendForAuthValue(running, policyHash, running, pool),
+                SecretPolicyAssertion a => ExtendSecret(running, a.AuthHandle, policyHash, pool),
+                NvPolicyAssertion a => TpmPolicyDigest.ExtendForNv(running, a.OperandB.Span, a.Offset, (ushort)a.Operation, a.NvName.Span, policyHash, running, pool),
+                CounterTimerPolicyAssertion a => TpmPolicyDigest.ExtendForCounterTimer(running, a.OperandB.Span, a.Offset, (ushort)a.Operation, policyHash, running, pool),
+                OrPolicyAssertion a => TpmPolicyDigest.ExtendForOr(a.BranchDigests, policyHash, running, pool),
+                PcrPolicyAssertion a => ExtendPcr(running, a, policyHash, pool),
+                SignedPolicyAssertion a => TpmPolicyDigest.ExtendForSigned(running, a.AuthName.Span, a.PolicyRef.Span, policyHash, running, pool),
+                AuthorizePolicyAssertion a => TpmPolicyDigest.ExtendForAuthorize(a.KeySign.Span, a.PolicyRef.Span, policyHash, running, pool),
+                PasswordPolicyAssertion => TpmPolicyDigest.ExtendForPassword(running, policyHash, running, pool),
+                CpHashPolicyAssertion a => TpmPolicyDigest.ExtendForCpHash(running, a.CpHashA.Span, policyHash, running, pool),
+                NameHashPolicyAssertion a => TpmPolicyDigest.ExtendForNameHash(running, a.NameHash.Span, policyHash, running, pool),
+                DuplicationSelectPolicyAssertion a => TpmPolicyDigest.ExtendForDuplicationSelect(running, a.ObjectName.Span, a.NewParentName.Span, a.IsObjectIncluded, policyHash, running, pool),
+                ParametersPolicyAssertion a => TpmPolicyDigest.ExtendForParameters(running, a.ParametersHash.Span, policyHash, running, pool),
+                TemplatePolicyAssertion a => TpmPolicyDigest.ExtendForTemplate(running, a.TemplateHash.Span, policyHash, running, pool),
+                LocalityPolicyAssertion a => TpmPolicyDigest.ExtendForLocality(running, a.Locality, policyHash, running, pool),
+                NvWrittenPolicyAssertion a => TpmPolicyDigest.ExtendForNvWritten(running, a.IsWrittenSet, policyHash, running, pool),
+                AuthorizeNvPolicyAssertion a => TpmPolicyDigest.ExtendForAuthorizeNv(a.NvName.Span, policyHash, running, pool),
                 _ => throw new NotSupportedException($"Unsupported policy assertion '{Assertions[i].GetType().Name}'.")
             };
         }
@@ -65,15 +77,15 @@ public sealed record TpmPolicy(IReadOnlyList<TpmPolicyAssertion> Assertions)
 
         /// <summary>
         /// Folds a PolicySecret assertion: a permanent handle's Name is its 4-octet big-endian handle value
-        /// (TPM 2.0 Library Part 1, Section 14, Table 6), folded with an empty policyRef.
+        /// (TPM 2.0 Library Part 1, clause 13, Table 9), folded with an empty policyRef.
         /// </summary>
-        static int ExtendSecret(Span<byte> running, uint authHandle, TpmAlgIdConstants policyHash)
+        static int ExtendSecret(Span<byte> running, uint authHandle, TpmAlgIdConstants policyHash, BaseMemoryPool pool)
         {
             //A permanent handle value is public, non-secret data, so the tiny fixed-size stack buffer is safe.
             Span<byte> permanentName = stackalloc byte[sizeof(uint)];
             BinaryPrimitives.WriteUInt32BigEndian(permanentName, authHandle);
 
-            return TpmPolicyDigest.ExtendForSecret(running, permanentName, ReadOnlySpan<byte>.Empty, policyHash, running);
+            return TpmPolicyDigest.ExtendForSecret(running, permanentName, ReadOnlySpan<byte>.Empty, policyHash, running, pool);
         }
     }
 
@@ -102,6 +114,15 @@ public sealed record TpmPolicy(IReadOnlyList<TpmPolicyAssertion> Assertions)
                 PcrPolicyAssertion a => await StepPcrAsync(device, policySession, a, cancellationToken).ConfigureAwait(false),
                 SignedPolicyAssertion a => await StepSignedAsync(device, policySession, a, cancellationToken).ConfigureAwait(false),
                 AuthorizePolicyAssertion a => await StepAuthorizeAsync(device, policySession, a, cancellationToken).ConfigureAwait(false),
+                PasswordPolicyAssertion => await StepPasswordAsync(device, policySession, cancellationToken).ConfigureAwait(false),
+                CpHashPolicyAssertion a => await StepCpHashAsync(device, policySession, a, cancellationToken).ConfigureAwait(false),
+                NameHashPolicyAssertion a => await StepNameHashAsync(device, policySession, a, cancellationToken).ConfigureAwait(false),
+                DuplicationSelectPolicyAssertion a => await StepDuplicationSelectAsync(device, policySession, a, cancellationToken).ConfigureAwait(false),
+                ParametersPolicyAssertion a => await StepParametersAsync(device, policySession, a, cancellationToken).ConfigureAwait(false),
+                TemplatePolicyAssertion a => await StepTemplateAsync(device, policySession, a, cancellationToken).ConfigureAwait(false),
+                LocalityPolicyAssertion a => await StepLocalityAsync(device, policySession, a, cancellationToken).ConfigureAwait(false),
+                NvWrittenPolicyAssertion a => await StepNvWrittenAsync(device, policySession, a, cancellationToken).ConfigureAwait(false),
+                AuthorizeNvPolicyAssertion a => await StepAuthorizeNvAsync(device, policySession, a, cancellationToken).ConfigureAwait(false),
                 _ => throw new NotSupportedException($"Unsupported policy assertion '{Assertions[i].GetType().Name}'.")
             };
 
@@ -183,10 +204,10 @@ public sealed record TpmPolicy(IReadOnlyList<TpmPolicyAssertion> Assertions)
         /// </summary>
         static async ValueTask<TpmResult<uint>?> StepSignedAsync(TpmDevice device, uint policySession, SignedPolicyAssertion assertion, CancellationToken cancellationToken)
         {
-            BaseMemoryPool pool = BaseMemoryPool.Shared;
+            BaseMemoryPool pool = device.Pool;
             int aHashLength = TpmPolicyDigest.Size(assertion.SchemeHashAlg);
             IMemoryOwner<byte> aHashOwner = pool.Rent(aHashLength);
-            _ = BuildPolicySignedAHash(assertion.Expiration, assertion.PolicyRef.Span, assertion.SchemeHashAlg, aHashOwner.Memory.Span[..aHashLength]);
+            _ = BuildPolicySignedAHash(assertion.Expiration, assertion.PolicyRef.Span, assertion.SchemeHashAlg, aHashOwner.Memory.Span[..aHashLength], pool);
 
             //The carrier takes ownership of the pooled buffer; disposing it releases (and zeroes) the rental.
             using var aHash = new DigestValue(aHashOwner, DigestTagFor(assertion.SchemeHashAlg));
@@ -214,6 +235,79 @@ public sealed record TpmPolicy(IReadOnlyList<TpmPolicyAssertion> Assertions)
             return result.IsSuccess ? null : ToFailure(result);
         }
 
+        /// <summary>Replays a TPM2_PolicyPassword assertion; <see langword="null"/> on success.</summary>
+        static async ValueTask<TpmResult<uint>?> StepPasswordAsync(TpmDevice device, uint policySession, CancellationToken cancellationToken)
+        {
+            TpmResult<PolicyPasswordResponse> result = await device.PolicyPasswordAsync(policySession, cancellationToken).ConfigureAwait(false);
+
+            return result.IsSuccess ? null : ToFailure(result);
+        }
+
+        /// <summary>Replays a TPM2_PolicyCpHash assertion; <see langword="null"/> on success.</summary>
+        static async ValueTask<TpmResult<uint>?> StepCpHashAsync(TpmDevice device, uint policySession, CpHashPolicyAssertion assertion, CancellationToken cancellationToken)
+        {
+            TpmResult<PolicyCpHashResponse> result = await device.PolicyCpHashAsync(policySession, assertion.CpHashA, cancellationToken).ConfigureAwait(false);
+
+            return result.IsSuccess ? null : ToFailure(result);
+        }
+
+        /// <summary>Replays a TPM2_PolicyNameHash assertion; <see langword="null"/> on success.</summary>
+        static async ValueTask<TpmResult<uint>?> StepNameHashAsync(TpmDevice device, uint policySession, NameHashPolicyAssertion assertion, CancellationToken cancellationToken)
+        {
+            TpmResult<PolicyNameHashResponse> result = await device.PolicyNameHashAsync(policySession, assertion.NameHash, cancellationToken).ConfigureAwait(false);
+
+            return result.IsSuccess ? null : ToFailure(result);
+        }
+
+        /// <summary>Replays a TPM2_PolicyDuplicationSelect assertion; <see langword="null"/> on success.</summary>
+        static async ValueTask<TpmResult<uint>?> StepDuplicationSelectAsync(TpmDevice device, uint policySession, DuplicationSelectPolicyAssertion assertion, CancellationToken cancellationToken)
+        {
+            TpmResult<PolicyDuplicationSelectResponse> result = await device.PolicyDuplicationSelectAsync(
+                policySession, assertion.ObjectName, assertion.NewParentName, assertion.IsObjectIncluded, cancellationToken).ConfigureAwait(false);
+
+            return result.IsSuccess ? null : ToFailure(result);
+        }
+
+        /// <summary>Replays a TPM2_PolicyParameters assertion; <see langword="null"/> on success.</summary>
+        static async ValueTask<TpmResult<uint>?> StepParametersAsync(TpmDevice device, uint policySession, ParametersPolicyAssertion assertion, CancellationToken cancellationToken)
+        {
+            TpmResult<PolicyParametersResponse> result = await device.PolicyParametersAsync(policySession, assertion.ParametersHash, cancellationToken).ConfigureAwait(false);
+
+            return result.IsSuccess ? null : ToFailure(result);
+        }
+
+        /// <summary>Replays a TPM2_PolicyTemplate assertion; <see langword="null"/> on success.</summary>
+        static async ValueTask<TpmResult<uint>?> StepTemplateAsync(TpmDevice device, uint policySession, TemplatePolicyAssertion assertion, CancellationToken cancellationToken)
+        {
+            TpmResult<PolicyTemplateResponse> result = await device.PolicyTemplateAsync(policySession, assertion.TemplateHash, cancellationToken).ConfigureAwait(false);
+
+            return result.IsSuccess ? null : ToFailure(result);
+        }
+
+        /// <summary>Replays a TPM2_PolicyLocality assertion; <see langword="null"/> on success.</summary>
+        static async ValueTask<TpmResult<uint>?> StepLocalityAsync(TpmDevice device, uint policySession, LocalityPolicyAssertion assertion, CancellationToken cancellationToken)
+        {
+            TpmResult<PolicyLocalityResponse> result = await device.PolicyLocalityAsync(policySession, assertion.Locality, cancellationToken).ConfigureAwait(false);
+
+            return result.IsSuccess ? null : ToFailure(result);
+        }
+
+        /// <summary>Replays a TPM2_PolicyNvWritten assertion; <see langword="null"/> on success.</summary>
+        static async ValueTask<TpmResult<uint>?> StepNvWrittenAsync(TpmDevice device, uint policySession, NvWrittenPolicyAssertion assertion, CancellationToken cancellationToken)
+        {
+            TpmResult<PolicyNvWrittenResponse> result = await device.PolicyNvWrittenAsync(policySession, assertion.IsWrittenSet, cancellationToken).ConfigureAwait(false);
+
+            return result.IsSuccess ? null : ToFailure(result);
+        }
+
+        /// <summary>Replays a TPM2_PolicyAuthorizeNV assertion; <see langword="null"/> on success.</summary>
+        static async ValueTask<TpmResult<uint>?> StepAuthorizeNvAsync(TpmDevice device, uint policySession, AuthorizeNvPolicyAssertion assertion, CancellationToken cancellationToken)
+        {
+            TpmResult<PolicyAuthorizeNvResponse> result = await device.PolicyAuthorizeNvAsync(assertion.AuthHandle, assertion.NvIndex, policySession, cancellationToken).ConfigureAwait(false);
+
+            return result.IsSuccess ? null : ToFailure(result);
+        }
+
         /// <summary>Maps a scheme hash algorithm to the digest tag its <see cref="DigestValue"/> carries.</summary>
         static Tag DigestTagFor(TpmAlgIdConstants schemeHashAlg) => schemeHashAlg switch
         {
@@ -230,10 +324,10 @@ public sealed record TpmPolicy(IReadOnlyList<TpmPolicyAssertion> Assertions)
     /// <param name="running">The running policyDigest (source and destination).</param>
     /// <param name="assertion">The PCR assertion.</param>
     /// <param name="policyHash">The session's policy hash algorithm.</param>
+    /// <param name="pool">The memory pool the marshaled selection scratch and the fold's hash-input scratch buffer are rented from.</param>
     /// <returns>The number of digest bytes written.</returns>
-    private static int ExtendPcr(Span<byte> running, PcrPolicyAssertion assertion, TpmAlgIdConstants policyHash)
+    private static int ExtendPcr(Span<byte> running, PcrPolicyAssertion assertion, TpmAlgIdConstants policyHash, BaseMemoryPool pool)
     {
-        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmlPcrSelection selection = TpmlPcrSelection.Create(assertion.PcrBank, assertion.PcrIndices, pool);
         int selectionSize = selection.GetSerializedSize();
         using IMemoryOwner<byte> owner = pool.Rent(selectionSize);
@@ -241,7 +335,7 @@ public sealed record TpmPolicy(IReadOnlyList<TpmPolicyAssertion> Assertions)
         var writer = new TpmWriter(marshaled);
         selection.WriteTo(ref writer);
 
-        return TpmPolicyDigest.ExtendForPcr(running, marshaled, assertion.PcrDigest.Span, policyHash, running);
+        return TpmPolicyDigest.ExtendForPcr(running, marshaled, assertion.PcrDigest.Span, policyHash, running, pool);
     }
 
     /// <summary>
@@ -257,11 +351,12 @@ public sealed record TpmPolicy(IReadOnlyList<TpmPolicyAssertion> Assertions)
     /// <param name="policyRef">The policy qualifier.</param>
     /// <param name="schemeHashAlg">H_authAlg: the hash algorithm carried inside the signature.</param>
     /// <param name="destination">Receives the <c>aHash</c>; must be at least <see cref="TpmPolicyDigest.Size"/> bytes for the algorithm.</param>
+    /// <param name="pool">The memory pool for the message scratch buffer.</param>
     /// <returns>The number of digest bytes written.</returns>
-    private static int BuildPolicySignedAHash(int expiration, ReadOnlySpan<byte> policyRef, TpmAlgIdConstants schemeHashAlg, Span<byte> destination)
+    private static int BuildPolicySignedAHash(int expiration, ReadOnlySpan<byte> policyRef, TpmAlgIdConstants schemeHashAlg, Span<byte> destination, BaseMemoryPool pool)
     {
         int length = sizeof(int) + policyRef.Length;
-        using IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(length);
+        using IMemoryOwner<byte> owner = pool.Rent(length);
         Span<byte> message = owner.Memory.Span[..length];
         var writer = new TpmWriter(message);
         writer.WriteInt32(expiration);

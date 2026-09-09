@@ -11,12 +11,13 @@ using Verifiable.Tpm.Infrastructure.Sessions;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
 /// <summary>
 /// Proves the pooled-carrier ownership of <c>TPM2_CertifyCreation()</c>'s wire parameters (TPM 2.0 Library Part
-/// 3, clause 18.3, Table 88) against the in-house behavioural <see cref="TpmSimulator"/>: the
+/// 3, clause 18.3, Table 99) against the in-house behavioural <see cref="TpmSimulator"/>: the
 /// <c>qualifyingData</c> (<c>TPM2B_DATA</c>), the <c>creationHash</c> (<c>TPM2B_DIGEST</c>), and the creation
 /// ticket's own digest each ride a carrier the parser rents, and each reaches the pool again on every path a
 /// command can leave by — refused at the entry transition, refused at the session continuation, refused for a
@@ -46,7 +47,7 @@ internal sealed class TpmInHouseSimulatorCertifyCreationCarrierTests
     /// <summary>
     /// The signing key's authValue for the session-authorized fixtures. It stays inside the SHA-256 nameAlg's
     /// 32-octet digest width, the bound an object's authValue may not exceed (TPM 2.0 Library Part 1, clause
-    /// 17.6.4.2).
+    /// 16.6.4.2).
     /// </summary>
     private const string SignKeyPassword = "certify-creation-carrier-auth";
 
@@ -67,19 +68,20 @@ internal sealed class TpmInHouseSimulatorCertifyCreationCarrierTests
     public TestContext TestContext { get; set; } = null!;
 
     /// <summary>
-    /// A <c>TPM2_CertifyCreation()</c> refused by the entry transition — the signHandle resolves to no loaded
-    /// object, so TPM 2.0 Library Part 3, clause 18.3's handle check answers <c>TPM_RC_HANDLE</c> before any
-    /// parameter is looked at — returns every carrier the parser rented: the sign slot's supplied password, the
-    /// qualifying data, the creation hash, and the ticket digest. The refusing arm reaches them through the
-    /// request record's own <c>IDisposable.Dispose</c>, which is the only owner they ever had, because a handle
-    /// refusal transfers nothing into an action.
+    /// A <c>TPM2_CertifyCreation()</c> refused by the entry transition — the signHandle (the 1st handle in the
+    /// handle area, index 0) is transient-range but resolves to no loaded object, so TPM 2.0 Library Part 3,
+    /// clause 5.4 step 2.1 answers <c>TPM_RC_REFERENCE_H0</c> before any parameter is looked at — returns every
+    /// carrier the parser rented: the sign slot's supplied password, the qualifying data, the creation hash, and
+    /// the ticket digest. The refusing arm reaches them through the request record's own
+    /// <c>IDisposable.Dispose</c>, which is the only owner they ever had, because a handle refusal transfers
+    /// nothing into an action.
     /// </summary>
     [TestMethod]
     public async Task RefusedCertifyCreationAtTheEntryTransitionReturnsTheParseRentedCarriersToPool()
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse subject = await CreateSigningPrimaryAsync(tpm, registry, trackingPool.Pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
@@ -96,8 +98,8 @@ internal sealed class TpmInHouseSimulatorCertifyCreationCarrierTests
             TpmResult<CertifyCreationResponse> result = await TpmCommandExecutor.ExecuteAsync<CertifyCreationResponse>(
                 tpm, certifyCreationInput, [signAuth], null, trackingPool.Pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
             Assert.AreEqual(
-                TpmRcConstants.TPM_RC_HANDLE, result.ResponseCode,
-                "A signHandle that resolves to no loaded object is a bare TPM_RC_HANDLE (TPM 2.0 Library Part 3, clause 18.3).");
+                TpmRcConstants.TPM_RC_REFERENCE_H0, result.ResponseCode,
+                "A transient-range signHandle (the 1st handle in the handle area) that resolves to no loaded object is TPM_RC_REFERENCE_H0 (TPM 2.0 Library Part 3, clause 5.4, step 2.1).");
 
             Assert.IsGreaterThan(
                 qualifyingRentsBefore, trackingPool.RentedCountOfSize(CarrierProofNonce.Length),
@@ -121,7 +123,7 @@ internal sealed class TpmInHouseSimulatorCertifyCreationCarrierTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateHmacArmRegistry();
 
         using CreatePrimaryResponse subject = await CreateSigningPrimaryAsync(tpm, registry, trackingPool.Pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
@@ -132,7 +134,7 @@ internal sealed class TpmInHouseSimulatorCertifyCreationCarrierTests
         TpmResult<CertifyCreationResponse> result = await CertifyCreationOverRealSignSessionAsync(
             tpm, registry, trackingPool, ak, subject, subject.CreationTicket, TpmAlgIdConstants.TPM_ALG_SHA1, SignKeyPasswordBytes).ConfigureAwait(false);
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_HASH, result.ResponseCode,
+            HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_HASH, 2), result.ResponseCode,
             "A scheme hash the attest digest path does not implement is refused with TPM_RC_HASH after the command HMAC has verified.");
 
         Assert.AreEqual(
@@ -151,7 +153,7 @@ internal sealed class TpmInHouseSimulatorCertifyCreationCarrierTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateHmacArmRegistry();
 
         using CreatePrimaryResponse subject = await CreateSigningPrimaryAsync(tpm, registry, trackingPool.Pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
@@ -173,16 +175,17 @@ internal sealed class TpmInHouseSimulatorCertifyCreationCarrierTests
     /// <summary>
     /// A <c>TPM2_CertifyCreation()</c> whose creation ticket does not reproduce is refused with
     /// <c>TPM_RC_TICKET</c> from inside the effect (TPM 2.0 Library Part 3, clause 18.3: the re-derivation needs
-    /// the asynchronous digest seam, so the outcome is decided there rather than in the transition) — and still
-    /// returns every carrier the request transferred into the action. This is the path that proves the effect
-    /// releases them on its early return, not only after a successful attestation.
+    /// the asynchronous digest seam, so the outcome is decided there rather than in the transition), designated
+    /// to <c>creationTicket</c>, Table 99's fourth parameter (index 3) — and still returns every carrier the
+    /// request transferred into the action. This is the path that proves the effect releases them on its early
+    /// return, not only after a successful attestation.
     /// </summary>
     [TestMethod]
     public async Task CertifyCreationWithATicketThatDoesNotReproduceReturnsTheTransferredCarriersToPool()
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse subject = await CreateSigningPrimaryAsync(tpm, registry, trackingPool.Pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
@@ -201,8 +204,8 @@ internal sealed class TpmInHouseSimulatorCertifyCreationCarrierTests
             TpmResult<CertifyCreationResponse> result = await TpmCommandExecutor.ExecuteAsync<CertifyCreationResponse>(
                 tpm, certifyCreationInput, [signAuth], null, trackingPool.Pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
             Assert.AreEqual(
-                TpmRcConstants.TPM_RC_TICKET, result.ResponseCode,
-                "A creation ticket that does not reproduce is TPM_RC_TICKET (TPM 2.0 Library Part 3, clause 18.3).");
+                HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_TICKET, 3), result.ResponseCode,
+                "A creation ticket that does not reproduce is TPM_RC_TICKET at creationTicket, parameter 4 of Table 99 (TPM 2.0 Library Part 3, clause 18.3).");
 
             Assert.IsGreaterThan(
                 qualifyingRentsBefore, trackingPool.RentedCountOfSize(CarrierProofNonce.Length),
@@ -219,7 +222,7 @@ internal sealed class TpmInHouseSimulatorCertifyCreationCarrierTests
     /// the response has been consumed: the qualifying data, the creation hash, and the ticket digest transferred
     /// out of the request into the certify-creation action, so it is the attesting effect — not the continuation
     /// — that is their terminal owner, and the ticket comparison and the attestation have read their octets by
-    /// the time it releases them (TPM 2.0 Library Part 3, clause 18.3; Part 1, clause 16.6.1 for the response
+    /// the time it releases them (TPM 2.0 Library Part 3, clause 18.3; Part 1, clause 15.6.1 for the response
     /// entry).
     /// </summary>
     [TestMethod]
@@ -227,7 +230,7 @@ internal sealed class TpmInHouseSimulatorCertifyCreationCarrierTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateHmacArmRegistry();
 
         using CreatePrimaryResponse subject = await CreateSigningPrimaryAsync(tpm, registry, trackingPool.Pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
@@ -252,8 +255,8 @@ internal sealed class TpmInHouseSimulatorCertifyCreationCarrierTests
 
     /// <summary>
     /// A <c>qualifyingData</c> wider than <c>TPM2B_DATA</c>'s declared bound — <c>sizeof(TPMT_HA)</c>, the
-    /// 2-octet algorithm identifier plus the largest supported digest (TPM 2.0 Library Part 2, clause 10.4.3,
-    /// Table 93) — is refused with <c>TPM_RC_SIZE</c> while the frame is still being parsed, so the parse rents
+    /// 2-octet algorithm identifier plus the largest supported digest (TPM 2.0 Library Part 2, clause 10.3.3,
+    /// Table 91) — is refused with <c>TPM_RC_SIZE</c> while the frame is still being parsed, so the parse rents
     /// nothing at all: the pool balance does not move, and the refusal is a response code rather than an
     /// exception escaping the command surface.
     /// </summary>
@@ -262,7 +265,7 @@ internal sealed class TpmInHouseSimulatorCertifyCreationCarrierTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse subject = await CreateSigningPrimaryAsync(tpm, registry, trackingPool.Pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
@@ -297,8 +300,8 @@ internal sealed class TpmInHouseSimulatorCertifyCreationCarrierTests
             TpmResult<CertifyCreationResponse> overBoundResult = await TpmCommandExecutor.ExecuteAsync<CertifyCreationResponse>(
                 tpm, overBoundInput, [overBoundAuth], null, trackingPool.Pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
             Assert.AreEqual(
-                TpmRcConstants.TPM_RC_SIZE, overBoundResult.ResponseCode,
-                "A qualifyingData wider than sizeof(TPMT_HA) is TPM_RC_SIZE (TPM 2.0 Library Part 2, clause 10.4.3, Table 93).");
+                HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SIZE, 0), overBoundResult.ResponseCode,
+                "A qualifyingData wider than sizeof(TPMT_HA) is TPM_RC_SIZE at qualifyingData, parameter 1 of the CertifyCreation command table (TPM 2.0 Library Part 2, clause 10.3.3, Table 91).");
 
             Assert.AreEqual(
                 overBoundRentsBefore, trackingPool.RentedCountOfSize(overBound.Length),
@@ -335,7 +338,7 @@ internal sealed class TpmInHouseSimulatorCertifyCreationCarrierTests
     /// Certifies <paramref name="subject"/>'s creation with <paramref name="ak"/> over a fresh, real, unbound and
     /// unsalted HMAC sign session carrying <paramref name="signSlotAuthValue"/>, flushing the session on the way
     /// out. The session lives entirely inside this call, so the nonce carrier it adopts from the response (TPM
-    /// 2.0 Library Part 1, clause 16.6.1) is released before a caller reads the pool balance.
+    /// 2.0 Library Part 1, clause 15.6.1) is released before a caller reads the pool balance.
     /// </summary>
     /// <param name="tpm">The TPM device.</param>
     /// <param name="registry">The response codec registry.</param>
@@ -350,7 +353,7 @@ internal sealed class TpmInHouseSimulatorCertifyCreationCarrierTests
         TpmDevice tpm, TpmResponseRegistry registry, MeteredHousePool trackingPool, CreatePrimaryResponse ak, CreatePrimaryResponse subject,
         TpmtTkCreation creationTicket, TpmAlgIdConstants schemeHashAlg, ReadOnlyMemory<byte> signSlotAuthValue)
     {
-        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(HmacSessionAlg);
+        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(HmacSessionAlg, TestEntropy.NewCounterStream(), BaseMemoryPool.Shared);
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             tpm, startInput, [], null, trackingPool.Pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession failed: '{startResult.ResponseCode}'.");
@@ -360,7 +363,7 @@ internal sealed class TpmInHouseSimulatorCertifyCreationCarrierTests
 
         try
         {
-            using TpmSession signSession = new(new TpmHandle(sessionHandle), started.NonceTPM, HmacSessionAlg, trackingPool.Pool);
+            using TpmSession signSession = new(new TpmHandle(sessionHandle), started.NonceTPM, HmacSessionAlg, TestEntropy.NewCounterStream(), trackingPool.Pool);
             signSession.SetAuthValue(signSlotAuthValue.Span, trackingPool.Pool);
 
             using CertifyCreationInput certifyCreationInput = CertifyCreationInput.ForEcdsa(
@@ -443,7 +446,7 @@ internal sealed class TpmInHouseSimulatorCertifyCreationCarrierTests
         var simulator = new TpmSimulator(
             "tpm-in-house-certify-creation-carriers",
             signingBackend: BouncyCastleTpmEccSigningBackend.Create(),
-            rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create());
+            rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await BringOperationalAsync(simulator, pool).ConfigureAwait(false);
 

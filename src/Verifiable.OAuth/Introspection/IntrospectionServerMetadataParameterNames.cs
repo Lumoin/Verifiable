@@ -17,7 +17,7 @@ public static class IntrospectionServerMetadataParameterNames
     /// The <c>introspection_signing_alg_values_supported</c> parameter — the JWS
     /// <c>alg</c> values the introspection endpoint supports for signing the response.
     /// </summary>
-    public static readonly string IntrospectionSigningAlgValuesSupported = Utf8Constants.ToInternedString(IntrospectionSigningAlgValuesSupportedUtf8);
+    public static string IntrospectionSigningAlgValuesSupported { get; } = Utf8Constants.ToInternedString(IntrospectionSigningAlgValuesSupportedUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="IntrospectionEncryptionAlgValuesSupported"/>.</summary>
     public static ReadOnlySpan<byte> IntrospectionEncryptionAlgValuesSupportedUtf8 => "introspection_encryption_alg_values_supported"u8;
@@ -26,7 +26,7 @@ public static class IntrospectionServerMetadataParameterNames
     /// The <c>introspection_encryption_alg_values_supported</c> parameter — the JWE
     /// <c>alg</c> values the introspection endpoint supports for content key encryption.
     /// </summary>
-    public static readonly string IntrospectionEncryptionAlgValuesSupported = Utf8Constants.ToInternedString(IntrospectionEncryptionAlgValuesSupportedUtf8);
+    public static string IntrospectionEncryptionAlgValuesSupported { get; } = Utf8Constants.ToInternedString(IntrospectionEncryptionAlgValuesSupportedUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="IntrospectionEncryptionEncValuesSupported"/>.</summary>
     public static ReadOnlySpan<byte> IntrospectionEncryptionEncValuesSupportedUtf8 => "introspection_encryption_enc_values_supported"u8;
@@ -35,7 +35,7 @@ public static class IntrospectionServerMetadataParameterNames
     /// The <c>introspection_encryption_enc_values_supported</c> parameter — the JWE
     /// <c>enc</c> values the introspection endpoint supports for content encryption.
     /// </summary>
-    public static readonly string IntrospectionEncryptionEncValuesSupported = Utf8Constants.ToInternedString(IntrospectionEncryptionEncValuesSupportedUtf8);
+    public static string IntrospectionEncryptionEncValuesSupported { get; } = Utf8Constants.ToInternedString(IntrospectionEncryptionEncValuesSupportedUtf8);
 
 
     /// <summary>Returns <see langword="true"/> when <paramref name="value"/> is exactly

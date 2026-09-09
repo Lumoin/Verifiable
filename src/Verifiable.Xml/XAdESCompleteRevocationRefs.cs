@@ -819,8 +819,8 @@ public sealed class XAdESCompleteRevocationRefs: IDisposable
     /// bound, since each entry decodes a full <c>DigestAlgAndValue</c> (and, for a <c>CRLRef</c>, an optional
     /// <c>CRLIdentifier</c>) and the schema's own <c>maxOccurs="unbounded"</c> content model sets no numeric
     /// limit. Chosen generously above any legitimate validation-data set's own size;
-    /// <c>XAdESGrowthBoundsCostTests.CrlRefFloodIsRefusedWithinTheCeiling</c> measures a flood one entry past
-    /// this bound refusing well inside its own loose ceiling.
+    /// <c>XAdESGrowthBoundsCostTests.CrlRefFloodIsRefusedAfterExactlyThreeRentsPerEntry</c> measures a flood one entry past
+    /// this bound refusing after exactly three pool rents per decoded entry.
     /// </summary>
     public const int MaximumRevocationRefEntryCount = 4096;
 
@@ -991,6 +991,8 @@ public sealed class XAdESCompleteRevocationRefs: IDisposable
 
             if(scan == ElementScanResult.Found)
             {
+                //One disjunct per xsd:sequence child this element can repeat; a named predicate per child
+                //would only rename the grammar, not simplify it.
                 bool isRepeat = (hasCrlRefs && XmlSignatureModelGrammar.IsElement(table, child, XAdESIdentifiers.XAdESNamespaceV132Utf8, "CRLRefs"u8))
                     || (hasOcspRefs && XmlSignatureModelGrammar.IsElement(table, child, XAdESIdentifiers.XAdESNamespaceV132Utf8, "OCSPRefs"u8))
                     || (hasOtherRefs && XmlSignatureModelGrammar.IsElement(table, child, XAdESIdentifiers.XAdESNamespaceV132Utf8, "OtherRefs"u8));

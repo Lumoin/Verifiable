@@ -37,7 +37,7 @@ public static class SsfTransmitterEndpoints
     /// The endpoint builder delegate. Pass this to
     /// <see cref="Verifiable.Server.ServerConfiguration.EndpointBuilders"/>.
     /// </summary>
-    public static readonly EndpointBuilderDelegate Builder = static (registration, context, ct) =>
+    public static EndpointBuilderDelegate Builder { get; } = static (registration, context, ct) =>
     {
         List<EndpointCandidate> candidates = [];
 
@@ -906,7 +906,7 @@ public static class SsfTransmitterEndpoints
         ServerHttpResponse response = ServerHttpResponse.Unauthorized(
             OAuthErrors.InvalidRequest, "Authorization failed or is missing.");
 
-        if(!((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata))
+        if(!registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata))
         {
             return response;
         }

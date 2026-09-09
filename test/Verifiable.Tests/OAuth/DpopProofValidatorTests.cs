@@ -14,8 +14,8 @@ internal sealed class DpopProofValidatorTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly DateTimeOffset NowInstant = TestClock.CanonicalEpoch.AddDays(-19);
-    private static readonly TimeSpan IatSkew = TimeSpan.FromSeconds(30);
+    private static DateTimeOffset NowInstant { get; } = TestClock.CanonicalEpoch.AddDays(-19);
+    private static TimeSpan IatSkew { get; } = TimeSpan.FromSeconds(30);
     private const string DefaultMethod = "POST";
     private const string DefaultUrl = "https://as.example.com/token";
 
@@ -279,12 +279,12 @@ internal sealed class DpopProofValidatorTests
             key,
             TestSetup.Base64UrlEncoder,
             DpopTestSupport.Serializer,
-            MicrosoftCryptographicFunctions.SignRsaSha256Pkcs1Async,
+            MicrosoftCryptographicFunctionsAdapter.SignRsaSha256Pkcs1Async,
             BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         DpopProofValidationResult result = await ValidateAsync(
-            proof, verifier: MicrosoftCryptographicFunctions.VerifyRsaSha256Pkcs1Async).ConfigureAwait(false);
+            proof, verifier: MicrosoftCryptographicFunctionsAdapter.VerifyRsaSha256Pkcs1Async).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccess, $"RS256 proof validation must succeed; got {result.FailureReason}.");
         Assert.AreEqual(
@@ -305,12 +305,12 @@ internal sealed class DpopProofValidatorTests
             key,
             TestSetup.Base64UrlEncoder,
             DpopTestSupport.Serializer,
-            MicrosoftCryptographicFunctions.SignRsaSha256PssAsync,
+            MicrosoftCryptographicFunctionsAdapter.SignRsaSha256PssAsync,
             BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         DpopProofValidationResult result = await ValidateAsync(
-            proof, verifier: MicrosoftCryptographicFunctions.VerifyRsaSha256PssAsync).ConfigureAwait(false);
+            proof, verifier: MicrosoftCryptographicFunctionsAdapter.VerifyRsaSha256PssAsync).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccess, $"PS256 proof validation must succeed; got {result.FailureReason}.");
         Assert.AreEqual(
@@ -331,12 +331,12 @@ internal sealed class DpopProofValidatorTests
             key,
             TestSetup.Base64UrlEncoder,
             DpopTestSupport.Serializer,
-            BouncyCastleCryptographicFunctions.SignEd25519Async,
+            BouncyCastleCryptographicFunctionsAdapter.SignEd25519Async,
             BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         DpopProofValidationResult result = await ValidateAsync(
-            proof, verifier: BouncyCastleCryptographicFunctions.VerifyEd25519Async).ConfigureAwait(false);
+            proof, verifier: BouncyCastleCryptographicFunctionsAdapter.VerifyEd25519Async).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccess, $"EdDSA proof validation must succeed; got {result.FailureReason}.");
         Assert.AreEqual(
@@ -361,7 +361,7 @@ internal sealed class DpopProofValidatorTests
             key,
             TestSetup.Base64UrlEncoder,
             DpopTestSupport.Serializer,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -382,7 +382,7 @@ internal sealed class DpopProofValidatorTests
             key,
             TestSetup.Base64UrlEncoder,
             customSerializer,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
     }
@@ -407,7 +407,7 @@ internal sealed class DpopProofValidatorTests
 
         return await DpopProofValidator.ValidateAsync(
             request,
-            verifier ?? MicrosoftCryptographicFunctions.VerifyP256Async,
+            verifier ?? MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             DpopTestSupport.Parser,
             TestSetup.Base64UrlEncoder,
             TestSetup.Base64UrlDecoder,

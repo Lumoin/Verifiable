@@ -10,7 +10,7 @@ namespace Verifiable.Tpm.Spec.Constants;
 /// Purpose: Identifiers for TPM 2.0 commands (command codes).
 /// </para>
 /// <para>
-/// Specification: TPM 2.0 Library Specification (Part 2: Structures), section "6.5 TPM_CC" (Table 15).
+/// Specification: TPM 2.0 Library Specification (Part 2: Structures), section "6.5 TPM_CC" (Table 12).
 /// </para>
 /// <para>
 /// Note: TPM_CC_HMAC/TPM_CC_HMAC_Start share values with TPM_CC_MAC/TPM_CC_MAC_Start (mutually
@@ -667,9 +667,65 @@ public enum TpmCcConstants : uint
     TPM_CC_PolicyTransportSPDM = 0x000001A1,
 
     /// <summary>
-    /// Compile variable. May increase based on implementation.
+    /// Command code of <c>TPM2_VerifySequenceComplete()</c>, which finishes a verification sequence started by
+    /// <see cref="TPM_CC_VerifySequenceStart"/> and validates the accumulated message against a supplied
+    /// signature (TPM 2.0 Library Part 3, clause 20.3; Part 2, clause 6.5.2, Table 12).
     /// </summary>
-    TPM_CC_LAST = 0x000001A1,
+    TPM_CC_VerifySequenceComplete = 0x000001A3,
+
+    /// <summary>
+    /// Command code of <c>TPM2_SignSequenceComplete()</c>, which finishes a signing sequence started by
+    /// <see cref="TPM_CC_SignSequenceStart"/> and produces a signature over the accumulated message
+    /// (TPM 2.0 Library Part 3, clause 20.6; Part 2, clause 6.5.2, Table 12).
+    /// </summary>
+    TPM_CC_SignSequenceComplete = 0x000001A4,
+
+    /// <summary>
+    /// Command code.
+    /// </summary>
+    TPM_CC_VerifyDigestSignature = 0x000001A5,
+
+    /// <summary>
+    /// Command code.
+    /// </summary>
+    TPM_CC_SignDigest = 0x000001A6,
+
+    /// <summary>
+    /// Command code.
+    /// </summary>
+    TPM_CC_Encapsulate = 0x000001A7,
+
+    /// <summary>
+    /// Command code.
+    /// </summary>
+    TPM_CC_Decapsulate = 0x000001A8,
+
+    /// <summary>
+    /// Command code of <c>TPM2_VerifySequenceStart()</c>, which starts a verification sequence over a message
+    /// whose signature will later be checked by <see cref="TPM_CC_VerifySequenceComplete"/>
+    /// (TPM 2.0 Library Part 3, clause 17.6; Part 2, clause 6.5.2, Table 12).
+    /// </summary>
+    TPM_CC_VerifySequenceStart = 0x000001A9,
+
+    /// <summary>
+    /// Command code of <c>TPM2_SignSequenceStart()</c>, which starts a signature signing sequence over a
+    /// message (TPM 2.0 Library Part 3, clause 17.5; Part 2, clause 6.5.2, Table 12). Aliased by
+    /// <see cref="TPM_CC_LAST"/>, which equals this value in v185 — TPM_CC_LAST is a "Compile variable" that
+    /// "may increase based on implementation" (TPM 2.0 Library Part 2, clause 6.5.2, Table 12), and v185
+    /// resolves it to this command.
+    /// </summary>
+    TPM_CC_SignSequenceStart = 0x000001AA,
+
+    /// <summary>
+    /// The last command code the v185 specification defines. Equal to
+    /// <see cref="TPM_CC_SignSequenceStart"/> in v185 (TPM 2.0 Library Part 2, clause 6.5.2, Table 12:
+    /// "Compile variable. May increase based on implementation") — the spec's own bound on the command-code
+    /// range, not a statement that this library implements every command up to it; this enum models only the
+    /// commands it implements. Declared after <see cref="TPM_CC_SignSequenceStart"/> so that name resolution
+    /// (<see cref="Enum.ToString()"/> and trace/diagnostic formatting) prefers the concrete command over this
+    /// alias for the shared value.
+    /// </summary>
+    TPM_CC_LAST = 0x000001AA,
 
     /// <summary>
     /// Command code.

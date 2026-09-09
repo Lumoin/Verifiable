@@ -333,6 +333,9 @@ public static class CredentialJwsExtensions
         }
         catch
         {
+            //The verification delegate (cryptographic) and the payload decode (parse) are the only
+            //operations this try block performs; a failure from either fails closed on the verification
+            //result rather than escaping as an exception, cancellation excepted above.
             return new JwsCredentialVerificationResult(false, header, null);
         }
     }

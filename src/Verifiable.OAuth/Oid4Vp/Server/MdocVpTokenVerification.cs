@@ -1,6 +1,9 @@
 using System.Buffers;
+using Verifiable.Core.Dcql;
+using Verifiable.Core.Model.Dcql;
 using Verifiable.Core.Model.Mdoc;
 using Verifiable.Core.Model.SelectiveDisclosure;
+using Verifiable.Core.StatusList;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 
@@ -37,6 +40,17 @@ namespace Verifiable.OAuth.Oid4Vp.Server;
 ///   <item><description>Surface the disclosed claims keyed by element identifier.</description></item>
 /// </list>
 /// <para>
+/// The issuer key is resolved here rather than inside the composed
+/// <c>MdocIssuerAuth.VerifyAsync</c> overload, because
+/// <see cref="ResolveMdocIssuerKeyDelegate"/> transfers ownership of the key it
+/// resolves and that key has to outlive this parse: it rides
+/// <see cref="VpTokenParsed.CredentialIssuerKey"/> into the credential-status step
+/// that runs after it. The resolution is therefore returned alongside the parsed
+/// result and released by the caller when the flow step ends, which is what keeps
+/// <see cref="VpTokenParsed.CredentialIssuerKey"/> a borrowed reference on every
+/// format.
+/// </para>
+/// <para>
 /// Result mapping: <see cref="VpTokenParsed.CredentialSignatureValid"/> is the
 /// issuer-auth signature AND the digest binding;
 /// <see cref="VpTokenParsed.SessionTranscriptValid"/> is the device signature
@@ -45,6 +59,23 @@ namespace Verifiable.OAuth.Oid4Vp.Server;
 /// subsumes the SD-JWT nonce+aud binding. The KB-JWT and <c>sd_hash</c> axes are
 /// not applicable to mdoc and follow the codebase's "N/A is not a failure"
 /// convention (mirroring the SD-JWT path's <see cref="VpTokenParsed.SessionTranscriptValid"/>).
+/// <see cref="VpCredentialClaims.Status"/> is the MSO's optional
+/// <see cref="MdocMobileSecurityObject.Status"/> carried whole. It reads
+/// <see langword="null"/> only when the MSO carries no <c>status</c> member at all;
+/// a Status structure whose mechanisms this library does not model (e.g.
+/// <c>identifier_list</c>) surfaces as a claim naming them with no
+/// <see cref="StatusClaim.StatusList"/>, which the shared status step tells apart.
+/// Surfacing the claim here keeps the fetch and trust of the status list the caller's
+/// concern, not the parser's, exactly as the SD-JWT and SD-CWT paths do.
+/// </para>
+/// <para>
+/// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-status-list-21.html#section-8.3">Token Status
+/// List §8.3</see>: "Upon receiving a Referenced Token, a Relying Party MUST first perform the validation
+/// of the Referenced Token - e.g., checking for expected attributes, valid signature and expiration time."
+/// The document's own issuer-auth signature, digest binding, and device-signature checks above run and
+/// populate <see cref="VpTokenParsed.CredentialSignatureValid"/>/<see cref="VpTokenParsed.SessionTranscriptValid"/>
+/// before <see cref="VpCredentialClaims.Status"/> is read by the shared status step; an mdoc that fails
+/// those checks never reaches status evaluation.
 /// </para>
 /// </remarks>
 public static class MdocVpTokenVerification
@@ -54,18 +85,17 @@ public static class MdocVpTokenVerification
     /// </summary>
     /// <param name="vpToken">The base64url-encoded DeviceResponse value from the OID4VP vp_token slot.</param>
     /// <param name="credentialQueryId">
-    /// The DCQL credential query identifier that matched this token. Used as the
-    /// key in <see cref="VpTokenParsed.ExtractedClaims"/>.
+    /// The DCQL credential query identifier that matched this token. Carried onto
+    /// <see cref="VpTokenParsed.CredentialQueryId"/>.
     /// </param>
     /// <param name="resolveIssuerKey">
     /// Application-provided trust delegate that resolves the issuer's
     /// verification key from the IssuerAuth (typically an IACA x5chain resolver).
     /// </param>
-    /// <param name="extractAuthorityIdentifier">
-    /// Optional delegate that extracts the leaf certificate's AuthorityKeyIdentifier
-    /// (base64url) from the IssuerAuth x5chain, surfaced on
-    /// <see cref="VpTokenParsed.CredentialIssuer"/> for DCQL <c>trusted_authorities</c>
-    /// (type <c>aki</c>) enforcement. <see langword="null"/> surfaces no authority identifier.
+    /// <param name="extractTrustedAuthorityEvidence">
+    /// Optional delegate that resolves the OID4VP 1.0 §6.1.1 trust evidence from the IssuerAuth
+    /// x5chain, surfaced on <see cref="VpCredentialClaims.TrustedAuthorityEvidence"/> for DCQL
+    /// <c>trusted_authorities</c> enforcement. <see langword="null"/> surfaces no evidence.
     /// </param>
     /// <param name="clientId">The authorization-request <c>client_id</c> bound into the SessionTranscript.</param>
     /// <param name="responseUri">The authorization-request <c>response_uri</c> bound into the SessionTranscript.</param>
@@ -84,15 +114,22 @@ public static class MdocVpTokenVerification
     /// <param name="decoder">Delegate for Base64Url decoding the vp_token value.</param>
     /// <param name="pool">Memory pool for cryptographic allocations.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The parsed and crypto-verified VP token contents.</returns>
+    /// <returns>
+    /// The verification result: the parsed and crypto-verified VP token contents together with the
+    /// IACA trust resolution whose key the issuer signature was checked under —
+    /// <see cref="MdocVpVerificationResult.IssuerTrust"/> is <see langword="null"/> when the response
+    /// carried no document to resolve a key for. The result owns the resolution, so the caller disposes
+    /// it once the flow step that reads <see cref="VpTokenParsed.CredentialIssuerKey"/> is done; a
+    /// failure thrown out of this method releases it here instead.
+    /// </returns>
     [System.Diagnostics.CodeAnalysis.SuppressMessage(
         "Design", "CA1054:URI-like parameters should not be strings",
         Justification = "Byte-exact string hashing per OID4VP 1.0 §B.2.6.1; Uri normalisation would break the wallet/verifier SessionTranscript hash agreement, mirroring Oid4VpMdocSessionTranscriptEncoder.Encode.")]
-    public static async ValueTask<VpTokenParsed> VerifyAsync(
+    public static async ValueTask<MdocVpVerificationResult> VerifyAsync(
         string vpToken,
-        string credentialQueryId,
+        CredentialQueryId credentialQueryId,
         ResolveMdocIssuerKeyDelegate resolveIssuerKey,
-        ExtractMdocAuthorityIdentifierDelegate? extractAuthorityIdentifier,
+        ExtractMdocTrustedAuthorityEvidenceDelegate? extractTrustedAuthorityEvidence,
         string clientId,
         string responseUri,
         string authorizationRequestNonce,
@@ -109,7 +146,7 @@ public static class MdocVpTokenVerification
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(vpToken);
-        ArgumentException.ThrowIfNullOrWhiteSpace(credentialQueryId);
+        ArgumentNullException.ThrowIfNull(credentialQueryId);
         ArgumentNullException.ThrowIfNull(resolveIssuerKey);
         ArgumentException.ThrowIfNullOrWhiteSpace(clientId);
         ArgumentException.ThrowIfNullOrWhiteSpace(responseUri);
@@ -131,82 +168,126 @@ public static class MdocVpTokenVerification
         using IMemoryOwner<byte> deviceResponseBytes = decoder(vpToken, pool);
         using MdocParsedDeviceResponse parsed = parseDeviceResponse(deviceResponseBytes.Memory.Span, pool);
 
+        MdocIacaTrustResolution? issuerTrust = null;
         bool credentialSignatureValid = false;
         bool sessionTranscriptValid = false;
-        string? credentialIssuer = null;
-        var extractedClaims = new Dictionary<string, string>(StringComparer.Ordinal);
+        string? credentialType = null;
+        StatusClaim? credentialStatus = null;
+        TrustedAuthorityEvidence? trustedAuthorityEvidence = null;
+        var extractedClaims = new Dictionary<CredentialPath, string>();
         var disclosedByPath = new Dictionary<CredentialPath, object?>();
 
-        //One DCQL credential query maps to one mdoc Document in the response.
-        if(parsed.Documents.Count > 0)
+        //Every step below runs after the trust delegate has handed over a resolution it owns, so a
+        //throw on the way out — a malformed element value, an unreadable device signature — releases
+        //that resolution here rather than leaving its pooled key unreturned. A successful return hands
+        //ownership to the caller instead.
+        try
         {
-            MdocParsedDocument document = parsed.Documents[0];
-
-            //The mdoc authority identifier for DCQL trusted_authorities (type aki) is the
-            //leaf certificate's AuthorityKeyIdentifier — extracted from the same IssuerAuth
-            //x5chain the trust resolver walks (the extractor captures its own pool). Null when
-            //no extractor is wired or no x5chain is present, leaving trusted_authorities unenforced.
-            credentialIssuer = extractAuthorityIdentifier?.Invoke(document.IssuerSigned.IssuerAuth);
-
-            //CredentialSignatureValid = issuer-auth COSE_Sign1 (under the trust-resolved key)
-            //AND the MSO digest binding over every presented item.
-            bool issuerAuthValid = await document.IssuerSigned.IssuerAuth.VerifyAsync(
-                resolveIssuerKey, pool, parseCoseSign1, buildSigStructure, cancellationToken).ConfigureAwait(false);
-
-            MdocDigestBindingResult binding = MdocMsoDigestBindingValidator.Validate(document.IssuerSigned);
-
-            credentialSignatureValid = issuerAuthValid && binding.IsValid;
-
-            //SessionTranscriptValid = device COSE_Sign1 over the verifier-reconstructed
-            //SessionTranscript, keyed by the device key the issuer committed to in the MSO.
-            if(document.DeviceSigned is MdocDeviceSigned deviceSigned)
+            //One DCQL credential query maps to one mdoc Document in the response.
+            if(parsed.Documents.Count > 0)
             {
-                ReadOnlyMemory<byte> sessionTranscript = encodeSessionTranscript(
-                    clientId, responseUri, authorizationRequestNonce, mdocGeneratedNonce.Span);
+                MdocParsedDocument document = parsed.Documents[0];
 
-                using PublicKeyMemory deviceVerificationKey =
-                    document.IssuerSigned.IssuerAuth.Mso.DeviceKeyInfo.DeviceKey.ToPublicKeyMemory(pool);
+                //The credential's own declared type — DCQL meta.doctype_value is answered against
+                //the document's own DocType, the mdoc analog of the SD-JWT VC vct claim.
+                credentialType = document.DocType;
 
-                sessionTranscriptValid = await deviceSigned.VerifyAsync(
-                    document.DocType, sessionTranscript, deviceVerificationKey, pool,
-                    parseCoseSign1AllowingNilPayload, encodeDeviceAuthenticationBytes, buildSigStructure,
-                    cancellationToken).ConfigureAwait(false);
-            }
+                //The MSO's optional Token Status List status claim, carried whole: the mechanisms the
+                //issuer named alongside the status_list reference when that mechanism is one of them.
+                //Null here means the MSO carries no status member at all, which the shared status step
+                //tells apart from a Status structure naming only mechanisms this library does not model
+                //(e.g. identifier_list). Fetching and trusting the referenced status list stays the
+                //caller's concern — the shared credential-status step reads this the same way it reads
+                //the SD-JWT and SD-CWT paths' status claims.
+                credentialStatus = document.IssuerSigned.IssuerAuth.Mso.Status;
 
-            //Surface the disclosed claims two ways: ExtractedClaims keyed by element
-            //identifier for the relying party, and DisclosedClaimPaths keyed by the
-            //full canonical "/{namespace}/{elementIdentifier}" path for the engine —
-            //the mdoc DCQL claim path is [namespace, element_identifier] and the same
-            //element id may occur in two namespaces, so the engine view keeps both.
-            foreach(KeyValuePair<string, IReadOnlyList<MdocIssuerSignedItem>> nsEntry in document.IssuerSigned.NameSpaces)
-            {
-                foreach(MdocIssuerSignedItem item in nsEntry.Value)
+                //The mdoc trust evidence for DCQL trusted_authorities is resolved from the IssuerAuth
+                //x5chain (the extractor captures its own pool and composed resolver). Null when no
+                //extractor is wired, leaving trusted_authorities fail-closed for want of evidence.
+                if(extractTrustedAuthorityEvidence is not null)
                 {
-                    string decoded = decodeElementValue(item.EncodedElementValue);
-                    extractedClaims[item.ElementIdentifier] = decoded;
-                    disclosedByPath[CredentialPath.Root.Append(nsEntry.Key).Append(item.ElementIdentifier)] = decoded;
+                    trustedAuthorityEvidence = await extractTrustedAuthorityEvidence(
+                        document.IssuerSigned.IssuerAuth, cancellationToken).ConfigureAwait(false);
+                }
+
+                //CredentialSignatureValid = issuer-auth COSE_Sign1 (under the trust-resolved key)
+                //AND the MSO digest binding over every presented item. The trust delegate is called here
+                //rather than through the composed overload so the resolution — which owns the key it
+                //resolved — survives this method and can be read as the credential's issuer key downstream.
+                issuerTrust = await resolveIssuerKey(document.IssuerSigned.IssuerAuth, cancellationToken).ConfigureAwait(false);
+
+                bool issuerAuthValid = false;
+                if(issuerTrust.IsTrusted && issuerTrust.IssuerVerificationKey is PublicKeyMemory trustedIssuerKey)
+                {
+                    issuerAuthValid = await document.IssuerSigned.IssuerAuth.VerifyAsync(
+                        trustedIssuerKey, pool, parseCoseSign1, buildSigStructure, cancellationToken).ConfigureAwait(false);
+                }
+
+                MdocDigestBindingResult binding = MdocMsoDigestBindingValidator.Validate(document.IssuerSigned, pool);
+
+                credentialSignatureValid = issuerAuthValid && binding.IsValid;
+
+                //SessionTranscriptValid = device COSE_Sign1 over the verifier-reconstructed
+                //SessionTranscript, keyed by the device key the issuer committed to in the MSO.
+                if(document.DeviceSigned is MdocDeviceSigned deviceSigned)
+                {
+                    ReadOnlyMemory<byte> sessionTranscript = encodeSessionTranscript(
+                        clientId, responseUri, authorizationRequestNonce, mdocGeneratedNonce.Span, pool);
+
+                    using PublicKeyMemory deviceVerificationKey =
+                        document.IssuerSigned.IssuerAuth.Mso.DeviceKeyInfo.DeviceKey.ToPublicKeyMemory(pool);
+
+                    sessionTranscriptValid = await deviceSigned.VerifyAsync(
+                        document.DocType, sessionTranscript, deviceVerificationKey, pool,
+                        parseCoseSign1AllowingNilPayload, encodeDeviceAuthenticationBytes, buildSigStructure,
+                        cancellationToken).ConfigureAwait(false);
+                }
+
+                //Surface the disclosed claims keyed by the full canonical
+                //"/{namespace}/{elementIdentifier}" path — the mdoc DCQL claim path is
+                //[namespace, element_identifier] and the same element id may occur in two
+                //namespaces, so the leaf identifier alone cannot key either map.
+                foreach(KeyValuePair<string, IReadOnlyList<MdocIssuerSignedItem>> nsEntry in document.IssuerSigned.NameSpaces)
+                {
+                    foreach(MdocIssuerSignedItem item in nsEntry.Value)
+                    {
+                        string decoded = decodeElementValue(item.EncodedElementValue);
+                        CredentialPath path = CredentialPath.Root.Append(nsEntry.Key).Append(item.ElementIdentifier);
+                        extractedClaims[path] = decoded;
+                        disclosedByPath[path] = decoded;
+                    }
                 }
             }
-        }
 
-        return new VpTokenParsed
+            VpTokenParsed verified = new()
+            {
+                CredentialQueryId = credentialQueryId,
+                CredentialIssuerKey = credentialSignatureValid ? issuerTrust?.IssuerVerificationKey : null,
+                Credential = new VpCredentialClaims
+                {
+                    Extracted = extractedClaims,
+                    Disclosed = disclosedByPath,
+                    CredentialType = credentialType,
+                    Issuer = null,
+                    TrustedAuthorityEvidence = trustedAuthorityEvidence,
+                    Status = credentialStatus
+                },
+                KbJwtNonce = null,
+                KbJwtAud = null,
+                KbJwtIat = null,
+                KbJwtSignatureValid = true,
+                CredentialSignatureValid = credentialSignatureValid,
+                SdHashValid = true,
+                SessionTranscriptValid = sessionTranscriptValid
+            };
+
+            return new MdocVpVerificationResult { Parsed = verified, IssuerTrust = issuerTrust };
+        }
+        catch
         {
-            KbJwtNonce = null,
-            KbJwtAud = null,
-            KbJwtIat = null,
-            KbJwtSignatureValid = true,
-            CredentialSignatureValid = credentialSignatureValid,
-            CredentialIssuer = credentialIssuer,
-            SdHashValid = true,
-            SessionTranscriptValid = sessionTranscriptValid,
-            ExtractedClaims = new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.Ordinal)
-            {
-                [credentialQueryId] = extractedClaims
-            },
-            DisclosedClaimPaths = new Dictionary<string, IReadOnlyDictionary<CredentialPath, object?>>(StringComparer.Ordinal)
-            {
-                [credentialQueryId] = disclosedByPath
-            }
-        };
+            issuerTrust?.Dispose();
+
+            throw;
+        }
     }
 }

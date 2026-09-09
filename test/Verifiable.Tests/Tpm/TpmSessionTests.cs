@@ -8,6 +8,7 @@ using Verifiable.Tpm.Infrastructure.Sessions;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -30,6 +31,28 @@ internal sealed class TpmSessionTests
 {
     public TestContext TestContext { get; set; } = null!;
 
+    /// <summary>
+    /// <see cref="StartAuthSessionInput.CreateBoundUnsaltedHmacSession"/> mints <c>nonceCaller</c> from
+    /// exactly the <see cref="FillEntropyDelegate"/> the caller passes: a delegate that writes a known,
+    /// fixed pattern is what <c>NonceCaller</c> equals, byte for byte.
+    /// </summary>
+    [TestMethod]
+    public void CreateBoundUnsaltedHmacSessionNonceCallerIsThePassedFillDelegatesOutput()
+    {
+        const uint BindHandle = 0x80000001u;
+        const int DigestSize = 32;
+        byte[] expectedPattern = new byte[DigestSize];
+        Array.Fill(expectedPattern, (byte)0x7E);
+        FillEntropyDelegate fixedPattern = destination => expectedPattern.AsSpan().CopyTo(destination);
+
+        StartAuthSessionInput input = StartAuthSessionInput.CreateBoundUnsaltedHmacSession(
+            BindHandle, TpmAlgIdConstants.TPM_ALG_SHA256, fixedPattern, BaseMemoryPool.Shared);
+
+        Assert.IsTrue(
+            input.NonceCaller.Span.SequenceEqual(expectedPattern),
+            "NonceCaller must equal exactly the bytes the passed FillEntropyDelegate wrote.");
+    }
+
     [TestMethod]
     [DataRow(TpmAlgIdConstants.TPM_ALG_SHA1, 20)]
     [DataRow(TpmAlgIdConstants.TPM_ALG_SHA256, 32)]
@@ -38,14 +61,14 @@ internal sealed class TpmSessionTests
     public void CreateBoundUnsaltedHmacSessionBuildsExpectedInput(TpmAlgIdConstants authHash, int digestSize)
     {
         const uint BindHandle = 0x80000001u;
-        StartAuthSessionInput input = StartAuthSessionInput.CreateBoundUnsaltedHmacSession(BindHandle, authHash);
+        StartAuthSessionInput input = StartAuthSessionInput.CreateBoundUnsaltedHmacSession(BindHandle, authHash, TestEntropy.NewCounterStream(), BaseMemoryPool.Shared);
 
         Assert.AreEqual(BindHandle, input.Bind, "Bind handle must be the supplied entity handle.");
         Assert.AreEqual((uint)TpmRh.TPM_RH_NULL, input.TpmKey, "An unsalted session must carry no salt key (TPM_RH_NULL).");
         Assert.AreEqual(TpmSeConstants.TPM_SE_HMAC, input.SessionType, "Session type must be HMAC.");
         Assert.AreEqual(authHash, input.AuthHash, "AuthHash must be the requested algorithm.");
         Assert.IsTrue(input.EncryptedSalt.IsEmpty, "An unsalted session must carry an empty encryptedSalt.");
-        Assert.HasCount(digestSize, input.NonceCaller, "nonceCaller must be a full-digest-size caller nonce (>= 16 octets per Part 3 §11.1).");
+        Assert.HasCount(digestSize, input.NonceCaller, "nonceCaller must be a full-digest-size caller nonce (>= 16 octets per Part 3, clause 11.1).");
         Assert.AreEqual(TpmCcConstants.TPM_CC_StartAuthSession, input.CommandCode);
     }
 
@@ -53,8 +76,9 @@ internal sealed class TpmSessionTests
     public void CreateBoundUnsaltedHmacSessionGeneratesFreshNonceEachCall()
     {
         const uint BindHandle = 0x80000001u;
-        StartAuthSessionInput first = StartAuthSessionInput.CreateBoundUnsaltedHmacSession(BindHandle, TpmAlgIdConstants.TPM_ALG_SHA256);
-        StartAuthSessionInput second = StartAuthSessionInput.CreateBoundUnsaltedHmacSession(BindHandle, TpmAlgIdConstants.TPM_ALG_SHA256);
+        FillEntropyDelegate rng = TestEntropy.NewCounterStream();
+        StartAuthSessionInput first = StartAuthSessionInput.CreateBoundUnsaltedHmacSession(BindHandle, TpmAlgIdConstants.TPM_ALG_SHA256, rng, BaseMemoryPool.Shared);
+        StartAuthSessionInput second = StartAuthSessionInput.CreateBoundUnsaltedHmacSession(BindHandle, TpmAlgIdConstants.TPM_ALG_SHA256, rng, BaseMemoryPool.Shared);
 
         Assert.IsFalse(
             first.NonceCaller.Span.SequenceEqual(second.NonceCaller.Span),
@@ -75,10 +99,10 @@ internal sealed class TpmSessionTests
         byte[] bindAuth = [0x01, 0x02, 0x03, 0x04];
         byte[] startNonceCaller = new byte[digestSize];
         startNonceCaller.AsSpan().Fill(0x5A);
-        Tpm2bNonce nonceTpm = Tpm2bNonce.CreateRandom(digestSize, pool);
+        Tpm2bNonce nonceTpm = Tpm2bNonce.CreateRandom(digestSize, TestEntropy.NewCounterStream(), pool);
 
         using TpmSession session = await TpmSession.CreateBoundAsync(
-            sessionHandle, bindAuth, startNonceCaller, nonceTpm, sessionAlg, pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            sessionHandle, bindAuth, startNonceCaller, nonceTpm, sessionAlg, TestEntropy.NewCounterStream(), pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(sessionHandle.Value, session.SessionHandle.Value, "The session must keep its StartAuthSession handle.");
         Assert.AreEqual(sessionAlg, session.HashAlgorithm, "The session must report its hash algorithm.");
@@ -96,10 +120,10 @@ internal sealed class TpmSessionTests
         //the bound path is exercised without an authValue. The factory must not reject the empty bind auth.
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         var sessionHandle = new TpmHandle(0x02000000u);
-        Tpm2bNonce nonceTpm = Tpm2bNonce.CreateRandom(32, pool);
+        Tpm2bNonce nonceTpm = Tpm2bNonce.CreateRandom(32, TestEntropy.NewCounterStream(), pool);
 
         using TpmSession session = await TpmSession.CreateBoundAsync(
-            sessionHandle, ReadOnlyMemory<byte>.Empty, new byte[32], nonceTpm, TpmAlgIdConstants.TPM_ALG_SHA256, pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            sessionHandle, ReadOnlyMemory<byte>.Empty, new byte[32], nonceTpm, TpmAlgIdConstants.TPM_ALG_SHA256, TestEntropy.NewCounterStream(), pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(sessionHandle.Value, session.SessionHandle.Value);
     }
@@ -111,18 +135,18 @@ internal sealed class TpmSessionTests
 
         await Assert.ThrowsExactlyAsync<ArgumentNullException>(async () =>
             await TpmSession.CreateBoundAsync(
-                new TpmHandle(0x02000000u), new byte[] { 0x01 }, new byte[32], null!, TpmAlgIdConstants.TPM_ALG_SHA256, pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+                new TpmHandle(0x02000000u), new byte[] { 0x01 }, new byte[32], null!, TpmAlgIdConstants.TPM_ALG_SHA256, TestEntropy.NewCounterStream(), pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
     }
 
     [TestMethod]
     public async Task CreateBoundAsyncRejectsNullPool()
     {
-        Tpm2bNonce nonceTpm = Tpm2bNonce.CreateRandom(32, BaseMemoryPool.Shared);
+        Tpm2bNonce nonceTpm = Tpm2bNonce.CreateRandom(32, TestEntropy.NewCounterStream(), BaseMemoryPool.Shared);
         try
         {
             await Assert.ThrowsExactlyAsync<ArgumentNullException>(async () =>
                 await TpmSession.CreateBoundAsync(
-                    new TpmHandle(0x02000000u), new byte[] { 0x01 }, new byte[32], nonceTpm, TpmAlgIdConstants.TPM_ALG_SHA256, null!, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+                    new TpmHandle(0x02000000u), new byte[] { 0x01 }, new byte[32], nonceTpm, TpmAlgIdConstants.TPM_ALG_SHA256, TestEntropy.NewCounterStream(), null!, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
         }
         finally
         {

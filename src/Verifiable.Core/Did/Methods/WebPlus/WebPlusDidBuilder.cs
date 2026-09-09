@@ -132,7 +132,7 @@ public sealed class WebPlusDidBuilder: Builder<DidDocument, WebPlusDidBuildState
         {
             string verificationMethodId = $"{buildState!.PlaceholderDid}?selfHash={buildState.Placeholder}&versionId=0#0";
             VerificationMethod verificationMethod = DidBuilderExtensions.CreateVerificationMethod(
-                buildState.UpdateKey, buildState.VerificationMethodType, verificationMethodId, buildState.PlaceholderDid);
+                buildState.UpdateKey, buildState.VerificationMethodType, verificationMethodId, buildState.PlaceholderDid, builder.Pool);
             document.VerificationMethod = [verificationMethod];
             document.WithStandardVerificationRelationships(buildState.UpdateKey, verificationMethodId);
 
@@ -218,7 +218,7 @@ public sealed class WebPlusDidBuilder: Builder<DidDocument, WebPlusDidBuildState
         WebPlusDidBuildState buildState = new(
             updateKey,
             verificationMethodType ?? MultikeyVerificationMethodTypeInfo.Instance,
-            MbPubKey: MultibaseSerializer.EncodeKey(updateKey, Base58Encoder),
+            MbPubKey: MultibaseSerializer.EncodeKey(updateKey, Base58Encoder, Pool),
             placeholder,
             PlaceholderDid: $"{WellKnownDidMethodPrefixes.WebPlusDidMethodPrefix}:{host}:{placeholder}",
             validFrom);

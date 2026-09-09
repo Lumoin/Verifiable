@@ -43,10 +43,9 @@ public sealed class ResourceServerIntegration
 
     /// <summary>
     /// The time provider used for <c>exp</c>/<c>nbf</c>/<c>iat</c> checks
-    /// and the DPoP freshness window. Defaults to
-    /// <see cref="TimeProvider.System"/>.
+    /// and the DPoP freshness window.
     /// </summary>
-    public TimeProvider TimeProvider { get; init; } = TimeProvider.System;
+    public required TimeProvider TimeProvider { get; init; }
 
     /// <summary>
     /// Tolerance applied to a DPoP proof's <c>iat</c> claim per RFC 9449

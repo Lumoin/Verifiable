@@ -26,7 +26,11 @@ public sealed record MdocVpVerificationSeams
     /// <summary>Resolves the issuer verification key from the IssuerAuth (typically an IACA x5chain resolver). Wired to e.g. <c>MdocCborIacaTrustResolver</c>.</summary>
     public required ResolveMdocIssuerKeyDelegate ResolveIssuerKey { get; init; }
 
-    /// <summary>Parses the DeviceResponse wire bytes. Wired to <c>MdocCborDeviceResponseReader.Read</c>.</summary>
+    /// <summary>
+    /// Parses the DeviceResponse wire bytes. Wired to <c>MdocCborDeviceResponseReader.Read</c> — see
+    /// <see cref="ParseMdocDeviceResponseDelegate"/>'s remarks for the <see cref="FormatException"/>
+    /// contract that method carries at its public boundary.
+    /// </summary>
     public required ParseMdocDeviceResponseDelegate ParseDeviceResponse { get; init; }
 
     /// <summary>Encodes the OID4VP SessionTranscript. Wired to <c>Oid4VpMdocSessionTranscriptEncoder.Encode</c>.</summary>
@@ -48,12 +52,12 @@ public sealed record MdocVpVerificationSeams
     public required BuildSigStructureDelegate BuildSigStructure { get; init; }
 
     /// <summary>
-    /// Optional: extracts the leaf certificate's AuthorityKeyIdentifier (base64url) from the
-    /// IssuerAuth x5chain so the verifier can enforce a DCQL <c>trusted_authorities</c> entry
-    /// of type <c>aki</c> (OID4VP 1.0 §6.1.1.1). Wired to e.g.
-    /// <c>MdocCborAuthorityIdentifierExtractor.Create</c>. When <see langword="null"/> the mdoc
-    /// path surfaces no issuer authority identifier, so a <c>trusted_authorities</c> constraint
-    /// on an <c>mso_mdoc</c> query is not enforced (the evaluator skips a check it has no value for).
+    /// Optional: resolves the OID4VP 1.0 §6.1.1 trust evidence from the IssuerAuth x5chain so the
+    /// verifier can enforce a DCQL <c>trusted_authorities</c> entry against an <c>mso_mdoc</c>
+    /// credential. Wired to e.g. <c>MdocCborTrustedAuthorityEvidence.Create</c>. When
+    /// <see langword="null"/> the mdoc path surfaces no trust evidence, so a
+    /// <c>trusted_authorities</c> constraint on an <c>mso_mdoc</c> query fails closed
+    /// (<see cref="Verifiable.Core.Dcql.DcqlFailureReasons.TrustedAuthorityEvidenceAbsent"/>).
     /// </summary>
-    public ExtractMdocAuthorityIdentifierDelegate? ExtractAuthorityIdentifier { get; init; }
+    public ExtractMdocTrustedAuthorityEvidenceDelegate? ExtractTrustedAuthorityEvidence { get; init; }
 }

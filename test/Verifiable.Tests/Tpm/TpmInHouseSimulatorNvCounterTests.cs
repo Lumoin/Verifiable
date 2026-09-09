@@ -17,6 +17,8 @@ using Verifiable.Tpm.Spec.Attributes;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
+using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -24,11 +26,11 @@ namespace Verifiable.Tests.Tpm;
 /// Drives the NV Counter Index machinery — <c>TPM2_NV_Increment()</c>'s authorization ladder, the
 /// <c>TPM_NT_COUNTER</c> type gate on both <c>TPM2_NV_Increment()</c> and <c>TPM2_NV_Write()</c>,
 /// <c>TPM2_NV_DefineSpace()</c>'s counter-related tightening (<c>dataSize</c>, <c>TPMA_NV_CLEAR_STCLEAR</c>,
-/// and the BITS/EXTEND unsupported-modifier gate), and the phantom-counter rollback protection across
+/// and the BITS unsupported-modifier gate), and the phantom-counter rollback protection across
 /// <c>TPM2_NV_UndefineSpace()</c>/redefine — against the in-house behavioural <see cref="TpmSimulator"/>,
 /// entirely in-process with no external assets, through the same production command path the production code
 /// uses (<see cref="TpmCommandExecutor"/> and the real command/response codecs). TPM 2.0 Library Part 1,
-/// clause 37.2.6.3; Part 3, clauses 31.3.1, 31.7.1, 31.8.
+/// clause 34.2.6.3; Part 3, clauses 31.3.1, 31.7.1, 31.8.
 /// </summary>
 [TestClass]
 internal sealed class TpmInHouseSimulatorNvCounterTests
@@ -45,12 +47,6 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     /// <summary>An Ordinary Index handle, used to prove <c>TPM2_NV_Increment()</c> refuses a non-Counter type.</summary>
     private const uint OrdinaryIndexHandle = 0x0100_0043;
 
-    /// <summary>A Bit Field Index handle, used only for the define-time rejection test.</summary>
-    private const uint BitsIndexHandle = 0x0100_0044;
-
-    /// <summary>An Extend Index handle, used only for the define-time rejection test.</summary>
-    private const uint ExtendIndexHandle = 0x0100_0045;
-
     /// <summary>An <c>authHandle</c> that is neither the owner hierarchy nor any Index defined in this file.</summary>
     private const uint MismatchedAuthHandle = 0x0100_0099;
 
@@ -66,7 +62,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     /// </summary>
     private const int Sha256DigestSize = 32;
 
-    /// <summary>The RSA public exponent the framework RSA key generator uses (TPM 2.0 Library Part 2, Table 215).</summary>
+    /// <summary>The RSA public exponent the framework RSA key generator uses (TPM 2.0 Library Part 2, Table 228).</summary>
     private const uint DefaultRsaExponent = 65537;
 
     /// <summary>The Name algorithm of the RSA endorsement-key-shaped decrypt key the salted-session tests build.</summary>
@@ -100,16 +96,6 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     private const TpmaNv OrdinaryAttributes =
         TpmaNv.TPMA_NV_AUTHREAD | TpmaNv.TPMA_NV_AUTHWRITE | TpmaNv.TPMA_NV_OWNERWRITE;
 
-    /// <summary>Bit Field Index attributes, used only to prove <c>TPM2_NV_DefineSpace()</c> now refuses the type.</summary>
-    private const TpmaNv BitsAttributes =
-        TpmaNv.TPMA_NV_AUTHREAD | TpmaNv.TPMA_NV_AUTHWRITE
-        | (TpmaNv)((uint)TpmNt.TPM_NT_BITS << TpmaNvFields.TPM_NT_SHIFT);
-
-    /// <summary>Extend Index attributes, used only to prove <c>TPM2_NV_DefineSpace()</c> now refuses the type.</summary>
-    private const TpmaNv ExtendAttributes =
-        TpmaNv.TPMA_NV_AUTHREAD | TpmaNv.TPMA_NV_AUTHWRITE
-        | (TpmaNv)((uint)TpmNt.TPM_NT_EXTEND << TpmaNvFields.TPM_NT_SHIFT);
-
     /// <summary>The Index authorization value (and, for owner-arm calls, an alias for "the correct value") used throughout.</summary>
     private static byte[] CorrectAuth { get; } = [0x01, 0x02, 0x03, 0x04];
 
@@ -131,19 +117,19 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
         TpmResult<NvIncrementResponse> result = await IncrementAsync(
             device, pool, registry, CounterIndexHandle, CounterIndexHandle, CorrectAuth).ConfigureAwait(false);
 
-        Assert.AreEqual(TpmRcConstants.TPM_RC_HANDLE, result.ResponseCode);
+        Assert.AreEqual(HmacKeyHarness.HandleEncodedRc(TpmRcConstants.TPM_RC_HANDLE, 1), result.ResponseCode, "Table 255: nvIndex is TPM2_NV_Increment()'s second handle (handle 2); an undefined Index is handle-encoded TPM_RC_HANDLE at index 1.");
     }
 
     /// <summary>
     /// Verifies repeated wrong-authValue index-arm increments against a DA-protected Counter Index increment
     /// <c>FailedTries</c>, and that the TPM enters Lockout mode exactly at the (lowered) <c>maxTries</c>,
-    /// rejecting even the correct authValue thereafter (TPM 2.0 Library Part 1, clause 17.8.3), mirroring
+    /// rejecting even the correct authValue thereafter (TPM 2.0 Library Part 1, clause 16.8.3), mirroring
     /// <c>TpmInHouseSimulatorDictionaryAttackTests</c>' own lockout-loop pattern.
     /// </summary>
     [TestMethod]
@@ -151,7 +137,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
         TpmResult<DictionaryAttackParametersResponse> lowerResult = await device.DictionaryAttackParametersAsync(
@@ -167,7 +153,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
                 device, pool, registry, CounterIndexHandle, CounterIndexHandle, WrongAuth).ConfigureAwait(false);
 
             Assert.AreEqual(
-                TpmRcConstants.TPM_RC_AUTH_FAIL, wrongResult.ResponseCode,
+                HmacKeyHarness.SessionEncodedRc(TpmRcConstants.TPM_RC_AUTH_FAIL, 0), wrongResult.ResponseCode,
                 $"Attempt {attempt} of {LoweredMaxTries} must count as an auth-failure, not yet Lockout mode.");
         }
 
@@ -182,7 +168,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     /// <summary>
     /// Verifies the owner-authorized increment arm stays available while the TPM is in Lockout mode: the
     /// clause 5.6 lockout gate binds the entity whose authValue is compared, and on this arm that entity is
-    /// the owner hierarchy (never dictionary-attack protected, TPM 2.0 Library Part 1, clause 17.8.1), not the
+    /// the owner hierarchy (never dictionary-attack protected, TPM 2.0 Library Part 1, clause 16.8.1), not the
     /// DA-protected Index - the same administrative posture <c>TPM2_NV_Write()</c>'s owner arm takes.
     /// </summary>
     [TestMethod]
@@ -190,7 +176,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
         TpmResult<DictionaryAttackParametersResponse> lowerResult = await device.DictionaryAttackParametersAsync(
@@ -205,7 +191,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
             TpmResult<NvIncrementResponse> wrongResult = await IncrementAsync(
                 device, pool, registry, CounterIndexHandle, CounterIndexHandle, WrongAuth).ConfigureAwait(false);
             Assert.AreEqual(
-                TpmRcConstants.TPM_RC_AUTH_FAIL, wrongResult.ResponseCode,
+                HmacKeyHarness.SessionEncodedRc(TpmRcConstants.TPM_RC_AUTH_FAIL, 0), wrongResult.ResponseCode,
                 $"Attempt {attempt} of {LoweredMaxTries} must count as an auth-failure while driving the TPM into Lockout mode.");
         }
 
@@ -233,7 +219,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
         await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterWithoutOwnerWriteAttributes).ConfigureAwait(false);
@@ -253,7 +239,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
         await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
@@ -275,7 +261,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
         await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterWithoutAuthWriteAttributes).ConfigureAwait(false);
@@ -290,14 +276,14 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
 
     /// <summary>
     /// Verifies a wrong index-arm authValue against a DA-protected Counter Index is an auth-failure (TPM 2.0
-    /// Library Part 1, clause 17.8.3), the DA half of the DA/NO_DA contrast this ladder must preserve.
+    /// Library Part 1, clause 16.8.3), the DA half of the DA/NO_DA contrast this ladder must preserve.
     /// </summary>
     [TestMethod]
     public async Task NvIncrementWithWrongAuthOnDaProtectedIndexReturnsAuthFail()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
         await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
@@ -305,20 +291,22 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
         TpmResult<NvIncrementResponse> result = await IncrementAsync(
             device, pool, registry, CounterIndexHandle, CounterIndexHandle, WrongAuth).ConfigureAwait(false);
 
-        Assert.AreEqual(TpmRcConstants.TPM_RC_AUTH_FAIL, result.ResponseCode);
+        Assert.AreEqual(HmacKeyHarness.SessionEncodedRc(TpmRcConstants.TPM_RC_AUTH_FAIL, 0), result.ResponseCode, "authHandle's authorizing session is session 1 of Table 255 (TPM 2.0 Library Part 2, clause 6.6.2); a wrong authValue on a DA-protected Index is session-encoded TPM_RC_AUTH_FAIL there.");
     }
 
     /// <summary>
     /// Verifies a wrong index-arm authValue against a <c>TPMA_NV_NO_DA</c> Counter Index is a plain
-    /// bad-authorization (TPM 2.0 Library Part 1, clause 17.8.1) - <c>TPMA_NV_NO_DA</c> applies uniformly,
-    /// with no counter-type carve-out (SPEC §5.1), the NO_DA half of the DA/NO_DA contrast.
+    /// bad-authorization (TPM 2.0 Library Part 1, clause 16.8.1) - <c>TPMA_NV_NO_DA</c> applies uniformly,
+    /// with no counter-type carve-out (TPM 2.0 Library Part 2, clause 13.4's <c>TPMA_NV_NO_DA</c> bit:
+    /// "Authorization failures of the Index do not affect the DA logic and authorization of the Index is not
+    /// blocked when the TPM is in Lockout mode."), the NO_DA half of the DA/NO_DA contrast.
     /// </summary>
     [TestMethod]
     public async Task NvIncrementWithWrongAuthOnNonDaIndexReturnsBadAuth()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
         await DefineIndexAsync(device, pool, registry, CounterIndexHandle, NonDaCounterAttributes).ConfigureAwait(false);
@@ -326,7 +314,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
         TpmResult<NvIncrementResponse> result = await IncrementAsync(
             device, pool, registry, CounterIndexHandle, CounterIndexHandle, WrongAuth).ConfigureAwait(false);
 
-        Assert.AreEqual(TpmRcConstants.TPM_RC_BAD_AUTH, result.ResponseCode);
+        Assert.AreEqual(HmacKeyHarness.SessionEncodedRc(TpmRcConstants.TPM_RC_BAD_AUTH, 0), result.ResponseCode, "authHandle's authorizing session is session 1 of Table 255 (TPM 2.0 Library Part 2, clause 6.6.2); a wrong authValue on a non-DA Index is session-encoded TPM_RC_BAD_AUTH there.");
     }
 
     /// <summary>
@@ -338,7 +326,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
         await DefineIndexAsync(device, pool, registry, OrdinaryIndexHandle, OrdinaryAttributes).ConfigureAwait(false);
@@ -347,7 +335,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
             device, pool, registry, OrdinaryIndexHandle, OrdinaryIndexHandle, CorrectAuth).ConfigureAwait(false);
 
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_ATTRIBUTES, result.ResponseCode,
+            HmacKeyHarness.HandleEncodedRc(TpmRcConstants.TPM_RC_ATTRIBUTES, 1), result.ResponseCode,
             "TPM2_NV_Increment() must refuse a non-Counter Index once authorization has already succeeded.");
     }
 
@@ -361,7 +349,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
         await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
@@ -384,20 +372,20 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
         TpmResult<NvDefineSpaceResponse> result = await DefineIndexAsync(
             device, pool, registry, CounterIndexHandle, CounterAttributes, dataSize: 4).ConfigureAwait(false);
 
-        Assert.AreEqual(TpmRcConstants.TPM_RC_SIZE, result.ResponseCode);
+        Assert.AreEqual(HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SIZE, 1), result.ResponseCode, "Table 245: publicInfo is TPM2_NV_DefineSpace()'s second parameter (parameter 2); a Counter Index defined with the wrong dataSize is parameter-encoded TPM_RC_SIZE at index 1.");
     }
 
     /// <summary>
     /// Verifies the phantom high-water mark is TPM-GLOBAL, not per-handle: a Counter Index defined at a
     /// DIFFERENT handle after another counter was deleted still seeds its first increment above that deleted
     /// counter's last value. The specification describes exactly this scope - the mark tracks "the largest
-    /// count of any deleted NV Counter" (TPM 2.0 Library Part 1, clause 37.2.6.3 NOTE 2/NOTE 6), so a fresh
+    /// count of any deleted NV Counter" (TPM 2.0 Library Part 1, clause 34.2.6.3 NOTE 2/NOTE 6), so a fresh
     /// counter's first value reflects the TPM's counter history rather than starting at one.
     /// </summary>
     [TestMethod]
@@ -407,7 +395,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
         await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
@@ -451,14 +439,14 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
         TpmResult<NvDefineSpaceResponse> result = await DefineIndexAsync(
             device, pool, registry, CounterIndexHandle, CounterAttributes | (TpmaNv)forgedStatusAttribute).ConfigureAwait(false);
 
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_ATTRIBUTES, result.ResponseCode,
+            HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_ATTRIBUTES, 1), result.ResponseCode,
             "A status attribute the TPM alone maintains must never be accepted from the caller at definition.");
     }
 
@@ -467,7 +455,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     /// could define a redefined Counter Index with <c>TPMA_NV_WRITTEN</c> already SET would make
     /// <c>TPM2_NV_Increment()</c> read the empty data area as counter value zero and restart the count from
     /// one instead of seeding from the phantom high-water mark, rolling a counter with this Name back below a
-    /// value it had already reported (TPM 2.0 Library Part 1, clause 37.2.6.3 NOTE 4 forbids exactly that).
+    /// value it had already reported (TPM 2.0 Library Part 1, clause 34.2.6.3 NOTE 4 forbids exactly that).
     /// The definition is refused, so the rollback is unreachable and the surviving counter keeps its history.
     /// </summary>
     [TestMethod]
@@ -477,7 +465,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
         await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
@@ -496,7 +484,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
             device, pool, registry, CounterIndexHandle, CounterAttributes | TpmaNv.TPMA_NV_WRITTEN).ConfigureAwait(false);
 
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_ATTRIBUTES, forgedRedefineResult.ResponseCode,
+            HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_ATTRIBUTES, 1), forgedRedefineResult.ResponseCode,
             "A redefinition claiming TPMA_NV_WRITTEN must be refused - accepting it would bypass the phantom high-water seed.");
 
         TpmResult<NvDefineSpaceResponse> honestRedefineResult = await DefineIndexAsync(
@@ -518,7 +506,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
 
     /// <summary>
     /// Verifies <c>TPM2_NV_DefineSpace()</c> rejects a Counter Index with <c>TPMA_NV_CLEAR_STCLEAR</c> SET
-    /// (TPM 2.0 Library Part 3, clause 31.3.1; Part 2, Table 214; Part 1, clause 37.2.4.2 NOTE) - a counter is
+    /// (TPM 2.0 Library Part 3, clause 31.3.1; Part 2, Table 249; Part 1, clause 34.2.4.2 NOTE) - a counter is
     /// either restored on an orderly startup or advanced on a non-orderly one, never cleared by a Reset/Restart.
     /// </summary>
     [TestMethod]
@@ -526,51 +514,13 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
         TpmResult<NvDefineSpaceResponse> result = await DefineIndexAsync(
             device, pool, registry, CounterIndexHandle, ClearStclearCounterAttributes).ConfigureAwait(false);
 
-        Assert.AreEqual(TpmRcConstants.TPM_RC_ATTRIBUTES, result.ResponseCode);
-    }
-
-    /// <summary>
-    /// Verifies <c>TPM2_NV_DefineSpace()</c> now rejects <c>TPM_NT_BITS</c> (TPM 2.0 Library Part 3, clause
-    /// 31.3.1's unsupported-command gate: a TPM that does not implement a type's modifying command,
-    /// <c>TPM2_NV_SetBits()</c> here, must refuse the type at definition).
-    /// </summary>
-    [TestMethod]
-    public async Task NvDefineSpaceOfBitsIndexReturnsAttributes()
-    {
-        BaseMemoryPool pool = BaseMemoryPool.Shared;
-        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
-        TpmResponseRegistry registry = CreateNvRegistry();
-
-        TpmResult<NvDefineSpaceResponse> result = await DefineIndexAsync(
-            device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
-
-        Assert.AreEqual(TpmRcConstants.TPM_RC_ATTRIBUTES, result.ResponseCode);
-    }
-
-    /// <summary>
-    /// Verifies <c>TPM2_NV_DefineSpace()</c> now rejects <c>TPM_NT_EXTEND</c> (TPM 2.0 Library Part 3, clause
-    /// 31.3.1's unsupported-command gate: a TPM that does not implement a type's modifying command,
-    /// <c>TPM2_NV_Extend()</c> here, must refuse the type at definition).
-    /// </summary>
-    [TestMethod]
-    public async Task NvDefineSpaceOfExtendIndexReturnsAttributes()
-    {
-        BaseMemoryPool pool = BaseMemoryPool.Shared;
-        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
-        TpmResponseRegistry registry = CreateNvRegistry();
-
-        TpmResult<NvDefineSpaceResponse> result = await DefineIndexAsync(
-            device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
-
-        Assert.AreEqual(TpmRcConstants.TPM_RC_ATTRIBUTES, result.ResponseCode);
+        Assert.AreEqual(HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_ATTRIBUTES, 1), result.ResponseCode, "Table 245: publicInfo is TPM2_NV_DefineSpace()'s second parameter (parameter 2); a Counter Index defined with TPMA_NV_CLEAR_STCLEAR SET is parameter-encoded TPM_RC_ATTRIBUTES at index 1.");
     }
 
     /// <summary>
@@ -584,7 +534,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
         await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
@@ -605,7 +555,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
         await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
@@ -636,7 +586,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
         await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
@@ -661,7 +611,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     /// The flagship rollback-protection positive: increments a Counter Index to a known value,
     /// undefines it, redefines the same handle, and verifies the first increment of the redefined Index seeds
     /// strictly above (exactly one past) the deleted counter's last value - the phantom high-water mark (TPM
-    /// 2.0 Library Part 1, clause 37.2.6.3 NOTE 2/NOTE 6) proving delete-then-redefine can never roll a
+    /// 2.0 Library Part 1, clause 34.2.6.3 NOTE 2/NOTE 6) proving delete-then-redefine can never roll a
     /// counter with this Name back.
     /// </summary>
     [TestMethod]
@@ -671,7 +621,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
         await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
@@ -710,9 +660,9 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     /// <summary>
     /// The rollback protection is a commitment the TPM has made to the world, not owner state, so it must
     /// survive the one event that discards all owner state. <c>TPM2_Clear()</c> "delete[s] any NV Index with
-    /// TPMA_NV_PLATFORMCREATE == CLEAR" (TPM 2.0 Library Part 3, Section 24.6.1) - which is every Counter Index
+    /// TPMA_NV_PLATFORMCREATE == CLEAR" (TPM 2.0 Library Part 3, clause 24.6.1) - which is every Counter Index
     /// defined under Owner Authorization - yet the phantom high-water mark tracks "the largest count of any
-    /// deleted NV Counter" (Part 1, clause 37.2.6.3 NOTE 2/NOTE 6) and never falls, so a counter redefined under
+    /// deleted NV Counter" (Part 1, clause 34.2.6.3 NOTE 2/NOTE 6) and never falls, so a counter redefined under
     /// the NEW owner still cannot restart below a value this TPM has already reported. A clear that reset the
     /// mark, or that deleted the Index without retiring its value into the mark, would let an owner change roll
     /// a counter back - the exact history rewrite the mark exists to make impossible.
@@ -724,7 +674,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
         await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
@@ -742,7 +692,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
         TpmResult<NvIncrementResponse> orphanedIncrement = await IncrementAsync(
             device, pool, registry, CounterIndexHandle, CounterIndexHandle, CorrectAuth).ConfigureAwait(false);
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_HANDLE, orphanedIncrement.ResponseCode,
+            HmacKeyHarness.HandleEncodedRc(TpmRcConstants.TPM_RC_HANDLE, 1), orphanedIncrement.ResponseCode,
             "The owner-created Counter Index must be gone after the clear, handle and all.");
 
         //The clear emptied ownerAuth as well, so the redefinition authorizes with the Empty Buffer exactly as the
@@ -769,7 +719,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     /// password arm. A wrong authValue proven over an HMAC session against a dictionary-attack-protected
     /// (<c>TPMA_NV_NO_DA</c> CLEAR) Counter Index is <c>TPM_RC_AUTH_FAIL</c>, and repeating it drives the TPM
     /// into Lockout mode exactly as the password arm does, proving <c>failedTries</c> genuinely advances on
-    /// the HMAC path (TPM 2.0 Library Part 1, clause 17.8.1, p.142; clause 17.8.3, p.143). Each per-attempt
+    /// the HMAC path (TPM 2.0 Library Part 1, clause 16.8.1, p.142; clause 16.8.3, p.143). Each per-attempt
     /// mismatch is asserted against <c>BaseError</c> rather than the raw <c>ResponseCode</c>: a genuine
     /// command-HMAC failure names the offending session, so the wire code is the format-one session-encoded
     /// form - base error + <c>TPM_RC_S</c> + <c>0x100</c> for the offending slot (TPM 2.0 Library Part 2,
@@ -781,7 +731,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
         TpmResult<DictionaryAttackParametersResponse> lowerResult = await device.DictionaryAttackParametersAsync(
@@ -815,7 +765,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     /// <summary>
     /// The HMAC arm's NO_DA contrast to the test above. A wrong authValue proven over an
     /// HMAC session against a <c>TPMA_NV_NO_DA</c> Counter Index is a plain <c>TPM_RC_BAD_AUTH</c> and never
-    /// advances the TPM-wide <c>failedTries</c> counter at all (TPM 2.0 Library Part 2, Table 233, bit 25): a
+    /// advances the TPM-wide <c>failedTries</c> counter at all (TPM 2.0 Library Part 2, Table 249, bit 25): a
     /// single wrong HMAC attempt against a SEPARATE, freshly defined DA-protected Index right afterward - with
     /// <c>maxTries</c> lowered to one - still reads a plain auth-failure rather than Lockout mode, proving the
     /// NO_DA Index's own failure above left the shared counter untouched. Both mismatches are asserted against
@@ -831,7 +781,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
         TpmResult<DictionaryAttackParametersResponse> lowerResult = await device.DictionaryAttackParametersAsync(
@@ -860,7 +810,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
 
     /// <summary>
     /// Lockout mode refuses the HMAC arm exactly as the password arm (TPM 2.0 Library
-    /// Part 1, clause 17.8.3). Once wrong PASSWORD attempts have driven the TPM into Lockout mode, a single
+    /// Part 1, clause 16.8.3). Once wrong PASSWORD attempts have driven the TPM into Lockout mode, a single
     /// HMAC-proven attempt with the CORRECT authValue is refused with <c>TPM_RC_LOCKOUT</c> too - the gate
     /// binds the DA-protected entity, not the mechanism used to present the authValue.
     /// </summary>
@@ -869,7 +819,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
         TpmResult<DictionaryAttackParametersResponse> lowerResult = await device.DictionaryAttackParametersAsync(
@@ -884,7 +834,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
             TpmResult<NvIncrementResponse> wrongResult = await IncrementAsync(
                 device, pool, registry, CounterIndexHandle, CounterIndexHandle, WrongAuth).ConfigureAwait(false);
             Assert.AreEqual(
-                TpmRcConstants.TPM_RC_AUTH_FAIL, wrongResult.ResponseCode,
+                HmacKeyHarness.SessionEncodedRc(TpmRcConstants.TPM_RC_AUTH_FAIL, 0), wrongResult.ResponseCode,
                 $"Password attempt {attempt} of {LoweredMaxTries} must count as an auth-failure while driving the TPM into Lockout mode.");
         }
 
@@ -899,8 +849,8 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     /// <summary>
     /// The HMAC arm's counterpart to <see cref="NvIncrementIndexArmWithoutAuthWriteReturnsAuthUnavailable"/>:
     /// with <c>TPMA_NV_AUTHWRITE</c> clear the Index's own authValue is not an available authorization
-    /// mechanism for an increment at all (TPM 2.0 Library Part 1, clause 35.2.6.1), so
-    /// <c>OnNvIncrementOverSession</c>'s entry gate (TPM 2.0 Library Part 3, clause 5.6, check 7.2.2, ordered
+    /// mechanism for an increment at all (TPM 2.0 Library Part 1, clause 34.2.6.1), so
+    /// this command's session-arm entry gate (TPM 2.0 Library Part 3, clause 5.6, check 7.2.2, ordered
     /// ahead of check 9's command-HMAC verification) refuses the command with a BARE
     /// <c>TPM_RC_AUTH_UNAVAILABLE</c> before the session's command HMAC is ever evaluated and before the
     /// Index's Name is even requested for that HMAC. A WRONG authValue is what makes the refusal sharp: had the
@@ -914,7 +864,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
         await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterWithoutAuthWriteAttributes).ConfigureAwait(false);
@@ -930,7 +880,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     /// <summary>
     /// The decrypt-attributed half of the parameter-encryption fail-closed pair:
     /// <c>TPM2_NV_Increment()</c> carries no parameters in either direction
-    /// (TPM 2.0 Library Part 3, clause 31.8.2, Tables 238-239), so a <c>decrypt</c>-attributed session names an
+    /// (TPM 2.0 Library Part 3, clause 31.8.2, Tables 255-256), so a <c>decrypt</c>-attributed session names an
     /// operation with nothing to act on, and the SIMULATOR itself must refuse it with <c>TPM_RC_ATTRIBUTES</c>
     /// (Part 3, clause 5.7) rather than silently ignoring it. The command is hand-framed and submitted directly
     /// to the transport (<see cref="IncrementOverHmacHandFramedAsync"/>) because
@@ -945,7 +895,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
         await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
@@ -969,7 +919,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
 
     /// <summary>
     /// The encrypt-attributed half of the parameter-encryption fail-closed pair: the response-side companion to the decrypt test above. Part 3, clause
-    /// 31.8.2, Table 239 gives <c>TPM2_NV_Increment()</c> no response parameter either, so an
+    /// 31.8.2, Table 256 gives <c>TPM2_NV_Increment()</c> no response parameter either, so an
     /// <c>encrypt</c>-attributed session fails closed with <c>TPM_RC_ATTRIBUTES</c> the same way (Part 3, clause
     /// 5.7), proven the same hand-framed way for the same reason - see the decrypt half's remarks - alongside
     /// the DECLINED case.
@@ -979,7 +929,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
         await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
@@ -1017,7 +967,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
         await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
@@ -1038,7 +988,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
         await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
@@ -1051,8 +1001,8 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     /// <summary>
     /// The bound-entity half: a SALTED, BOUND HMAC session bound directly to
     /// <see cref="CounterIndexHandle"/> itself - legal for a Counter Index, unlike the outright prohibition
-    /// TPM 2.0 Library Part 1, clause 35.2.8.3 places on binding to a PIN Pass/PIN Fail Index. The Index's own
-    /// authValue already feeds the session key's KDFa (Part 1, clause 17.6.12, equation 25), so the
+    /// TPM 2.0 Library Part 1, clause 34.2.8.3 places on binding to a PIN Pass/PIN Fail Index. The Index's own
+    /// authValue already feeds the session key's KDFa (Part 1, clause 16.6.12, equation 25), so the
     /// per-command HMAC key omits the authValue term entirely when the session authorizes that SAME bound
     /// entity (equation 27, p.123) - the increment succeeds even though the composing session never calls
     /// <c>SetAuthValue</c>.
@@ -1062,7 +1012,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(withRsaBackend: true).ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateSaltedSessionRegistry();
 
         await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
@@ -1073,7 +1023,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
         TpmRsaSigningBackend rsaBackend = MicrosoftTpmRsaSigningBackend.Create();
 
         (StartAuthSessionInput Input, IMemoryOwner<byte> Salt, int SaltLength) salted = await StartAuthSessionInput.CreateBoundAndSaltedHmacSession(
-            tpmKeyHandle, CounterIndexHandle, modulus, DefaultRsaExponent, RsaKeyNameAlg, HmacSessionAlg, rsaBackend.EncryptOaep, pool, TestContext.CancellationToken).ConfigureAwait(false);
+            tpmKeyHandle, CounterIndexHandle, modulus, DefaultRsaExponent, RsaKeyNameAlg, HmacSessionAlg, rsaBackend.EncryptOaep, TestEntropy.NewCounterStream(), pool, TestContext.CancellationToken).ConfigureAwait(false);
 
         try
         {
@@ -1091,7 +1041,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
                 //calling it here would double up the authValue term the bound-entity arm (equation 27) omits.
                 using TpmSession session = await TpmSession.CreateBoundAsync(
                     new TpmHandle(sessionHandle), CorrectAuth, salted.Input.NonceCaller, started.NonceTPM,
-                    HmacSessionAlg, pool, salt: salted.Salt.Memory[..salted.SaltLength], cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+                    HmacSessionAlg, TestEntropy.NewCounterStream(), pool, salt: salted.Salt.Memory[..salted.SaltLength], cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
                 TpmResult<NvReadPublicResponse> nameResult = await device.NvReadPublicAsync(CounterIndexHandle, TestContext.CancellationToken).ConfigureAwait(false);
                 Assert.IsTrue(nameResult.IsSuccess, $"NvReadPublicAsync failed: '{nameResult.ResponseCode}'.");
@@ -1121,7 +1071,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
 
     /// <summary>
     /// The not-bound-entity half: the companion to the test above (TPM 2.0 Library Part 1,
-    /// clause 17.6.12, equation 26, p.123). The SAME salted-and-bound session shape, but bound to the OWNER
+    /// clause 16.6.12, equation 26, p.123). The SAME salted-and-bound session shape, but bound to the OWNER
     /// hierarchy rather than to the Index being authorized. Because the entity the session authorizes (the
     /// Index) differs from the entity it is bound to (the owner), the authValue term must still be supplied
     /// explicitly via <c>SetAuthValue</c> - the increment succeeds once it is.
@@ -1131,7 +1081,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(withRsaBackend: true).ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateSaltedSessionRegistry();
 
         await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
@@ -1142,7 +1092,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
         TpmRsaSigningBackend rsaBackend = MicrosoftTpmRsaSigningBackend.Create();
 
         (StartAuthSessionInput Input, IMemoryOwner<byte> Salt, int SaltLength) salted = await StartAuthSessionInput.CreateBoundAndSaltedHmacSession(
-            tpmKeyHandle, (uint)TpmRh.TPM_RH_OWNER, modulus, DefaultRsaExponent, RsaKeyNameAlg, HmacSessionAlg, rsaBackend.EncryptOaep, pool, TestContext.CancellationToken).ConfigureAwait(false);
+            tpmKeyHandle, (uint)TpmRh.TPM_RH_OWNER, modulus, DefaultRsaExponent, RsaKeyNameAlg, HmacSessionAlg, rsaBackend.EncryptOaep, TestEntropy.NewCounterStream(), pool, TestContext.CancellationToken).ConfigureAwait(false);
 
         try
         {
@@ -1160,7 +1110,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
                 //own authValue must still be supplied as this per-command HMAC's authValue term (equation 26).
                 using TpmSession session = await TpmSession.CreateBoundAsync(
                     new TpmHandle(sessionHandle), ReadOnlyMemory<byte>.Empty, salted.Input.NonceCaller, started.NonceTPM,
-                    HmacSessionAlg, pool, salt: salted.Salt.Memory[..salted.SaltLength], cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+                    HmacSessionAlg, TestEntropy.NewCounterStream(), pool, salt: salted.Salt.Memory[..salted.SaltLength], cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
                 session.SetAuthValue(CorrectAuth, pool);
 
                 TpmResult<NvReadPublicResponse> nameResult = await device.NvReadPublicAsync(CounterIndexHandle, TestContext.CancellationToken).ConfigureAwait(false);
@@ -1202,12 +1152,12 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
         await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
 
-        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(HmacSessionAlg);
+        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(HmacSessionAlg, TestEntropy.NewCounterStream(), pool);
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             device, startInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession failed: '{startResult.ResponseCode}'.");
@@ -1217,7 +1167,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
 
         try
         {
-            using TpmSession session = new(new TpmHandle(sessionHandle), started.NonceTPM, HmacSessionAlg, pool);
+            using TpmSession session = new(new TpmHandle(sessionHandle), started.NonceTPM, HmacSessionAlg, TestEntropy.NewCounterStream(), pool);
             session.SetAuthValue(CorrectAuth, pool);
 
             TpmResult<NvReadPublicResponse> nameResult = await device.NvReadPublicAsync(CounterIndexHandle, TestContext.CancellationToken).ConfigureAwait(false);
@@ -1250,7 +1200,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     /// <summary>
     /// Shared by this file's HMAC-arm tests: issues <c>TPM2_NV_Increment()</c> against <paramref name="nvIndex"/>,
     /// authorizing its own Index arm over an UNBOUND, unsalted HMAC session (TPM 2.0 Library Part 1, clause
-    /// 17.6.9, equation 19) whose authValue is <paramref name="suppliedAuth"/>, optionally carrying
+    /// 16.6.9, equation 19) whose authValue is <paramref name="suppliedAuth"/>, optionally carrying
     /// <paramref name="extraSessionAttributes"/> for the parameter-encryption fail-closed tests.
     /// </summary>
     /// <param name="device">The TPM device.</param>
@@ -1264,7 +1214,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
         TpmDevice device, BaseMemoryPool pool, TpmResponseRegistry registry, uint nvIndex, ReadOnlyMemory<byte> suppliedAuth,
         TpmaSession extraSessionAttributes = default)
     {
-        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(HmacSessionAlg);
+        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(HmacSessionAlg, TestEntropy.NewCounterStream(), pool);
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             device, startInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession failed: '{startResult.ResponseCode}'.");
@@ -1274,7 +1224,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
 
         try
         {
-            using TpmSession session = new(new TpmHandle(sessionHandle), started.NonceTPM, HmacSessionAlg, pool);
+            using TpmSession session = new(new TpmHandle(sessionHandle), started.NonceTPM, HmacSessionAlg, TestEntropy.NewCounterStream(), pool);
             session.SetAuthValue(suppliedAuth.Span, pool);
             session.SessionAttributes |= extraSessionAttributes;
 
@@ -1298,7 +1248,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
 
     /// <summary>
     /// The SIMULATOR-side proof for the parameter-encryption fail-closed gate: hand-frames a raw <c>TPM2_NV_Increment()</c> command
-    /// authorized by a single unbound, unsalted HMAC session (TPM 2.0 Library Part 1, clause 17.6.9, equation
+    /// authorized by a single unbound, unsalted HMAC session (TPM 2.0 Library Part 1, clause 16.6.9, equation
     /// 19) whose <c>sessionAttributes</c> octet carries <paramref name="attribute"/> (<c>decrypt</c> or
     /// <c>encrypt</c>), and submits it directly to the transport - bypassing <see cref="TpmCommandExecutor"/>
     /// entirely, since its own client-side admissibility guard would refuse this exact composition before any
@@ -1320,7 +1270,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     private async Task<TpmRcConstants> IncrementOverHmacHandFramedAsync(
         TpmDevice device, BaseMemoryPool pool, TpmResponseRegistry registry, uint nvIndex, ReadOnlyMemory<byte> suppliedAuth, TpmaSession attribute)
     {
-        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(HmacSessionAlg);
+        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(HmacSessionAlg, TestEntropy.NewCounterStream(), pool);
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             device, startInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession failed: '{startResult.ResponseCode}'.");
@@ -1330,7 +1280,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
 
         try
         {
-            using TpmSession session = new(new TpmHandle(sessionHandle), started.NonceTPM, HmacSessionAlg, pool);
+            using TpmSession session = new(new TpmHandle(sessionHandle), started.NonceTPM, HmacSessionAlg, TestEntropy.NewCounterStream(), pool);
             session.SetAuthValue(suppliedAuth.Span, pool);
             session.SessionAttributes |= attribute;
 
@@ -1341,7 +1291,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
 
             //cpHash = H_SHA256(commandCode || Name(authHandle) || Name(nvIndex)) - TPM 2.0 Library Part 1, clause
             //16.7, equation 15. TPM2_NV_Increment() carries no command parameters (Part 3, clause 31.8.2, Table
-            //238), and this arm's authHandle and nvIndex are the same Index, so both Name terms are identical.
+            //255), and this arm's authHandle and nvIndex are the same Index, so both Name terms are identical.
             int cpHashInputLength = sizeof(uint) + indexName.Length + indexName.Length;
             using IMemoryOwner<byte> cpHashInputOwner = pool.Rent(cpHashInputLength);
             Memory<byte> cpHashInput = cpHashInputOwner.Memory[..cpHashInputLength];
@@ -1537,7 +1487,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     /// Creates a simulator, powers it on, and brings it through <c>TPM2_Startup(CLEAR)</c> into the
     /// operational phase. When <paramref name="withRsaBackend"/> is set, the simulator is also wired with the
     /// ECC (BouncyCastle) and RSA (framework) signing backends a salted HMAC session's RSA <c>tpmKey</c> needs
-    /// from <c>TPM2_CreatePrimary()</c> (TPM 2.0 Library Part 1, clause 11.4.10.3).
+    /// from <c>TPM2_CreatePrimary()</c> (TPM 2.0 Library Part 1, clause 16.6.11).
     /// </summary>
     /// <param name="withRsaBackend">When <see langword="true"/>, wires the ECC and RSA signing backends; otherwise the simulator carries neither.</param>
     /// <returns>The operational simulator.</returns>
@@ -1545,8 +1495,8 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     {
         var simulator = withRsaBackend
             ? new TpmSimulator(
-                "tpm-in-house-nv-counter", signingBackend: BouncyCastleTpmEccSigningBackend.Create(), rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create())
-            : new TpmSimulator("tpm-in-house-nv-counter");
+                "tpm-in-house-nv-counter", signingBackend: BouncyCastleTpmEccSigningBackend.Create(), rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch))
+            : new TpmSimulator("tpm-in-house-nv-counter", rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;

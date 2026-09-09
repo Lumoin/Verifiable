@@ -1,8 +1,10 @@
-using System.Formats.Cbor;
+using System.Buffers;
+using Lumoin.Veritas.Cbor;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using Verifiable.Cbor;
 using Verifiable.Cbor.Fido2;
 using Verifiable.Cbor.Mdoc;
 using Verifiable.Cryptography;
@@ -19,8 +21,8 @@ namespace Verifiable.Tests.Fido2;
 /// Tests for the shipped CBOR default readers in <c>Verifiable.Cbor.Fido2</c> —
 /// <see cref="AttestationObjectCborReader"/>, <see cref="PackedAttestationStatementCborReader"/>,
 /// <see cref="CredentialPublicKeyCborReader"/>, and <see cref="AuthenticatorExtensionOutputsCborReader"/> —
-/// the interim System.Formats.Cbor-based composition-edge implementations of the parse delegates
-/// <c>Verifiable.Fido2</c> declares but never itself implements.
+/// the composition-edge implementations of the parse delegates <c>Verifiable.Fido2</c> declares but
+/// never itself implements.
 /// </summary>
 /// <remarks>
 /// Every positive vector is minted at test time with a fresh <see cref="CborWriter"/> — never a frozen
@@ -99,7 +101,8 @@ internal sealed class Fido2CborDefaultsTests
 
         Fido2FormatException exception = Assert.ThrowsExactly<Fido2FormatException>(() => AttestationObjectCborReader.Parse(bytes));
 
-        Assert.IsInstanceOfType<CborContentException>(exception.InnerException);
+        CborConformanceException conformanceException = Assert.IsInstanceOfType<CborConformanceException>(exception.InnerException);
+        Assert.AreEqual(CborConformanceException.DuplicateMapKeyRule, conformanceException.RuleName);
         Assert.Contains("duplicate", exception.InnerException!.Message, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -108,9 +111,11 @@ internal sealed class Fido2CborDefaultsTests
     [TestMethod]
     public void AttestationObjectWithANonMapRootIsRejected()
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteTextString("not-a-map");
-        byte[] bytes = writer.Encode();
+        byte[] bytes = writerBuffer.WrittenSpan.ToArray();
 
         Assert.ThrowsExactly<Fido2FormatException>(() => AttestationObjectCborReader.Parse(bytes));
     }
@@ -198,6 +203,9 @@ internal sealed class Fido2CborDefaultsTests
         byte[] signature = [9, 8, 7, 6, 5];
         byte[] cbor = Fido2AttestationTestVectors.EncodePackedAttStmt(WellKnownCoseAlgorithms.Es256, signature, [leafCert.RawData, rootCert.RawData]);
 
+        //statement.X5c is a collection of disposables, not one disposable value: a using declaration
+        //disposes one variable's own value, not a collection's elements, so the foreach below in the
+        //finally block is the release point.
         PackedAttestationStatement statement = PackedAttestationStatementCborReader.Parse(cbor, BaseMemoryPool.Shared);
         try
         {
@@ -223,7 +231,9 @@ internal sealed class Fido2CborDefaultsTests
     [TestMethod]
     public void PackedStatementDefaultRejectsAnUnrecognisedMember()
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(3);
         writer.WriteTextString("alg");
         writer.WriteInt32(WellKnownCoseAlgorithms.Es256);
@@ -232,7 +242,7 @@ internal sealed class Fido2CborDefaultsTests
         writer.WriteTextString("foo");
         writer.WriteBoolean(true);
         writer.WriteEndMap();
-        byte[] cbor = writer.Encode();
+        byte[] cbor = writerBuffer.WrittenSpan.ToArray();
 
         Fido2FormatException exception = Assert.ThrowsExactly<Fido2FormatException>(() => PackedAttestationStatementCborReader.Parse(cbor, BaseMemoryPool.Shared));
 
@@ -244,12 +254,14 @@ internal sealed class Fido2CborDefaultsTests
     [TestMethod]
     public void PackedStatementDefaultRejectsAMissingRequiredMember()
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(1);
         writer.WriteTextString("alg");
         writer.WriteInt32(WellKnownCoseAlgorithms.Es256);
         writer.WriteEndMap();
-        byte[] cbor = writer.Encode();
+        byte[] cbor = writerBuffer.WrittenSpan.ToArray();
 
         Fido2FormatException exception = Assert.ThrowsExactly<Fido2FormatException>(() => PackedAttestationStatementCborReader.Parse(cbor, BaseMemoryPool.Shared));
 
@@ -390,7 +402,8 @@ internal sealed class Fido2CborDefaultsTests
 
         Fido2FormatException exception = Assert.ThrowsExactly<Fido2FormatException>(() => CredentialPublicKeyCborReader.Read(cbor));
 
-        Assert.IsInstanceOfType<CborContentException>(exception.InnerException);
+        CborConformanceException conformanceException = Assert.IsInstanceOfType<CborConformanceException>(exception.InnerException);
+        Assert.AreEqual(CborConformanceException.DuplicateMapKeyRule, conformanceException.RuleName);
     }
 
 
@@ -402,14 +415,16 @@ internal sealed class Fido2CborDefaultsTests
     [TestMethod]
     public void AuthenticatorExtensionOutputsDefaultSplitsATwoExtensionMapInWireOrder()
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(2);
         writer.WriteTextString("credProtect");
         writer.WriteInt32(2);
         writer.WriteTextString("hmac-secret");
         writer.WriteBoolean(true);
         writer.WriteEndMap();
-        byte[] cbor = writer.Encode();
+        byte[] cbor = writerBuffer.WrittenSpan.ToArray();
 
         IReadOnlyList<Fido2ExtensionOutput> outputs = AuthenticatorExtensionOutputsCborReader.Read(cbor);
 
@@ -428,12 +443,14 @@ internal sealed class Fido2CborDefaultsTests
     [TestMethod]
     public void AuthenticatorExtensionOutputsDefaultRejectsTrailingBytes()
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(1);
         writer.WriteTextString("uvm");
         writer.WriteBoolean(true);
         writer.WriteEndMap();
-        byte[] valid = writer.Encode();
+        byte[] valid = writerBuffer.WrittenSpan.ToArray();
         byte[] withTrailingByte = [.. valid, 0xFF];
 
         Fido2FormatException exception = Assert.ThrowsExactly<Fido2FormatException>(() => AuthenticatorExtensionOutputsCborReader.Read(withTrailingByte));
@@ -514,11 +531,13 @@ internal sealed class Fido2CborDefaultsTests
     /// <returns>The CBOR-encoded empty map.</returns>
     private static byte[] EncodeEmptyMap()
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(0);
         writer.WriteEndMap();
 
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -542,7 +561,8 @@ internal sealed class Fido2CborDefaultsTests
     /// <returns>The CBOR-encoded map bytes.</returns>
     private static byte[] EncodeTextKeyedMap(CborConformanceMode mode, params (string Key, Action<CborWriter> WriteValue)[] entries)
     {
-        var writer = new CborWriter(mode);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborSerializerOptions.Default(mode));
         writer.WriteStartMap(entries.Length);
         foreach((string key, Action<CborWriter> writeValue) in entries)
         {
@@ -552,7 +572,7 @@ internal sealed class Fido2CborDefaultsTests
 
         writer.WriteEndMap();
 
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 

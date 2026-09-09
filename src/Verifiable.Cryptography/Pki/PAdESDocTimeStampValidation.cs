@@ -107,7 +107,7 @@ public sealed class PAdESDocTimeStampValidationResult: IDisposable
 [DebuggerDisplay("PAdESDocTimeStampCollectionResult: {IsSuccess}, {DocTimeStamps?.Count} time-stamp(s)")]
 public sealed class PAdESDocTimeStampCollectionResult: IDisposable
 {
-    private readonly PdfByteSurfaceParseResult byteSurface;
+    private PdfByteSurfaceParseResult ByteSurface { get; }
     private bool disposed;
 
 
@@ -115,7 +115,7 @@ public sealed class PAdESDocTimeStampCollectionResult: IDisposable
     {
         IsSuccess = isSuccess;
         FailureReason = failureReason;
-        this.byteSurface = byteSurface;
+        this.ByteSurface = byteSurface;
         DocTimeStamps = docTimeStamps;
     }
 
@@ -148,7 +148,7 @@ public sealed class PAdESDocTimeStampCollectionResult: IDisposable
             return;
         }
 
-        byteSurface.Dispose();
+        ByteSurface.Dispose();
         if(DocTimeStamps is not null)
         {
             for(int i = 0; i < DocTimeStamps.Count; ++i)

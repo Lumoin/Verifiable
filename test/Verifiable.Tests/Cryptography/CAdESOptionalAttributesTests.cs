@@ -1,7 +1,6 @@
 using System;
 using System.Buffers;
 using System.Formats.Asn1;
-using System.Reflection;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading;
@@ -885,12 +884,51 @@ internal sealed class CAdESOptionalAttributesTests
     [DataRow(nameof(CAdESSignatureFacts.CountersignatureAttributeOid), "1.2.840.113549.1.9.6")]
     public void EveryAttributeOidGetterMatchesItsSpecificationValue(string getterName, string expectedOid)
     {
-        PropertyInfo? property = typeof(CAdESSignatureFacts).GetProperty(getterName, BindingFlags.Public | BindingFlags.Static);
-        Assert.IsNotNull(property, $"{getterName} must exist on {nameof(CAdESSignatureFacts)}.");
-
-        var actualOid = (string)property!.GetValue(null)!;
+        string actualOid = ResolveAttributeOid(getterName);
         Assert.AreEqual(expectedOid, actualOid, $"{getterName} must equal the specification's object identifier.");
     }
+
+
+    /// <summary>
+    /// Maps a <see cref="CAdESSignatureFacts"/> OID getter's own name to its value through a switch naming
+    /// every case explicitly, so <see cref="EveryAttributeOidGetterMatchesItsSpecificationValue"/> reads each
+    /// getter directly rather than through a reflective property lookup.
+    /// </summary>
+    /// <param name="getterName">The <see cref="CAdESSignatureFacts"/> static property name.</param>
+    /// <returns>The named getter's value.</returns>
+    private static string ResolveAttributeOid(string getterName) => getterName switch
+    {
+        nameof(CAdESSignatureFacts.ContentTypeAttributeOid) => CAdESSignatureFacts.ContentTypeAttributeOid,
+        nameof(CAdESSignatureFacts.MessageDigestAttributeOid) => CAdESSignatureFacts.MessageDigestAttributeOid,
+        nameof(CAdESSignatureFacts.SigningTimeAttributeOid) => CAdESSignatureFacts.SigningTimeAttributeOid,
+        nameof(CAdESSignatureFacts.SigningCertificateAttributeOid) => CAdESSignatureFacts.SigningCertificateAttributeOid,
+        nameof(CAdESSignatureFacts.SigningCertificateV2AttributeOid) => CAdESSignatureFacts.SigningCertificateV2AttributeOid,
+        nameof(CAdESSignatureFacts.SignaturePolicyIdentifierAttributeOid) => CAdESSignatureFacts.SignaturePolicyIdentifierAttributeOid,
+        nameof(CAdESSignatureFacts.ContentTimestampAttributeOid) => CAdESSignatureFacts.ContentTimestampAttributeOid,
+        nameof(CAdESSignatureFacts.SignatureTimestampAttributeOid) => CAdESSignatureFacts.SignatureTimestampAttributeOid,
+        nameof(CAdESSignatureFacts.CompleteCertificateReferencesAttributeOid) => CAdESSignatureFacts.CompleteCertificateReferencesAttributeOid,
+        nameof(CAdESSignatureFacts.CompleteRevocationReferencesAttributeOid) => CAdESSignatureFacts.CompleteRevocationReferencesAttributeOid,
+        nameof(CAdESSignatureFacts.CertificateValuesAttributeOid) => CAdESSignatureFacts.CertificateValuesAttributeOid,
+        nameof(CAdESSignatureFacts.RevocationValuesAttributeOid) => CAdESSignatureFacts.RevocationValuesAttributeOid,
+        nameof(CAdESSignatureFacts.EscTimestampAttributeOid) => CAdESSignatureFacts.EscTimestampAttributeOid,
+        nameof(CAdESSignatureFacts.CertificateAndCrlTimestampAttributeOid) => CAdESSignatureFacts.CertificateAndCrlTimestampAttributeOid,
+        nameof(CAdESSignatureFacts.ArchiveTimestampV2AttributeOid) => CAdESSignatureFacts.ArchiveTimestampV2AttributeOid,
+        nameof(CAdESSignatureFacts.ArchiveTimestampV3AttributeOid) => CAdESSignatureFacts.ArchiveTimestampV3AttributeOid,
+        nameof(CAdESSignatureFacts.AtsHashIndexV3AttributeOid) => CAdESSignatureFacts.AtsHashIndexV3AttributeOid,
+        nameof(CAdESSignatureFacts.LongTermValidationAttributeOid) => CAdESSignatureFacts.LongTermValidationAttributeOid,
+        nameof(CAdESSignatureFacts.AtsHashIndexAttributeOid) => CAdESSignatureFacts.AtsHashIndexAttributeOid,
+        nameof(CAdESSignatureFacts.AtsHashIndexV2AttributeOid) => CAdESSignatureFacts.AtsHashIndexV2AttributeOid,
+        nameof(CAdESSignatureFacts.CommitmentTypeIndicationAttributeOid) => CAdESSignatureFacts.CommitmentTypeIndicationAttributeOid,
+        nameof(CAdESSignatureFacts.ContentHintsAttributeOid) => CAdESSignatureFacts.ContentHintsAttributeOid,
+        nameof(CAdESSignatureFacts.MimeTypeAttributeOid) => CAdESSignatureFacts.MimeTypeAttributeOid,
+        nameof(CAdESSignatureFacts.SignerLocationAttributeOid) => CAdESSignatureFacts.SignerLocationAttributeOid,
+        nameof(CAdESSignatureFacts.ContentReferenceAttributeOid) => CAdESSignatureFacts.ContentReferenceAttributeOid,
+        nameof(CAdESSignatureFacts.ContentIdentifierAttributeOid) => CAdESSignatureFacts.ContentIdentifierAttributeOid,
+        nameof(CAdESSignatureFacts.SignaturePolicyStoreAttributeOid) => CAdESSignatureFacts.SignaturePolicyStoreAttributeOid,
+        nameof(CAdESSignatureFacts.SignerAttributesV2AttributeOid) => CAdESSignatureFacts.SignerAttributesV2AttributeOid,
+        nameof(CAdESSignatureFacts.CountersignatureAttributeOid) => CAdESSignatureFacts.CountersignatureAttributeOid,
+        _ => throw new NotSupportedException($"'{getterName}' is not one of {nameof(CAdESSignatureFacts)}'s mapped OID getters."),
+    };
 
 
     /// <summary>Signs <see cref="Content"/> with <paramref name="optionalAttributes"/> through the shipped convenience surface.</summary>

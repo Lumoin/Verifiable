@@ -34,6 +34,7 @@ internal static class SdJwtPipeline
         IReadOnlySet<CredentialPath> disclosablePaths,
         GenerateDisclosureSaltDelegate generateSalt,
         string hashAlgorithm,
+        BaseMemoryPool pool,
         DecoyDigestOptions decoyOptions)
     {
         string json = Encoding.UTF8.GetString(payload.Span);
@@ -46,6 +47,7 @@ internal static class SdJwtPipeline
             SdJwtPathExtraction.ComputeDisclosureDigest,
             encoder,
             hashAlgorithm,
+            pool,
             decoyOptions);
 
         byte[] redactedBytes = SerializeDictionaryToUtf8(jwtPayload);

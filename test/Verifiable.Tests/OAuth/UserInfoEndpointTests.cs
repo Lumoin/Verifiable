@@ -44,8 +44,8 @@ internal sealed class UserInfoEndpointTests
 
     private const string ClientId = "https://userinfo.client.test";
     private const string SubjectId = "subject-userinfo";
-    private static readonly Uri ClientBaseUri = new("https://userinfo.client.test");
-    private static readonly Uri RedirectUri =
+    private static Uri ClientBaseUri { get; } = new("https://userinfo.client.test");
+    private static Uri RedirectUri { get; } =
         new("https://client.example.com/callback");
 
 

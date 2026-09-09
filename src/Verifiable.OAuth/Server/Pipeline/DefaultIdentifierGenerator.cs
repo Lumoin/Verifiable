@@ -1,4 +1,5 @@
-using System.Security.Cryptography;
+using System.Buffers;
+using Verifiable.Cryptography;
 
 namespace Verifiable.OAuth.Server.Pipeline;
 
@@ -25,14 +26,17 @@ namespace Verifiable.OAuth.Server.Pipeline;
 /// credentials — fail closed toward the stronger form.
 /// </para>
 /// <para>
-/// This default fills from the platform CSPRNG without entropy-provenance
-/// tracking; deployments that track entropy through their providers replace
-/// the integration delegate (the seam exists for exactly that), as do
-/// deployments needing purpose-specific formats, audit-log emission, or
-/// replay-deterministic identifier injection. Stored as a factory taking
-/// <see cref="TimeProvider"/> rather than a static method because the time
-/// source isn't ambiently available — the caller (typically
-/// <see cref="EndpointServer"/> construction) binds the time source.
+/// This default draws credential bytes from the caller-supplied
+/// <see cref="FillEntropyDelegate"/> rather than the platform CSPRNG
+/// directly, so a deployment that tracks entropy through its own providers
+/// (or a TPM/HSM-backed source) gets that provenance for free; a deployment
+/// needing purpose-specific formats, audit-log emission, or
+/// replay-deterministic identifier injection still replaces the whole
+/// integration delegate (the seam exists for exactly that). Stored as a
+/// factory taking <see cref="TimeProvider"/>, <see cref="FillEntropyDelegate"/>,
+/// and <see cref="BaseMemoryPool"/> rather than a static method because none
+/// of the three is ambiently available — the caller (typically
+/// <see cref="EndpointServer"/> construction) binds all three.
 /// </para>
 /// </remarks>
 public static class DefaultIdentifierGenerator
@@ -47,21 +51,27 @@ public static class DefaultIdentifierGenerator
 
     /// <summary>
     /// Returns a <see cref="GenerateIdentifierDelegate"/> that emits a
-    /// 64-character CSPRNG hex string for credential-shaped purposes and a
-    /// v7 GUID's 32-character hex string for correlation-shaped purposes,
-    /// ignoring the per-call request context.
+    /// 64-character hex string drawn from <paramref name="fillEntropy"/> for
+    /// credential-shaped purposes and a v7 GUID's 32-character hex string for
+    /// correlation-shaped purposes, ignoring the per-call request context.
     /// </summary>
     /// <param name="timeProvider">The time source for the v7 GUID's encoded timestamp. Required.</param>
-    public static GenerateIdentifierDelegate ForTimeProvider(TimeProvider timeProvider)
+    /// <param name="fillEntropy">The entropy source the credential-shaped branch draws its bytes from. Required.</param>
+    /// <param name="pool">The pool the credential-shaped branch rents its scratch buffer from. Required.</param>
+    public static GenerateIdentifierDelegate For(TimeProvider timeProvider, FillEntropyDelegate fillEntropy, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(timeProvider);
+        ArgumentNullException.ThrowIfNull(fillEntropy);
+        ArgumentNullException.ThrowIfNull(pool);
 
         return (purpose, context, cancellationToken) =>
         {
             if(IsCredentialShaped(purpose))
             {
-                string credential = Convert.ToHexStringLower(
-                    RandomNumberGenerator.GetBytes(CredentialByteLength));
+                using IMemoryOwner<byte> owner = pool.Rent(CredentialByteLength);
+                Span<byte> bytes = owner.Memory.Span[..CredentialByteLength];
+                fillEntropy(bytes);
+                string credential = Convert.ToHexStringLower(bytes);
 
                 return ValueTask.FromResult(credential);
             }

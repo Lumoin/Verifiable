@@ -2225,7 +2225,7 @@ internal sealed class TokenExchangeGrantTests
             expectedIssuer,
             ResourceServerAudience,
             resolver,
-            MicrosoftCryptographicFunctions.VerifyP256Async,
+            MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             JwsAccessTokenTestSupport.Parser,
             TestSetup.Base64UrlDecoder,
             TimeProvider,

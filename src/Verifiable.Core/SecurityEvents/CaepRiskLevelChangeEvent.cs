@@ -13,25 +13,25 @@ public static class CaepRiskLevelChangeClaimNames
     public static ReadOnlySpan<byte> RiskReasonUtf8 => "risk_reason"u8;
 
     /// <summary><c>risk_reason</c> — RECOMMENDED; the reason that contributed to the change.</summary>
-    public static readonly string RiskReason = Utf8Constants.ToInternedString(RiskReasonUtf8);
+    public static string RiskReason { get; } = Utf8Constants.ToInternedString(RiskReasonUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Principal"/>.</summary>
     public static ReadOnlySpan<byte> PrincipalUtf8 => "principal"u8;
 
     /// <summary><c>principal</c> — REQUIRED; see <see cref="CaepRiskPrincipalValues"/>.</summary>
-    public static readonly string Principal = Utf8Constants.ToInternedString(PrincipalUtf8);
+    public static string Principal { get; } = Utf8Constants.ToInternedString(PrincipalUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="CurrentLevel"/>.</summary>
     public static ReadOnlySpan<byte> CurrentLevelUtf8 => "current_level"u8;
 
     /// <summary><c>current_level</c> — REQUIRED; one of <see cref="CaepRiskLevelValues"/>.</summary>
-    public static readonly string CurrentLevel = Utf8Constants.ToInternedString(CurrentLevelUtf8);
+    public static string CurrentLevel { get; } = Utf8Constants.ToInternedString(CurrentLevelUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="PreviousLevel"/>.</summary>
     public static ReadOnlySpan<byte> PreviousLevelUtf8 => "previous_level"u8;
 
     /// <summary><c>previous_level</c> — OPTIONAL; omitted means the previous level is unknown to the Transmitter.</summary>
-    public static readonly string PreviousLevel = Utf8Constants.ToInternedString(PreviousLevelUtf8);
+    public static string PreviousLevel { get; } = Utf8Constants.ToInternedString(PreviousLevelUtf8);
 }
 
 
@@ -46,37 +46,37 @@ public static class CaepRiskPrincipalValues
     public static ReadOnlySpan<byte> UserUtf8 => "USER"u8;
 
     /// <summary><c>USER</c>.</summary>
-    public static readonly string User = Utf8Constants.ToInternedString(UserUtf8);
+    public static string User { get; } = Utf8Constants.ToInternedString(UserUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Device"/>.</summary>
     public static ReadOnlySpan<byte> DeviceUtf8 => "DEVICE"u8;
 
     /// <summary><c>DEVICE</c>.</summary>
-    public static readonly string Device = Utf8Constants.ToInternedString(DeviceUtf8);
+    public static string Device { get; } = Utf8Constants.ToInternedString(DeviceUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Session"/>.</summary>
     public static ReadOnlySpan<byte> SessionUtf8 => "SESSION"u8;
 
     /// <summary><c>SESSION</c>.</summary>
-    public static readonly string Session = Utf8Constants.ToInternedString(SessionUtf8);
+    public static string Session { get; } = Utf8Constants.ToInternedString(SessionUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Tenant"/>.</summary>
     public static ReadOnlySpan<byte> TenantUtf8 => "TENANT"u8;
 
     /// <summary><c>TENANT</c>.</summary>
-    public static readonly string Tenant = Utf8Constants.ToInternedString(TenantUtf8);
+    public static string Tenant { get; } = Utf8Constants.ToInternedString(TenantUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="OrgUnit"/>.</summary>
     public static ReadOnlySpan<byte> OrgUnitUtf8 => "ORG_UNIT"u8;
 
     /// <summary><c>ORG_UNIT</c>.</summary>
-    public static readonly string OrgUnit = Utf8Constants.ToInternedString(OrgUnitUtf8);
+    public static string OrgUnit { get; } = Utf8Constants.ToInternedString(OrgUnitUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Group"/>.</summary>
     public static ReadOnlySpan<byte> GroupUtf8 => "GROUP"u8;
 
     /// <summary><c>GROUP</c>.</summary>
-    public static readonly string Group = Utf8Constants.ToInternedString(GroupUtf8);
+    public static string Group { get; } = Utf8Constants.ToInternedString(GroupUtf8);
 }
 
 
@@ -90,19 +90,19 @@ public static class CaepRiskLevelValues
     public static ReadOnlySpan<byte> LowUtf8 => "LOW"u8;
 
     /// <summary><c>LOW</c>.</summary>
-    public static readonly string Low = Utf8Constants.ToInternedString(LowUtf8);
+    public static string Low { get; } = Utf8Constants.ToInternedString(LowUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Medium"/>.</summary>
     public static ReadOnlySpan<byte> MediumUtf8 => "MEDIUM"u8;
 
     /// <summary><c>MEDIUM</c>.</summary>
-    public static readonly string Medium = Utf8Constants.ToInternedString(MediumUtf8);
+    public static string Medium { get; } = Utf8Constants.ToInternedString(MediumUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="High"/>.</summary>
     public static ReadOnlySpan<byte> HighUtf8 => "HIGH"u8;
 
     /// <summary><c>HIGH</c>.</summary>
-    public static readonly string High = Utf8Constants.ToInternedString(HighUtf8);
+    public static string High { get; } = Utf8Constants.ToInternedString(HighUtf8);
 
 
     /// <summary>Whether <paramref name="value"/> is one of the three allowed values.</summary>

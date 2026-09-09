@@ -36,7 +36,7 @@ public static class WellKnownAuthenticationSchemes
     /// Used in <c>Authorization: Bearer &lt;access-token&gt;</c> and as the
     /// <c>token_type</c> value in token endpoint responses.
     /// </summary>
-    public static readonly string Bearer = Utf8Constants.ToInternedString(BearerUtf8);
+    public static string Bearer { get; } = Utf8Constants.ToInternedString(BearerUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="DPoP"/>.</summary>
     public static ReadOnlySpan<byte> DPoPUtf8 => "DPoP"u8;
@@ -47,7 +47,7 @@ public static class WellKnownAuthenticationSchemes
     /// Used in <c>Authorization: DPoP &lt;access-token&gt;</c> when the
     /// access token is bound to a DPoP proof.
     /// </summary>
-    public static readonly string DPoP = Utf8Constants.ToInternedString(DPoPUtf8);
+    public static string DPoP { get; } = Utf8Constants.ToInternedString(DPoPUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Basic"/>.</summary>
     public static ReadOnlySpan<byte> BasicUtf8 => "Basic"u8;
@@ -59,7 +59,7 @@ public static class WellKnownAuthenticationSchemes
     /// <c>Authorization: Basic &lt;base64(id:secret)&gt;</c> for <c>client_secret_basic</c> client
     /// authentication at the token endpoint.
     /// </summary>
-    public static readonly string Basic = Utf8Constants.ToInternedString(BasicUtf8);
+    public static string Basic { get; } = Utf8Constants.ToInternedString(BasicUtf8);
 
 
     /// <summary>

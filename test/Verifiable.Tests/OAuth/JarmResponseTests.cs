@@ -32,21 +32,21 @@ internal sealed class JarmResponseTests
     private const string ClientId = "s6BhdRkqt3";
     private const string KeyId = "authorization-response-key-1";
 
-    private static readonly string[] AllowedAlgorithms = [WellKnownJwaValues.Es256];
+    private static string[] AllowedAlgorithms { get; } = [WellKnownJwaValues.Es256];
 
-    private static readonly Uri RedirectUri = new("https://client.example.com/cb");
+    private static Uri RedirectUri { get; } = new("https://client.example.com/cb");
 
-    private static readonly JwtHeaderSerializer HeaderSerializer =
+    private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)header,
             TestSetup.DefaultSerializationOptions);
 
-    private static readonly JwtPayloadSerializer PayloadSerializer =
+    private static JwtPayloadSerializer PayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)payload,
             TestSetup.DefaultSerializationOptions);
 
-    private static readonly JwtPayloadDeserializer PayloadDeserializer =
+    private static JwtPayloadDeserializer PayloadDeserializer { get; } =
         static bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
             bytes, TestSetup.DefaultSerializationOptions)
             ?? throw new FormatException("Payload JSON parsed to null.");

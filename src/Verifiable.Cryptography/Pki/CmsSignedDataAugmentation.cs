@@ -790,6 +790,14 @@ public static class CmsSignedDataAugmentation
     /// augmented structure — the same caution ETSI EN 319 122-1 clause 5.5.3 NOTE 6 gives for adding to a
     /// protected structure. Parallel signers are placed before such whole-object evidence is, not after.
     /// </para>
+    /// <para>
+    /// <strong>Manual disposal, not <see langword="using"/> declarations.</strong> <c>withAlgorithm</c> is
+    /// declared <see langword="null"/> and assigned only when a digest algorithm actually needed inserting;
+    /// <c>withSigner</c> transfers ownership out through the no-certificates return (nulled just before it) but
+    /// is read, not owned, by <see cref="AddCertificates"/> on the other path, so the
+    /// <see langword="finally"/> below still disposes it there. Neither can be a single-declaration
+    /// <see langword="using"/> target.
+    /// </para>
     /// </remarks>
     public static CmsSignedData AddSignerInfo(
         CmsSignedData signedData,

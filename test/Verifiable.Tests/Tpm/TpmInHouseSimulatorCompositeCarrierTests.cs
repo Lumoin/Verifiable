@@ -15,6 +15,7 @@ using Verifiable.Tpm.Spec;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -63,8 +64,8 @@ internal sealed class TpmInHouseSimulatorCompositeCarrierTests
     /// <summary>
     /// <c>TPM2_CreatePrimary()</c> frames its creation by-products as the four separate structures Part 3,
     /// clause 24.1's response table names — <c>creationData</c> (a <c>TPM2B_CREATION_DATA</c>, Part 2, clause
-    /// 15.2, Table 247), <c>creationHash</c> (a <c>TPM2B_DIGEST</c>, clause 10.4.2, Table 92),
-    /// <c>creationTicket</c> (a <c>TPMT_TK_CREATION</c>, clause 10.7.3, Table 109) and <c>name</c> (a
+    /// 15.2, Table 262), <c>creationHash</c> (a <c>TPM2B_DIGEST</c>, clause 10.3.2, Table 90),
+    /// <c>creationTicket</c> (a <c>TPMT_TK_CREATION</c>, clause 10.6.3, Table 110) and <c>name</c> (a
     /// <c>TPM2B_NAME</c>) — one after another with no padding and nothing left over. Each field boundary is
     /// walked explicitly, and the creation hash is recomputed from the creation-data octets the same response
     /// carried, so a dropped, reordered, or resized member fails the walk rather than merely changing a length.
@@ -91,7 +92,7 @@ internal sealed class TpmInHouseSimulatorCompositeCarrierTests
             expectedCreationHash, creationHash,
             "Part 3, clause 24.1 defines creationHash as the Name-algorithm digest of the creationData the same response carries.");
 
-        Assert.HasCount(Sha256NameSize, name, "TPM2_CreatePrimary() returns the object Name as nameAlg followed by its digest (Part 1, clause 14, Table 6).");
+        Assert.HasCount(Sha256NameSize, name, "TPM2_CreatePrimary() returns the object Name as nameAlg followed by its digest (Part 1, clause 13, Table 9).");
         Assert.AreEqual(
             (ushort)SessionAlg, BinaryPrimitives.ReadUInt16BigEndian(name),
             "The Name's leading algorithm identifier is the object's own nameAlg.");
@@ -109,7 +110,7 @@ internal sealed class TpmInHouseSimulatorCompositeCarrierTests
         using var trackingPool = new MeteredHousePool();
         BaseMemoryPool pool = trackingPool.Pool;
         using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-composite-createframing").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         uint parentHandle = await CreateStorageParentAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -134,9 +135,9 @@ internal sealed class TpmInHouseSimulatorCompositeCarrierTests
 
     /// <summary>
     /// <c>TPM2_Create()</c>'s creation ticket names the HIERARCHY the created object belongs to, never the
-    /// parent object's transient handle. Part 2, clause 10.7.3, Table 109 types the ticket's <c>hierarchy</c>
+    /// parent object's transient handle. Part 2, clause 10.6.3, Table 110 types the ticket's <c>hierarchy</c>
     /// field <c>TPMI_RH_HIERARCHY+</c> and describes it as "the hierarchy containing name", so its only legal
-    /// values are the four selectors of clause 9.13, Table 60; a transient object handle is not among them. The
+    /// values are the four selectors of clause 9.13, Table 59; a transient object handle is not among them. The
     /// proof creates the parent under the PLATFORM hierarchy, so the ticket's field can be neither the parent's
     /// handle nor the storage hierarchy the sibling proofs use.
     /// </summary>
@@ -146,7 +147,7 @@ internal sealed class TpmInHouseSimulatorCompositeCarrierTests
         using var trackingPool = new MeteredHousePool();
         BaseMemoryPool pool = trackingPool.Pool;
         using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-composite-tickethierarchy").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         uint parentHandle = await CreateStorageParentAsync(tpm, registry, pool, TpmRh.TPM_RH_PLATFORM).ConfigureAwait(false);
@@ -183,7 +184,7 @@ internal sealed class TpmInHouseSimulatorCompositeCarrierTests
         using var trackingPool = new MeteredHousePool();
         BaseMemoryPool pool = trackingPool.Pool;
         using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-composite-primarybalance").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         //The first creation warms every lazily-rented durable slot, so the measured window covers the
@@ -218,7 +219,7 @@ internal sealed class TpmInHouseSimulatorCompositeCarrierTests
         using var trackingPool = new MeteredHousePool();
         BaseMemoryPool pool = trackingPool.Pool;
         using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-composite-createbalance").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         uint parentHandle = await CreateStorageParentAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -243,10 +244,10 @@ internal sealed class TpmInHouseSimulatorCompositeCarrierTests
 
     /// <summary>
     /// A <c>TPM2_PolicyCounterTimer()</c> whose <c>operandB</c> declares more octets than a
-    /// <c>TPM2B_OPERAND</c> can hold is refused at the wire read with <c>TPM_RC_SIZE</c>. Part 2, clause 10.4.6,
-    /// Table 96 defines <c>TPM2B_OPERAND</c> with the digest structure's own bound —
+    /// <c>TPM2B_OPERAND</c> can hold is refused at the wire read with <c>TPM_RC_SIZE</c>. Part 2, clause 10.3.6,
+    /// Table 94 defines <c>TPM2B_OPERAND</c> with the digest structure's own bound —
     /// <c>buffer[size]{:sizeof(TPMU_HA)}</c>, 64 octets — so a wider parameter never reaches the command body at
-    /// all, and its refusal is the marshalling one rather than the offset/size range rule clause 23.10 states
+    /// all, and its refusal is the marshalling one rather than the offset/size range rule Part 3, clause 23.10 states
     /// for a well-formed operand. All three rungs are proved on one session so the ORDER is pinned as well: an
     /// operand spanning the whole <c>TPMS_TIME_INFO</c> is admitted, one octet more is <c>TPM_RC_RANGE</c> from
     /// the command body, and one past the buffer bound is <c>TPM_RC_SIZE</c> from the wire read. The last rung
@@ -259,7 +260,7 @@ internal sealed class TpmInHouseSimulatorCompositeCarrierTests
         using var trackingPool = new MeteredHousePool();
         BaseMemoryPool pool = trackingPool.Pool;
         using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-composite-operandbound").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         TpmResult<StartAuthSessionResponse> startResult = await tpm.StartTrialPolicySessionAsync(SessionAlg, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession (trial) failed: '{startResult.ResponseCode}'.");
@@ -300,8 +301,8 @@ internal sealed class TpmInHouseSimulatorCompositeCarrierTests
                 simulator, pool, TpmStConstants.TPM_ST_NO_SESSIONS, TpmCcConstants.TPM_CC_PolicyCounterTimer, [.. oversizeBody]).ConfigureAwait(false);
 
             Assert.AreEqual(
-                TpmRcConstants.TPM_RC_SIZE, oversize,
-                "A parameter wider than Table 96's bound is a marshalling refusal, answered before the command body runs.");
+                HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SIZE, parameterIndex: 0), oversize,
+                "Table 158: operandB is TPM2_PolicyCounterTimer()'s first parameter (index 0); a parameter wider than Table 94's bound is a marshalling refusal, answered before the command body runs.");
 
             Assert.AreEqual(
                 baseline, trackingPool.OutstandingCount,
@@ -315,7 +316,7 @@ internal sealed class TpmInHouseSimulatorCompositeCarrierTests
 
     /// <summary>
     /// <c>TPM2_PolicyNV()</c>'s <c>operandB</c> carries the same <c>TPM2B_OPERAND</c> bound (Part 2, clause
-    /// 10.4.6, Table 96), enforced at the same wire read: the refusal precedes every gate the command body runs,
+    /// 10.3.6, Table 94), enforced at the same wire read: the refusal precedes every gate the command body runs,
     /// so it needs no defined Index and no authorization to observe, and it rents nothing. The frame is built by
     /// hand, because <see cref="PolicyNvInput"/> refuses the same bound at construction.
     /// </summary>
@@ -325,7 +326,7 @@ internal sealed class TpmInHouseSimulatorCompositeCarrierTests
         using var trackingPool = new MeteredHousePool();
         BaseMemoryPool pool = trackingPool.Pool;
         using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-composite-nvoperandbound").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         TpmResult<StartAuthSessionResponse> startResult = await tpm.StartTrialPolicySessionAsync(SessionAlg, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession (trial) failed: '{startResult.ResponseCode}'.");
@@ -352,8 +353,8 @@ internal sealed class TpmInHouseSimulatorCompositeCarrierTests
                 simulator, pool, TpmStConstants.TPM_ST_SESSIONS, TpmCcConstants.TPM_CC_PolicyNV, [.. oversizeBody]).ConfigureAwait(false);
 
             Assert.AreEqual(
-                TpmRcConstants.TPM_RC_SIZE, oversize,
-                "A parameter wider than Table 96's bound is a marshalling refusal, answered before the Index is even resolved.");
+                HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SIZE, parameterIndex: 0), oversize,
+                "Table 156: operandB is TPM2_PolicyNV()'s first parameter (index 0); a parameter wider than Table 94's bound is a marshalling refusal, answered before the Index is even resolved.");
             Assert.AreEqual(
                 baseline, trackingPool.OutstandingCount,
                 "The bound is answered ahead of the rentals, so a refused parse rents neither the operand nor the supplied password.");
@@ -366,7 +367,7 @@ internal sealed class TpmInHouseSimulatorCompositeCarrierTests
 
     /// <summary>
     /// An RSA storage parent's retained public modulus is an owned pooled <c>TPM2B_PUBLIC_KEY_RSA</c> carrier
-    /// (Part 2, clause 11.2.4.5, Table 193) on the same lifecycle as the object's other durable carriers:
+    /// (Part 2, clause 11.2.4.6, Table 194) on the same lifecycle as the object's other durable carriers:
     /// persisting the object deep-copies it, so the transient and persistent entries hold separate rentals, and
     /// evicting each entry releases its own.
     /// </summary>
@@ -376,7 +377,7 @@ internal sealed class TpmInHouseSimulatorCompositeCarrierTests
         using var trackingPool = new MeteredHousePool();
         BaseMemoryPool pool = trackingPool.Pool;
         using TpmSimulator simulator = await CreateRsaOperationalAsync(pool, "tpm-composite-modulus").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         long baseline = trackingPool.OutstandingCount;
@@ -396,14 +397,18 @@ internal sealed class TpmInHouseSimulatorCompositeCarrierTests
         long afterCreate = trackingPool.OutstandingCount;
         Assert.IsGreaterThan(baseline, afterCreate, "The created RSA parent retains durable carriers, the public modulus among them.");
 
-        await EvictControlAsync(tpm, registry, pool, transientHandle, PersistentHandle).ConfigureAwait(false);
+        TpmResult<EvictControlResponse> persistResult = await TpmEvictControlHarness.EvictControlAsync(
+            tpm, registry, pool, transientHandle, PersistentHandle, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(persistResult.IsSuccess, $"EvictControl (persist) failed: '{persistResult.ResponseCode}'.");
         long afterPersist = trackingPool.OutstandingCount;
         Assert.IsGreaterThan(
             afterCreate, afterPersist,
             "Persisting deep-copies every durable carrier, so the persistent entry holds rentals of its own rather than sharing the transient entry's.");
 
         //Evicting the persistent copy releases ITS carriers alone; the transient object still holds its own.
-        await EvictControlAsync(tpm, registry, pool, PersistentHandle, PersistentHandle).ConfigureAwait(false);
+        TpmResult<EvictControlResponse> evictResult = await TpmEvictControlHarness.EvictControlAsync(
+            tpm, registry, pool, PersistentHandle, PersistentHandle, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(evictResult.IsSuccess, $"EvictControl (evict) failed: '{evictResult.ResponseCode}'.");
         Assert.AreEqual(afterCreate, trackingPool.OutstandingCount, "Evicting the persistent copy releases exactly the carriers it deep-copied.");
 
         _ = await tpm.FlushContextAsync(transientHandle, TestContext.CancellationToken).ConfigureAwait(false);
@@ -413,7 +418,7 @@ internal sealed class TpmInHouseSimulatorCompositeCarrierTests
     /// <summary>
     /// <c>TPM2_Load()</c>'s <c>inPublic</c> rides an owned <c>TPM2B_PUBLIC</c> carrier from the parse to the
     /// effect that hashes its marshaled <c>TPMT_PUBLIC</c> into the object Name (Part 3, clause 12.2; Part 1,
-    /// clause 14, Table 6), so the public area never leaves pooled memory. Both outcomes are proved on one pool: a
+    /// clause 13, Table 9), so the public area never leaves pooled memory. Both outcomes are proved on one pool: a
     /// refused load returns every parse rental, and a successful one leaves only the loaded object's own durable
     /// carriers behind, which the flush then releases.
     /// </summary>
@@ -423,7 +428,7 @@ internal sealed class TpmInHouseSimulatorCompositeCarrierTests
         using var trackingPool = new MeteredHousePool();
         BaseMemoryPool pool = trackingPool.Pool;
         using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-composite-loadcarrier").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         uint parentHandle = await CreateStorageParentAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -542,7 +547,7 @@ internal sealed class TpmInHouseSimulatorCompositeCarrierTests
         return (creationData, creationHash, name);
     }
 
-    /// <summary>Walks a <c>TPMT_TK_CREATION</c> at the reader's position and checks every field Table 109 fixes.</summary>
+    /// <summary>Walks a <c>TPMT_TK_CREATION</c> at the reader's position and checks every field Table 110 fixes.</summary>
     /// <param name="reader">The reader positioned at the ticket's tag.</param>
     /// <param name="expectedHierarchy">The hierarchy the ticket must name.</param>
     private static void AssertCreationTicket(ref TpmReader reader, TpmiRhHierarchy expectedHierarchy)
@@ -550,7 +555,7 @@ internal sealed class TpmInHouseSimulatorCompositeCarrierTests
         ushort ticketTag = reader.ReadUInt16();
         Assert.AreEqual(
             (ushort)TpmStConstants.TPM_ST_CREATION, ticketTag,
-            "A creation ticket's structure tag is TPM_ST_CREATION (Part 2, clause 10.7.3, Table 109).");
+            "A creation ticket's structure tag is TPM_ST_CREATION (Part 2, clause 10.6.3, Table 110).");
 
         uint ticketHierarchy = reader.ReadUInt32();
         Assert.AreEqual(
@@ -558,7 +563,7 @@ internal sealed class TpmInHouseSimulatorCompositeCarrierTests
             "The ticket's hierarchy field is a TPMI_RH_HIERARCHY selector naming the hierarchy containing the object.");
         Assert.IsTrue(
             TpmiRhHierarchy.IsHierarchy(ticketHierarchy),
-            "Table 109 types the field TPMI_RH_HIERARCHY+, whose admitted set is Table 60's four selectors.");
+            "Table 110 types the field TPMI_RH_HIERARCHY+, whose admitted set is Table 59's four selectors.");
 
         ushort ticketDigestSize = reader.ReadUInt16();
         Assert.AreEqual(DigestSize, ticketDigestSize, "A real ticket carries a full-width HMAC, so its TPM2B_DIGEST is the context digest width.");
@@ -629,7 +634,7 @@ internal sealed class TpmInHouseSimulatorCompositeCarrierTests
 
     /// <summary>
     /// Appends a one-slot authorization area naming <c>TPM_RS_PW</c> with an empty nonce and an empty password —
-    /// the password form of <c>TPMS_AUTH_COMMAND</c> (TPM 2.0 Library Part 1, clause 17.6.4.1) — which is enough
+    /// the password form of <c>TPMS_AUTH_COMMAND</c> (TPM 2.0 Library Part 1, clause 16.6.4.1) — which is enough
     /// for a parse-time proof, since the parse never evaluates the credential.
     /// </summary>
     /// <param name="body">The body being built.</param>
@@ -727,30 +732,13 @@ internal sealed class TpmInHouseSimulatorCompositeCarrierTests
         return registry;
     }
 
-    /// <summary>Runs <c>TPM2_EvictControl()</c> under empty owner authorization and asserts it succeeded.</summary>
-    /// <param name="tpm">The TPM device.</param>
-    /// <param name="registry">The response codec registry.</param>
-    /// <param name="pool">The memory pool.</param>
-    /// <param name="objectHandle">The transient or persistent object the command acts on.</param>
-    /// <param name="persistentHandle">The persistent handle to install at or evict.</param>
-    private async Task EvictControlAsync(
-        TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, uint objectHandle, uint persistentHandle)
-    {
-        var input = new EvictControlInput(TpmRh.TPM_RH_OWNER, objectHandle, persistentHandle);
-        using TpmPasswordSession ownerAuth = TpmPasswordSession.CreateEmpty(pool);
-
-        TpmResult<EvictControlResponse> result = await TpmCommandExecutor.ExecuteAsync<EvictControlResponse>(
-            tpm, input, [ownerAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.IsTrue(result.IsSuccess, $"EvictControl failed: '{result.ResponseCode}'.");
-    }
-
     /// <summary>Creates a simulator with an RSA signing backend, powers it on, and brings it operational.</summary>
     /// <param name="pool">The memory pool every command runs against.</param>
     /// <param name="tpmId">The simulated TPM's run identifier, unique per test so no meter is shared.</param>
     /// <returns>The operational simulator.</returns>
     private async Task<TpmSimulator> CreateRsaOperationalAsync(BaseMemoryPool pool, string tpmId)
     {
-        var simulator = new TpmSimulator(tpmId, rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create());
+        var simulator = new TpmSimulator(tpmId, rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await BringOperationalAsync(simulator, pool).ConfigureAwait(false);
 
@@ -763,7 +751,7 @@ internal sealed class TpmInHouseSimulatorCompositeCarrierTests
     /// <returns>The operational simulator.</returns>
     private async Task<TpmSimulator> CreateOperationalAsync(BaseMemoryPool pool, string tpmId)
     {
-        var simulator = new TpmSimulator(tpmId, signingBackend: BouncyCastleTpmEccSigningBackend.Create());
+        var simulator = new TpmSimulator(tpmId, signingBackend: BouncyCastleTpmEccSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await BringOperationalAsync(simulator, pool).ConfigureAwait(false);
 

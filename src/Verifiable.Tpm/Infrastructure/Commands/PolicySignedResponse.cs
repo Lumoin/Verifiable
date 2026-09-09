@@ -11,11 +11,11 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Response structure (TPM 2.0 Part 3, Section 23.3):
+/// Response structure (TPM 2.0 Library Part 3, clause 23.3):
 /// </para>
 /// <list type="bullet">
 ///   <item><description>timeout (TPM2B_TIMEOUT): the expiration relative to the session, or empty when no ticket is produced.</description></item>
-///   <item><description>policyTicket (TPMT_TK_AUTH): a real authorization ticket when expiration was negative on a non-trial session, otherwise a NULL ticket (TPM 2.0 Library Part 3, Section 23.2.5).</description></item>
+///   <item><description>policyTicket (TPMT_TK_AUTH): a real authorization ticket when expiration was negative on a non-trial session, otherwise a NULL ticket (TPM 2.0 Library Part 3, clause 23.2.5).</description></item>
 /// </list>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -71,7 +71,7 @@ public sealed class PolicySignedResponse: IDisposable, ITpmWireType
                 reader.ReadBytes(timeoutSize).CopyTo(timeoutOwner.Memory.Span[..timeoutSize]);
             }
 
-            //policyTicket (TPMT_TK_AUTH, TPM 2.0 Library Part 2, clause 10.7.5, Table 111): the ticket carrier
+            //policyTicket (TPMT_TK_AUTH, TPM 2.0 Library Part 2, clause 10.6.6, Table 114): the ticket carrier
             //reads its own tag, hierarchy, and digest and owns whatever storage the digest needs.
             TpmtTkAuth ticket = TpmtTkAuth.Parse(ref reader, pool);
 

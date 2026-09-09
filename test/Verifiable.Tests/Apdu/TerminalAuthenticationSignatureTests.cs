@@ -23,10 +23,10 @@ namespace Verifiable.Tests.Apdu;
 internal sealed class TerminalAuthenticationSignatureTests
 {
     /// <summary>The chip identifier ID_IC after Basic Access Control: the MRZ document number including its check digit.</summary>
-    private static readonly byte[] ChipIdentifier = System.Text.Encoding.ASCII.GetBytes("L898902C<3");
+    private static byte[] ChipIdentifier { get; } = System.Text.Encoding.ASCII.GetBytes("L898902C<3");
 
     /// <summary>The chip's 8-byte challenge r_IC from GET CHALLENGE.</summary>
-    private static readonly byte[] ChipChallenge = Convert.FromHexString("0001020304050607");
+    private static byte[] ChipChallenge { get; } = Convert.FromHexString("0001020304050607");
 
 
     public required TestContext TestContext { get; set; }

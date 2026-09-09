@@ -16,10 +16,11 @@ namespace Verifiable.Core.Did.Methods.Web
 {
     public static class IdentifierExtensions
     {
-        public static string EncodeKey(PublicKeyMemory publicKey, KeyFormat keyFormat)
+        public static string EncodeKey(PublicKeyMemory publicKey, KeyFormat keyFormat, BaseMemoryPool pool)
         {
             ArgumentNullException.ThrowIfNull(publicKey);
             ArgumentNullException.ThrowIfNull(keyFormat);
+            ArgumentNullException.ThrowIfNull(pool);
             if(keyFormat is PublicKeyJwk)
             {
                 return DefaultCoderSelector.SelectEncoder(WellKnownKeyFormats.PublicKeyJwk)(publicKey.AsReadOnlySpan());
@@ -32,7 +33,8 @@ namespace Verifiable.Core.Did.Methods.Web
                 algorithm,
                 purpose,
                 publicKey.AsReadOnlySpan(),
-                DefaultCoderSelector.SelectEncoder(WellKnownKeyFormats.PublicKeyMultibase));
+                DefaultCoderSelector.SelectEncoder(WellKnownKeyFormats.PublicKeyMultibase),
+                pool);
         }
     }
 
@@ -88,7 +90,7 @@ namespace Verifiable.Core.Did.Methods.Web
     /// <example>
     /// <code>
     /// // Single key usage.
-    /// var builder = new WebDidBuilder();
+    /// var builder = new WebDidBuilder(BaseMemoryPool.Shared);
     /// var didDocument = await builder.BuildAsync(publicKey, verificationMethodType, "example.com", cancellationToken: ct);
     ///
     /// // Multiple key usage.
@@ -108,6 +110,12 @@ namespace Verifiable.Core.Did.Methods.Web
         /// </summary>
         public FragmentGenerator FragmentGenerator { get; set; } = NumberedFragmentGenerator;
 
+        /// <summary>
+        /// The memory pool this builder's verification-method key formats are rented from, supplied at
+        /// construction.
+        /// </summary>
+        private BaseMemoryPool Pool { get; }
+
 
         /// <summary>
         /// Default fragment generator that creates numbered fragments for all keys.
@@ -120,19 +128,27 @@ namespace Verifiable.Core.Did.Methods.Web
 
 
         /// <summary>
-        /// Alternative fragment generator that uses encoded key identifiers.
+        /// Builds an alternative fragment generator that uses encoded key identifiers, rented from
+        /// <paramref name="pool"/>.
         /// </summary>
-        public static FragmentGenerator EncodedKeyFragmentGenerator { get; } = (state) =>
+        /// <param name="pool">The memory pool the key's multibase/JWK encoding is rented from.</param>
+        /// <returns>The composed fragment generator.</returns>
+        public static FragmentGenerator CreateEncodedKeyFragmentGenerator(BaseMemoryPool pool)
         {
-            if(state is WebDidBuildState webDidState)
-            {
-                var keyInput = webDidState.KeyInputs[webDidState.CurrentVerificationMethodIndex];
-                var keyFormat = keyInput.VerificationMethodType.CreateKeyFormat(keyInput.PublicKey);
-                return IdentifierExtensions.EncodeKey(keyInput.PublicKey, keyFormat);
-            }
+            ArgumentNullException.ThrowIfNull(pool);
 
-            return "key-1";
-        };
+            return (state) =>
+            {
+                if(state is WebDidBuildState webDidState)
+                {
+                    var keyInput = webDidState.KeyInputs[webDidState.CurrentVerificationMethodIndex];
+                    var keyFormat = keyInput.VerificationMethodType.CreateKeyFormat(keyInput.PublicKey, pool);
+                    return IdentifierExtensions.EncodeKey(keyInput.PublicKey, keyFormat, pool);
+                }
+
+                return "key-1";
+            };
+        }
 
 
         /// <summary>
@@ -156,8 +172,16 @@ namespace Verifiable.Core.Did.Methods.Web
         /// <item><description>Additional contexts are appended to the @context array when present.</description></item>
         /// </list>
         /// </remarks>
-        public WebDidBuilder()
+        /// <summary>
+        /// Initializes a new instance of the <see cref="WebDidBuilder"/> class with representation-aware
+        /// transformations, renting its verification-method key-format encodings from <paramref name="pool"/>.
+        /// </summary>
+        /// <param name="pool">The memory pool this builder's verification-method key formats are rented from.</param>
+        public WebDidBuilder(BaseMemoryPool pool)
         {
+            ArgumentNullException.ThrowIfNull(pool);
+            Pool = pool;
+
             //First transformation: Handle @context based on representation type.
             _ = With((didDocument, builder, buildState) =>
             {
@@ -165,22 +189,15 @@ namespace Verifiable.Core.Did.Methods.Web
                 {
                     case DidRepresentationType.JsonLd:
                     case DidRepresentationType.JsonWithContext:
-                        //Create new context with the specified DID Core version.
-                        var context = new Context
-                        {
-                            Contexts = new List<object> { buildState.DidCoreVersion }
-                        };
-
-                        //Add any additional contexts.
+                        //Create the context with the specified DID Core version, followed by any
+                        //additional contexts.
+                        var contextIris = new List<string> { buildState.DidCoreVersion };
                         if(buildState.AdditionalContexts != null)
                         {
-                            foreach(var additionalContext in buildState.AdditionalContexts)
-                            {
-                                context.Contexts.Add(additionalContext);
-                            }
+                            contextIris.AddRange(buildState.AdditionalContexts);
                         }
 
-                        didDocument.Context = context;
+                        didDocument.Context = Context.FromIris(contextIris.ToArray());
                         break;
 
                     case DidRepresentationType.JsonWithoutContext:
@@ -207,7 +224,7 @@ namespace Verifiable.Core.Did.Methods.Web
                     //The standard verification-method construction (id, type, controller, key format) is shared
                     //across every DID method builder; only the id format is method-specific.
                     VerificationMethod verificationMethod = DidBuilderExtensions.CreateVerificationMethod(
-                        keyInput.PublicKey, keyInput.VerificationMethodType, verificationMethodId, CreateDidId(buildState.WebDomain));
+                        keyInput.PublicKey, keyInput.VerificationMethodType, verificationMethodId, CreateDidId(buildState.WebDomain), builder.Pool);
 
                     verificationMethods.Add(verificationMethod);
                 }

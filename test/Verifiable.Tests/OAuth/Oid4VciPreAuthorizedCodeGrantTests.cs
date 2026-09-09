@@ -37,7 +37,7 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
     private const string ClientId = "https://wallet.client.test";
 
     /// <summary>The base URI the registered client is reachable at.</summary>
-    private static readonly Uri ClientBaseUri = new("https://wallet.client.test");
+    private static Uri ClientBaseUri { get; } = new("https://wallet.client.test");
 
     /// <summary>The End-User the offered Credential is about — the seam-resolved subject.</summary>
     private const string OfferSubject = "urn:uuid:end-user-42";
@@ -51,7 +51,7 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
     /// because <see cref="Rfc9068AccessTokenProducer"/>'s <c>RequiredCapability</c> is
     /// <see langword="null"/>, an optional tenant-feature gate rather than a grant-capability proxy.
     /// </summary>
-    private static readonly ImmutableHashSet<CapabilityIdentifier> GrantCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> GrantCapabilities { get; } =
         ImmutableHashSet.Create(
             WellKnownCapabilityIdentifiers.Oid4VciPreAuthorizedCodeGrant,
             WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,

@@ -28,7 +28,7 @@ namespace Verifiable.Tests.JCose;
 /// <para>
 /// <strong>Key material.</strong> The JAdES signing key is P-256, minted through
 /// <see cref="TestKeyMaterialProvider.CreateP256KeyMaterial"/> and wired through
-/// <see cref="MicrosoftCryptographicFunctions.SignP256Async"/>, mirroring <c>JAdESSignatureCreationTests</c>'s own
+/// <see cref="MicrosoftCryptographicFunctionsAdapter.SignP256Async"/>, mirroring <c>JAdESSignatureCreationTests</c>'s own
 /// composition pattern.
 /// </para>
 /// <para>
@@ -905,7 +905,7 @@ internal sealed class JAdESSignatureAugmentationTests
         JAdESSignatureCreation.SignAsync(
             headers, payloadInput, unsignedHeaders,
             JAdESProtectedHeaderJson.Encode, JAdESEtsiUJson.Encode, TestSetup.Base64UrlEncoder,
-            privateKey, MicrosoftCryptographicFunctions.SignP256Async,
+            privateKey, MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             dereference: null, dereferenceContext: null, unknownMechanismHandler: null,
             BaseMemoryPool.Shared, cancellationToken: cancellationToken);
 
@@ -1085,16 +1085,16 @@ internal sealed class JAdESSignatureAugmentationTests
     /// <summary>A genuine in-process Time-Stamping Authority: a root CA, a TSA leaf certificate under it, and <see cref="MintingTimestampResponder"/> minting real RFC 3161 tokens over whatever message imprint a call sends — no network socket involved.</summary>
     private sealed class TsaFixture: IDisposable
     {
-        private readonly X509ChainTestRingNode root;
-        private readonly X509ChainTestRingNode authority;
+        private X509ChainTestRingNode Root { get; }
+        private X509ChainTestRingNode Authority { get; }
 
         public MintingTimestampResponder Responder { get; }
 
 
         private TsaFixture(X509ChainTestRingNode root, X509ChainTestRingNode authority, MintingTimestampResponder responder)
         {
-            this.root = root;
-            this.authority = authority;
+            this.Root = root;
+            this.Authority = authority;
             Responder = responder;
         }
 
@@ -1111,13 +1111,13 @@ internal sealed class JAdESSignatureAugmentationTests
 
 
         /// <summary>A DER-encoded X.509 certificate carrier (the root's own) suitable for the augmentation contexts' <c>SigningCertificate</c> field — a REAL certificate, since the readability/validity-window checks actually parse it.</summary>
-        public PkiCertificateMemory SignerCertificate() => OcspTestFixtures.ToCertificateCarrier(root.Certificate);
+        public PkiCertificateMemory SignerCertificate() => OcspTestFixtures.ToCertificateCarrier(Root.Certificate);
 
 
         public void Dispose()
         {
-            authority.Dispose();
-            root.Dispose();
+            Authority.Dispose();
+            Root.Dispose();
         }
     }
 }

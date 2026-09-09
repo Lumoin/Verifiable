@@ -25,8 +25,8 @@ namespace Verifiable.JCose;
 /// fixed profiled-header entries for those seven labels (plus <c>alg</c>, <c>content type</c>, <c>kid</c>, CWT
 /// Claims, <c>x5chain</c>, <c>x5t</c>, <c>x5u</c>) are always minted as <see cref="CoseHeaderIntegerLabel"/>;
 /// only <c>crit</c>'s array elements and <see cref="CBAdESProtectedHeaders.UnprofiledHeaders"/>'s keys can ever
-/// carry the <see cref="CoseHeaderTextLabel"/> arm. Likewise the S1/S2 CB-AdES component codecs' own internal
-/// CBOR maps (clause 4.6: "The keys of the CBOR maps pairs shall be integers") stay <see langword="int"/>-only
+/// carry the <see cref="CoseHeaderTextLabel"/> arm. Likewise every CB-AdES component's own internal CBOR maps
+/// (clause 4.6: "The keys of the CBOR maps pairs shall be integers") stay <see langword="int"/>-only
 /// through <c>ReadAscendingMapKey</c>/<c>ReadInt32Array</c> — this union governs only the outer protected-headers
 /// map's own label space, the general COSE substrate concern, not the CB-AdES-defined component internals.
 /// </para>

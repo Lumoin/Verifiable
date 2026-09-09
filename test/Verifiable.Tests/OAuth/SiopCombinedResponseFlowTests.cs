@@ -54,19 +54,19 @@ internal sealed class SiopCombinedResponseFlowTests
     private const string IssuerId = "https://issuer.example.com";
     private const string IssuerKeyId = "did:web:issuer.example.com#key-1";
 
-    private static readonly Uri RelyingPartyBaseUri = new("https://rp.example.com");
+    private static Uri RelyingPartyBaseUri { get; } = new("https://rp.example.com");
 
-    private static readonly ImmutableHashSet<CapabilityIdentifier> SiopCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> SiopCapabilities { get; } =
         ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.SiopSelfIssuedOp);
 
-    private static readonly string[] AllowedSiopAlgorithms = [WellKnownJwaValues.Es256];
+    private static string[] AllowedSiopAlgorithms { get; } = [WellKnownJwaValues.Es256];
 
-    private static readonly JwtHeaderSerializer HeaderSerializer =
+    private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)header,
             TestSetup.DefaultSerializationOptions);
 
-    private static readonly JwtPayloadSerializer PayloadSerializer =
+    private static JwtPayloadSerializer PayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)payload,
             TestSetup.DefaultSerializationOptions);
@@ -273,86 +273,30 @@ internal sealed class SiopCombinedResponseFlowTests
 
 
     /// <summary>
-    /// Issues an EUDI PID SD-JWT VC with the holder's Ed25519 public key in <c>cnf.jwk</c>. Copied
-    /// from <see cref="SiopCombinedResponseTests"/> — the issuance-time half every presentation
-    /// builds on.
+    /// Issues an EUDI PID SD-JWT VC with the holder's Ed25519 public key in <c>cnf.jwk</c> — the
+    /// issuance-time half every presentation builds on. Delegates to the shared
+    /// <see cref="SdJwtVpFixture.IssuePidCredentialWithClaimsAsync"/>, the one minter every SD-JWT VC
+    /// seat shares.
     /// </summary>
-    private async ValueTask<(string SerializedSdJwt, PrivateKeyMemory HolderPrivateKey, PublicKeyMemory IssuerPublicKey)>
-        IssuePidCredentialAsync(string givenName, string familyName)
-    {
-        var issuerKeys = TestKeyMaterialProvider.CreateP256KeyMaterial();
-        using PrivateKeyMemory issuerPrivateKey = issuerKeys.PrivateKey;
-
-        var holderKeys = TestKeyMaterialProvider.CreateEd25519KeyMaterial();
-        using PublicKeyMemory holderPublicKey = holderKeys.PublicKey;
-
-        Dictionary<string, object> holderJwk = CryptoFormatConversions.DefaultAlgorithmToJwkConverter(
-            holderPublicKey.Tag.Get<CryptoAlgorithm>(),
-            holderPublicKey.Tag.Get<Purpose>(),
-            holderPublicKey.AsReadOnlySpan(),
-            TestSetup.Base64UrlEncoder);
-
-        JwtPayload payload = JwtPayload.ForSdJwtVcIssuance(
-            issuer: IssuerId,
-            verifiableCredentialType: EudiPid.SdJwtVct,
-            issuedAt: TimeProvider.GetUtcNow(),
-            holderConfirmation: holderJwk,
-            claims:
-            [
-                new(EudiPid.SdJwt.GivenName, givenName),
-                new(EudiPid.SdJwt.FamilyName, familyName)
-            ]);
-
-        var disclosablePaths = new HashSet<CredentialPath>
-        {
-            CredentialPath.FromJsonPointer($"/{EudiPid.SdJwt.GivenName}"),
-            CredentialPath.FromJsonPointer($"/{EudiPid.SdJwt.FamilyName}")
-        };
-
-        SdTokenResult result = await payload.IssueSdJwtAsync(
-            c => JsonSerializerExtensions.SerializeToUtf8Bytes(c, TestSetup.DefaultSerializationOptions),
-            SdJwtIssuance.IssueVerboseAsync,
-            disclosablePaths, TestSalts.DefaultGenerator(),
-            issuerPrivateKey, IssuerKeyId, Pool,
-            mediaType: WellKnownMediaTypes.Jwt.VcSdJwt,
-            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
-
-        string compactJws = Encoding.UTF8.GetString(result.SignedToken.Span);
-        using SdToken<string> issuedToken = new(compactJws, result.Disclosures.ToList());
-        string serializedSdJwt = SdJwtSerializer.SerializeToken(issuedToken, TestSetup.Base64UrlEncoder);
-
-        return (serializedSdJwt, holderKeys.PrivateKey, issuerKeys.PublicKey);
-    }
+    /// <param name="givenName">The value of the disclosable <c>given_name</c> claim.</param>
+    /// <param name="familyName">The value of the disclosable <c>family_name</c> claim.</param>
+    private ValueTask<(string SerializedSdJwt, PrivateKeyMemory HolderPrivateKey, PublicKeyMemory IssuerPublicKey)>
+        IssuePidCredentialAsync(string givenName, string familyName) =>
+        SdJwtVpFixture.IssuePidCredentialWithClaimsAsync(
+            TimeProvider, givenName, familyName, IssuerId, IssuerKeyId, Pool,
+            status: null, TestContext.CancellationToken);
 
 
     /// <summary>
     /// The wallet-side presentation step: parse the stored SD-JWT, sign a KB-JWT over its hash input
     /// with the holder key bound to the request's <c>nonce</c> and the verifier's Client ID, and
-    /// serialise the presentation with key binding per RFC 9901 §4.3. Copied from
-    /// <see cref="SiopCombinedResponseTests"/>.
+    /// serialise the presentation with key binding per RFC 9901 §4.3. Delegates to the shared
+    /// <see cref="SdJwtVpFixture.PresentWithKeyBindingAsync"/>, the one step every SIOPv2 §12 combined-
+    /// response seat shares.
     /// </summary>
-    private async ValueTask<string> PresentWithKeyBindingAsync(
-        string sdJwtWithoutKb, PrivateKeyMemory holderPrivateKey, string nonce, string audience)
-    {
-        using SdToken<string> token = SdJwtSerializer.ParseToken(
-            sdJwtWithoutKb, TestSetup.Base64UrlDecoder, Pool, TestSalts.TestSaltTag);
-
-        string hashInput = SdJwtSerializer.GetSdJwtForHashing(token, TestSetup.Base64UrlEncoder);
-
-        string compactKbJwt = await KbJwtIssuance.IssueAsync(
-            Encoding.UTF8.GetBytes(hashInput),
-            holderPrivateKey,
-            nonce,
-            audience,
-            TimeProvider.GetUtcNow(),
-            TestSetup.Base64UrlEncoder,
-            HeaderSerializer,
-            PayloadSerializer,
-            Pool,
-            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
-
-        using SdToken<string> tokenWithKb = token.WithKeyBinding(compactKbJwt, Pool);
-
-        return SdJwtSerializer.SerializeToken(tokenWithKb, TestSetup.Base64UrlEncoder);
-    }
+    private ValueTask<string> PresentWithKeyBindingAsync(
+        string sdJwtWithoutKb, PrivateKeyMemory holderPrivateKey, string nonce, string audience) =>
+        SdJwtVpFixture.PresentWithKeyBindingAsync(
+            sdJwtWithoutKb, holderPrivateKey, nonce, audience,
+            TimeProvider, HeaderSerializer, PayloadSerializer, Pool, TestContext.CancellationToken);
 }

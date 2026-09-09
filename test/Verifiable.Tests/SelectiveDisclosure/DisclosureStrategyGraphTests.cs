@@ -306,7 +306,7 @@ internal sealed class DisclosureStrategyGraphTests
         entropyCompute: signalCapture,
         signals: signals);
 
-        var _ = graph.EnumerateStrategies().ToList();
+        _ = graph.EnumerateStrategies().ToList();
 
         Assert.IsNotNull(receivedSignals);
         Assert.AreEqual(0.5, (double)receivedSignals![typeof(double)]);

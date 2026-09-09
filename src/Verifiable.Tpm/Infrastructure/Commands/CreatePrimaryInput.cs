@@ -32,7 +32,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// TPML_PCR_SELECTION     creationPCR     PCRs to include in creation data
 /// </code>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 3, Section 24.1, Table 174.
+/// Specification reference: TPM 2.0 Library Part 3, clause 24.1, Table 191.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -225,6 +225,76 @@ public sealed class CreatePrimaryInput: ITpmCommandInput, IDisposable
 
 
     /// <summary>
+    /// Creates a <see cref="CreatePrimaryInput"/> for an unrestricted RSA decryption key — the RSA counterpart
+    /// of <see cref="ForEccKemKey"/>: <paramref name="scheme"/> selects RSAES, OAEP, or NULL (raw RSAEP/RSADP)
+    /// for <c>TPM2_RSA_Encrypt()</c>/<c>TPM2_RSA_Decrypt()</c> over a key with no signing capability. A NULL
+    /// <paramref name="scheme"/> selects the raw-primitive form TPM 2.0 Library Part 2, clause 12.2.3.4, Table
+    /// 228 deprecates in general ("Support for TPM_ALG_NULL except for Storage Keys, and keys intended for use
+    /// with the raw RSAEP/RSADP primitive, was deprecated in version 185. See Part 0.") but names as the carve-out
+    /// Part 0, clause 3.1.4.2 admits.
+    /// </summary>
+    /// <remarks>
+    /// The key this creates is unrestricted, so it is a candidate <c>tpmKey</c> for a salted session: "If an
+    /// unrestricted tpmKey is used for salted session generation, then the encapsulated salt may be recoverable
+    /// by a user or attacker that can call a decryption primitive (e.g., TPM2_RSA_Decrypt() or
+    /// TPM2_ECDH_ZGen()). Users are urged to only use restricted keys for salted sessions. The ability to use an
+    /// unrestricted key for salted sessions is deprecated. See Part 0." (TPM 2.0 Library Part 1, clause 16.6.14)
+    /// — "TPM2_StartAuthSession() with an unrestricted tpmKey was deprecated in TPM 2.0 version 185" (Part 0,
+    /// clause 3.1.4.3). Only the loaded key's own <c>restricted</c> CLEAR/<c>decrypt</c> SET attribute pair
+    /// (<c>TPM_RC_ATTRIBUTES</c> at <see cref="Verifiable.Tpm.Automata.TpmLifecycleTransitions.TryBuildRsaDecryptAction"/>)
+    /// stands between it and recovering, in the clear, anything OAEP/RSAES/RSAEP-wrapped to it — an
+    /// encapsulated salt included, when the caller used this key as a session's <c>tpmKey</c>. This factory
+    /// states the caution; it does not withhold the key or refuse the scheme, and this simulator does not gate
+    /// <c>TPM2_StartAuthSession()</c>'s own <c>tpmKey</c> on restriction (Part 4's <c>StartAuthSession.c</c>
+    /// gates the resolved key's <c>decrypt</c> attribute only).
+    /// </remarks>
+    /// <param name="hierarchy">The hierarchy under which to create the primary key.</param>
+    /// <param name="password">Optional password for the key (null for no password).</param>
+    /// <param name="keyBits">Key size in bits (typically 2048).</param>
+    /// <param name="scheme">The decryption scheme.</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <param name="noDa">
+    /// When <see langword="true"/>, sets TPMA_OBJECT.noDA so that authorization failures against the key do not
+    /// advance the TPM's dictionary-attack lockout counter. Defaults to <see langword="false"/>.
+    /// </param>
+    /// <returns>The command input.</returns>
+    public static CreatePrimaryInput ForRsaDecryptKey(
+        TpmRh hierarchy,
+        string? password,
+        ushort keyBits,
+        TpmtRsaScheme scheme,
+        BaseMemoryPool pool,
+        bool noDa = false)
+    {
+        var objectAttributes =
+            TpmaObject.FIXED_TPM |
+            TpmaObject.FIXED_PARENT |
+            TpmaObject.SENSITIVE_DATA_ORIGIN |
+            TpmaObject.USER_WITH_AUTH |
+            TpmaObject.DECRYPT;
+
+        if(noDa)
+        {
+            objectAttributes |= TpmaObject.NO_DA;
+        }
+
+        var inSensitive = string.IsNullOrEmpty(password)
+            ? Tpm2bSensitiveCreate.CreateEmpty(pool)
+            : Tpm2bSensitiveCreate.WithPassword(password, pool);
+
+        var inPublic = Tpm2bPublic.CreateRsaDecryptKeyTemplate(
+            TpmAlgIdConstants.TPM_ALG_SHA256,
+            objectAttributes,
+            keyBits,
+            scheme);
+
+        var outsideInfo = Tpm2bData.Empty;
+        var creationPcr = TpmlPcrSelection.Empty;
+
+        return new CreatePrimaryInput(hierarchy, inSensitive, inPublic, outsideInfo, creationPcr);
+    }
+
+    /// <summary>
     /// Creates a <see cref="CreatePrimaryInput"/> for generating an ECC ECDH key agreement key.
     /// </summary>
     /// <remarks>
@@ -238,7 +308,7 @@ public sealed class CreatePrimaryInput: ITpmCommandInput, IDisposable
     /// </para>
     /// <list type="bullet">
     ///   <item><description>Object attributes include <see cref="TpmaObject.DECRYPT"/> instead of <see cref="TpmaObject.SIGN_ENCRYPT"/>.</description></item>
-    ///   <item><description>Scheme is TPM_ALG_NULL — unrestricted decryption key per TPM 2.0 Part 2, Section 12.2.3.5.</description></item>
+    ///   <item><description>Scheme is TPM_ALG_NULL — unrestricted decryption key per TPM 2.0 Library Part 2, clause 12.2.3.5.</description></item>
     ///   <item><description>KDF is TPM_ALG_NULL — raw point output required for SECDSA protocol math.</description></item>
     /// </list>
     /// </remarks>
@@ -260,6 +330,65 @@ public sealed class CreatePrimaryInput: ITpmCommandInput, IDisposable
         var inPublic = Tpm2bPublic.CreateEccKeyAgreementTemplate(
             TpmAlgIdConstants.TPM_ALG_SHA256,
             curve);
+
+        return new CreatePrimaryInput(hierarchy, inSensitive, inPublic, Tpm2bData.Empty, TpmlPcrSelection.Empty);
+    }
+
+    /// <summary>
+    /// Creates a <see cref="CreatePrimaryInput"/> for an unrestricted ECC decryption key usable with
+    /// <c>TPM2_Encapsulate()</c> and <c>TPM2_Decapsulate()</c> — a DHKEM(<paramref name="curve"/>,
+    /// HKDF-<paramref name="kdfHashAlg"/>) key per RFC 9180.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Key differences from <see cref="ForEccKeyAgreementKey"/> (the null-scheme/null-kdf ECDH_ZGen shape):
+    /// </para>
+    /// <list type="bullet">
+    ///   <item><description>Scheme is TPM_ALG_ECDH — see <see cref="TpmtEccScheme.Ecdh"/>.</description></item>
+    ///   <item><description>KDF is TPM_ALG_HKDF over <paramref name="kdfHashAlg"/> — the KEM admission gate TPM 2.0 Library Part 2, Table 229 requires (<see cref="TpmsEccParms.ForKeyEncapsulation"/>); a NULL <c>kdf</c> here is what makes <see cref="ForEccKeyAgreementKey"/>'s key refuse both commands.</description></item>
+    ///   <item><description><see cref="TpmaObject.RESTRICTED"/> stays CLEAR: TPM2_Decapsulate() requires <c>restricted</c> CLEAR and <c>decrypt</c> SET (TPM_RC_ATTRIBUTES otherwise) — the anti-oracle gate that keeps this command from decapsulating a storage parent's Labeled-KEM traffic.</description></item>
+    ///   <item><description><see cref="TpmaObject.SIGN_ENCRYPT"/> stays CLEAR: a KEM key is a decryption key, not a signing key.</description></item>
+    /// </list>
+    /// </remarks>
+    /// <param name="hierarchy">The hierarchy under which to create the primary key.</param>
+    /// <param name="password">Optional password for the key (null for no password).</param>
+    /// <param name="curve">The ECC curve — the DHKEM's <c>curveID</c>.</param>
+    /// <param name="kdfHashAlg">The HKDF hash algorithm — the DHKEM's KDF hash.</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <param name="noDa">
+    /// When <see langword="true"/>, sets TPMA_OBJECT.noDA so that authorization failures against the key do not
+    /// advance the TPM's dictionary-attack lockout counter. Defaults to <see langword="false"/>.
+    /// </param>
+    /// <returns>The command input.</returns>
+    public static CreatePrimaryInput ForEccKemKey(
+        TpmRh hierarchy,
+        string? password,
+        TpmEccCurveConstants curve,
+        TpmAlgIdConstants kdfHashAlg,
+        BaseMemoryPool pool,
+        bool noDa = false)
+    {
+        var objectAttributes =
+            TpmaObject.FIXED_TPM |
+            TpmaObject.FIXED_PARENT |
+            TpmaObject.SENSITIVE_DATA_ORIGIN |
+            TpmaObject.USER_WITH_AUTH |
+            TpmaObject.DECRYPT;
+
+        if(noDa)
+        {
+            objectAttributes |= TpmaObject.NO_DA;
+        }
+
+        var inSensitive = string.IsNullOrEmpty(password)
+            ? Tpm2bSensitiveCreate.CreateEmpty(pool)
+            : Tpm2bSensitiveCreate.WithPassword(password, pool);
+
+        var inPublic = Tpm2bPublic.CreateEccKemKeyTemplate(
+            TpmAlgIdConstants.TPM_ALG_SHA256,
+            objectAttributes,
+            curve,
+            kdfHashAlg);
 
         return new CreatePrimaryInput(hierarchy, inSensitive, inPublic, Tpm2bData.Empty, TpmlPcrSelection.Empty);
     }
@@ -302,6 +431,37 @@ public sealed class CreatePrimaryInput: ITpmCommandInput, IDisposable
     }
 
     /// <summary>
+    /// Creates a <see cref="CreatePrimaryInput"/> for an ordinary (password-authorizable) RSA restricted
+    /// storage key — the RSA counterpart of <see cref="ForEccStorageParent"/>, and the non-endorsement sibling
+    /// of <see cref="ForRsaEndorsementKey"/>, whose policy-only authorization an ordinary storage parent does
+    /// not carry.
+    /// </summary>
+    /// <param name="hierarchy">The hierarchy under which to create the key.</param>
+    /// <param name="authPassword">The parent's authorization password, or <see langword="null"/>/empty for an empty authValue.</param>
+    /// <param name="keyBits">The RSA modulus size in bits.</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <param name="noDa">When <see langword="true"/>, sets TPMA_OBJECT.noDA on the template.</param>
+    /// <returns>A <see cref="CreatePrimaryInput"/> configured for an RSA storage parent.</returns>
+    public static CreatePrimaryInput ForRsaStorageParent(
+        TpmRh hierarchy,
+        string? authPassword,
+        ushort keyBits,
+        BaseMemoryPool pool,
+        bool noDa = false)
+    {
+        Tpm2bSensitiveCreate inSensitive = string.IsNullOrEmpty(authPassword)
+            ? Tpm2bSensitiveCreate.CreateEmpty(pool)
+            : Tpm2bSensitiveCreate.WithPassword(authPassword, pool);
+
+        Tpm2bPublic inPublic = Tpm2bPublic.CreateRsaStorageParentTemplate(
+            TpmAlgIdConstants.TPM_ALG_SHA256,
+            keyBits,
+            noDa);
+
+        return new CreatePrimaryInput(hierarchy, inSensitive, inPublic, Tpm2bData.Empty, TpmlPcrSelection.Empty);
+    }
+
+    /// <summary>
     /// Creates a <see cref="CreatePrimaryInput"/> for the standard ECC NIST P-256 endorsement key (TCG EK
     /// Credential Profile, Annex B.3.4, Template L-2): a restricted storage key whose USER-role authorization is
     /// gated on a policy session over the Endorsement Hierarchy's authorization ("PolicyA") rather than on an
@@ -336,7 +496,7 @@ public sealed class CreatePrimaryInput: ITpmCommandInput, IDisposable
         Span<byte> authName = stackalloc byte[sizeof(uint)];
         BinaryPrimitives.WriteUInt32BigEndian(authName, (uint)TpmRh.TPM_RH_ENDORSEMENT);
         Span<byte> policyA = stackalloc byte[digestSize];
-        _ = TpmPolicyDigest.ExtendForSecret(current, authName, ReadOnlySpan<byte>.Empty, TpmAlgIdConstants.TPM_ALG_SHA256, policyA);
+        _ = TpmPolicyDigest.ExtendForSecret(current, authName, ReadOnlySpan<byte>.Empty, TpmAlgIdConstants.TPM_ALG_SHA256, policyA, pool);
 
         Tpm2bSensitiveCreate inSensitive = Tpm2bSensitiveCreate.CreateEmpty(pool);
         Tpm2bPublic inPublic = Tpm2bPublic.CreateEccEndorsementKeyTemplate(
@@ -374,7 +534,7 @@ public sealed class CreatePrimaryInput: ITpmCommandInput, IDisposable
         Span<byte> authName = stackalloc byte[sizeof(uint)];
         BinaryPrimitives.WriteUInt32BigEndian(authName, (uint)TpmRh.TPM_RH_ENDORSEMENT);
         Span<byte> policyA = stackalloc byte[digestSize];
-        _ = TpmPolicyDigest.ExtendForSecret(current, authName, ReadOnlySpan<byte>.Empty, TpmAlgIdConstants.TPM_ALG_SHA256, policyA);
+        _ = TpmPolicyDigest.ExtendForSecret(current, authName, ReadOnlySpan<byte>.Empty, TpmAlgIdConstants.TPM_ALG_SHA256, policyA, pool);
 
         Tpm2bSensitiveCreate inSensitive = Tpm2bSensitiveCreate.CreateEmpty(pool);
 

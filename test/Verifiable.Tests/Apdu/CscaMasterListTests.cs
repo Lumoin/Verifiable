@@ -22,9 +22,9 @@ namespace Verifiable.Tests.Apdu;
 [TestClass]
 internal sealed class CscaMasterListTests
 {
-    private static readonly DateTimeOffset NotBefore = SyntheticPassportFactory.NotBefore;
-    private static readonly DateTimeOffset NotAfter = SyntheticPassportFactory.NotAfter;
-    private static readonly DateTimeOffset ValidationTime = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+    private static DateTimeOffset NotBefore { get; } = SyntheticPassportFactory.NotBefore;
+    private static DateTimeOffset NotAfter { get; } = SyntheticPassportFactory.NotAfter;
+    private static DateTimeOffset ValidationTime { get; } = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
     /// <summary>The id-icao-mrtd-security-ldsSecurityObject content type, a valid CMS content type that is not a master list.</summary>
     private const string LdsSecurityObjectOid = "2.23.136.1.1.1";

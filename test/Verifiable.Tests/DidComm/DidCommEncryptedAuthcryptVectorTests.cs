@@ -31,10 +31,10 @@ internal sealed class DidCommEncryptedAuthcryptVectorTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly BaseMemoryPool Pool = BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool { get; } = BaseMemoryPool.Shared;
 
     //A non-network resolution context; it only satisfies the SSRF-policy-carrying parameter.
-    private static readonly ExchangeContext Context = new();
+    private static ExchangeContext Context { get; } = new();
 
     private const string ExampleDidPrefix = "did:example";
 

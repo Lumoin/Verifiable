@@ -37,7 +37,7 @@ public static class WellKnownPaths
     /// of the Credential Issuer Identifier to form the Credential Issuer Metadata URL. IANA
     /// registration: OID4VCI 1.0 Appendix G.5.1.
     /// </summary>
-    public static readonly string OpenIdCredentialIssuerSuffix = Utf8Constants.ToInternedString(OpenIdCredentialIssuerSuffixUtf8);
+    public static string OpenIdCredentialIssuerSuffix { get; } = Utf8Constants.ToInternedString(OpenIdCredentialIssuerSuffixUtf8);
 
 
     /// <summary>

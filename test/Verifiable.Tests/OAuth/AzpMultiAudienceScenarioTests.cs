@@ -43,14 +43,14 @@ internal sealed class AzpMultiAudienceScenarioTests
     private const string SubjectId = "subject-azp-1";
     private const string SecondAudience = "https://api.partner.example.com";
 
-    private static readonly Uri ClientBaseUri = new("https://client.example.com");
-    private static readonly Uri RedirectUri = new("https://client.example.com/callback");
-    private static readonly TimeSpan IatSkew = TimeSpan.FromSeconds(60);
+    private static Uri ClientBaseUri { get; } = new("https://client.example.com");
+    private static Uri RedirectUri { get; } = new("https://client.example.com/callback");
+    private static TimeSpan IatSkew { get; } = TimeSpan.FromSeconds(60);
 
     //Test-local claim ids for the deployment contributor; the WellKnownClaimIds
     //registry holds the library-shipped ones.
-    private static readonly ClaimId MultiAudienceClaimId = ClaimId.Create(9100, "TestMultiAudience");
-    private static readonly ClaimId AuthorizedPartyClaimId = ClaimId.Create(9101, "TestAuthorizedParty");
+    private static ClaimId MultiAudienceClaimId { get; } = ClaimId.Create(9100, "TestMultiAudience");
+    private static ClaimId AuthorizedPartyClaimId { get; } = ClaimId.Create(9101, "TestAuthorizedParty");
 
     public TestContext TestContext { get; set; } = null!;
 
@@ -295,7 +295,7 @@ internal sealed class AzpMultiAudienceScenarioTests
             material.Registration.IssuerUri!.OriginalString,
             ClientId,
             resolveKey,
-            MicrosoftCryptographicFunctions.VerifyP256Async,
+            MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             JwsAccessTokenTestSupport.Parser,
             TestSetup.Base64UrlDecoder,
             TimeProvider,

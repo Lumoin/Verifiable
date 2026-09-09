@@ -3,6 +3,7 @@ using System.Buffers;
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Time.Testing;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Cbor.Fido2;
 using Verifiable.Cryptography;
@@ -88,7 +89,7 @@ internal sealed class CtapAuthenticatorPowerCycleTests
         Assert.AreEqual(6, after.MinPinCodePointLength, "the current minimum PIN length survives a power cycle; only authenticatorReset reverts it.");
         Assert.IsTrue(after.IsForcePinChangeRequired, "forcePINChange survives a power cycle; only authenticatorReset or a successful changePIN clears it.");
         Assert.AreSequenceEqual(
-            (string[])[.. before.MinPinLengthRpIds], (string[])[.. after.MinPinLengthRpIds],
+            before.MinPinLengthRpIds.ToArray(), after.MinPinLengthRpIds.ToArray(),
             "minPinLengthRPIDs (§7.4.3 line 8424) survives a power cycle; only authenticatorReset clears it.");
 
         Assert.IsFalse(protocolOnePublicKeyBefore.AsSpan().SequenceEqual(after.ProtocolOneKeyAgreementKeyPair.PublicKey.AsReadOnlySpan()), "Protocol one's key-agreement key pair must be refreshed.");
@@ -116,11 +117,13 @@ internal sealed class CtapAuthenticatorPowerCycleTests
     /// generically above by <see cref="PowerCyclePreservesPinConfigurationClearsTheLatchAndRefreshesKeyMaterial"/>'s
     /// dictionary-reference assertion), so a stored record — and therefore its
     /// <see cref="CtapCredentialRecord.CredRandomWithUV"/>/<see cref="CtapCredentialRecord.CredRandomWithoutUV"/>
-    /// pooled owners — survives as the SAME objects, not merely equal ones.
+    /// pooled owners — survives as the SAME objects, not merely equal ones. The
+    /// <c>ImmutableDictionary&lt;,&gt;.Empty</c> read that seeds the store needs no lock: it is a
+    /// get-only BCL singleton that nothing mutates in place.
     /// </summary>
     [TestMethod]
     [SuppressMessage("Reliability", "CA2000:Dispose objects created by 'CredentialId.Create'/'UserHandle.Create' before all references to it are out of scope",
-        Justification = "Ownership of the credential ID and user handle carriers transfers to the CtapCredentialRecord constructed immediately afterward; record.Dispose() releases both once the assertions complete.")]
+        Justification = "Ownership of the credential ID, the user handle, and the two rented credRandom buffers all transfers to the CtapCredentialRecord constructed immediately afterward; record.Dispose() releases all four once the assertions complete.")]
     public async Task PowerCyclePreservesCredRandomWithUvAndWithoutUvByReference()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
@@ -175,7 +178,7 @@ internal sealed class CtapAuthenticatorPowerCycleTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         Guid aaguid = Guid.NewGuid();
         DateTimeOffset now = TestClock.CanonicalEpoch;
-        CtapEnterpriseAttestationProvisioning provisioning = CtapEnterpriseAttestationFixtures.BuildProvisioning(pool);
+        using CtapEnterpriseAttestationProvisioning provisioning = CtapEnterpriseAttestationFixtures.BuildProvisioning(pool);
 
         CtapAuthenticatorState before = CtapAuthenticatorState.Initial(
             aaguid, now, keyAgreementPool: pool, enterpriseAttestationProvisioning: provisioning) with
@@ -194,7 +197,6 @@ internal sealed class CtapAuthenticatorPowerCycleTests
         after.ProtocolOneToken.Dispose();
         after.ProtocolTwoToken.Dispose();
         after.SerializedLargeBlobArray.Dispose();
-        provisioning.Dispose();
     }
 
 
@@ -253,7 +255,7 @@ internal sealed class CtapAuthenticatorPowerCycleTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         DateTimeOffset now = TestClock.CanonicalEpoch;
 
-        BioEnrollmentTemplateId provisionedTemplateId = BioEnrollmentTemplateId.Create(BuildFixedBytes(16, 0x60), pool);
+        using BioEnrollmentTemplateId provisionedTemplateId = BioEnrollmentTemplateId.Create(BuildFixedBytes(16, 0x60), pool);
         var provisionedRecord = new CtapBioEnrollmentTemplateRecord(provisionedTemplateId, FriendlyName: "right index");
         ImmutableDictionary<string, CtapBioEnrollmentTemplateRecord> populatedStore = ImmutableDictionary<string, CtapBioEnrollmentTemplateRecord>.Empty
             .Add(Convert.ToHexStringLower(provisionedTemplateId.AsReadOnlySpan()), provisionedRecord);
@@ -272,7 +274,6 @@ internal sealed class CtapAuthenticatorPowerCycleTests
         Assert.IsTrue(after.HasProvisionedBioEnrollments);
         Assert.IsNull(after.RememberedBioEnrollment, "an in-progress capture sequence must not survive a power cycle.");
 
-        provisionedTemplateId.Dispose();
         after.ProtocolOneKeyAgreementKeyPair.Dispose();
         after.ProtocolTwoKeyAgreementKeyPair.Dispose();
         after.ProtocolOneToken.Dispose();
@@ -291,8 +292,8 @@ internal sealed class CtapAuthenticatorPowerCycleTests
     [TestMethod]
     public async Task SimulatorPowerCycleKeepsCredentialsUsableAndRefreshesBothProtocolsKeyAgreement()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulatorWithClientPinAndCredentials("power-cycle-sim");
         BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using CtapAuthenticatorSimulator simulator = CreateSimulatorWithClientPinAndCredentials("power-cycle-sim", pool);
         Guid aaguidBefore = simulator.Aaguid;
 
         byte[] credentialIdBytes = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0x90), TestContext.CancellationToken);
@@ -300,7 +301,7 @@ internal sealed class CtapAuthenticatorPowerCycleTests
         CoseKey protocolOneKeyBefore = await GetKeyAgreementAsync(simulator, CtapPinUvAuthProtocolId.One, pool);
         CoseKey protocolTwoKeyBefore = await GetKeyAgreementAsync(simulator, CtapPinUvAuthProtocolId.Two, pool);
 
-        simulator.PowerCycle();
+        simulator.PowerCycle(BaseMemoryPool.Shared);
 
         Assert.AreEqual(aaguidBefore, simulator.Aaguid, "The AAGUID must never change across a power cycle.");
 
@@ -327,7 +328,7 @@ internal sealed class CtapAuthenticatorPowerCycleTests
     /// neither <see cref="TestInfrastructure.CtapMakeCredentialGetAssertionFixtures"/> nor
     /// <see cref="TestInfrastructure.CtapClientPinFixtures"/> combines both.
     /// </summary>
-    private static CtapAuthenticatorSimulator CreateSimulatorWithClientPinAndCredentials(string runId) =>
+    private static CtapAuthenticatorSimulator CreateSimulatorWithClientPinAndCredentials(string runId, BaseMemoryPool pool) =>
         new(
             runId,
             CtapGetInfoResponseCborWriter.Write,
@@ -348,7 +349,10 @@ internal sealed class CtapAuthenticatorPowerCycleTests
             decodeLargeBlobsRequest: CtapLargeBlobsRequestCborReader.Read,
             encodeLargeBlobsResponse: CtapLargeBlobsResponseCborWriter.Write,
             encodeMakeCredentialExtensionOutputs: CtapMakeCredentialExtensionOutputsCborWriter.Write,
-            encodeGetAssertionExtensionOutputs: CtapGetAssertionExtensionOutputsCborWriter.Write);
+            encodeGetAssertionExtensionOutputs: CtapGetAssertionExtensionOutputsCborWriter.Write,
+            rng: TestEntropy.NewCounterStream(),
+            timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch),
+            pinUvAuthKeyAgreementPool: pool);
 
 
     /// <summary>Sends a <c>getKeyAgreement</c> request for <paramref name="id"/> and returns the reported COSE_Key.</summary>

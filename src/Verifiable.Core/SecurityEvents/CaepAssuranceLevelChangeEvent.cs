@@ -13,25 +13,25 @@ public static class CaepAssuranceLevelChangeClaimNames
     public static ReadOnlySpan<byte> NamespaceUtf8 => "namespace"u8;
 
     /// <summary><c>namespace</c> — REQUIRED; see <see cref="CaepAssuranceNamespaceValues"/>.</summary>
-    public static readonly string Namespace = Utf8Constants.ToInternedString(NamespaceUtf8);
+    public static string Namespace { get; } = Utf8Constants.ToInternedString(NamespaceUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="CurrentLevel"/>.</summary>
     public static ReadOnlySpan<byte> CurrentLevelUtf8 => "current_level"u8;
 
     /// <summary><c>current_level</c> — REQUIRED; the current assurance level in the namespace.</summary>
-    public static readonly string CurrentLevel = Utf8Constants.ToInternedString(CurrentLevelUtf8);
+    public static string CurrentLevel { get; } = Utf8Constants.ToInternedString(CurrentLevelUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="PreviousLevel"/>.</summary>
     public static ReadOnlySpan<byte> PreviousLevelUtf8 => "previous_level"u8;
 
     /// <summary><c>previous_level</c> — OPTIONAL; omitted means the previous level is unknown to the Transmitter.</summary>
-    public static readonly string PreviousLevel = Utf8Constants.ToInternedString(PreviousLevelUtf8);
+    public static string PreviousLevel { get; } = Utf8Constants.ToInternedString(PreviousLevelUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="ChangeDirection"/>.</summary>
     public static ReadOnlySpan<byte> ChangeDirectionUtf8 => "change_direction"u8;
 
     /// <summary><c>change_direction</c> — OPTIONAL; see <see cref="CaepChangeDirectionValues"/>.</summary>
-    public static readonly string ChangeDirection = Utf8Constants.ToInternedString(ChangeDirectionUtf8);
+    public static string ChangeDirection { get; } = Utf8Constants.ToInternedString(ChangeDirectionUtf8);
 }
 
 
@@ -47,37 +47,37 @@ public static class CaepAssuranceNamespaceValues
     public static ReadOnlySpan<byte> Rfc8176Utf8 => "RFC8176"u8;
 
     /// <summary><c>RFC8176</c> — Authentication Method Reference values.</summary>
-    public static readonly string Rfc8176 = Utf8Constants.ToInternedString(Rfc8176Utf8);
+    public static string Rfc8176 { get; } = Utf8Constants.ToInternedString(Rfc8176Utf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Rfc6711"/>.</summary>
     public static ReadOnlySpan<byte> Rfc6711Utf8 => "RFC6711"u8;
 
     /// <summary><c>RFC6711</c> — IANA Level of Assurance profiles.</summary>
-    public static readonly string Rfc6711 = Utf8Constants.ToInternedString(Rfc6711Utf8);
+    public static string Rfc6711 { get; } = Utf8Constants.ToInternedString(Rfc6711Utf8);
 
     /// <summary>The UTF-8 source literal of <see cref="IsoIec29115"/>.</summary>
     public static ReadOnlySpan<byte> IsoIec29115Utf8 => "ISO-IEC-29115"u8;
 
     /// <summary><c>ISO-IEC-29115</c> — entity authentication assurance framework.</summary>
-    public static readonly string IsoIec29115 = Utf8Constants.ToInternedString(IsoIec29115Utf8);
+    public static string IsoIec29115 { get; } = Utf8Constants.ToInternedString(IsoIec29115Utf8);
 
     /// <summary>The UTF-8 source literal of <see cref="NistIal"/>.</summary>
     public static ReadOnlySpan<byte> NistIalUtf8 => "NIST-IAL"u8;
 
     /// <summary><c>NIST-IAL</c> — NIST SP 800-63A identity assurance levels.</summary>
-    public static readonly string NistIal = Utf8Constants.ToInternedString(NistIalUtf8);
+    public static string NistIal { get; } = Utf8Constants.ToInternedString(NistIalUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="NistAal"/>.</summary>
     public static ReadOnlySpan<byte> NistAalUtf8 => "NIST-AAL"u8;
 
     /// <summary><c>NIST-AAL</c> — NIST SP 800-63B authenticator assurance levels.</summary>
-    public static readonly string NistAal = Utf8Constants.ToInternedString(NistAalUtf8);
+    public static string NistAal { get; } = Utf8Constants.ToInternedString(NistAalUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="NistFal"/>.</summary>
     public static ReadOnlySpan<byte> NistFalUtf8 => "NIST-FAL"u8;
 
     /// <summary><c>NIST-FAL</c> — NIST SP 800-63C federation assurance levels.</summary>
-    public static readonly string NistFal = Utf8Constants.ToInternedString(NistFalUtf8);
+    public static string NistFal { get; } = Utf8Constants.ToInternedString(NistFalUtf8);
 }
 
 
@@ -91,13 +91,13 @@ public static class CaepChangeDirectionValues
     public static ReadOnlySpan<byte> IncreaseUtf8 => "increase"u8;
 
     /// <summary><c>increase</c> — the assurance level increased.</summary>
-    public static readonly string Increase = Utf8Constants.ToInternedString(IncreaseUtf8);
+    public static string Increase { get; } = Utf8Constants.ToInternedString(IncreaseUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Decrease"/>.</summary>
     public static ReadOnlySpan<byte> DecreaseUtf8 => "decrease"u8;
 
     /// <summary><c>decrease</c> — the assurance level decreased.</summary>
-    public static readonly string Decrease = Utf8Constants.ToInternedString(DecreaseUtf8);
+    public static string Decrease { get; } = Utf8Constants.ToInternedString(DecreaseUtf8);
 
 
     /// <summary>Whether <paramref name="value"/> is one of the two allowed values.</summary>

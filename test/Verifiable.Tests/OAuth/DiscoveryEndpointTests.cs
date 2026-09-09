@@ -33,7 +33,7 @@ internal sealed class DiscoveryEndpointTests
     private FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch.AddDays(-15));
 
     private const string ClientId = "https://discovery.client.test";
-    private static readonly Uri ClientBaseUri = new("https://discovery.client.test");
+    private static Uri ClientBaseUri { get; } = new("https://discovery.client.test");
 
 
     [TestMethod]
@@ -274,8 +274,19 @@ internal sealed class DiscoveryEndpointTests
     }
 
 
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8414#section-2">RFC 8414, Section 2</see>:
+    /// "token_endpoint_auth_methods_supported: OPTIONAL. JSON array containing a list of client
+    /// authentication methods supported by this token endpoint." The emitted array is the
+    /// integration's <see cref="AuthorizationServerIntegration.ClientAuthenticationMethodsSupported"/>
+    /// declaration rendered through <see cref="ClientAuthenticationMethodNames"/>; its default value is
+    /// <c>[<see cref="ClientAuthenticationMethod.None"/>]</c>, so a host that declares nothing publishes
+    /// exactly <c>["none"]</c> — the PKCE-only public-client shape. A deployment adding
+    /// <c>client_secret_basic</c> / <c>private_key_jwt</c> / mTLS declares those methods and they appear
+    /// in the array; the advertisement and the token endpoint's judgment are one set.
+    /// </summary>
     [TestMethod]
-    public async Task DiscoveryEmitsTokenEndpointAuthMethodsAsNone()
+    public async Task DiscoveryEmitsTokenEndpointAuthMethodsFromDefaultNoneDeclaration()
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
@@ -293,7 +304,7 @@ internal sealed class DiscoveryEndpointTests
         Assert.AreEqual(JsonValueKind.Array, methods.ValueKind);
         List<string> values = EnumerateStrings(methods);
         Assert.Contains("none", values,
-            "The library's token endpoint accepts PKCE-only public clients (auth method 'none'); deployments adding client_secret_basic / private_key_jwt / mTLS advertise those via ContributeDiscoveryFieldsAsync.");
+            "The default ClientAuthenticationMethodsSupported = [None] declaration renders token_endpoint_auth_methods_supported as ['none']; deployments declaring client_secret_basic / private_key_jwt / mTLS advertise those methods.");
     }
 
 

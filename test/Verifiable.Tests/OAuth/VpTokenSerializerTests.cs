@@ -18,7 +18,7 @@ internal sealed class VpTokenSerializerTests
 
     //Faithful to the JCose semantic type: serialize the JwtPayload directly (it is
     //registered in VerifiableJsonContext), with no downcast to Dictionary<string,object>.
-    private static readonly JwtPayloadSerializer PayloadSerializer =
+    private static JwtPayloadSerializer PayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
             payload,
             TestSetup.DefaultSerializationOptions);

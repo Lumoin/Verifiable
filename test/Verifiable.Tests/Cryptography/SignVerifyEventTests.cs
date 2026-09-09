@@ -7,6 +7,7 @@ using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Microsoft;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Cryptography;
 
@@ -37,7 +38,7 @@ internal sealed class SignVerifyEventTests
         using PublicKeyMemory publicKeyMemory = keys.PublicKey;
         using PrivateKeyMemory privateKeyMemory = keys.PrivateKey;
 
-        using PrivateKey privateKey = new(privateKeyMemory, "ms-p256-sign", MicrosoftCryptographicFunctions.SignP256Async);
+        using PrivateKey privateKey = new(privateKeyMemory, "ms-p256-sign", MicrosoftCryptographicFunctionsAdapter.SignP256Async);
 
         var observed = new ConcurrentQueue<CryptoEvent>();
         using(CryptographicKeyEvents.Events.Subscribe(new CollectingObserver(observed)))
@@ -73,8 +74,8 @@ internal sealed class SignVerifyEventTests
         using PublicKeyMemory publicKeyMemory = keys.PublicKey;
         using PrivateKeyMemory privateKeyMemory = keys.PrivateKey;
 
-        using PrivateKey privateKey = new(privateKeyMemory, "ms-p256-sign", MicrosoftCryptographicFunctions.SignP256Async);
-        using PublicKey publicKey = new(publicKeyMemory, "ms-p256-verify", MicrosoftCryptographicFunctions.VerifyP256Async);
+        using PrivateKey privateKey = new(privateKeyMemory, "ms-p256-sign", MicrosoftCryptographicFunctionsAdapter.SignP256Async);
+        using PublicKey publicKey = new(publicKeyMemory, "ms-p256-verify", MicrosoftCryptographicFunctionsAdapter.VerifyP256Async);
 
         using Signature signature = await privateKey.SignAsync(TestData, BaseMemoryPool.Shared).ConfigureAwait(false);
 
@@ -109,7 +110,7 @@ internal sealed class SignVerifyEventTests
         using PublicKeyMemory publicKeyMemory = keys.PublicKey;
         using PrivateKeyMemory privateKeyMemory = keys.PrivateKey;
 
-        using PrivateKey privateKey = new(privateKeyMemory, "bc-ed25519-sign", BouncyCastleCryptographicFunctions.SignEd25519Async);
+        using PrivateKey privateKey = new(privateKeyMemory, "bc-ed25519-sign", BouncyCastleCryptographicFunctionsAdapter.SignEd25519Async);
 
         var observed = new ConcurrentQueue<CryptoEvent>();
         using(CryptographicKeyEvents.Events.Subscribe(new CollectingObserver(observed)))
@@ -141,8 +142,8 @@ internal sealed class SignVerifyEventTests
         using PublicKeyMemory publicKeyMemory = keys.PublicKey;
         using PrivateKeyMemory privateKeyMemory = keys.PrivateKey;
 
-        using PrivateKey privateKey = new(privateKeyMemory, "bc-ed25519-sign", BouncyCastleCryptographicFunctions.SignEd25519Async);
-        using PublicKey publicKey = new(publicKeyMemory, "bc-ed25519-verify", BouncyCastleCryptographicFunctions.VerifyEd25519Async);
+        using PrivateKey privateKey = new(privateKeyMemory, "bc-ed25519-sign", BouncyCastleCryptographicFunctionsAdapter.SignEd25519Async);
+        using PublicKey publicKey = new(publicKeyMemory, "bc-ed25519-verify", BouncyCastleCryptographicFunctionsAdapter.VerifyEd25519Async);
 
         using Signature signature = await privateKey.SignAsync(TestData, BaseMemoryPool.Shared).ConfigureAwait(false);
 
@@ -175,8 +176,8 @@ internal sealed class SignVerifyEventTests
         using PublicKeyMemory publicKeyMemory = keys.PublicKey;
         using PrivateKeyMemory privateKeyMemory = keys.PrivateKey;
 
-        using PrivateKey privateKey = new(privateKeyMemory, "ms-p256-sign", MicrosoftCryptographicFunctions.SignP256Async);
-        using PublicKey publicKey = new(publicKeyMemory, "ms-p256-verify", MicrosoftCryptographicFunctions.VerifyP256Async);
+        using PrivateKey privateKey = new(privateKeyMemory, "ms-p256-sign", MicrosoftCryptographicFunctionsAdapter.SignP256Async);
+        using PublicKey publicKey = new(publicKeyMemory, "ms-p256-verify", MicrosoftCryptographicFunctionsAdapter.VerifyP256Async);
 
         using Signature signature = await privateKey.SignAsync(TestData, BaseMemoryPool.Shared).ConfigureAwait(false);
 

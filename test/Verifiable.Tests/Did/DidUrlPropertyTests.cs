@@ -46,7 +46,7 @@ namespace Verifiable.Tests.Did
         /// Generates method-specific identifier segments that can be separated by colons.
         /// Each segment contains valid idchars and optional percent-encoded characters.
         /// </summary>
-        private static readonly Gen<string> GenMethodSpecificIdSegment =
+        private static Gen<string> GenMethodSpecificIdSegment { get; } =
             Gen.OneOf(
                 GenIdChar.Select(c => c.ToString()),
                 GenPercentEncoded
@@ -56,14 +56,14 @@ namespace Verifiable.Tests.Did
         /// Generates complete method-specific identifiers that may contain multiple colon-separated segments.
         /// This handles cases like did:web:example.com:path where "example.com:path" is the method-specific-id.
         /// </summary>
-        private static readonly Gen<string> GenMethodSpecificId =
+        private static Gen<string> GenMethodSpecificId { get; } =
             GenMethodSpecificIdSegment.Array[1, 5]
                 .Select(segments => string.Join(":", segments));
 
         /// <summary>
         /// Generates valid path components that start with "/" and contain valid path characters.
         /// </summary>
-        private static readonly Gen<string> GenPath =
+        private static Gen<string> GenPath { get; } =
             Gen.Char.Where(c => c != '?' && c != '#' && c > 32 && c < 127)
                .Array[0, 30]
                .Select(chars => "/" + new string(chars));
@@ -108,7 +108,7 @@ namespace Verifiable.Tests.Did
         /// <summary>
         /// Generates optional components (either null or a generated value).
         /// </summary>
-        private static Gen<T?> GenOption<T>(Gen<T> gen) where T: class => Gen.OneOf(Gen.Const(default(T)), gen.Select(x => (T?)x));
+        private static Gen<T?> GenOption<T>(Gen<T> gen) where T: class => Gen.OneOf(Gen.Const(default(T)), gen.Select(x => x));
 
 
         /// <summary>

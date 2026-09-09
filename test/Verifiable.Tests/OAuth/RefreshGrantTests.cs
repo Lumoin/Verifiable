@@ -32,8 +32,8 @@ internal sealed class RefreshGrantTests
         new DateTimeOffset(2026, 5, 15, 12, 0, 0, TimeSpan.Zero));
 
     private const string ClientId = "https://client.example.com";
-    private static readonly Uri ClientBaseUri = new("https://client.example.com");
-    private static readonly Uri RedirectUri =
+    private static Uri ClientBaseUri { get; } = new("https://client.example.com");
+    private static Uri RedirectUri { get; } =
         new("https://client.example.com/callback");
 
 

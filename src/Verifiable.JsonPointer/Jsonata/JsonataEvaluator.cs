@@ -175,13 +175,13 @@ public static class JsonataEvaluator
     //that never reaches the depth limit is still bounded.
     private sealed class EvaluationBudget
     {
-        private int _steps;
+        private int steps;
 
 
         public void Step()
         {
-            _steps++;
-            if(_steps > JsonataLimits.MaxEvaluationSteps)
+            steps++;
+            if(steps > JsonataLimits.MaxEvaluationSteps)
             {
                 throw new JsonataEvaluationLimitException(
                     JsonataLimit.EvaluationSteps,

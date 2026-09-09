@@ -124,7 +124,14 @@ public class Issuer: IEquatable<Issuer>
     }
 
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Determines whether this issuer is equal to <paramref name="other"/> by comparing
+    /// <see cref="Id"/>, <see cref="Name"/>, <see cref="Description"/> and <see cref="Image"/>.
+    /// Equality is exact-type, not polymorphic over subtypes: a derived type adding further
+    /// identity-bearing members is never equal to a same-valued instance of this type.
+    /// </summary>
+    /// <param name="other">The issuer to compare against.</param>
+    /// <returns><see langword="true"/> if the issuers are equal; otherwise <see langword="false"/>.</returns>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public bool Equals(Issuer? other)
     {
@@ -138,6 +145,11 @@ public class Issuer: IEquatable<Issuer>
             return true;
         }
 
+        if(GetType() != other.GetType())
+        {
+            return false;
+        }
+
         return string.Equals(Id, other.Id, StringComparison.Ordinal)
             && string.Equals(Name, other.Name, StringComparison.Ordinal)
             && string.Equals(Description, other.Description, StringComparison.Ordinal)
@@ -147,7 +159,8 @@ public class Issuer: IEquatable<Issuer>
 
     /// <inheritdoc/>
     [EditorBrowsable(EditorBrowsableState.Never)]
-    public override bool Equals([NotNullWhen(true)] object? obj) => obj is Issuer other && Equals(other);
+    public override bool Equals([NotNullWhen(true)] object? obj) =>
+        obj is Issuer other && Equals(other);
 
 
     /// <inheritdoc/>

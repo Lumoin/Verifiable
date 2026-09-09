@@ -14,7 +14,7 @@ namespace Verifiable.Tests.Jose;
 internal sealed class JwkJsonReaderWriterPropertyTests
 {
     //Base64url alphabet: A-Z, a-z, 0-9, '-', '_'. No padding.
-    private static readonly Gen<char> GenBase64UrlChar =
+    private static Gen<char> GenBase64UrlChar { get; } =
         Gen.OneOf(
             Gen.Char['A', 'Z'],
             Gen.Char['a', 'z'],
@@ -23,15 +23,15 @@ internal sealed class JwkJsonReaderWriterPropertyTests
             Gen.Const('_'));
 
     //P-256 coordinates are 43 base64url characters (32 bytes, no padding).
-    private static readonly Gen<string> GenP256Coordinate =
+    private static Gen<string> GenP256Coordinate { get; } =
         Gen.String[GenBase64UrlChar, 43, 43];
 
     //Short alphanumeric strings for kty, crv, use, kid values.
-    private static readonly Gen<string> GenFieldValue =
+    private static Gen<string> GenFieldValue { get; } =
         Gen.String[Gen.Char.AlphaNumeric, 1, 16];
 
     //A key-value pair for a flat JWK field.
-    private static readonly Gen<(string Key, string Value)> GenKeyValuePair =
+    private static Gen<(string Key, string Value)> GenKeyValuePair { get; } =
         GenFieldValue.SelectMany(k => GenFieldValue.Select(v => (k, v)));
 
 
@@ -207,7 +207,7 @@ internal sealed class JwkJsonReaderWriterPropertyTests
     //backslashes they are exactly the bytes that would bias a depth counter that
     //fails to skip string content. Underscore is deliberately absent so generated
     //content can never spell a quoted property key used by these tests.
-    private static readonly Gen<string> GenJsonStringToken =
+    private static Gen<string> GenJsonStringToken { get; } =
         Gen.OneOf(
             Gen.Char.AlphaNumeric.Select(c => c.ToString()),
             Gen.Const("["),
@@ -220,10 +220,10 @@ internal sealed class JwkJsonReaderWriterPropertyTests
             Gen.Const("\\\\"));
 
     //A complete JSON string literal, quotes included.
-    private static readonly Gen<string> GenJsonStringLiteral =
+    private static Gen<string> GenJsonStringLiteral { get; } =
         GenJsonStringToken.Array[0, 8].Select(tokens => "\"" + string.Concat(tokens) + "\"");
 
-    private static readonly Gen<string> GenJsonNumberLiteral =
+    private static Gen<string> GenJsonNumberLiteral { get; } =
         Gen.Int.Select(i => i.ToString(CultureInfo.InvariantCulture));
 
 
@@ -430,7 +430,7 @@ internal sealed class JwkJsonReaderWriterPropertyTests
     //Non-integer JSON numbers that are legal JSON but invalid for an integer claim:
     //exponent form, decimal form, and a trailing-garbage run. Reading only the leading
     //digit run would silently misparse these, so the scanner must reject them.
-    private static readonly Gen<string> GenNonIntegerNumberText =
+    private static Gen<string> GenNonIntegerNumberText { get; } =
         Gen.OneOf(
             Gen.Int[1, 9].SelectMany(m => Gen.Int[1, 18].Select(e => $"{m}e{e}")),
             Gen.Int[0, 999].SelectMany(w => Gen.Int[1, 999].Select(f => $"{w}.{f}")),

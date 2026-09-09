@@ -16,7 +16,7 @@ namespace Verifiable.Tpm.Spec.Handles;
 /// <c>TPM_RH_NULL</c> (the null handle). Unmarshaling any other value is <c>TPM_RC_VALUE</c>.
 /// </para>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 9.20, Table 67.
+/// Specification reference: TPM 2.0 Library Part 2, clause 9.20, Table 66.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]

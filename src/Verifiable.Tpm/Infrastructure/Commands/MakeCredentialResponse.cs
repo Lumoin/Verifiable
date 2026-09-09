@@ -10,7 +10,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Response structure (TPM 2.0 Part 3, Section 12.6):
+/// Response structure (TPM 2.0 Library Part 3, clause 12.6):
 /// </para>
 /// <list type="bullet">
 ///   <item><description>credentialBlob (TPM2B_ID_OBJECT): the integrity-protected, encrypted credential.</description></item>

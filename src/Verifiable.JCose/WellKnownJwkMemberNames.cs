@@ -7,9 +7,12 @@ namespace Verifiable.JCose;
 /// Well-known JWK member NAMES — strings that appear as JSON keys in JWK
 /// objects per <see href="https://www.rfc-editor.org/rfc/rfc7517">RFC 7517</see>
 /// and JWA per <see href="https://www.rfc-editor.org/rfc/rfc7518">RFC 7518</see>.
-/// Several of these (<c>alg</c>, <c>kid</c>, <c>x5*</c>) also appear as JOSE
-/// header parameter names per RFC 7515; the same constant is reused at both
-/// call sites since the strings are identical.
+/// <c>kid</c> and the <c>x5*</c> members also appear as JOSE header parameter
+/// names per RFC 7515 and are reused from this table at both call sites. The
+/// JOSE <c>alg</c> header parameter (RFC 7515, Section 4.1.1) has its own
+/// entry in <see cref="WellKnownJoseHeaderNames.Alg"/> — a distinct parameter
+/// that shares the spelling of the RFC 7517, Section 4.4 JWK member named
+/// here.
 /// </summary>
 /// <remarks>
 /// These are the NAMES of JWK members (<c>"kty"</c>, <c>"crv"</c>, <c>"use"</c>,
@@ -27,7 +30,7 @@ public static class WellKnownJwkMemberNames
     /// The <c>alg</c> (Algorithm) parameter — JWK member per RFC 7517 §4.4 and
     /// JWS/JWE header parameter per RFC 7515 §4.1.1.
     /// </summary>
-    public static readonly string Alg = Utf8Constants.ToInternedString(AlgUtf8);
+    public static string Alg { get; } = Utf8Constants.ToInternedString(AlgUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Crv"/>.</summary>
     public static ReadOnlySpan<byte> CrvUtf8 => "crv"u8;
@@ -36,49 +39,49 @@ public static class WellKnownJwkMemberNames
     /// The <c>crv</c> (Curve) parameter per RFC 7518 §6.2.1.1 — identifies the
     /// cryptographic curve used with an EC or OKP JWK.
     /// </summary>
-    public static readonly string Crv = Utf8Constants.ToInternedString(CrvUtf8);
+    public static string Crv { get; } = Utf8Constants.ToInternedString(CrvUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="D"/>.</summary>
     public static ReadOnlySpan<byte> DUtf8 => "d"u8;
 
     /// <summary>The <c>d</c> (ECC / OKP Private Key) parameter per RFC 7518 §6.2.2.1.</summary>
-    public static readonly string D = Utf8Constants.ToInternedString(DUtf8);
+    public static string D { get; } = Utf8Constants.ToInternedString(DUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Dp"/>.</summary>
     public static ReadOnlySpan<byte> DpUtf8 => "dp"u8;
 
     /// <summary>The <c>dp</c> (RSA Private Key) first-factor CRT exponent parameter per RFC 7518 §6.3.2.6.</summary>
-    public static readonly string Dp = Utf8Constants.ToInternedString(DpUtf8);
+    public static string Dp { get; } = Utf8Constants.ToInternedString(DpUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Dq"/>.</summary>
     public static ReadOnlySpan<byte> DqUtf8 => "dq"u8;
 
     /// <summary>The <c>dq</c> (RSA Private Key) second-factor CRT exponent parameter per RFC 7518 §6.3.2.7.</summary>
-    public static readonly string Dq = Utf8Constants.ToInternedString(DqUtf8);
+    public static string Dq { get; } = Utf8Constants.ToInternedString(DqUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="E"/>.</summary>
     public static ReadOnlySpan<byte> EUtf8 => "e"u8;
 
     /// <summary>The <c>e</c> (RSA Public Key) exponent parameter per RFC 7518 §6.3.1.2.</summary>
-    public static readonly string E = Utf8Constants.ToInternedString(EUtf8);
+    public static string E { get; } = Utf8Constants.ToInternedString(EUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="K"/>.</summary>
     public static ReadOnlySpan<byte> KUtf8 => "k"u8;
 
     /// <summary>The <c>k</c> (Symmetric Key Value) parameter per RFC 7518 §6.4.1.</summary>
-    public static readonly string K = Utf8Constants.ToInternedString(KUtf8);
+    public static string K { get; } = Utf8Constants.ToInternedString(KUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="KeyOps"/>.</summary>
     public static ReadOnlySpan<byte> KeyOpsUtf8 => "key_ops"u8;
 
     /// <summary>The <c>key_ops</c> (Key Operations) parameter per RFC 7517 §4.3.</summary>
-    public static readonly string KeyOps = Utf8Constants.ToInternedString(KeyOpsUtf8);
+    public static string KeyOps { get; } = Utf8Constants.ToInternedString(KeyOpsUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Keys"/>.</summary>
     public static ReadOnlySpan<byte> KeysUtf8 => "keys"u8;
 
     /// <summary>The <c>keys</c> top-level member of a JWK Set document per RFC 7517 §5.1.</summary>
-    public static readonly string Keys = Utf8Constants.ToInternedString(KeysUtf8);
+    public static string Keys { get; } = Utf8Constants.ToInternedString(KeysUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Kid"/>.</summary>
     public static ReadOnlySpan<byte> KidUtf8 => "kid"u8;
@@ -87,31 +90,31 @@ public static class WellKnownJwkMemberNames
     /// The <c>kid</c> (Key ID) parameter — JWK member per RFC 7517 §4.5 and
     /// JWS/JWE header parameter per RFC 7515 §4.1.4.
     /// </summary>
-    public static readonly string Kid = Utf8Constants.ToInternedString(KidUtf8);
+    public static string Kid { get; } = Utf8Constants.ToInternedString(KidUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Kty"/>.</summary>
     public static ReadOnlySpan<byte> KtyUtf8 => "kty"u8;
 
     /// <summary>The <c>kty</c> (Key Type) parameter per RFC 7517 §4.1.</summary>
-    public static readonly string Kty = Utf8Constants.ToInternedString(KtyUtf8);
+    public static string Kty { get; } = Utf8Constants.ToInternedString(KtyUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="N"/>.</summary>
     public static ReadOnlySpan<byte> NUtf8 => "n"u8;
 
     /// <summary>The <c>n</c> (RSA Public Key) modulus parameter per RFC 7518 §6.3.1.1.</summary>
-    public static readonly string N = Utf8Constants.ToInternedString(NUtf8);
+    public static string N { get; } = Utf8Constants.ToInternedString(NUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Oth"/>.</summary>
     public static ReadOnlySpan<byte> OthUtf8 => "oth"u8;
 
     /// <summary>The <c>oth</c> (RSA Private Key) other-primes-info array parameter per RFC 7518 §6.3.2.7.</summary>
-    public static readonly string Oth = Utf8Constants.ToInternedString(OthUtf8);
+    public static string Oth { get; } = Utf8Constants.ToInternedString(OthUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="P"/>.</summary>
     public static ReadOnlySpan<byte> PUtf8 => "p"u8;
 
     /// <summary>The <c>p</c> (RSA Private Key) first-prime-factor parameter per RFC 7518 §6.3.2.4.</summary>
-    public static readonly string P = Utf8Constants.ToInternedString(PUtf8);
+    public static string P { get; } = Utf8Constants.ToInternedString(PUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Pub"/>.</summary>
     public static ReadOnlySpan<byte> PubUtf8 => "pub"u8;
@@ -122,7 +125,7 @@ public static class WellKnownJwkMemberNames
     /// than named-curve coordinates or RSA factors. See
     /// <see href="https://datatracker.ietf.org/doc/draft-ietf-jose-pqc-kem">JOSE Post-Quantum Drafts</see>.
     /// </summary>
-    public static readonly string Pub = Utf8Constants.ToInternedString(PubUtf8);
+    public static string Pub { get; } = Utf8Constants.ToInternedString(PubUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Priv"/>.</summary>
     public static ReadOnlySpan<byte> PrivUtf8 => "priv"u8;
@@ -131,19 +134,19 @@ public static class WellKnownJwkMemberNames
     /// The <c>priv</c> (AKP private key) parameter of an Algorithm Key Pair JWK
     /// (<c>kty</c> <c>AKP</c>, e.g. ML-DSA). A published JWK must never carry it.
     /// </summary>
-    public static readonly string Priv = Utf8Constants.ToInternedString(PrivUtf8);
+    public static string Priv { get; } = Utf8Constants.ToInternedString(PrivUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Q"/>.</summary>
     public static ReadOnlySpan<byte> QUtf8 => "q"u8;
 
     /// <summary>The <c>q</c> (RSA Private Key) second-prime-factor parameter per RFC 7518 §6.3.2.5.</summary>
-    public static readonly string Q = Utf8Constants.ToInternedString(QUtf8);
+    public static string Q { get; } = Utf8Constants.ToInternedString(QUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Qi"/>.</summary>
     public static ReadOnlySpan<byte> QiUtf8 => "qi"u8;
 
     /// <summary>The <c>qi</c> (RSA Private Key) first-CRT-coefficient parameter per RFC 7518 §6.3.2.8.</summary>
-    public static readonly string Qi = Utf8Constants.ToInternedString(QiUtf8);
+    public static string Qi { get; } = Utf8Constants.ToInternedString(QiUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Use"/>.</summary>
     public static ReadOnlySpan<byte> UseUtf8 => "use"u8;
@@ -152,13 +155,13 @@ public static class WellKnownJwkMemberNames
     /// The <c>use</c> (Public Key Use) parameter per RFC 7517 §4.2. Distinguishes
     /// keys intended for signature/MAC computation from keys intended for encryption.
     /// </summary>
-    public static readonly string Use = Utf8Constants.ToInternedString(UseUtf8);
+    public static string Use { get; } = Utf8Constants.ToInternedString(UseUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="X"/>.</summary>
     public static ReadOnlySpan<byte> XUtf8 => "x"u8;
 
     /// <summary>The <c>x</c> (EC / OKP Public Key) x-coordinate parameter per RFC 7518 §6.2.1.2.</summary>
-    public static readonly string X = Utf8Constants.ToInternedString(XUtf8);
+    public static string X { get; } = Utf8Constants.ToInternedString(XUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="X5c"/>.</summary>
     public static ReadOnlySpan<byte> X5cUtf8 => "x5c"u8;
@@ -167,7 +170,7 @@ public static class WellKnownJwkMemberNames
     /// The <c>x5c</c> (X.509 Certificate Chain) parameter — JWK member per RFC 7517 §4.7
     /// and JWS/JWE header parameter per RFC 7515 §4.1.6.
     /// </summary>
-    public static readonly string X5c = Utf8Constants.ToInternedString(X5cUtf8);
+    public static string X5c { get; } = Utf8Constants.ToInternedString(X5cUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="X5t"/>.</summary>
     public static ReadOnlySpan<byte> X5tUtf8 => "x5t"u8;
@@ -176,7 +179,7 @@ public static class WellKnownJwkMemberNames
     /// The <c>x5t</c> (X.509 SHA-1 Thumbprint) parameter — JWK member per RFC 7517 §4.8
     /// and JWS/JWE header parameter per RFC 7515 §4.1.7.
     /// </summary>
-    public static readonly string X5t = Utf8Constants.ToInternedString(X5tUtf8);
+    public static string X5t { get; } = Utf8Constants.ToInternedString(X5tUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="X5tHashS256"/>.</summary>
     public static ReadOnlySpan<byte> X5tHashS256Utf8 => "x5t#S256"u8;
@@ -185,7 +188,7 @@ public static class WellKnownJwkMemberNames
     /// The <c>x5t#S256</c> (X.509 SHA-256 Thumbprint) parameter — JWK member per RFC 7517 §4.9
     /// and JWS/JWE header parameter per RFC 7515 §4.1.8.
     /// </summary>
-    public static readonly string X5tHashS256 = Utf8Constants.ToInternedString(X5tHashS256Utf8);
+    public static string X5tHashS256 { get; } = Utf8Constants.ToInternedString(X5tHashS256Utf8);
 
     /// <summary>The UTF-8 source literal of <see cref="X5u"/>.</summary>
     public static ReadOnlySpan<byte> X5uUtf8 => "x5u"u8;
@@ -194,13 +197,13 @@ public static class WellKnownJwkMemberNames
     /// The <c>x5u</c> (X.509 URL) parameter — JWK member per RFC 7517 §4.6 and
     /// JWS/JWE header parameter per RFC 7515 §4.1.5.
     /// </summary>
-    public static readonly string X5u = Utf8Constants.ToInternedString(X5uUtf8);
+    public static string X5u { get; } = Utf8Constants.ToInternedString(X5uUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Y"/>.</summary>
     public static ReadOnlySpan<byte> YUtf8 => "y"u8;
 
     /// <summary>The <c>y</c> (EC Public Key) y-coordinate parameter per RFC 7518 §6.2.1.3.</summary>
-    public static readonly string Y = Utf8Constants.ToInternedString(YUtf8);
+    public static string Y { get; } = Utf8Constants.ToInternedString(YUtf8);
 
 
     /// <summary>Whether <paramref name="name"/> is <see cref="Alg"/>.</summary>

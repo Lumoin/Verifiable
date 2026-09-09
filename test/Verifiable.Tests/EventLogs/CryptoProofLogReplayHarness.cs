@@ -36,6 +36,11 @@ internal static class CryptoProofLogReplayHarness
             ValidateProof = CryptoProofValidation.CreateValidateProof<int, ReadOnlyMemory<byte>, object>(),
             ValidationContext = new object(),
             Apply = LogReplayDefaults.CreateApplyDelegate<int, ReadOnlyMemory<byte>, CryptoProof>(
+                //The (string?) cast on the null literal is load-bearing: ValueTask.FromResult<TResult>
+                //infers TResult from the argument alone, and a bare null here has no natural type at
+                //all, so the cast is what lets the tuple literal — and, through it, this lambda's
+                //return type against the delegate's own ActiveLogState<int>/DeactivatedLogState<int>
+                //element — resolve at all.
                 genesis: static (_, _, _) => ValueTask.FromResult((new ActiveLogState<int>(1), (string?)null)),
                 update: static (active, _, _) => ValueTask.FromResult((new ActiveLogState<int>(active.Value + 1), (string?)null)),
                 deactivate: static (active, _, _) => ValueTask.FromResult((new DeactivatedLogState<int>(active.Value), (string?)null))),

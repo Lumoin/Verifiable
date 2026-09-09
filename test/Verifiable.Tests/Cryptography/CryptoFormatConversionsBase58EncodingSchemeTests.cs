@@ -43,6 +43,8 @@ internal sealed class CryptoFormatConversionsBase58EncodingSchemeTests
     //Builds a base58btc multicodec multibase public key string for the given NIST curve from generated test
     //key material (the compressed SEC1 point under the curve's public-key multicodec header), decodes it via
     //DefaultBase58ToAlgorithmConverter, and asserts the resolved curve and the EcCompressed scheme.
+    /// <summary><c>keyMaterial</c> is a tuple-deconstruction target, disposed in the <see langword="finally"/>
+    /// block because a <see langword="using"/> declaration cannot target one.</summary>
     private static void AssertNistMulticodecKeyTaggedCompressed(string humanReadableCurve, CryptoAlgorithm expectedAlgorithm)
     {
         EllipticCurveTestData testData = GetTestData(humanReadableCurve);
@@ -53,7 +55,8 @@ internal sealed class CryptoFormatConversionsBase58EncodingSchemeTests
             compressed,
             testData.PublicKeyMulticodecHeader,
             MultibaseAlgorithms.Base58Btc,
-            Base58.Bitcoin.Encode);
+            Base58.Bitcoin.Encode,
+            BaseMemoryPool.Shared);
 
         (CryptoAlgorithm algorithm, Purpose purpose, EncodingScheme scheme, IMemoryOwner<byte> keyMaterial) =
             CryptoFormatConversions.DefaultBase58ToAlgorithmConverter(multibaseKey, BaseMemoryPool.Shared, TestSetup.Base58Decoder);

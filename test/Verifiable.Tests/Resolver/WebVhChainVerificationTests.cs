@@ -8,6 +8,7 @@ using Verifiable.Cryptography;
 using Verifiable.Foundation;
 using Verifiable.Json;
 using Verifiable.Microsoft;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Resolver;
 
@@ -32,10 +33,10 @@ internal sealed class WebVhChainVerificationTests
     private const string GenesisEntryHash = "QmQ6FJ4fk2xheSSQoEjVpTgx9AQPKhJgtR9hn1nr4EeCrZ";
     private const string GenesisVersionId = "1-" + GenesisEntryHash;
 
-    private static readonly EncodeDelegate Base58Encoder = DefaultCoderSelector.SelectEncoder(typeof(PublicKeyMultibase));
-    private static readonly DecodeDelegate Base58Decoder = DefaultCoderSelector.SelectDecoder(typeof(PublicKeyMultibase));
-    private static readonly VerifyChainIntegrityDelegate<WebVhRawEntry, WebVhProof> Verify =
-        WebVhChainVerification.Create(WebVhLogEntryJson.Canonicalizer.EntryHashInput, MicrosoftCryptographicFunctions.ComputeDigestAsync, Base58Encoder, Base58Decoder, BaseMemoryPool.Shared);
+    private static EncodeDelegate Base58Encoder { get; } = DefaultCoderSelector.SelectEncoder(typeof(PublicKeyMultibase));
+    private static DecodeDelegate Base58Decoder { get; } = DefaultCoderSelector.SelectDecoder(typeof(PublicKeyMultibase));
+    private static VerifyChainIntegrityDelegate<WebVhRawEntry, WebVhProof> Verify { get; } =
+        WebVhChainVerification.Create(WebVhLogEntryJson.Canonicalizer.EntryHashInput, MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync, Base58Encoder, Base58Decoder, BaseMemoryPool.Shared);
 
 
     public TestContext TestContext { get; set; } = null!;

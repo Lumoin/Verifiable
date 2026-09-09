@@ -32,12 +32,12 @@ namespace Verifiable.Tests.Resolver;
 /// </remarks>
 internal sealed class DidResolutionHttpApplication
 {
-    private readonly DidResolver resolver;
-    private readonly DidResolutionResultSerializer serializeResolution;
-    private readonly DidDereferencingResultSerializer serializeDereferencing;
-    private readonly DidDocumentSerializer serializeDocument;
-    private readonly DidContentStreamSerializer serializeContentStream;
-    private readonly OutboundFetchPolicy fetchPolicy;
+    private DidResolver Resolver { get; }
+    private DidResolutionResultSerializer SerializeResolution { get; }
+    private DidDereferencingResultSerializer SerializeDereferencing { get; }
+    private DidDocumentSerializer SerializeDocument { get; }
+    private DidContentStreamSerializer SerializeContentStream { get; }
+    private OutboundFetchPolicy FetchPolicy { get; }
 
     public DidResolutionHttpApplication(
         DidResolver resolver,
@@ -54,12 +54,12 @@ internal sealed class DidResolutionHttpApplication
         ArgumentNullException.ThrowIfNull(serializeContentStream);
         ArgumentNullException.ThrowIfNull(fetchPolicy);
 
-        this.resolver = resolver;
-        this.serializeResolution = serializeResolution;
-        this.serializeDereferencing = serializeDereferencing;
-        this.serializeDocument = serializeDocument;
-        this.serializeContentStream = serializeContentStream;
-        this.fetchPolicy = fetchPolicy;
+        this.Resolver = resolver;
+        this.SerializeResolution = serializeResolution;
+        this.SerializeDereferencing = serializeDereferencing;
+        this.SerializeDocument = serializeDocument;
+        this.SerializeContentStream = serializeContentStream;
+        this.FetchPolicy = fetchPolicy;
     }
 
 
@@ -88,7 +88,7 @@ internal sealed class DidResolutionHttpApplication
         string accept = context.Request.Headers.Accept.ToString();
 
         ExchangeContext exchangeContext = new();
-        exchangeContext.SetOutboundFetchPolicy(fetchPolicy);
+        exchangeContext.SetOutboundFetchPolicy(FetchPolicy);
 
         BindingResponse binding = await HandleAsync(didOrUrl, accept, exchangeContext, context.RequestAborted)
             .ConfigureAwait(false);
@@ -108,13 +108,13 @@ internal sealed class DidResolutionHttpApplication
             && !parsed.IsRelative
             && (parsed.Path is not null || parsed.Query is not null || parsed.Fragment is not null))
         {
-            DidDereferencingResult dereferencing = await resolver.DereferenceAsync(
+            DidDereferencingResult dereferencing = await Resolver.DereferenceAsync(
                 didOrUrl, exchangeContext, cancellationToken: cancellationToken).ConfigureAwait(false);
 
             return RenderDereferencing(dereferencing, accept);
         }
 
-        DidResolutionResult resolution = await resolver.ResolveAsync(
+        DidResolutionResult resolution = await Resolver.ResolveAsync(
             didOrUrl, exchangeContext, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return RenderResolution(resolution, accept);
@@ -128,7 +128,7 @@ internal sealed class DidResolutionHttpApplication
             return ErrorResponse(
                 result.ResolutionMetadata.Error,
                 WellKnownDidResolutionMediaTypes.DidResolution,
-                serializeResolution(result));
+                SerializeResolution(result));
         }
 
         //A deactivated DID is signalled with HTTP 410 Gone (MUST), still carrying the full envelope.
@@ -137,7 +137,7 @@ internal sealed class DidResolutionHttpApplication
             return new BindingResponse(
                 StatusCodes.Status410Gone,
                 WellKnownDidResolutionMediaTypes.DidResolution,
-                serializeResolution(result));
+                SerializeResolution(result));
         }
 
         //A resolution can serve either the full resolution-result envelope (preferred) or only the DID
@@ -164,13 +164,13 @@ internal sealed class DidResolutionHttpApplication
             return new BindingResponse(
                 StatusCodes.Status200OK,
                 WellKnownDidResolutionMediaTypes.DidResolution,
-                serializeResolution(result));
+                SerializeResolution(result));
         }
 
         return new BindingResponse(
             StatusCodes.Status200OK,
             documentContentType,
-            result.Document is null ? "null" : serializeDocument(result.Document));
+            result.Document is null ? "null" : SerializeDocument(result.Document));
     }
 
 
@@ -181,7 +181,7 @@ internal sealed class DidResolutionHttpApplication
             return ErrorResponse(
                 result.DereferencingMetadata.Error,
                 WellKnownDidResolutionMediaTypes.DidUrlDereferencing,
-                serializeDereferencing(result));
+                SerializeDereferencing(result));
         }
 
         if(result.ContentMetadata?.Deactivated == true)
@@ -189,7 +189,7 @@ internal sealed class DidResolutionHttpApplication
             return new BindingResponse(
                 StatusCodes.Status410Gone,
                 WellKnownDidResolutionMediaTypes.DidUrlDereferencing,
-                serializeDereferencing(result));
+                SerializeDereferencing(result));
         }
 
         //A dereference can serve either the full dereferencing-result envelope (preferred) or the dereferenced
@@ -212,7 +212,7 @@ internal sealed class DidResolutionHttpApplication
             return new BindingResponse(
                 StatusCodes.Status200OK,
                 WellKnownDidResolutionMediaTypes.DidUrlDereferencing,
-                serializeDereferencing(result));
+                SerializeDereferencing(result));
         }
 
         //A text/uri-list content stream is a service-endpoint URL: answer 303 with a Location header
@@ -233,7 +233,7 @@ internal sealed class DidResolutionHttpApplication
         return new BindingResponse(
             StatusCodes.Status200OK,
             contentType,
-            serializeContentStream(result.ContentStream));
+            SerializeContentStream(result.ContentStream));
     }
 
 

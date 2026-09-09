@@ -18,8 +18,8 @@ namespace Verifiable.Tests.Serialization;
 [TestClass]
 internal sealed class JAdESProtectedHeaderJsonTests
 {
-    private static readonly string[] ExpectedCriticalLabels = ["sigD"];
-    private static readonly string[] ExpectedHttpHeaderNames = ["content-type", "digest"];
+    private static string[] ExpectedCriticalLabels { get; } = ["sigD"];
+    private static string[] ExpectedHttpHeaderNames { get; } = ["content-type", "digest"];
 
 
 

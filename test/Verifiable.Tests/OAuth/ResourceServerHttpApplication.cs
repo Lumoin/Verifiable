@@ -58,9 +58,9 @@ internal sealed class ResourceServerHttpApplication: IHttpApplication<HttpContex
     /// <summary>The RFC 6750 §3 <c>realm</c> value every Bearer challenge from this host carries.</summary>
     private const string ProtectedRealm = "protected";
 
-    private readonly ResourceServerIntegration integration;
-    private readonly VerificationDelegate verifySignature;
-    private readonly string? requiredScope;
+    private ResourceServerIntegration Integration { get; }
+    private VerificationDelegate VerifySignature { get; }
+    private string? RequiredScope { get; }
 
     /// <summary>
     /// The RFC 9728 serving surface, assigned by
@@ -82,9 +82,9 @@ internal sealed class ResourceServerHttpApplication: IHttpApplication<HttpContex
     {
         ArgumentNullException.ThrowIfNull(integration);
         ArgumentNullException.ThrowIfNull(verifySignature);
-        this.integration = integration;
-        this.verifySignature = verifySignature;
-        this.requiredScope = requiredScope;
+        this.Integration = integration;
+        this.VerifySignature = verifySignature;
+        this.RequiredScope = requiredScope;
     }
 
 
@@ -152,15 +152,15 @@ internal sealed class ResourceServerHttpApplication: IHttpApplication<HttpContex
 
         JwsAccessTokenValidationResult tokenResult = await JwsAccessTokenValidator.ValidateAsync(
             accessToken!,
-            integration.TrustedIssuer.OriginalString,
-            integration.ExpectedAudience,
-            integration.ResolveVerificationKeyAsync,
-            verifySignature,
+            Integration.TrustedIssuer.OriginalString,
+            Integration.ExpectedAudience,
+            Integration.ResolveVerificationKeyAsync,
+            VerifySignature,
             JwsAccessTokenTestSupport.Parser,
             TestSetup.Base64UrlDecoder,
-            integration.TimeProvider,
+            Integration.TimeProvider,
             BaseMemoryPool.Shared,
-            integration.AccessTokenIatSkew,
+            Integration.AccessTokenIatSkew,
             tenantId: default,
             exchangeContext,
             expectedAuthorizedParty: null,
@@ -213,13 +213,13 @@ internal sealed class ResourceServerHttpApplication: IHttpApplication<HttpContex
 
             DpopProofValidationResult proofResult = await DpopProofValidator.ValidateAsync(
                 proofRequest,
-                verifySignature,
+                VerifySignature,
                 DpopTestSupport.Parser,
                 TestSetup.Base64UrlEncoder,
                 TestSetup.Base64UrlDecoder,
-                integration.TimeProvider,
+                Integration.TimeProvider,
                 BaseMemoryPool.Shared,
-                integration.DpopFreshnessWindow,
+                Integration.DpopFreshnessWindow,
                 context.RequestAborted).ConfigureAwait(false);
 
             if(!proofResult.IsSuccess)
@@ -238,11 +238,11 @@ internal sealed class ResourceServerHttpApplication: IHttpApplication<HttpContex
                 return;
             }
 
-            if(integration.IsDpopProofJtiSeenAsync is not null
-                && integration.PersistDpopProofJtiAsync is not null)
+            if(Integration.IsDpopProofJtiSeenAsync is not null
+                && Integration.PersistDpopProofJtiAsync is not null)
             {
                 string jti = proofResult.Claims!.Jti;
-                bool isReplayed = await integration.IsDpopProofJtiSeenAsync(
+                bool isReplayed = await Integration.IsDpopProofJtiSeenAsync(
                     jti, exchangeContext, context.RequestAborted).ConfigureAwait(false);
                 if(isReplayed)
                 {
@@ -251,17 +251,17 @@ internal sealed class ResourceServerHttpApplication: IHttpApplication<HttpContex
                     return;
                 }
 
-                DateTimeOffset expiresAt = integration.TimeProvider.GetUtcNow()
-                    + integration.DpopFreshnessWindow;
-                await integration.PersistDpopProofJtiAsync(
+                DateTimeOffset expiresAt = Integration.TimeProvider.GetUtcNow()
+                    + Integration.DpopFreshnessWindow;
+                await Integration.PersistDpopProofJtiAsync(
                     jti, expiresAt, exchangeContext, context.RequestAborted).ConfigureAwait(false);
             }
         }
 
-        if(requiredScope is not null)
+        if(RequiredScope is not null)
         {
-            bool isScopeSatisfied = HasScope(claims.Scope, requiredScope);
-            Activity.Current?.SetTag(ResourceServerTagNames.ScopeRequired, requiredScope);
+            bool isScopeSatisfied = HasScope(claims.Scope, RequiredScope);
+            Activity.Current?.SetTag(ResourceServerTagNames.ScopeRequired, RequiredScope);
             Activity.Current?.SetTag(ResourceServerTagNames.ScopeSatisfied, isScopeSatisfied);
             Activity.Current?.AddEvent(new ActivityEvent(ResourceServerEventNames.ScopeChecked));
 
@@ -274,7 +274,7 @@ internal sealed class ResourceServerHttpApplication: IHttpApplication<HttpContex
                     context, StatusCodes.Status403Forbidden,
                     OAuthErrors.InsufficientScope,
                     "The access token does not carry the scope this resource requires.",
-                    scope: requiredScope).ConfigureAwait(false);
+                    scope: RequiredScope).ConfigureAwait(false);
                 return;
             }
         }

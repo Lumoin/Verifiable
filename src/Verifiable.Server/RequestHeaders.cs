@@ -7,9 +7,10 @@ namespace Verifiable.Server;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The skin populates this from whatever the HTTP framework surfaces.
-/// Header names are case-insensitive per RFC 9110 §5.1; values are
-/// preserved verbatim.
+/// The skin populates this from whatever the HTTP framework surfaces. Header names are
+/// case-insensitive per RFC 9110 §5.1; a value is preserved verbatim except that a CR, LF, or
+/// NUL character is replaced with SP per RFC 9110 §5.5's recipient arm (see
+/// <see cref="HttpHeaderSet.FromReceived"/>).
 /// </para>
 /// <para>
 /// Multi-value headers are represented as a list per name. Most matchers
@@ -19,31 +20,60 @@ namespace Verifiable.Server;
 /// </para>
 /// <para>
 /// Immutable. The skin builds the headers once when constructing the
-/// <see cref="IncomingRequest"/>; matchers and handlers read.
+/// <see cref="IncomingRequest"/>; matchers and handlers read. A thin view
+/// over <see cref="Headers"/> (an <see cref="HttpHeaderSet"/>) — the multi-value
+/// storage and the RFC 9110 §5.3 field-order/case-insensitivity rules live there.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("RequestHeaders({Count} headers)")]
 public sealed class RequestHeaders
 {
-    private Dictionary<string, string[]> Headers { get; }
+    /// <summary>The underlying header set.</summary>
+    public HttpHeaderSet Headers { get; }
 
 
     /// <summary>
-    /// Creates a <see cref="RequestHeaders"/> from a header dictionary.
-    /// Header names are normalized to case-insensitive lookups.
+    /// Creates a <see cref="RequestHeaders"/> from an <see cref="HttpHeaderSet"/> directly.
+    /// </summary>
+    /// <param name="headers">The header set.</param>
+    public RequestHeaders(HttpHeaderSet headers)
+    {
+        ArgumentNullException.ThrowIfNull(headers);
+
+        Headers = headers;
+    }
+
+
+    /// <summary>
+    /// Creates a <see cref="RequestHeaders"/> from a header name to value-list mapping — the skin's raw
+    /// wire capture, built through <see cref="HttpHeaderSet.FromReceived"/> rather than the composing-side
+    /// <see cref="HttpHeaderSet.Builder"/>: a hostile field line (a non-token name, a case-insensitively
+    /// colliding name, or a value carrying CR/LF/NUL) is sanitized or dropped per RFC 9110 §5.5/§5.3
+    /// instead of throwing out of request parsing.
     /// </summary>
     /// <param name="source">
-    /// Header name to value-list mapping. Names are case-insensitive on
-    /// lookup; the skin may pass them in any case.
+    /// Header name to value-list mapping, as received. Names are case-insensitive on
+    /// lookup; the skin may pass them in any case, including two entries colliding
+    /// case-insensitively (an ordinal-keyed map holding both <c>X-Foo</c> and <c>x-foo</c>).
     /// </param>
     public RequestHeaders(IReadOnlyDictionary<string, string[]> source)
     {
         ArgumentNullException.ThrowIfNull(source);
 
-        Headers = new Dictionary<string, string[]>(source.Count, StringComparer.OrdinalIgnoreCase);
+        Headers = HttpHeaderSet.FromReceived(FlattenToFieldLines(source));
+    }
+
+
+    /// <summary>Flattens a name to value-array mapping into one field line per value, in enumeration order.</summary>
+    /// <param name="source">The mapping to flatten.</param>
+    private static IEnumerable<(string Name, string Value)> FlattenToFieldLines(IReadOnlyDictionary<string, string[]> source)
+    {
         foreach(KeyValuePair<string, string[]> entry in source)
         {
-            Headers[entry.Key] = entry.Value;
+            foreach(string value in entry.Value)
+            {
+                yield return (entry.Key, value);
+            }
         }
     }
 
@@ -52,8 +82,7 @@ public sealed class RequestHeaders
     /// An empty <see cref="RequestHeaders"/> instance for tests and
     /// pipelines that have no headers to surface.
     /// </summary>
-    public static RequestHeaders Empty { get; } =
-        new RequestHeaders(new Dictionary<string, string[]>(0));
+    public static RequestHeaders Empty { get; } = new RequestHeaders(HttpHeaderSet.Empty);
 
 
     /// <summary>
@@ -77,13 +106,16 @@ public sealed class RequestHeaders
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
-        if(Headers.TryGetValue(name, out string[]? values) && values.Length == 1)
+        IReadOnlyList<string> values = Headers.GetValues(name);
+        if(values.Count == 1)
         {
             value = values[0];
+
             return true;
         }
 
         value = null;
+
         return false;
     }
 
@@ -101,13 +133,15 @@ public sealed class RequestHeaders
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
-        if(Headers.TryGetValue(name, out string[]? raw))
+        if(Headers.Contains(name))
         {
-            values = raw;
+            values = Headers.GetValues(name);
+
             return true;
         }
 
         values = null;
+
         return false;
     }
 
@@ -119,6 +153,7 @@ public sealed class RequestHeaders
     public bool Contains(string name)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        return Headers.ContainsKey(name);
+
+        return Headers.Contains(name);
     }
 }

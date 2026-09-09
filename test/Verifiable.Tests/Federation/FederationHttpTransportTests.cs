@@ -26,13 +26,13 @@ internal sealed class FederationHttpTransportTests
     public TestContext TestContext { get; set; } = null!;
 
     /// <summary>Header deserializer mirroring the authorization server's wiring.</summary>
-    private static readonly JwtHeaderDeserializer HeaderDeserializer = static bytes =>
+    private static JwtHeaderDeserializer HeaderDeserializer { get; } = static bytes =>
         JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
             bytes, TestSetup.DefaultSerializationOptions)
         ?? throw new FormatException("Header JSON parsed to null.");
 
     /// <summary>Payload deserializer mirroring the authorization server's wiring.</summary>
-    private static readonly JwtPayloadDeserializer PayloadDeserializer = static bytes =>
+    private static JwtPayloadDeserializer PayloadDeserializer { get; } = static bytes =>
         JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
             bytes, TestSetup.DefaultSerializationOptions)
         ?? throw new FormatException("Payload JSON parsed to null.");
@@ -44,7 +44,6 @@ internal sealed class FederationHttpTransportTests
             ValueTask.FromResult(new OutboundResponse
             {
                 StatusCode = statusCode,
-                Headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
                 Body = new TaggedMemory<byte>(Encoding.UTF8.GetBytes(body), Tag.Empty),
             });
 
@@ -64,7 +63,8 @@ internal sealed class FederationHttpTransportTests
             CannedTransport(200, minted.CompactJws),
             HeaderDeserializer,
             PayloadDeserializer,
-            TestSetup.Base64UrlDecoder);
+            TestSetup.Base64UrlDecoder,
+            BaseMemoryPool.Shared);
 
         FetchedEntityStatement? result = await fetch(
             subject.Identifier,
@@ -90,7 +90,8 @@ internal sealed class FederationHttpTransportTests
             CannedTransport(404, string.Empty),
             HeaderDeserializer,
             PayloadDeserializer,
-            TestSetup.Base64UrlDecoder);
+            TestSetup.Base64UrlDecoder,
+            BaseMemoryPool.Shared);
 
         FetchedEntityStatement? result = await fetch(
             subject.Identifier,

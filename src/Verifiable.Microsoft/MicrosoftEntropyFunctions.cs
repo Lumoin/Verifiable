@@ -54,10 +54,12 @@ public static class MicrosoftEntropyFunctions
     public static (Nonce Result, CryptoEvent? Event) GenerateNonce(
         int byteLength,
         Tag tag,
-        BaseMemoryPool pool)
+        BaseMemoryPool pool,
+        TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(tag);
         ArgumentNullException.ThrowIfNull(pool);
+        ArgumentNullException.ThrowIfNull(timeProvider);
 
         ProviderOperation operation = new(nameof(GenerateNonce));
         Tag stamped = CryptoProviderInstrumentation.StampTag(
@@ -80,7 +82,7 @@ public static class MicrosoftEntropyFunctions
         Purpose evtPurpose = stamped.TryGet<Purpose>(out Purpose ep)
             ? ep : Purpose.Nonce;
         CryptoEvent evt = EntropyConsumedEvent.Create(
-            EntropySource.Csprng, byteLength, evtPurpose, EntropyHealthObservation.Unknown);
+            EntropySource.Csprng, byteLength, evtPurpose, EntropyHealthObservation.Unknown, timeProvider: timeProvider);
 
         return (result, evt);
     }
@@ -92,10 +94,12 @@ public static class MicrosoftEntropyFunctions
     public static (Salt Result, CryptoEvent? Event) GenerateSalt(
         int byteLength,
         Tag tag,
-        BaseMemoryPool pool)
+        BaseMemoryPool pool,
+        TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(tag);
         ArgumentNullException.ThrowIfNull(pool);
+        ArgumentNullException.ThrowIfNull(timeProvider);
 
         ProviderOperation operation = new(nameof(GenerateSalt));
         Tag stamped = CryptoProviderInstrumentation.StampTag(
@@ -118,7 +122,7 @@ public static class MicrosoftEntropyFunctions
         Purpose evtPurpose = stamped.TryGet<Purpose>(out Purpose ep)
             ? ep : Purpose.Salt;
         CryptoEvent evt = EntropyConsumedEvent.Create(
-            EntropySource.Csprng, byteLength, evtPurpose, EntropyHealthObservation.Unknown);
+            EntropySource.Csprng, byteLength, evtPurpose, EntropyHealthObservation.Unknown, timeProvider: timeProvider);
 
         return (result, evt);
     }

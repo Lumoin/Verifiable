@@ -1,4 +1,6 @@
-using System.Formats.Cbor;
+using System.Buffers;
+using Lumoin.Veritas.Cbor;
+using Verifiable.Cbor;
 using Verifiable.Cbor.Mdoc;
 using Verifiable.Core.Model.Mdoc;
 using Verifiable.JCose;
@@ -31,8 +33,8 @@ internal sealed class MdocCborMsoReaderTests
     //Mirrors the instants MdocTestFixtures.WriteValidityInfo bakes into
     //BuildSampleMso's validityInfo tdate fields. Bit-identical to
     //TestClock.CanonicalEpoch.AddDays(-8) (2026-05-24T12:00:00Z).
-    private static readonly DateTimeOffset ExpectedValiditySigned = TestClock.CanonicalEpoch.AddDays(-8);
-    private static readonly DateTimeOffset ExpectedValidityValidUntil = ExpectedValiditySigned.AddYears(1);
+    private static DateTimeOffset ExpectedValiditySigned { get; } = TestClock.CanonicalEpoch.AddDays(-8);
+    private static DateTimeOffset ExpectedValidityValidUntil { get; } = ExpectedValiditySigned.AddYears(1);
 
 
     [TestMethod]
@@ -131,7 +133,8 @@ internal sealed class MdocCborMsoReaderTests
 
     private static byte[] BuildSampleMsoWithExtraField()
     {
-        var writer = new CborWriter(CborConformanceMode.Lax);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.Lax);
 
         //Lax mode used so we can add an extra key without canonical ordering
         //constraints — the test point is that the reader skips the unknown
@@ -163,13 +166,14 @@ internal sealed class MdocCborMsoReaderTests
 
         writer.WriteEndMap();
 
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
     }
 
 
     private static byte[] BuildIncompleteMso()
     {
-        var writer = new CborWriter(CborConformanceMode.Lax);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.Lax);
 
         //Missing docType deliberately — reader must surface the gap.
         writer.WriteStartMap(5);
@@ -191,6 +195,6 @@ internal sealed class MdocCborMsoReaderTests
 
         writer.WriteEndMap();
 
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
     }
 }

@@ -25,23 +25,23 @@ namespace Verifiable.OAuth;
 public static class WellKnownClaimIds
 {
     //OIDC Core §5.4 standard claim families (codes 1000–1019).
-    public static readonly ClaimId OidcProfile = ClaimId.Create(1000, "OidcProfile");
-    public static readonly ClaimId OidcEmail = ClaimId.Create(1001, "OidcEmail");
-    public static readonly ClaimId OidcAddress = ClaimId.Create(1002, "OidcAddress");
-    public static readonly ClaimId OidcPhone = ClaimId.Create(1003, "OidcPhone");
+    public static ClaimId OidcProfile { get; } = ClaimId.Create(1000, "OidcProfile");
+    public static ClaimId OidcEmail { get; } = ClaimId.Create(1001, "OidcEmail");
+    public static ClaimId OidcAddress { get; } = ClaimId.Create(1002, "OidcAddress");
+    public static ClaimId OidcPhone { get; } = ClaimId.Create(1003, "OidcPhone");
 
     //OIDC authentication context (codes 1020–1029).
-    public static readonly ClaimId OidcAuthTime = ClaimId.Create(1020, "OidcAuthTime");
-    public static readonly ClaimId OidcAuthClass = ClaimId.Create(1021, "OidcAuthClass");
-    public static readonly ClaimId OidcSessionId = ClaimId.Create(1022, "OidcSessionId");
+    public static ClaimId OidcAuthTime { get; } = ClaimId.Create(1020, "OidcAuthTime");
+    public static ClaimId OidcAuthClass { get; } = ClaimId.Create(1021, "OidcAuthClass");
+    public static ClaimId OidcSessionId { get; } = ClaimId.Create(1022, "OidcSessionId");
 
     //RFC 7800 confirmation method (codes 1030–1039).
-    public static readonly ClaimId CnfBinding = ClaimId.Create(1030, "CnfBinding");
+    public static ClaimId CnfBinding { get; } = ClaimId.Create(1030, "CnfBinding");
 
     //Subject identifier (code 1040). Carries the result of
     //ResolveSubjectIdentifierAsync — public-identity by default,
     //pairwise-hash for deployments that wire one.
-    public static readonly ClaimId SubjectIdentifier = ClaimId.Create(1040, "SubjectIdentifier");
+    public static ClaimId SubjectIdentifier { get; } = ClaimId.Create(1040, "SubjectIdentifier");
 
     //Future OAuth contributor rule IDs land in 1050–1099. Downstream tracks
     //reserve 1100+ in their own WellKnown* classes.

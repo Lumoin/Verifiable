@@ -1,4 +1,4 @@
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Fido2;
 using Verifiable.JCose;
 
@@ -6,7 +6,7 @@ namespace Verifiable.Cbor.Fido2;
 
 /// <summary>
 /// The shipped default for <see cref="ReadCredentialPublicKeyDelegate"/>: decodes the self-describing
-/// COSE_Key <c>credentialPublicKey</c> at the start of a buffer using System.Formats.Cbor.
+/// COSE_Key <c>credentialPublicKey</c> at the start of a buffer.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -55,7 +55,7 @@ public static class CredentialPublicKeyCborReader
     {
         try
         {
-            var reader = new CborReader(source, CborConformanceMode.Ctap2Canonical);
+            var reader = new CborReader(source, CborOptions.Ctap2Canonical);
             int? entryCount = reader.ReadStartMap();
 
             var labels = new List<int>();
@@ -96,24 +96,26 @@ public static class CredentialPublicKeyCborReader
 
             return new CredentialPublicKeyReadResult(coseKey, bytesConsumed, labels);
         }
-        catch(Exception exception) when(exception is CborContentException or InvalidOperationException or OverflowException or FormatException)
+        catch(Exception exception) when(exception is CborException or InvalidOperationException or OverflowException or FormatException)
         {
             throw new Fido2FormatException("The COSE_Key bytes are not valid CTAP2 canonical CBOR conforming to RFC 9052 §7.1.", exception);
         }
 
-        //Decodes a captured raw CBOR value as a signed integer.
-        static int DecodeInt(ReadOnlyMemory<byte> encodedValue) => checked((int)new CborReader(encodedValue).ReadInt64());
+        //Decodes a captured raw CBOR value as a signed integer. The captured bytes were sliced from a
+        //map read under Ctap2Canonical (per the type-level remarks), so this probe reads under the
+        //same mode rather than CborReader's mode-less default constructor.
+        static int DecodeInt(ReadOnlyMemory<byte> encodedValue) => checked((int)new CborReader(encodedValue, CborOptions.Ctap2Canonical).ReadInt64());
 
-        //Decodes a captured raw CBOR value as a byte string.
-        static ReadOnlyMemory<byte> DecodeBytes(ReadOnlyMemory<byte> encodedValue) => new CborReader(encodedValue).ReadByteString();
+        //Decodes a captured raw CBOR value as a byte string. See DecodeInt for the mode choice.
+        static ReadOnlyMemory<byte> DecodeBytes(ReadOnlyMemory<byte> encodedValue) => new CborReader(encodedValue, CborOptions.Ctap2Canonical).ReadByteString();
 
-        //Decodes a captured raw CBOR value as a boolean.
-        static bool DecodeBoolean(ReadOnlyMemory<byte> encodedValue) => new CborReader(encodedValue).ReadBoolean();
+        //Decodes a captured raw CBOR value as a boolean. See DecodeInt for the mode choice.
+        static bool DecodeBoolean(ReadOnlyMemory<byte> encodedValue) => new CborReader(encodedValue, CborOptions.Ctap2Canonical).ReadBoolean();
 
         //Determines whether a captured raw CBOR value is a boolean, used to distinguish the EC2 "y"
         //label's two encodings: an uncompressed coordinate (byte string) versus a compressed sign bit
-        //(boolean).
-        static bool IsBooleanEncoding(ReadOnlyMemory<byte> encodedValue) => new CborReader(encodedValue).PeekState() == CborReaderState.Boolean;
+        //(boolean). See DecodeInt for the mode choice.
+        static bool IsBooleanEncoding(ReadOnlyMemory<byte> encodedValue) => new CborReader(encodedValue, CborOptions.Ctap2Canonical).PeekState() == CborReaderState.Boolean;
 
         //Builds the EC2 key-material fields: crv (-1), x (-2), and y (-3), where y may be encoded
         //either as an uncompressed coordinate (byte string) or a compressed sign bit (boolean).

@@ -8,6 +8,8 @@ using Verifiable.Apdu.Bac;
 using Verifiable.Apdu.Lds;
 using Verifiable.Apdu.SecureMessaging;
 using Verifiable.Cryptography;
+using Microsoft.Extensions.Time.Testing;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Apdu;
 
@@ -90,7 +92,7 @@ internal sealed class CardSimulatorActiveAuthenticationTests
         using ActiveAuthenticationKey activeAuthenticationKey = CreateActiveAuthenticationKey(heldKeyScalarHex);
 
         using var card = new CardSimulator(
-            "passport-active-auth", [dataGroup1, dataGroup15File], activeAuthenticationKey: activeAuthenticationKey);
+            "passport-active-auth", [dataGroup1, dataGroup15File], activeAuthenticationKey: activeAuthenticationKey, rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         using ApduDevice device = ApduDevice.Create(card.TransceiveAsync);
 
         //Firewall: the terminal reconstructs the Active Authentication public key from the DG15 wire bytes.
@@ -123,7 +125,7 @@ internal sealed class CardSimulatorActiveAuthenticationTests
         using ActiveAuthenticationKey activeAuthenticationKey = CreateActiveAuthenticationKey(P256ActiveAuthenticationPrivateKey);
 
         using var card = new CardSimulator(
-            "passport-active-auth-compressed", [dataGroup1, dataGroup15File], activeAuthenticationKey: activeAuthenticationKey);
+            "passport-active-auth-compressed", [dataGroup1, dataGroup15File], activeAuthenticationKey: activeAuthenticationKey, rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         using ApduDevice device = ApduDevice.Create(card.TransceiveAsync);
 
         using EncodedEcPoint compressedPublicKey = CompressVerificationKey(uncompressedPublicKey);
@@ -151,7 +153,7 @@ internal sealed class CardSimulatorActiveAuthenticationTests
         using ActiveAuthenticationKey activeAuthenticationKey = CreateActiveAuthenticationKey(P256ActiveAuthenticationPrivateKey);
 
         using var card = new CardSimulator(
-            "passport-active-auth-sm", [dataGroup1, dataGroup15File], activeAuthenticationKey: activeAuthenticationKey);
+            "passport-active-auth-sm", [dataGroup1, dataGroup15File], activeAuthenticationKey: activeAuthenticationKey, rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         using ApduDevice device = ApduDevice.Create(card.TransceiveAsync);
 
         (SecureMessagingSession session, SymmetricKeyMemory accessEncryptionKey, SymmetricKeyMemory accessMacKey) =

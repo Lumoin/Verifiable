@@ -18,7 +18,7 @@ internal sealed class WebPlusUpdateRulesJsonTests
     private static WebPlusUpdateRuleParser Parser => WebPlusUpdateRulesJson.Parser;
 
     //A HashedKeyMatcher that never matches; the key-only and structural tests never reach a hashedKey rule.
-    private static readonly HashedKeyMatcher NoHashedKeyMatch = static (_, _, _) => ValueTask.FromResult(false);
+    private static HashedKeyMatcher NoHashedKeyMatch { get; } = static (_, _, _) => ValueTask.FromResult(false);
 
 
     //Parses a standalone updateRules value by wrapping it in a minimal DID document, the form the parser reads.

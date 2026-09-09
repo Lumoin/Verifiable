@@ -14,6 +14,8 @@ using Verifiable.Tpm.Spec.Attributes;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
+using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -26,7 +28,7 @@ namespace Verifiable.Tests.Tpm;
 /// </summary>
 /// <remarks>
 /// The Name is recomputed off-TPM from the wire-exported public area through the registered digest seam (TPM 2.0
-/// Library Part 1, clause 14, Table 6) — firewalled: the verifier never calls into the production <c>TpmObjectName</c>
+/// Library Part 1, clause 13, Table 9) — firewalled: the verifier never calls into the production <c>TpmObjectName</c>
 /// helper, only an independent recomputation, matching the sibling nameAlg/Certify/Sign/Quote tests' oracle style.
 /// A match proves the template's authPolicy is threaded end to end into both the exported public area and the Name.
 /// </remarks>
@@ -52,7 +54,7 @@ internal sealed class TpmInHouseSimulatorEndorsementKeyTemplateTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryInput input = CreatePrimaryInput.ForEndorsementKey(TpmRh.TPM_RH_ENDORSEMENT, pool);
@@ -110,7 +112,7 @@ internal sealed class TpmInHouseSimulatorEndorsementKeyTemplateTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalWithRsaAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryInput input = CreatePrimaryInput.ForRsaEndorsementKey(TpmRh.TPM_RH_ENDORSEMENT, pool);
@@ -196,7 +198,7 @@ internal sealed class TpmInHouseSimulatorEndorsementKeyTemplateTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalWithBothBackendsAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryInput eccInput = CreatePrimaryInput.ForEndorsementKey(TpmRh.TPM_RH_ENDORSEMENT, pool);
@@ -304,7 +306,7 @@ internal sealed class TpmInHouseSimulatorEndorsementKeyTemplateTests
     /// <returns>The operational simulator.</returns>
     private async Task<TpmSimulator> CreateOperationalAsync(BaseMemoryPool pool)
     {
-        var simulator = new TpmSimulator("tpm-in-house-ek-template", signingBackend: BouncyCastleTpmEccSigningBackend.Create());
+        var simulator = new TpmSimulator("tpm-in-house-ek-template", signingBackend: BouncyCastleTpmEccSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await BringOperationalAsync(simulator, pool).ConfigureAwait(false);
 
@@ -321,7 +323,7 @@ internal sealed class TpmInHouseSimulatorEndorsementKeyTemplateTests
     /// <returns>The operational simulator.</returns>
     private async Task<TpmSimulator> CreateOperationalWithRsaAsync(BaseMemoryPool pool)
     {
-        var simulator = new TpmSimulator("tpm-in-house-ek-template-rsa", rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create());
+        var simulator = new TpmSimulator("tpm-in-house-ek-template-rsa", rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await BringOperationalAsync(simulator, pool).ConfigureAwait(false);
 
@@ -340,7 +342,7 @@ internal sealed class TpmInHouseSimulatorEndorsementKeyTemplateTests
         var simulator = new TpmSimulator(
             "tpm-in-house-ek-template-both",
             signingBackend: BouncyCastleTpmEccSigningBackend.Create(),
-            rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create());
+            rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await BringOperationalAsync(simulator, pool).ConfigureAwait(false);
 

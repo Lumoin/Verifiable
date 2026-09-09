@@ -40,6 +40,9 @@ internal sealed class X509ChainTestRingTests
             Convert.ToBase64String(root.Certificate.RawData),
         ];
 
+        //trustAnchors is a collection of disposables, not one disposable value: a using declaration
+        //disposes one variable's own value, not a collection's elements, so the foreach below in the
+        //finally block is the release point.
         IReadOnlyList<PkiCertificateMemory> trustAnchors = MicrosoftX509Functions.ParseX5c(
             [Convert.ToBase64String(root.Certificate.RawData)],
             Pool);
@@ -73,6 +76,9 @@ internal sealed class X509ChainTestRingTests
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
 
+        //trustAnchors is a collection of disposables, not one disposable value: a using declaration
+        //disposes one variable's own value, not a collection's elements, so the foreach below in the
+        //finally block is the release point.
         IReadOnlyList<PkiCertificateMemory> trustAnchors = MicrosoftX509Functions.ParseX5c(
             chain.RootX5c, Pool);
         try
@@ -179,6 +185,9 @@ internal sealed class X509ChainTestRingTests
         //Walks the chain through the production primitives, exactly as
         //X509SanDnsKeyResolver would. Asserts the chain validates and the
         //leaf key extracts cleanly.
+        //parsed is a collection of disposables, not one disposable value: a using declaration disposes
+        //one variable's own value, not a collection's elements, so the foreach below in the finally block
+        //is the release point.
         IReadOnlyList<PkiCertificateMemory> parsed = MicrosoftX509Functions.ParseX5c(x5c, Pool);
         try
         {

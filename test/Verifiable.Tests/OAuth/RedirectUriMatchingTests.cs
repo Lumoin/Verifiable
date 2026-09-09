@@ -22,10 +22,10 @@ internal sealed class RedirectUriMatchingTests
     public TestContext TestContext { get; set; } = null!;
 
     private const string ClientId = "https://client.example.com";
-    private static readonly Uri ClientBaseUri = new(ClientId);
+    private static Uri ClientBaseUri { get; } = new(ClientId);
 
     //The redirect URI TestHostShell.RegisterDpopClient registers by default.
-    private static readonly Uri RegisteredRedirectUri = new("https://client.example.com/callback");
+    private static Uri RegisteredRedirectUri { get; } = new("https://client.example.com/callback");
 
 
     //Part A — the pure matcher, no host.

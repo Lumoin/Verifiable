@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
 
@@ -56,14 +56,14 @@ public static class CtapBioEnrollmentRequestCborReader
             bool? getModality = null;
             if(parameters.TryGetValue(WellKnownCtapBioEnrollmentRequestKeys.GetModality, out ReadOnlyMemory<byte> getModalityCbor))
             {
-                getModality = new CborReader(getModalityCbor, CborConformanceMode.Ctap2Canonical).ReadBoolean();
+                getModality = new CborReader(getModalityCbor, CborOptions.Ctap2Canonical).ReadBoolean();
             }
 
             return new CtapBioEnrollmentRequest(
                 modality, subCommand, subCommandParams, templateId, templateFriendlyName, timeoutMilliseconds,
                 pinUvAuthProtocol, pinUvAuthParam, getModality);
         }
-        catch(CborContentException exception)
+        catch(CborException exception)
         {
             throw new Fido2FormatException(Fido2FormatFailureKind.MalformedCbor, "The authenticatorBioEnrollment request parameter bytes are not valid CTAP2 canonical CBOR.", exception);
         }
@@ -75,7 +75,7 @@ public static class CtapBioEnrollmentRequestCborReader
         //Looks up an Optional integer member, or returns null when the member is absent.
         static int? ReadOptionalInt(IReadOnlyDictionary<int, ReadOnlyMemory<byte>> parameters, int key) =>
             parameters.TryGetValue(key, out ReadOnlyMemory<byte> valueCbor)
-                ? checked((int)new CborReader(valueCbor, CborConformanceMode.Ctap2Canonical).ReadInt64())
+                ? checked((int)new CborReader(valueCbor, CborOptions.Ctap2Canonical).ReadInt64())
                 : null;
 
         //Looks up an Optional member's still-encoded bytes verbatim, or returns null when the member is
@@ -96,7 +96,7 @@ public static class CtapBioEnrollmentRequestCborReader
         {
             if(parameters.TryGetValue(key, out ReadOnlyMemory<byte> valueCbor))
             {
-                return new CborReader(valueCbor, CborConformanceMode.Ctap2Canonical).ReadByteString();
+                return new CborReader(valueCbor, CborOptions.Ctap2Canonical).ReadByteString();
             }
 
             return null;
@@ -120,19 +120,19 @@ public static class CtapBioEnrollmentRequestCborReader
         ReadOnlyMemory<byte>? templateId = null;
         if(members.TryGetValue(WellKnownCtapBioEnrollmentSubCommandParamsKeys.TemplateId, out ReadOnlyMemory<byte> templateIdCbor))
         {
-            templateId = new CborReader(templateIdCbor, CborConformanceMode.Ctap2Canonical).ReadByteString();
+            templateId = new CborReader(templateIdCbor, CborOptions.Ctap2Canonical).ReadByteString();
         }
 
         string? templateFriendlyName = null;
         if(members.TryGetValue(WellKnownCtapBioEnrollmentSubCommandParamsKeys.TemplateFriendlyName, out ReadOnlyMemory<byte> templateFriendlyNameCbor))
         {
-            templateFriendlyName = new CborReader(templateFriendlyNameCbor, CborConformanceMode.Ctap2Canonical).ReadTextString();
+            templateFriendlyName = new CborReader(templateFriendlyNameCbor, CborOptions.Ctap2Canonical).ReadTextString();
         }
 
         int? timeoutMilliseconds = null;
         if(members.TryGetValue(WellKnownCtapBioEnrollmentSubCommandParamsKeys.TimeoutMilliseconds, out ReadOnlyMemory<byte> timeoutMillisecondsCbor))
         {
-            timeoutMilliseconds = checked((int)new CborReader(timeoutMillisecondsCbor, CborConformanceMode.Ctap2Canonical).ReadInt64());
+            timeoutMilliseconds = checked((int)new CborReader(timeoutMillisecondsCbor, CborOptions.Ctap2Canonical).ReadInt64());
         }
 
         return (templateId, templateFriendlyName, timeoutMilliseconds);

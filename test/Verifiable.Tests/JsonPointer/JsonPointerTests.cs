@@ -1,6 +1,6 @@
-using Verifiable.JsonPointer;
-using Ptr = Verifiable.JsonPointer.JsonPointer;
-using Seg = Verifiable.JsonPointer.JsonPointerSegment;
+using Lumoin.Veritas.JsonPointer;
+using Ptr = Lumoin.Veritas.JsonPointer.JsonPointer;
+using Seg = Lumoin.Veritas.JsonPointer.JsonPointerSegment;
 
 namespace Verifiable.Tests.JsonPointer;
 

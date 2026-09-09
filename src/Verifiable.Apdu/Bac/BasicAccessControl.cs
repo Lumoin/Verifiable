@@ -301,6 +301,9 @@ public static class BasicAccessControl
         using IMemoryOwner<byte> zeroIv = pool.Rent(BlockSize);
         (DecryptedContent decoded, _) = await decrypt(
             chipCryptogram, encryptionKey.AsReadOnlyMemory(), zeroIv.Memory, CryptoTags.TripleDesCbcDecryptedContent, pool, null, cancellationToken).ConfigureAwait(false);
+
+        //Not a using declaration: decoded comes out of a tuple deconstruction, a shape the using
+        //declaration syntax does not accept; the try/finally disposes it exactly once on every exit path.
         try
         {
             IMemoryOwner<byte> owner = pool.Rent(decoded.AsReadOnlySpan().Length, AllocationKind.Pinned);
@@ -431,6 +434,9 @@ public static class BasicAccessControl
 
         (DigestValue value, _) = await digest(
             new ReadOnlySequence<byte>(input), Sha1Length, Sha1DigestTag, pool, null, cancellationToken).ConfigureAwait(false);
+
+        //Not a using declaration: value comes out of a tuple deconstruction, a shape the using
+        //declaration syntax does not accept; the try/finally disposes it exactly once on every exit path.
         try
         {
             //The SHA-1 seed/key-derivation hashes are secret in BAC, so they are re-homed to pinned memory.

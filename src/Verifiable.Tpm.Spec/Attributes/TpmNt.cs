@@ -10,7 +10,7 @@ namespace Verifiable.Tpm.Spec.Attributes;
 /// This field is 4 bits wide. All other values are reserved and TPM2_NV_DefineSpace() returns TPM_RC_ATTRIBUTES.
 /// </para>
 /// <para>
-/// Specification: <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2: Structures, section 13.2 (TPM_NT).
+/// Specification: <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2: Structures, clause 13.2 (TPM_NT).
 /// </para>
 /// </remarks>
 /// 

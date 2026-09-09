@@ -3,6 +3,7 @@ using Verifiable.Foundation.Automata;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Resolvers;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Resolver;
 
@@ -282,7 +283,7 @@ internal sealed class DidRegistrationTests
     private static PushdownAutomaton<RegistrationFlowState, RegistrationInput, string> CreateTestAutomaton(
         Func<RegistrationFlowState, RegistrationInput, CancellationToken, ValueTask<RegistrationFlowState>> handler)
     {
-        return DidRegistrationTransitions.CreateAutomaton("test-run", handler);
+        return DidRegistrationTransitions.CreateAutomaton("test-run", handler, new FakeTimeProvider(TestClock.CanonicalEpoch));
     }
 
     private sealed class TestObserver<T>(List<T> entries) : IObserver<T>

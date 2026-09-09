@@ -152,6 +152,9 @@ public static class BasicAccessControlCardResponder
         using IMemoryOwner<byte> zeroIv = pool.Rent(BlockSize);
         (DecryptedContent decoded, _) = await decrypt(
             terminalCryptogram, encryptionKey.AsReadOnlyMemory(), zeroIv.Memory, CryptoTags.TripleDesCbcDecryptedContent, pool, null, cancellationToken).ConfigureAwait(false);
+
+        //Not a using declaration: decoded comes out of a tuple deconstruction, a shape the using
+        //declaration syntax does not accept; the try/finally disposes it exactly once on every exit path.
         try
         {
             IMemoryOwner<byte> owner = pool.Rent(decoded.AsReadOnlySpan().Length, AllocationKind.Pinned);
@@ -189,6 +192,9 @@ public static class BasicAccessControlCardResponder
         using IMemoryOwner<byte> zeroIv = pool.Rent(BlockSize);
         (Ciphertext chipCryptogram, _) = await encrypt(
             r.Memory, encryptionKey.AsReadOnlyMemory(), zeroIv.Memory, CryptoTags.TripleDesCbc, pool, null, cancellationToken).ConfigureAwait(false);
+
+        //Not a using declaration: chipCryptogram comes out of a tuple deconstruction, a shape the using
+        //declaration syntax does not accept; the try/finally disposes it exactly once on every exit path.
         try
         {
             using MacValue chipMac = await ComputeRetailMacAsync(macKey, chipCryptogram.AsReadOnlyMemory(), pool, cancellationToken).ConfigureAwait(false);

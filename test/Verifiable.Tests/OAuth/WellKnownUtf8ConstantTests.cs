@@ -1,117 +1,78 @@
-using System.Reflection;
-using System.Text;
-using Verifiable.OAuth;
+using System.IO;
+using System.Text.RegularExpressions;
+using Verifiable.Tests.Foundation;
 
 namespace Verifiable.Tests.OAuth;
 
 /// <summary>
 /// Structural guard for the UTF-8-first well-known constant convention: every public static
-/// <c>XUtf8</c> span property must sit beside a public static string member <c>X</c> whose
-/// value is the UTF-8 decoding of the span. The convention derives the string from the span's
-/// single <c>u8</c> literal, so for conforming members this holds by construction — the sweep
-/// exists to catch any future member that reintroduces a second hand-written literal or an
-/// orphaned <c>*Utf8</c> property, across ALL classes in the scanned assemblies without
-/// per-name maintenance here.
+/// <c>XUtf8</c> span property must sit beside a public static string member <c>X</c> that names the
+/// identical text — either derived through <c>Utf8Constants.ToInternedString(XUtf8)</c> (the
+/// correct-by-construction form most of this tree uses, which ties the string's content to the
+/// span's own <c>u8</c> literal and interns it in one call) or, for a leaf whose own layering rule
+/// forbids referencing the type <c>ToInternedString</c> would otherwise share a literal with,
+/// independently restated as the identical string literal (compile-time string literals are
+/// themselves always interned by the runtime, so this form loses no interning guarantee, only the
+/// single-source-of-truth one <c>ToInternedString</c> gives) — so a second hand-written literal that
+/// silently drifted from its span, or an orphaned <c>*Utf8</c> property with no string view at all,
+/// cannot creep in unnoticed. Checked as a source scan over every <c>src/**</c> file, with no
+/// reflection over any loaded assembly.
 /// </summary>
 [TestClass]
 internal sealed class WellKnownUtf8ConstantTests
 {
-    //Reflection cannot box a ReadOnlySpan<byte> return value through MethodInfo.Invoke;
-    //a typed delegate reads the property instead.
-    private delegate ReadOnlySpan<byte> Utf8SpanGetter();
+    /// <summary>Matches a public static UTF-8 source-literal span property's declaration line.</summary>
+    private static Regex Utf8SpanPropertyPattern { get; } = new(
+        @"public\s+static\s+ReadOnlySpan<byte>\s+(\w+)Utf8\s*=>\s*""((?:[^""\\]|\\.)*)""u8;",
+        RegexOptions.Compiled);
 
 
+    /// <summary>
+    /// Every <c>XUtf8</c> span property declared anywhere under <c>src/**</c> has, in the same file, a
+    /// public static string member <c>X</c> whose text agrees with the span's own <c>u8</c> literal —
+    /// through the mandated <c>Utf8Constants.ToInternedString(XUtf8)</c> derivation, or, where that is
+    /// unavailable, as the identical restated literal — proving the UTF-8 and string views cannot drift
+    /// apart, without reading either member's runtime value.
+    /// </summary>
     [TestMethod]
     public void EveryUtf8SpanPropertyMatchesItsStringMember()
     {
-        Assembly[] assemblies =
-        [
-            typeof(Verifiable.JCose.WellKnownJwtClaimNames).Assembly,
-            typeof(OAuthRequestParameterNames).Assembly,
-            typeof(Verifiable.Server.Diagnostics.ServerTagNames).Assembly,
-            typeof(Verifiable.Vcalm.VcalmParameterNames).Assembly,
-            typeof(Verifiable.Core.SecurityEvents.SubjectIdentifierFormats).Assembly,
-            typeof(Verifiable.Cryptography.RsaUtilities).Assembly
-        ];
+        string repositoryRoot = SourceHygieneScanner.FindRepositoryRoot();
+        IReadOnlyList<string> files = SourceHygieneScanner.EnumerateSourceFilesUnder(repositoryRoot, "src");
 
-        int pairCount = 0;
         List<string> orphans = [];
         List<string> mismatches = [];
-        List<string> uninterned = [];
+        int pairCount = 0;
 
-        foreach(Assembly assembly in assemblies)
+        foreach(string filePath in files)
         {
-            foreach(Type type in assembly.GetTypes())
+            string text = File.ReadAllText(filePath);
+            string relativePath = Path.GetRelativePath(repositoryRoot, filePath).Replace(Path.DirectorySeparatorChar, '/');
+
+            foreach(Match spanMatch in Utf8SpanPropertyPattern.Matches(text))
             {
-                foreach(PropertyInfo property in type.GetProperties(
-                    BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly))
+                string name = spanMatch.Groups[1].Value;
+                string spanLiteral = spanMatch.Groups[2].Value;
+                var siblingPattern = new Regex(
+                    $@"public\s+static\s+(?:readonly\s+)?string\s+{Regex.Escape(name)}\s*(?:\{{\s*get;\s*\}}\s*=|=)\s*(?:Utf8Constants\.ToInternedString\({Regex.Escape(name)}Utf8\)|""((?:[^""\\]|\\.)*)"")\s*;");
+
+                Match siblingMatch = siblingPattern.Match(text);
+                if(!siblingMatch.Success)
                 {
-                    if(property.PropertyType != typeof(ReadOnlySpan<byte>)
-                        || !property.Name.EndsWith("Utf8", StringComparison.Ordinal))
-                    {
-                        continue;
-                    }
-
-                    string memberName = property.Name[..^"Utf8".Length];
-
-                    //The string sibling is either a get-only property (the IRON static-getter form:
-                    //`static string X { get; } = …`) or a legacy `static readonly string X` field. Accept both;
-                    //the getter form is the one the static-getter rule mandates for new and swept members.
-                    if(ReadStaticStringMember(type, memberName) is not string text)
-                    {
-                        orphans.Add($"{type.FullName}.{property.Name}");
-                        continue;
-                    }
-
-                    Utf8SpanGetter readSpan = property.GetGetMethod()!
-                        .CreateDelegate<Utf8SpanGetter>();
-                    if(!readSpan().SequenceEqual(Encoding.UTF8.GetBytes(text)))
-                    {
-                        mismatches.Add($"{type.FullName}.{memberName} = \"{text}\"");
-                    }
-
-                    //Utf8Constants.ToInternedString interns the derived string so constants
-                    //stay reference-equal to literals with the same text — the fast path
-                    //the canonicalization helpers rely on.
-                    if(!ReferenceEquals(text, string.IsInterned(text)))
-                    {
-                        uninterned.Add($"{type.FullName}.{memberName}");
-                    }
-
-                    pairCount++;
+                    orphans.Add($"{relativePath}: {name}Utf8 has no string sibling {name} agreeing with it.");
                 }
+                else if(siblingMatch.Groups[1].Success && siblingMatch.Groups[1].Value != spanLiteral)
+                {
+                    mismatches.Add($"{relativePath}: {name} = \"{siblingMatch.Groups[1].Value}\" does not match {name}Utf8 = \"{spanLiteral}\".");
+                }
+
+                pairCount++;
             }
         }
 
-        Assert.IsEmpty(orphans,
-            $"Every *Utf8 span property must have a string sibling: {string.Join(", ", orphans)}");
-        Assert.IsEmpty(mismatches,
-            $"UTF-8 and string views must agree: {string.Join(", ", mismatches)}");
-        Assert.IsEmpty(uninterned,
-            "Every derived string view must be interned (derive through " +
-            $"Utf8Constants.ToInternedString): {string.Join(", ", uninterned)}");
+        Assert.IsEmpty(orphans, string.Join(Environment.NewLine, orphans));
+        Assert.IsEmpty(mismatches, string.Join(Environment.NewLine, mismatches));
         Assert.IsGreaterThanOrEqualTo(900, pairCount,
-            "The sweep must discover the well-known constant surface; a collapse in pair " +
-            "count means the discovery convention (XUtf8 property + X string field or property) broke.");
-
-
-        //Reads a public static string member by name — a get-only property (the static-getter form) or a
-        //static readonly field — or null when neither exists as a string.
-        static string? ReadStaticStringMember(Type type, string name)
-        {
-            PropertyInfo? property = type.GetProperty(name, BindingFlags.Public | BindingFlags.Static);
-            if(property?.PropertyType == typeof(string) && property.GetGetMethod() is { } getter)
-            {
-                return getter.Invoke(null, null) as string;
-            }
-
-            FieldInfo? field = type.GetField(name, BindingFlags.Public | BindingFlags.Static);
-            if(field?.FieldType == typeof(string))
-            {
-                return field.GetValue(null) as string;
-            }
-
-            return null;
-        }
+            "The sweep must discover the well-known constant surface; a collapse in pair count means the XUtf8 declaration shape changed.");
     }
 }

@@ -36,7 +36,7 @@ internal sealed class CtapAuthenticatorPackedAttestationTests
     [TestMethod]
     public async Task AbsentPreferenceDefaultsToPackedSelfAttestationAcceptedByShippedVerifier()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("packed-default");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("packed-default",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool);
@@ -81,7 +81,7 @@ internal sealed class CtapAuthenticatorPackedAttestationTests
     [TestMethod]
     public async Task SingleEntryPackedPreferenceResolvesToPackedSelfAttestation()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("packed-single-entry");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("packed-single-entry",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool, attestationFormatsPreference: [WellKnownWebAuthnAttestationFormats.Packed]);
@@ -101,7 +101,7 @@ internal sealed class CtapAuthenticatorPackedAttestationTests
     [TestMethod]
     public async Task PackedAtLowerIndexThanNoneResolvesToPackedSelfAttestation()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("packed-lower-index");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("packed-lower-index",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(
@@ -126,7 +126,7 @@ internal sealed class CtapAuthenticatorPackedAttestationTests
     [TestMethod]
     public async Task NoneAtLowerIndexThanPackedResolvesToNoneWithEmptyMapStatementPresent()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("packed-none-lower-index");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("packed-none-lower-index",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(
@@ -149,7 +149,7 @@ internal sealed class CtapAuthenticatorPackedAttestationTests
     [TestMethod]
     public async Task PreferenceWithNoSupportedFormatFallsBackToPackedSelfAttestation()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("packed-fallback");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("packed-fallback",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool, attestationFormatsPreference: [WellKnownWebAuthnAttestationFormats.Tpm]);
@@ -169,7 +169,7 @@ internal sealed class CtapAuthenticatorPackedAttestationTests
     [TestMethod]
     public async Task EmptyPreferenceListDefaultsToPackedSelfAttestation()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("packed-empty-list");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("packed-empty-list",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool, attestationFormatsPreference: []);

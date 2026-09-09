@@ -17,7 +17,7 @@ public static class WellKnownMsoMdocFormatProperties
     /// identifiers supported for signing mdoc documents.
     /// Per OID4VP 1.0 Appendix B.2.
     /// </summary>
-    public static readonly string AlgValuesSupported = Utf8Constants.ToInternedString(AlgValuesSupportedUtf8);
+    public static string AlgValuesSupported { get; } = Utf8Constants.ToInternedString(AlgValuesSupportedUtf8);
 
 
     /// <summary>Returns <see langword="true"/> when <paramref name="value"/> is

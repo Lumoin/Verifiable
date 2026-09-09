@@ -423,7 +423,7 @@ internal static class FederationTestRing
         //The node's key lives as an ECDsa instance (SigningKey), so the exported
         //scalar is routed through the project's own ES256 driver rather than a
         //bespoke ECDsa lambda; SignP256Async's parameter shape matches SigningDelegate exactly.
-        SigningDelegate signingDelegate = MicrosoftCryptographicFunctions.SignP256Async;
+        SigningDelegate signingDelegate = MicrosoftCryptographicFunctionsAdapter.SignP256Async;
 
         JwsMessage jwsMessage = await Jws.SignAsync(
             headerDict,
@@ -460,7 +460,7 @@ internal static class FederationTestRing
         //The node's key lives as an ECDsa instance (SigningKey), so the exported
         //scalar is routed through the project's own ES256 driver rather than a
         //bespoke ECDsa lambda; SignP256Async's parameter shape matches SigningDelegate exactly.
-        SigningDelegate signingDelegate = MicrosoftCryptographicFunctions.SignP256Async;
+        SigningDelegate signingDelegate = MicrosoftCryptographicFunctionsAdapter.SignP256Async;
 
         JwsMessage jwsMessage = await Jws.SignAsync(
             headerDict,

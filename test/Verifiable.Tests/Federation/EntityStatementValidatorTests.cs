@@ -3,6 +3,7 @@ using Verifiable.JCose;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Federation;
 using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Federation;
 
@@ -41,7 +42,7 @@ internal sealed class EntityStatementValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        EntityStatementValidator validator = EntityStatementValidator.Default();
+        EntityStatementValidator validator = EntityStatementValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch));
         ClaimIssueResult result = await validator.ValidateAsync(
             context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -83,7 +84,7 @@ internal sealed class EntityStatementValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        EntityStatementValidator validator = EntityStatementValidator.Default();
+        EntityStatementValidator validator = EntityStatementValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch));
         ClaimIssueResult result = await validator.ValidateAsync(
             context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -123,7 +124,7 @@ internal sealed class EntityStatementValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+        ClaimIssueResult result = await EntityStatementValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch)).ValidateAsync(
             context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
         Claim expAfterIat = result.Claims.Single(c => c.Id.Code == WellKnownFederationClaimIds.ExpAfterIat.Code);
@@ -160,7 +161,7 @@ internal sealed class EntityStatementValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        EntityStatementValidator validator = EntityStatementValidator.Default();
+        EntityStatementValidator validator = EntityStatementValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch));
         ClaimIssueResult result = await validator.ValidateAsync(
             context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -222,7 +223,7 @@ internal sealed class EntityStatementValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+        ClaimIssueResult result = await EntityStatementValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch)).ValidateAsync(
             context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
         Claim jwksPublicOnly = result.Claims.Single(
@@ -286,7 +287,7 @@ internal sealed class EntityStatementValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+        ClaimIssueResult result = await EntityStatementValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch)).ValidateAsync(
             context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
         Claim distinctKids = result.Claims.Single(
@@ -341,7 +342,7 @@ internal sealed class EntityStatementValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+        ClaimIssueResult result = await EntityStatementValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch)).ValidateAsync(
             context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
         Claim distinctKids = result.Claims.Single(
@@ -433,7 +434,7 @@ internal sealed class EntityStatementValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+        ClaimIssueResult result = await EntityStatementValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch)).ValidateAsync(
             context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
         return result.Claims.Single(
@@ -476,7 +477,7 @@ internal sealed class EntityStatementValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        ClaimIssueResult result = await EntityStatementValidator.Default()
+        ClaimIssueResult result = await EntityStatementValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch))
             .ValidateAsync(context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
         Claim iatClaim = result.Claims.Single(c => c.Id.Code == WellKnownFederationClaimIds.IatInRange.Code);
@@ -514,7 +515,7 @@ internal sealed class EntityStatementValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+        ClaimIssueResult result = await EntityStatementValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch)).ValidateAsync(
             context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
         Claim algClaim = result.Claims.Single(c => c.Id.Code == WellKnownFederationClaimIds.AlgPresent.Code);
@@ -549,7 +550,7 @@ internal sealed class EntityStatementValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+        ClaimIssueResult result = await EntityStatementValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch)).ValidateAsync(
             context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
         Claim algClaim = result.Claims.Single(c => c.Id.Code == WellKnownFederationClaimIds.AlgPresent.Code);
@@ -586,7 +587,7 @@ internal sealed class EntityStatementValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+        ClaimIssueResult result = await EntityStatementValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch)).ValidateAsync(
             context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
         Claim typClaim = result.Claims.Single(c => c.Id.Code == WellKnownFederationClaimIds.TypMatchesEntityStatement.Code);
@@ -630,7 +631,7 @@ internal sealed class EntityStatementValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+        ClaimIssueResult result = await EntityStatementValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch)).ValidateAsync(
             context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
         Claim jwksPresent = result.Claims.Single(
@@ -680,7 +681,7 @@ internal sealed class EntityStatementValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+        ClaimIssueResult result = await EntityStatementValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch)).ValidateAsync(
             context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
         Claim jwksPresent = result.Claims.Single(
@@ -728,7 +729,7 @@ internal sealed class EntityStatementValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+        ClaimIssueResult result = await EntityStatementValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch)).ValidateAsync(
             context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
         Claim jwksPresent = result.Claims.Single(
@@ -778,7 +779,7 @@ internal sealed class EntityStatementValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+        ClaimIssueResult result = await EntityStatementValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch)).ValidateAsync(
             context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
         Claim jwksPresent = result.Claims.Single(
@@ -817,7 +818,7 @@ internal sealed class EntityStatementValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+        ClaimIssueResult result = await EntityStatementValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch)).ValidateAsync(
             context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
         Claim kid = result.Claims.Single(c => c.Id.Code == WellKnownFederationClaimIds.KidPresent.Code);
@@ -852,7 +853,7 @@ internal sealed class EntityStatementValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+        ClaimIssueResult result = await EntityStatementValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch)).ValidateAsync(
             context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
         Claim hints = result.Claims.Single(
@@ -888,7 +889,7 @@ internal sealed class EntityStatementValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+        ClaimIssueResult result = await EntityStatementValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch)).ValidateAsync(
             context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
         Claim metadata = result.Claims.Single(
@@ -932,7 +933,7 @@ internal sealed class EntityStatementValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+        ClaimIssueResult result = await EntityStatementValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch)).ValidateAsync(
             context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
         Claim metadata = result.Claims.Single(
@@ -976,7 +977,7 @@ internal sealed class EntityStatementValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+        ClaimIssueResult result = await EntityStatementValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch)).ValidateAsync(
             context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
         Claim endpoints = result.Claims.Single(
@@ -1019,7 +1020,7 @@ internal sealed class EntityStatementValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+        ClaimIssueResult result = await EntityStatementValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch)).ValidateAsync(
             context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
         Claim endpoints = result.Claims.Single(
@@ -1064,7 +1065,7 @@ internal sealed class EntityStatementValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+        ClaimIssueResult result = await EntityStatementValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch)).ValidateAsync(
             context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
         Claim algs = result.Claims.Single(
@@ -1108,7 +1109,7 @@ internal sealed class EntityStatementValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+        ClaimIssueResult result = await EntityStatementValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch)).ValidateAsync(
             context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
         Claim algs = result.Claims.Single(
@@ -1152,7 +1153,7 @@ internal sealed class EntityStatementValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+        ClaimIssueResult result = await EntityStatementValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch)).ValidateAsync(
             context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
         Claim jwkSet = result.Claims.Single(
@@ -1192,7 +1193,7 @@ internal sealed class EntityStatementValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+        ClaimIssueResult result = await EntityStatementValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch)).ValidateAsync(
             context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
         Claim placement = result.Claims.Single(
@@ -1230,7 +1231,7 @@ internal sealed class EntityStatementValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+        ClaimIssueResult result = await EntityStatementValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch)).ValidateAsync(
             context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
         Claim placement = result.Claims.Single(
@@ -1267,7 +1268,7 @@ internal sealed class EntityStatementValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+        ClaimIssueResult result = await EntityStatementValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch)).ValidateAsync(
             context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
         Claim crit = result.Claims.Single(
@@ -1302,7 +1303,7 @@ internal sealed class EntityStatementValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+        ClaimIssueResult result = await EntityStatementValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch)).ValidateAsync(
             context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
         Claim crit = result.Claims.Single(
@@ -1340,7 +1341,7 @@ internal sealed class EntityStatementValidatorTests
             UnderstoodCriticalClaims = new HashSet<string>(StringComparer.Ordinal) { "ext_feature" },
         };
 
-        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+        ClaimIssueResult result = await EntityStatementValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch)).ValidateAsync(
             context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
         Claim crit = result.Claims.Single(
@@ -1385,7 +1386,7 @@ internal sealed class EntityStatementValidatorTests
                 new HashSet<string>(StringComparer.Ordinal) { WellKnownFederationClaimNames.Metadata },
         };
 
-        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+        ClaimIssueResult result = await EntityStatementValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch)).ValidateAsync(
             context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
         Claim crit = result.Claims.Single(
@@ -1424,7 +1425,7 @@ internal sealed class EntityStatementValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+        ClaimIssueResult result = await EntityStatementValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch)).ValidateAsync(
             context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
         Claim noChainHeader = result.Claims.Single(

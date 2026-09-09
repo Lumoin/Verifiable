@@ -566,13 +566,15 @@ public static class MicrosoftKeyMaterialCreator
         PublicPrivateKeyCreationDelegate<PublicKeyMemory, PrivateKeyMemory> creator,
         CryptoAlgorithm algorithm,
         Purpose purpose,
-        BaseMemoryPool memoryPool)
+        BaseMemoryPool memoryPool,
+        TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(creator);
         ArgumentNullException.ThrowIfNull(memoryPool);
+        ArgumentNullException.ThrowIfNull(timeProvider);
 
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys = creator(memoryPool);
-        CryptoEvent evt = KeyMaterialGeneratedEvent.Create(algorithm, purpose, MaterialSemantics.Direct, CryptoLib.Name);
+        CryptoEvent evt = KeyMaterialGeneratedEvent.Create(algorithm, purpose, MaterialSemantics.Direct, CryptoLib.Name, timeProvider: timeProvider);
 
         return (keys, evt);
     }

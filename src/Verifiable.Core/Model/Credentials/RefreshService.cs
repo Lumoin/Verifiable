@@ -67,7 +67,14 @@ public class RefreshService: IEquatable<RefreshService>
     public IDictionary<string, object>? AdditionalData { get; set; }
 
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Determines whether this refresh service is equal to <paramref name="other"/> by comparing
+    /// <see cref="Id"/> and <see cref="Type"/>. Equality is exact-type, not polymorphic over
+    /// subtypes: a derived type adding further identity-bearing members is never equal to a
+    /// same-valued instance of this type.
+    /// </summary>
+    /// <param name="other">The refresh service to compare against.</param>
+    /// <returns><see langword="true"/> if the refresh services are equal; otherwise <see langword="false"/>.</returns>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public bool Equals(RefreshService? other)
     {
@@ -81,6 +88,11 @@ public class RefreshService: IEquatable<RefreshService>
             return true;
         }
 
+        if(GetType() != other.GetType())
+        {
+            return false;
+        }
+
         return string.Equals(Id, other.Id, StringComparison.Ordinal)
             && string.Equals(Type, other.Type, StringComparison.Ordinal);
     }
@@ -88,7 +100,8 @@ public class RefreshService: IEquatable<RefreshService>
 
     /// <inheritdoc/>
     [EditorBrowsable(EditorBrowsableState.Never)]
-    public override bool Equals([NotNullWhen(true)] object? obj) => obj is RefreshService other && Equals(other);
+    public override bool Equals([NotNullWhen(true)] object? obj) =>
+        obj is RefreshService other && Equals(other);
 
 
     /// <inheritdoc/>

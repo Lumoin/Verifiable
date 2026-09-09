@@ -1,9 +1,10 @@
 using System;
 using System.Buffers;
 using System.Collections.Generic;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using System.Threading;
 using System.Threading.Tasks;
+using Verifiable.Cbor;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Cbor.Fido2;
 using Verifiable.Cryptography;
@@ -65,7 +66,8 @@ internal sealed class CtapAuthenticatorHmacSecretGetAssertionFlowTests
         CtapPinUvAuthProtocolId protocolId = isProtocolTwo ? CtapPinUvAuthProtocolId.Two : CtapPinUvAuthProtocolId.One;
 
         using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator(
-            $"hmac-secret-matrix-{saltCount}-{isProtocolTwo}-{userVerified}");
+            $"hmac-secret-matrix-{saltCount}-{isProtocolTwo}-{userVerified}",
+            BaseMemoryPool.Shared);
 
         byte[] credentialIdBytes = await CtapMakeCredentialGetAssertionFixtures.RegisterAndCaptureCredentialIdBytesAsync(
             simulator, pool, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0x50), cancellationToken, RpId).ConfigureAwait(false);
@@ -135,7 +137,7 @@ internal sealed class CtapAuthenticatorHmacSecretGetAssertionFlowTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("hmac-secret-unsupported-protocol");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("hmac-secret-unsupported-protocol",BaseMemoryPool.Shared);
         byte[] credentialIdBytes = await CtapMakeCredentialGetAssertionFixtures.RegisterAndCaptureCredentialIdBytesAsync(
             simulator, pool, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0x51), cancellationToken, RpId).ConfigureAwait(false);
 
@@ -167,7 +169,7 @@ internal sealed class CtapAuthenticatorHmacSecretGetAssertionFlowTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("hmac-secret-up-false");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("hmac-secret-up-false",BaseMemoryPool.Shared);
         byte[] credentialIdBytes = await CtapMakeCredentialGetAssertionFixtures.RegisterAndCaptureCredentialIdBytesAsync(
             simulator, pool, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0x52), cancellationToken, RpId).ConfigureAwait(false);
 
@@ -199,7 +201,7 @@ internal sealed class CtapAuthenticatorHmacSecretGetAssertionFlowTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("hmac-secret-tampered-auth");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("hmac-secret-tampered-auth",BaseMemoryPool.Shared);
         byte[] credentialIdBytes = await CtapMakeCredentialGetAssertionFixtures.RegisterAndCaptureCredentialIdBytesAsync(
             simulator, pool, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0x53), cancellationToken, RpId).ConfigureAwait(false);
 
@@ -233,7 +235,7 @@ internal sealed class CtapAuthenticatorHmacSecretGetAssertionFlowTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("hmac-secret-decrypt-failure");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("hmac-secret-decrypt-failure",BaseMemoryPool.Shared);
         byte[] credentialIdBytes = await CtapMakeCredentialGetAssertionFixtures.RegisterAndCaptureCredentialIdBytesAsync(
             simulator, pool, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0x5D), cancellationToken, RpId).ConfigureAwait(false);
 
@@ -263,7 +265,7 @@ internal sealed class CtapAuthenticatorHmacSecretGetAssertionFlowTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("hmac-secret-wrong-length");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("hmac-secret-wrong-length",BaseMemoryPool.Shared);
         byte[] credentialIdBytes = await CtapMakeCredentialGetAssertionFixtures.RegisterAndCaptureCredentialIdBytesAsync(
             simulator, pool, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0x54), cancellationToken, RpId).ConfigureAwait(false);
 
@@ -297,7 +299,7 @@ internal sealed class CtapAuthenticatorHmacSecretGetAssertionFlowTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("hmac-secret-13087");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("hmac-secret-13087",BaseMemoryPool.Shared);
         byte[] credentialIdBytes = await CtapMakeCredentialGetAssertionFixtures.RegisterAndCaptureCredentialIdBytesAsync(
             simulator, pool, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0x55), cancellationToken, RpId, resident: true).ConfigureAwait(false);
 
@@ -321,7 +323,7 @@ internal sealed class CtapAuthenticatorHmacSecretGetAssertionFlowTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("hmac-secret-r2c");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("hmac-secret-r2c",BaseMemoryPool.Shared);
 
         //RegisterAndCaptureCredentialIdBytesAsync's own mc request carries no extensions member at all --
         //the credential is minted with hmac-secret entirely unmentioned.
@@ -345,7 +347,7 @@ internal sealed class CtapAuthenticatorHmacSecretGetAssertionFlowTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("hmac-secret-determinism");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("hmac-secret-determinism",BaseMemoryPool.Shared);
         byte[] credentialIdBytes = await CtapMakeCredentialGetAssertionFixtures.RegisterAndCaptureCredentialIdBytesAsync(
             simulator, pool, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0x57), cancellationToken, RpId).ConfigureAwait(false);
 
@@ -373,7 +375,7 @@ internal sealed class CtapAuthenticatorHmacSecretGetAssertionFlowTests
         CancellationToken cancellationToken = TestContext.CancellationToken;
         const CtapPinUvAuthProtocolId ProtocolId = CtapPinUvAuthProtocolId.Two;
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("hmac-secret-uv-separation");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("hmac-secret-uv-separation",BaseMemoryPool.Shared);
         byte[] credentialIdBytes = await CtapMakeCredentialGetAssertionFixtures.RegisterAndCaptureCredentialIdBytesAsync(
             simulator, pool, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0x58), cancellationToken, RpId).ConfigureAwait(false);
         byte[] token = await EstablishPinAndIssueGaTokenAsync(simulator, pool, ProtocolId, RpId, cancellationToken).ConfigureAwait(false);
@@ -406,7 +408,7 @@ internal sealed class CtapAuthenticatorHmacSecretGetAssertionFlowTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("hmac-secret-linkage");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("hmac-secret-linkage",BaseMemoryPool.Shared);
         byte[] credentialIdBytes = await CtapMakeCredentialGetAssertionFixtures.RegisterAndCaptureCredentialIdBytesAsync(
             simulator, pool, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0x59), cancellationToken, RpId).ConfigureAwait(false);
 
@@ -439,7 +441,7 @@ internal sealed class CtapAuthenticatorHmacSecretGetAssertionFlowTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("hmac-secret-isolation");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("hmac-secret-isolation",BaseMemoryPool.Shared);
         byte[] firstCredentialIdBytes = await CtapMakeCredentialGetAssertionFixtures.RegisterAndCaptureCredentialIdBytesAsync(
             simulator, pool, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0x5A), cancellationToken, RpId).ConfigureAwait(false);
         byte[] secondCredentialIdBytes = await CtapMakeCredentialGetAssertionFixtures.RegisterAndCaptureCredentialIdBytesAsync(
@@ -465,7 +467,7 @@ internal sealed class CtapAuthenticatorHmacSecretGetAssertionFlowTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("hmac-secret-iv-freshness");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("hmac-secret-iv-freshness",BaseMemoryPool.Shared);
         byte[] credentialIdBytes = await CtapMakeCredentialGetAssertionFixtures.RegisterAndCaptureCredentialIdBytesAsync(
             simulator, pool, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0x5C), cancellationToken, RpId).ConfigureAwait(false);
 
@@ -631,7 +633,7 @@ internal sealed class CtapAuthenticatorHmacSecretGetAssertionFlowTests
 
     /// <summary>Decodes a CBOR byte-string item's raw content bytes (the wire form <see cref="AuthenticatorExtensionOutputsCborReader"/> hands back, still type/length-prefixed).</summary>
     private static byte[] DecodeCborByteString(ReadOnlyMemory<byte> encoded) =>
-        new CborReader(encoded, CborConformanceMode.Ctap2Canonical).ReadByteString();
+        new CborReader(encoded, CborOptions.Ctap2Canonical).ReadByteString();
 
 
     /// <summary>Sends <paramref name="request"/> through <see cref="CtapAuthenticatorGetAssertionClient.GetAssertionAsync"/>, disposing the request either way.</summary>

@@ -20,7 +20,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 ///   <item><description>propertyCount (UINT32) - the maximum number of properties to return.</description></item>
 /// </list>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 3, Section 30.2.
+/// Specification reference: TPM 2.0 Library Part 3, clause 30.2.
 /// </para>
 /// </remarks>
 public readonly struct GetCapabilityInput: ITpmCommandInput, IEquatable<GetCapabilityInput>

@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using Verifiable.Core.Dcql;
+using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Core.StatusList;
+using Verifiable.OAuth.Oid4Vp.Server;
 
 namespace Verifiable.OAuth.Oid4Vp.States;
 
@@ -26,9 +29,10 @@ namespace Verifiable.OAuth.Oid4Vp.States;
 public sealed record PresentationVerifiedState: FlowState
 {
     /// <summary>
-    /// The verified and extracted claims, keyed by DCQL credential query identifier.
+    /// The verified credentials, keyed by the <see cref="CredentialQueryId"/> each answered — one
+    /// entry per presented credential.
     /// </summary>
-    public required IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> Claims { get; init; }
+    public required IReadOnlyDictionary<CredentialQueryId, VpCredentialClaims> Credentials { get; init; }
 
     /// <summary>The UTC instant at which verification completed.</summary>
     public required DateTimeOffset VerifiedAt { get; init; }
@@ -53,5 +57,5 @@ public sealed record PresentationVerifiedState: FlowState
     /// no presented credential referenced a status list. A relying party hosting the verifier flow
     /// reads this from the terminal state to act on revocation/suspension.
     /// </summary>
-    public IReadOnlyDictionary<string, CredentialStatusOutcome>? CredentialStatuses { get; init; }
+    public IReadOnlyDictionary<CredentialQueryId, CredentialStatusOutcome>? CredentialStatuses { get; init; }
 }

@@ -118,6 +118,14 @@ public static class VcalmVerificationService
         ImmutableArray<VcalmStatusResult> statusResults = await EvaluateStatusAsync(
             credential, resolveStatusList, now, problems, context, cancellationToken).ConfigureAwait(false);
 
+        //§3.3.1 results.credentialSchema[]: one entry per credentialSchema object evaluated through
+        //the schema seams. A Failure is a MALFORMED_VALUE_ERROR (§3.8.1 classifies only status and
+        //validity ProblemDetails as warnings, so a document that does not conform to its declared
+        //schema is an error and flips verified); an Indeterminate evaluation reports verified:false
+        //without asserting an error, mirroring the undeterminable-status convention above.
+        ImmutableArray<VcalmSchemaResult> schemaResults = await EvaluateSchemaAsync(
+            credential, verification, problems, context, cancellationToken).ConfigureAwait(false);
+
         bool hasError = false;
         foreach(VcalmProblemDetail problem in problems)
         {
@@ -135,9 +143,106 @@ public static class VcalmVerificationService
             ValidFrom = validFromResult,
             ValidUntil = validUntilResult,
             StatusResults = statusResults,
+            SchemaResults = schemaResults,
             ProofResults = proofResults.ToImmutable(),
             ProblemDetails = problems.ToImmutable()
         };
+    }
+
+
+    /// <summary>
+    /// Evaluates every §3.3.1 <c>credentialSchema</c> object the credential declares through the
+    /// schema seams, producing one <see cref="VcalmSchemaResult"/> per entry.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Per VC Data Model 2.0 §4.11 each entry MUST specify its <c>type</c> and an <c>id</c> URL,
+    /// and with multiple schemas validity is determined per each associated <c>type</c>'s
+    /// processing rules: entries are evaluated independently and each contributes its own result.
+    /// The <see href="https://www.w3.org/TR/vc-json-schema/#evaluation">VC JSON Schema §4.2</see>
+    /// tri-state collapses onto the §3.3.1 boolean as: Success → <c>verified:true</c>;
+    /// Failure → <c>verified:false</c> plus a MALFORMED_VALUE_ERROR; Indeterminate (unsupported
+    /// schema version, unresolvable schema document, or an unregistered mechanism type) →
+    /// <c>verified:false</c> with no ProblemDetail, so an undeterminable schema neither asserts
+    /// conformance nor flips the overall <c>verified</c>.
+    /// </para>
+    /// <para>
+    /// With no declared schemas, or with the seams unwired
+    /// (<see cref="VcalmCredentialVerification.SchemaValidators"/> /
+    /// <see cref="VcalmCredentialVerification.ResolveSchemaDocument"/>), the results stay empty.
+    /// </para>
+    /// </remarks>
+    private static async ValueTask<ImmutableArray<VcalmSchemaResult>> EvaluateSchemaAsync(
+        DataIntegritySecuredCredential credential,
+        VcalmCredentialVerification? verification,
+        ImmutableArray<VcalmProblemDetail>.Builder problems,
+        ExchangeContext context,
+        CancellationToken cancellationToken)
+    {
+        List<CredentialSchema>? entries = credential.CredentialSchema;
+        VcalmSchemaValidatorRegistry? validators = verification?.SchemaValidators;
+        ResolveVcalmSchemaDocumentDelegate? resolveSchema = verification?.ResolveSchemaDocument;
+        if(entries is null || entries.Count == 0 || validators is null || resolveSchema is null)
+        {
+            return ImmutableArray<VcalmSchemaResult>.Empty;
+        }
+
+        string credentialJson = verification!.SerializeCredential(credential);
+        ImmutableArray<VcalmSchemaResult>.Builder results = ImmutableArray.CreateBuilder<VcalmSchemaResult>(entries.Count);
+        foreach(CredentialSchema entry in entries)
+        {
+            //VC Data Model 2.0 §4.11: each credentialSchema MUST specify its type and an id URL.
+            //A malformed entry cannot identify a schema to conform to, which is a malformed value.
+            if(string.IsNullOrEmpty(entry.Id) || string.IsNullOrEmpty(entry.Type))
+            {
+                problems.Add(VcalmProblemDetail.Error(
+                    VcalmProblemTypes.MalformedValueError,
+                    "MALFORMED_VALUE_ERROR",
+                    "A credentialSchema entry must specify its type and an id URL (VC Data Model 2.0 §4.11)."));
+                results.Add(new VcalmSchemaResult { Verified = false, Id = entry.Id ?? string.Empty, Type = entry.Type ?? string.Empty });
+
+                continue;
+            }
+
+            if(!validators.IsRegistered(entry.Type))
+            {
+                //An unregistered mechanism type cannot be evaluated: Indeterminate.
+                results.Add(new VcalmSchemaResult { Verified = false, Id = entry.Id, Type = entry.Type });
+
+                continue;
+            }
+
+            string? schemaJson = await resolveSchema(entry.Id, context, cancellationToken).ConfigureAwait(false);
+            if(schemaJson is null)
+            {
+                //An unresolvable schema document cannot be evaluated: Indeterminate.
+                results.Add(new VcalmSchemaResult { Verified = false, Id = entry.Id, Type = entry.Type });
+
+                continue;
+            }
+
+            CredentialSchemaValidationResult validation = await validators.ValidateAsync(
+                entry.Type, schemaJson, credentialJson, cancellationToken).ConfigureAwait(false);
+            if(validation.Outcome == CredentialSchemaValidationOutcome.Failure)
+            {
+                CredentialSchemaValidationError? firstError = validation.Errors.Count > 0 ? validation.Errors[0] : null;
+                problems.Add(VcalmProblemDetail.Error(
+                    VcalmProblemTypes.MalformedValueError,
+                    "MALFORMED_VALUE_ERROR",
+                    firstError is null
+                        ? $"The credential does not conform to its declared schema '{entry.Id}'."
+                        : $"The credential does not conform to its declared schema '{entry.Id}': {firstError.Message} (instance {firstError.InstanceLocation}, keyword {firstError.KeywordLocation})."));
+            }
+
+            results.Add(new VcalmSchemaResult
+            {
+                Verified = validation.Outcome == CredentialSchemaValidationOutcome.Success,
+                Id = entry.Id,
+                Type = entry.Type
+            });
+        }
+
+        return results.ToImmutable();
     }
 
 

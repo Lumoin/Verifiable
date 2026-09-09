@@ -1,6 +1,7 @@
 using System;
+using System.Buffers;
 using System.Collections.Generic;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -25,7 +26,7 @@ namespace Verifiable.Tests.JCose;
 /// (CDDL and Table N key assignments) documented on each <c>CBAdES*</c> model type — never by calling
 /// <see cref="CBAdESSerialization"/>'s own private writers. The oracle helpers at the end of this file (
 /// <see cref="WriteTag32Uri"/>, <see cref="WriteOId"/>, <see cref="WritePkiOb"/>) use only raw
-/// <see cref="CborWriter"/> primitives and the <see cref="CborTag"/> BCL enum, never
+/// <see cref="CborWriter"/> primitives and the <see cref="CborTag"/> struct, never
 /// <c>Verifiable.Cbor</c>'s own <c>CborWriterExtensions</c>/<c>CborValueConverter</c> helpers, so a defect
 /// shared between the codec and a generic helper cannot hide behind this suite.
 /// </para>
@@ -80,13 +81,14 @@ internal sealed class CBAdESSignedHeaderModelTests
         ]);
 #pragma warning restore CA2000 // Dispose objects before losing scope
 
-        var oracle = new CborWriter(CborConformanceMode.Canonical);
+        var oracleBuffer = new ArrayBufferWriter<byte>();
+        var oracle = new CborWriter(oracleBuffer, CborOptions.RfcCanonical);
         oracle.WriteStartArray(3);
         WriteX5tEntry(oracle, WellKnownCoseAlgorithms.Sha256, signingBytes);
         WriteX5tEntry(oracle, WellKnownCoseAlgorithms.Sha384, intermediateBytes);
         WriteX5tEntry(oracle, WellKnownCoseAlgorithms.Sha512, rootBytes);
         oracle.WriteEndArray();
-        byte[] expected = oracle.Encode();
+        byte[] expected = oracleBuffer.WrittenSpan.ToArray();
 
         using PooledMemory actual = CBAdESSerialization.EncodeCertificateThumbprints(thumbprints, BaseMemoryPool.Shared);
 
@@ -114,16 +116,10 @@ internal sealed class CBAdESSignedHeaderModelTests
     [TestMethod]
     public async Task ConstructingCertificateThumbprintsBelowMinimumCountThrows()
     {
-        DigestValue digest = await CreateDigestAsync(WellKnownCoseAlgorithms.Sha256, "only one"u8.ToArray(), TestContext.CancellationToken).ConfigureAwait(false);
-        var singleEntry = new AdESCertificateThumbprint(new AdESDigestAlgorithmIntegerIdentifier(WellKnownCoseAlgorithms.Sha256), digest);
-        try
-        {
-            Assert.ThrowsExactly<ArgumentException>(() => new AdESCertificateThumbprints([singleEntry]));
-        }
-        finally
-        {
-            singleEntry.Dispose();
-        }
+        using DigestValue digest = await CreateDigestAsync(WellKnownCoseAlgorithms.Sha256, "only one"u8.ToArray(), TestContext.CancellationToken).ConfigureAwait(false);
+        using var singleEntry = new AdESCertificateThumbprint(new AdESDigestAlgorithmIntegerIdentifier(WellKnownCoseAlgorithms.Sha256), digest);
+
+        Assert.ThrowsExactly<ArgumentException>(() => new AdESCertificateThumbprints([singleEntry]));
     }
 
 
@@ -134,12 +130,13 @@ internal sealed class CBAdESSignedHeaderModelTests
     [TestMethod]
     public void TryParseCertificateThumbprintsFailsClosedBelowMinimumCount()
     {
-        var oracle = new CborWriter(CborConformanceMode.Canonical);
+        var oracleBuffer = new ArrayBufferWriter<byte>();
+        var oracle = new CborWriter(oracleBuffer, CborOptions.RfcCanonical);
         oracle.WriteStartArray(1);
         WriteX5tEntry(oracle, WellKnownCoseAlgorithms.Sha256, new byte[32]);
         oracle.WriteEndArray();
 
-        bool success = CBAdESSerialization.TryParseCertificateThumbprints(oracle.Encode(), BaseMemoryPool.Shared, out AdESCertificateThumbprints? result);
+        bool success = CBAdESSerialization.TryParseCertificateThumbprints(oracleBuffer.WrittenSpan.ToArray(), BaseMemoryPool.Shared, out AdESCertificateThumbprints? result);
 
         Assert.IsFalse(success);
         Assert.IsNull(result);
@@ -154,12 +151,13 @@ internal sealed class CBAdESSignedHeaderModelTests
     [TestMethod]
     public void TryParseCertificateThumbprintsFailsClosedOnTrailingBytes()
     {
-        var oracle = new CborWriter(CborConformanceMode.Canonical);
+        var oracleBuffer = new ArrayBufferWriter<byte>();
+        var oracle = new CborWriter(oracleBuffer, CborOptions.RfcCanonical);
         oracle.WriteStartArray(2);
         WriteX5tEntry(oracle, WellKnownCoseAlgorithms.Sha256, new byte[32]);
         WriteX5tEntry(oracle, WellKnownCoseAlgorithms.Sha384, new byte[48]);
         oracle.WriteEndArray();
-        byte[] withTrailer = [.. oracle.Encode(), 0x00];
+        byte[] withTrailer = [.. oracleBuffer.WrittenSpan.ToArray(), 0x00];
 
         bool success = CBAdESSerialization.TryParseCertificateThumbprints(withTrailer, BaseMemoryPool.Shared, out AdESCertificateThumbprints? result);
 
@@ -173,13 +171,14 @@ internal sealed class CBAdESSignedHeaderModelTests
     [TestMethod]
     public void TryParseCertificateThumbprintsFailsClosedOnIndefiniteLengthArray()
     {
-        var oracle = new CborWriter(CborConformanceMode.Lax);
+        var oracleBuffer = new ArrayBufferWriter<byte>();
+        var oracle = new CborWriter(oracleBuffer, CborOptions.Lax);
         oracle.WriteStartArray(null);
         WriteX5tEntry(oracle, WellKnownCoseAlgorithms.Sha256, new byte[32]);
         WriteX5tEntry(oracle, WellKnownCoseAlgorithms.Sha384, new byte[48]);
         oracle.WriteEndArray();
 
-        bool success = CBAdESSerialization.TryParseCertificateThumbprints(oracle.Encode(), BaseMemoryPool.Shared, out AdESCertificateThumbprints? result);
+        bool success = CBAdESSerialization.TryParseCertificateThumbprints(oracleBuffer.WrittenSpan.ToArray(), BaseMemoryPool.Shared, out AdESCertificateThumbprints? result);
 
         Assert.IsFalse(success, "An indefinite-length x5ts array must be rejected under canonical-mode parsing.");
         Assert.IsNull(result);
@@ -225,7 +224,8 @@ internal sealed class CBAdESSignedHeaderModelTests
             new AdESCommitment(bareCommitmentId)
         ]);
 
-        var oracle = new CborWriter(CborConformanceMode.Canonical);
+        var oracleBuffer = new ArrayBufferWriter<byte>();
+        var oracle = new CborWriter(oracleBuffer, CborOptions.RfcCanonical);
         oracle.WriteStartArray(2);
 
         oracle.WriteStartMap(2);
@@ -244,7 +244,7 @@ internal sealed class CBAdESSignedHeaderModelTests
         oracle.WriteEndMap();
 
         oracle.WriteEndArray();
-        byte[] expected = oracle.Encode();
+        byte[] expected = oracleBuffer.WrittenSpan.ToArray();
 
         using PooledMemory actual = CBAdESSerialization.EncodeSignerCommitments(commitments, BaseMemoryPool.Shared);
         Assert.IsTrue(expected.AsSpan().SequenceEqual(actual.AsReadOnlySpan()));
@@ -281,11 +281,12 @@ internal sealed class CBAdESSignedHeaderModelTests
     [TestMethod]
     public void TryParseSignerCommitmentsFailsClosedOnEmptyArray()
     {
-        var oracle = new CborWriter(CborConformanceMode.Canonical);
+        var oracleBuffer = new ArrayBufferWriter<byte>();
+        var oracle = new CborWriter(oracleBuffer, CborOptions.RfcCanonical);
         oracle.WriteStartArray(0);
         oracle.WriteEndArray();
 
-        bool success = CBAdESSerialization.TryParseSignerCommitments(oracle.Encode(), out AdESSignerCommitments? result);
+        bool success = CBAdESSerialization.TryParseSignerCommitments(oracleBuffer.WrittenSpan.ToArray(), out AdESSignerCommitments? result);
 
         Assert.IsFalse(success);
         Assert.IsNull(result);
@@ -299,7 +300,8 @@ internal sealed class CBAdESSignedHeaderModelTests
     [TestMethod]
     public void TryParseSignerCommitmentsFailsClosedOnUnknownMapKey()
     {
-        var oracle = new CborWriter(CborConformanceMode.Canonical);
+        var oracleBuffer = new ArrayBufferWriter<byte>();
+        var oracle = new CborWriter(oracleBuffer, CborOptions.RfcCanonical);
         oracle.WriteStartArray(1);
         oracle.WriteStartMap(1);
         oracle.WriteInt32(3);
@@ -307,7 +309,7 @@ internal sealed class CBAdESSignedHeaderModelTests
         oracle.WriteEndMap();
         oracle.WriteEndArray();
 
-        bool success = CBAdESSerialization.TryParseSignerCommitments(oracle.Encode(), out AdESSignerCommitments? result);
+        bool success = CBAdESSerialization.TryParseSignerCommitments(oracleBuffer.WrittenSpan.ToArray(), out AdESSignerCommitments? result);
 
         Assert.IsFalse(success);
         Assert.IsNull(result);
@@ -321,14 +323,15 @@ internal sealed class CBAdESSignedHeaderModelTests
     [TestMethod]
     public void TryParseSignerCommitmentsFailsClosedOnTrailingBytes()
     {
-        var oracle = new CborWriter(CborConformanceMode.Canonical);
+        var oracleBuffer = new ArrayBufferWriter<byte>();
+        var oracle = new CborWriter(oracleBuffer, CborOptions.RfcCanonical);
         oracle.WriteStartArray(1);
         oracle.WriteStartMap(1);
         oracle.WriteInt32(1);
         WriteOId(oracle, CBAdESCommitmentTypes.ProofOfOriginUri);
         oracle.WriteEndMap();
         oracle.WriteEndArray();
-        byte[] withTrailer = [.. oracle.Encode(), 0x00];
+        byte[] withTrailer = [.. oracleBuffer.WrittenSpan.ToArray(), 0x00];
 
         bool success = CBAdESSerialization.TryParseSignerCommitments(withTrailer, out AdESSignerCommitments? result);
 
@@ -344,7 +347,8 @@ internal sealed class CBAdESSignedHeaderModelTests
     [TestMethod]
     public void TryParseSignerCommitmentsFailsClosedOnMissingRequiredCommitmentId()
     {
-        var oracle = new CborWriter(CborConformanceMode.Canonical);
+        var oracleBuffer = new ArrayBufferWriter<byte>();
+        var oracle = new CborWriter(oracleBuffer, CborOptions.RfcCanonical);
         oracle.WriteStartArray(1);
         oracle.WriteStartMap(1);
         oracle.WriteInt32(2);
@@ -354,7 +358,7 @@ internal sealed class CBAdESSignedHeaderModelTests
         oracle.WriteEndMap();
         oracle.WriteEndArray();
 
-        bool success = CBAdESSerialization.TryParseSignerCommitments(oracle.Encode(), out AdESSignerCommitments? result);
+        bool success = CBAdESSerialization.TryParseSignerCommitments(oracleBuffer.WrittenSpan.ToArray(), out AdESSignerCommitments? result);
 
         Assert.IsFalse(success);
         Assert.IsNull(result);
@@ -368,7 +372,8 @@ internal sealed class CBAdESSignedHeaderModelTests
     [TestMethod]
     public void TryParseSignerCommitmentsFailsClosedOnWrongMajorTypeForCommitmentId()
     {
-        var oracle = new CborWriter(CborConformanceMode.Canonical);
+        var oracleBuffer = new ArrayBufferWriter<byte>();
+        var oracle = new CborWriter(oracleBuffer, CborOptions.RfcCanonical);
         oracle.WriteStartArray(1);
         oracle.WriteStartMap(1);
         oracle.WriteInt32(1);
@@ -376,7 +381,7 @@ internal sealed class CBAdESSignedHeaderModelTests
         oracle.WriteEndMap();
         oracle.WriteEndArray();
 
-        bool success = CBAdESSerialization.TryParseSignerCommitments(oracle.Encode(), out AdESSignerCommitments? result);
+        bool success = CBAdESSerialization.TryParseSignerCommitments(oracleBuffer.WrittenSpan.ToArray(), out AdESSignerCommitments? result);
 
         Assert.IsFalse(success);
         Assert.IsNull(result);
@@ -387,7 +392,8 @@ internal sealed class CBAdESSignedHeaderModelTests
     [TestMethod]
     public void TryParseSignerCommitmentsFailsClosedOnIndefiniteLengthArray()
     {
-        var oracle = new CborWriter(CborConformanceMode.Lax);
+        var oracleBuffer = new ArrayBufferWriter<byte>();
+        var oracle = new CborWriter(oracleBuffer, CborOptions.Lax);
         oracle.WriteStartArray(null);
         oracle.WriteStartMap(1);
         oracle.WriteInt32(1);
@@ -395,7 +401,7 @@ internal sealed class CBAdESSignedHeaderModelTests
         oracle.WriteEndMap();
         oracle.WriteEndArray();
 
-        bool success = CBAdESSerialization.TryParseSignerCommitments(oracle.Encode(), out AdESSignerCommitments? result);
+        bool success = CBAdESSerialization.TryParseSignerCommitments(oracleBuffer.WrittenSpan.ToArray(), out AdESSignerCommitments? result);
 
         Assert.IsFalse(success, "An indefinite-length srCms array must be rejected under canonical-mode parsing.");
         Assert.IsNull(result);
@@ -439,7 +445,8 @@ internal sealed class CBAdESSignedHeaderModelTests
             StreetAddress = "Mannerheimintie 1"
         };
 
-        var oracle = new CborWriter(CborConformanceMode.Canonical);
+        var oracleBuffer = new ArrayBufferWriter<byte>();
+        var oracle = new CborWriter(oracleBuffer, CborOptions.RfcCanonical);
         oracle.WriteStartMap(6);
         oracle.WriteInt32(1);
         oracle.WriteTextString("FI");
@@ -454,7 +461,7 @@ internal sealed class CBAdESSignedHeaderModelTests
         oracle.WriteInt32(6);
         oracle.WriteTextString("Mannerheimintie 1");
         oracle.WriteEndMap();
-        byte[] expected = oracle.Encode();
+        byte[] expected = oracleBuffer.WrittenSpan.ToArray();
 
         using PooledMemory actual = CBAdESSerialization.EncodeSignatureProductionPlace(place, BaseMemoryPool.Shared);
         Assert.IsTrue(expected.AsSpan().SequenceEqual(actual.AsReadOnlySpan()));
@@ -468,7 +475,8 @@ internal sealed class CBAdESSignedHeaderModelTests
     [TestMethod]
     public void TryParseSignatureProductionPlaceRoundTripsPartialMembers()
     {
-        var oracle = new CborWriter(CborConformanceMode.Canonical);
+        var oracleBuffer = new ArrayBufferWriter<byte>();
+        var oracle = new CborWriter(oracleBuffer, CborOptions.RfcCanonical);
         oracle.WriteStartMap(2);
         oracle.WriteInt32(3);
         oracle.WriteTextString("Uusimaa");
@@ -476,7 +484,7 @@ internal sealed class CBAdESSignedHeaderModelTests
         oracle.WriteTextString("00100");
         oracle.WriteEndMap();
 
-        bool success = CBAdESSerialization.TryParseSignatureProductionPlace(oracle.Encode(), out AdESSignatureProductionPlace? result);
+        bool success = CBAdESSerialization.TryParseSignatureProductionPlace(oracleBuffer.WrittenSpan.ToArray(), out AdESSignatureProductionPlace? result);
 
         Assert.IsTrue(success);
         Assert.IsNull(result!.AddressCountry);
@@ -507,11 +515,12 @@ internal sealed class CBAdESSignedHeaderModelTests
     [TestMethod]
     public void TryParseSignatureProductionPlaceFailsClosedOnEmptyMap()
     {
-        var oracle = new CborWriter(CborConformanceMode.Canonical);
+        var oracleBuffer = new ArrayBufferWriter<byte>();
+        var oracle = new CborWriter(oracleBuffer, CborOptions.RfcCanonical);
         oracle.WriteStartMap(0);
         oracle.WriteEndMap();
 
-        bool success = CBAdESSerialization.TryParseSignatureProductionPlace(oracle.Encode(), out AdESSignatureProductionPlace? result);
+        bool success = CBAdESSerialization.TryParseSignatureProductionPlace(oracleBuffer.WrittenSpan.ToArray(), out AdESSignatureProductionPlace? result);
 
         Assert.IsFalse(success);
         Assert.IsNull(result);
@@ -525,13 +534,14 @@ internal sealed class CBAdESSignedHeaderModelTests
     [TestMethod]
     public void TryParseSignatureProductionPlaceFailsClosedOnUnknownMapKey()
     {
-        var oracle = new CborWriter(CborConformanceMode.Canonical);
+        var oracleBuffer = new ArrayBufferWriter<byte>();
+        var oracle = new CborWriter(oracleBuffer, CborOptions.RfcCanonical);
         oracle.WriteStartMap(1);
         oracle.WriteInt32(7);
         oracle.WriteTextString("out of range");
         oracle.WriteEndMap();
 
-        bool success = CBAdESSerialization.TryParseSignatureProductionPlace(oracle.Encode(), out AdESSignatureProductionPlace? result);
+        bool success = CBAdESSerialization.TryParseSignatureProductionPlace(oracleBuffer.WrittenSpan.ToArray(), out AdESSignatureProductionPlace? result);
 
         Assert.IsFalse(success);
         Assert.IsNull(result);
@@ -545,12 +555,13 @@ internal sealed class CBAdESSignedHeaderModelTests
     [TestMethod]
     public void TryParseSignatureProductionPlaceFailsClosedOnTrailingBytes()
     {
-        var oracle = new CborWriter(CborConformanceMode.Canonical);
+        var oracleBuffer = new ArrayBufferWriter<byte>();
+        var oracle = new CborWriter(oracleBuffer, CborOptions.RfcCanonical);
         oracle.WriteStartMap(1);
         oracle.WriteInt32(1);
         oracle.WriteTextString("FI");
         oracle.WriteEndMap();
-        byte[] withTrailer = [.. oracle.Encode(), 0x00];
+        byte[] withTrailer = [.. oracleBuffer.WrittenSpan.ToArray(), 0x00];
 
         bool success = CBAdESSerialization.TryParseSignatureProductionPlace(withTrailer, out AdESSignatureProductionPlace? result);
 
@@ -563,13 +574,14 @@ internal sealed class CBAdESSignedHeaderModelTests
     [TestMethod]
     public void TryParseSignatureProductionPlaceFailsClosedOnIndefiniteLengthMap()
     {
-        var oracle = new CborWriter(CborConformanceMode.Lax);
+        var oracleBuffer = new ArrayBufferWriter<byte>();
+        var oracle = new CborWriter(oracleBuffer, CborOptions.Lax);
         oracle.WriteStartMap(null);
         oracle.WriteInt32(1);
         oracle.WriteTextString("FI");
         oracle.WriteEndMap();
 
-        bool success = CBAdESSerialization.TryParseSignatureProductionPlace(oracle.Encode(), out AdESSignatureProductionPlace? result);
+        bool success = CBAdESSerialization.TryParseSignatureProductionPlace(oracleBuffer.WrittenSpan.ToArray(), out AdESSignatureProductionPlace? result);
 
         Assert.IsFalse(success, "An indefinite-length sigPl map must be rejected under canonical-mode parsing.");
         Assert.IsNull(result);
@@ -614,7 +626,8 @@ internal sealed class CBAdESSignedHeaderModelTests
                 new AdESOtherAttributeCertificate(new AdESPkiObject { Val = otherBytes, SpecRef = otherSpecRef })
             ]);
 
-        var oracle = new CborWriter(CborConformanceMode.Canonical);
+        var oracleBuffer = new ArrayBufferWriter<byte>();
+        var oracle = new CborWriter(oracleBuffer, CborOptions.RfcCanonical);
         oracle.WriteStartMap(1);
         oracle.WriteInt32(1);
         oracle.WriteStartArray(2);
@@ -631,7 +644,7 @@ internal sealed class CBAdESSignedHeaderModelTests
 
         oracle.WriteEndArray();
         oracle.WriteEndMap();
-        byte[] expected = oracle.Encode();
+        byte[] expected = oracleBuffer.WrittenSpan.ToArray();
 
         using PooledMemory actual = CBAdESSerialization.EncodeSignerAttributes(attributes, BaseMemoryPool.Shared);
         Assert.IsTrue(expected.AsSpan().SequenceEqual(actual.AsReadOnlySpan()));
@@ -660,19 +673,22 @@ internal sealed class CBAdESSignedHeaderModelTests
     [TestMethod]
     public void TryParseSignerAttributesPreservesOpaqueQualifyingValueBytesExactly()
     {
-        var nestedValueWriter = new CborWriter(CborConformanceMode.Canonical);
+        var nestedValueWriterBuffer = new ArrayBufferWriter<byte>();
+        var nestedValueWriter = new CborWriter(nestedValueWriterBuffer, CborOptions.RfcCanonical);
         nestedValueWriter.WriteStartArray(3);
         nestedValueWriter.WriteInt32(1);
         nestedValueWriter.WriteTextString("two");
         nestedValueWriter.WriteInt32(3);
         nestedValueWriter.WriteEndArray();
-        byte[] nestedValueBytes = nestedValueWriter.Encode();
+        byte[] nestedValueBytes = nestedValueWriterBuffer.WrittenSpan.ToArray();
 
-        var plainTextValueWriter = new CborWriter(CborConformanceMode.Canonical);
+        var plainTextValueWriterBuffer = new ArrayBufferWriter<byte>();
+        var plainTextValueWriter = new CborWriter(plainTextValueWriterBuffer, CborOptions.RfcCanonical);
         plainTextValueWriter.WriteTextString("plain");
-        byte[] plainTextValueBytes = plainTextValueWriter.Encode();
+        byte[] plainTextValueBytes = plainTextValueWriterBuffer.WrittenSpan.ToArray();
 
-        var oracle = new CborWriter(CborConformanceMode.Canonical);
+        var oracleBuffer = new ArrayBufferWriter<byte>();
+        var oracle = new CborWriter(oracleBuffer, CborOptions.RfcCanonical);
         oracle.WriteStartMap(1);
         oracle.WriteInt32(2);
         oracle.WriteStartArray(1);
@@ -686,7 +702,7 @@ internal sealed class CBAdESSignedHeaderModelTests
         oracle.WriteEndArray();
         oracle.WriteEndMap();
 
-        bool success = CBAdESSerialization.TryParseSignerAttributes(oracle.Encode(), out AdESSignerAttributes? result);
+        bool success = CBAdESSerialization.TryParseSignerAttributes(oracleBuffer.WrittenSpan.ToArray(), out AdESSignerAttributes? result);
 
         Assert.IsTrue(success);
         var item = (CBAdESSignerAttributeNotCertifiedItem)result!.SignedAssertions![0];
@@ -718,14 +734,15 @@ internal sealed class CBAdESSignedHeaderModelTests
     [TestMethod]
     public void TryParseSignerAttributesFailsClosedOnEmptyCertifiedArray()
     {
-        var oracle = new CborWriter(CborConformanceMode.Canonical);
+        var oracleBuffer = new ArrayBufferWriter<byte>();
+        var oracle = new CborWriter(oracleBuffer, CborOptions.RfcCanonical);
         oracle.WriteStartMap(1);
         oracle.WriteInt32(1);
         oracle.WriteStartArray(0);
         oracle.WriteEndArray();
         oracle.WriteEndMap();
 
-        bool success = CBAdESSerialization.TryParseSignerAttributes(oracle.Encode(), out AdESSignerAttributes? result);
+        bool success = CBAdESSerialization.TryParseSignerAttributes(oracleBuffer.WrittenSpan.ToArray(), out AdESSignerAttributes? result);
 
         Assert.IsFalse(success);
         Assert.IsNull(result);
@@ -739,7 +756,8 @@ internal sealed class CBAdESSignedHeaderModelTests
     [TestMethod]
     public void TryParseSignerAttributesFailsClosedOnUnknownCertifiedAttrChoiceKey()
     {
-        var oracle = new CborWriter(CborConformanceMode.Canonical);
+        var oracleBuffer = new ArrayBufferWriter<byte>();
+        var oracle = new CborWriter(oracleBuffer, CborOptions.RfcCanonical);
         oracle.WriteStartMap(1);
         oracle.WriteInt32(1);
         oracle.WriteStartArray(1);
@@ -750,7 +768,7 @@ internal sealed class CBAdESSignedHeaderModelTests
         oracle.WriteEndArray();
         oracle.WriteEndMap();
 
-        bool success = CBAdESSerialization.TryParseSignerAttributes(oracle.Encode(), out AdESSignerAttributes? result);
+        bool success = CBAdESSerialization.TryParseSignerAttributes(oracleBuffer.WrittenSpan.ToArray(), out AdESSignerAttributes? result);
 
         Assert.IsFalse(success);
         Assert.IsNull(result);
@@ -764,7 +782,8 @@ internal sealed class CBAdESSignedHeaderModelTests
     [TestMethod]
     public void TryParseSignerAttributesFailsClosedOnTrailingBytes()
     {
-        var oracle = new CborWriter(CborConformanceMode.Canonical);
+        var oracleBuffer = new ArrayBufferWriter<byte>();
+        var oracle = new CborWriter(oracleBuffer, CborOptions.RfcCanonical);
         oracle.WriteStartMap(1);
         oracle.WriteInt32(1);
         oracle.WriteStartArray(1);
@@ -774,7 +793,7 @@ internal sealed class CBAdESSignedHeaderModelTests
         oracle.WriteEndMap();
         oracle.WriteEndArray();
         oracle.WriteEndMap();
-        byte[] withTrailer = [.. oracle.Encode(), 0x00];
+        byte[] withTrailer = [.. oracleBuffer.WrittenSpan.ToArray(), 0x00];
 
         bool success = CBAdESSerialization.TryParseSignerAttributes(withTrailer, out AdESSignerAttributes? result);
 
@@ -787,7 +806,8 @@ internal sealed class CBAdESSignedHeaderModelTests
     [TestMethod]
     public void TryParseSignerAttributesFailsClosedOnIndefiniteLengthMap()
     {
-        var oracle = new CborWriter(CborConformanceMode.Lax);
+        var oracleBuffer = new ArrayBufferWriter<byte>();
+        var oracle = new CborWriter(oracleBuffer, CborOptions.Lax);
         oracle.WriteStartMap(null);
         oracle.WriteInt32(1);
         oracle.WriteStartArray(1);
@@ -798,7 +818,7 @@ internal sealed class CBAdESSignedHeaderModelTests
         oracle.WriteEndArray();
         oracle.WriteEndMap();
 
-        bool success = CBAdESSerialization.TryParseSignerAttributes(oracle.Encode(), out AdESSignerAttributes? result);
+        bool success = CBAdESSerialization.TryParseSignerAttributes(oracleBuffer.WrittenSpan.ToArray(), out AdESSignerAttributes? result);
 
         Assert.IsFalse(success, "An indefinite-length srAts map must be rejected under canonical-mode parsing.");
         Assert.IsNull(result);
@@ -880,7 +900,8 @@ internal sealed class CBAdESSignedHeaderModelTests
         ]));
 #pragma warning restore CA2000 // Dispose objects before losing scope
 
-        var oracle = new CborWriter(CborConformanceMode.Canonical);
+        var oracleBuffer = new ArrayBufferWriter<byte>();
+        var oracle = new CborWriter(oracleBuffer, CborOptions.RfcCanonical);
         oracle.WriteStartMap(1);
         oracle.WriteInt32(1);
         oracle.WriteStartArray(2);
@@ -903,7 +924,7 @@ internal sealed class CBAdESSignedHeaderModelTests
 
         oracle.WriteEndArray();
         oracle.WriteEndMap();
-        byte[] expected = oracle.Encode();
+        byte[] expected = oracleBuffer.WrittenSpan.ToArray();
 
         using PooledMemory actual = CBAdESSerialization.EncodePayloadTimestamp(timestamp, BaseMemoryPool.Shared);
         Assert.IsTrue(expected.AsSpan().SequenceEqual(actual.AsReadOnlySpan()));
@@ -932,14 +953,15 @@ internal sealed class CBAdESSignedHeaderModelTests
     [TestMethod]
     public void TryParsePayloadTimestampFailsClosedOnEmptyTokenArray()
     {
-        var oracle = new CborWriter(CborConformanceMode.Canonical);
+        var oracleBuffer = new ArrayBufferWriter<byte>();
+        var oracle = new CborWriter(oracleBuffer, CborOptions.RfcCanonical);
         oracle.WriteStartMap(1);
         oracle.WriteInt32(1);
         oracle.WriteStartArray(0);
         oracle.WriteEndArray();
         oracle.WriteEndMap();
 
-        bool success = CBAdESSerialization.TryParsePayloadTimestamp(oracle.Encode(), out CBAdESPayloadTimestamp? result);
+        bool success = CBAdESSerialization.TryParsePayloadTimestamp(oracleBuffer.WrittenSpan.ToArray(), out CBAdESPayloadTimestamp? result);
 
         Assert.IsFalse(success);
         Assert.IsNull(result);
@@ -954,7 +976,8 @@ internal sealed class CBAdESSignedHeaderModelTests
     [TestMethod]
     public void TryParsePayloadTimestampFailsClosedOnUnknownTstTokenMapKey()
     {
-        var oracle = new CborWriter(CborConformanceMode.Canonical);
+        var oracleBuffer = new ArrayBufferWriter<byte>();
+        var oracle = new CborWriter(oracleBuffer, CborOptions.RfcCanonical);
         oracle.WriteStartMap(1);
         oracle.WriteInt32(1);
         oracle.WriteStartArray(1);
@@ -965,7 +988,7 @@ internal sealed class CBAdESSignedHeaderModelTests
         oracle.WriteEndArray();
         oracle.WriteEndMap();
 
-        bool success = CBAdESSerialization.TryParsePayloadTimestamp(oracle.Encode(), out CBAdESPayloadTimestamp? result);
+        bool success = CBAdESSerialization.TryParsePayloadTimestamp(oracleBuffer.WrittenSpan.ToArray(), out CBAdESPayloadTimestamp? result);
 
         Assert.IsFalse(success);
         Assert.IsNull(result);
@@ -980,7 +1003,8 @@ internal sealed class CBAdESSignedHeaderModelTests
     [TestMethod]
     public void TryParsePayloadTimestampFailsClosedOnTrailingBytes()
     {
-        var oracle = new CborWriter(CborConformanceMode.Canonical);
+        var oracleBuffer = new ArrayBufferWriter<byte>();
+        var oracle = new CborWriter(oracleBuffer, CborOptions.RfcCanonical);
         oracle.WriteStartMap(1);
         oracle.WriteInt32(1);
         oracle.WriteStartArray(1);
@@ -990,7 +1014,7 @@ internal sealed class CBAdESSignedHeaderModelTests
         oracle.WriteEndMap();
         oracle.WriteEndArray();
         oracle.WriteEndMap();
-        byte[] withTrailer = [.. oracle.Encode(), 0x00];
+        byte[] withTrailer = [.. oracleBuffer.WrittenSpan.ToArray(), 0x00];
 
         bool success = CBAdESSerialization.TryParsePayloadTimestamp(withTrailer, out CBAdESPayloadTimestamp? result);
 
@@ -1004,7 +1028,8 @@ internal sealed class CBAdESSignedHeaderModelTests
     [TestMethod]
     public void TryParsePayloadTimestampFailsClosedOnIndefiniteLengthContainer()
     {
-        var oracle = new CborWriter(CborConformanceMode.Lax);
+        var oracleBuffer = new ArrayBufferWriter<byte>();
+        var oracle = new CborWriter(oracleBuffer, CborOptions.Lax);
         oracle.WriteStartMap(null);
         oracle.WriteInt32(1);
         oracle.WriteStartArray(1);
@@ -1015,7 +1040,7 @@ internal sealed class CBAdESSignedHeaderModelTests
         oracle.WriteEndArray();
         oracle.WriteEndMap();
 
-        bool success = CBAdESSerialization.TryParsePayloadTimestamp(oracle.Encode(), out CBAdESPayloadTimestamp? result);
+        bool success = CBAdESSerialization.TryParsePayloadTimestamp(oracleBuffer.WrittenSpan.ToArray(), out CBAdESPayloadTimestamp? result);
 
         Assert.IsFalse(success, "An indefinite-length adoTst map must be rejected under canonical-mode parsing.");
         Assert.IsNull(result);
@@ -1049,16 +1074,10 @@ internal sealed class CBAdESSignedHeaderModelTests
     public async Task ConstructingSignaturePolicyIdentifierWithDigPSpTrueAndNoQualifiersThrows()
     {
         var id = new AdESObjectIdentifier("https://policy.example.org/v1");
-        DigestValue digest = await CreateDigestAsync(WellKnownCoseAlgorithms.Sha256, "policy document"u8.ToArray(), TestContext.CancellationToken).ConfigureAwait(false);
-        try
-        {
-            Assert.ThrowsExactly<ArgumentException>(() =>
-                new AdESSignaturePolicyIdentifier(id, new AdESDigestAlgorithmIntegerIdentifier(WellKnownCoseAlgorithms.Sha256), digest, digestIsPerSpecification: true));
-        }
-        finally
-        {
-            digest.Dispose();
-        }
+        using DigestValue digest = await CreateDigestAsync(WellKnownCoseAlgorithms.Sha256, "policy document"u8.ToArray(), TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.ThrowsExactly<ArgumentException>(() =>
+            new AdESSignaturePolicyIdentifier(id, new AdESDigestAlgorithmIntegerIdentifier(WellKnownCoseAlgorithms.Sha256), digest, digestIsPerSpecification: true));
     }
 
 
@@ -1070,21 +1089,15 @@ internal sealed class CBAdESSignedHeaderModelTests
     public async Task ConstructingSignaturePolicyIdentifierWithDigPSpTrueAndQualifiersLackingDocumentSpecificationThrows()
     {
         var id = new AdESObjectIdentifier("https://policy.example.org/v1");
-        DigestValue digest = await CreateDigestAsync(WellKnownCoseAlgorithms.Sha256, "policy document"u8.ToArray(), TestContext.CancellationToken).ConfigureAwait(false);
-        try
-        {
-            Assert.ThrowsExactly<ArgumentException>(() =>
-                new AdESSignaturePolicyIdentifier(
-                    id,
-                    new AdESDigestAlgorithmIntegerIdentifier(WellKnownCoseAlgorithms.Sha256),
-                    digest,
-                    digestIsPerSpecification: true,
-                    qualifiers: [new AdESSignaturePolicyUri("https://policy.example.org/v1/copy")]));
-        }
-        finally
-        {
-            digest.Dispose();
-        }
+        using DigestValue digest = await CreateDigestAsync(WellKnownCoseAlgorithms.Sha256, "policy document"u8.ToArray(), TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.ThrowsExactly<ArgumentException>(() =>
+            new AdESSignaturePolicyIdentifier(
+                id,
+                new AdESDigestAlgorithmIntegerIdentifier(WellKnownCoseAlgorithms.Sha256),
+                digest,
+                digestIsPerSpecification: true,
+                qualifiers: [new AdESSignaturePolicyUri("https://policy.example.org/v1/copy")]));
     }
 
 
@@ -1096,17 +1109,11 @@ internal sealed class CBAdESSignedHeaderModelTests
     public async Task ConstructingSignaturePolicyIdentifierWithEmptyQualifiersListThrows()
     {
         var id = new AdESObjectIdentifier("https://policy.example.org/v1");
-        DigestValue digest = await CreateDigestAsync(WellKnownCoseAlgorithms.Sha256, "policy document"u8.ToArray(), TestContext.CancellationToken).ConfigureAwait(false);
-        try
-        {
-            Assert.ThrowsExactly<ArgumentException>(() =>
-                new AdESSignaturePolicyIdentifier(
-                    id, new AdESDigestAlgorithmIntegerIdentifier(WellKnownCoseAlgorithms.Sha256), digest, qualifiers: []));
-        }
-        finally
-        {
-            digest.Dispose();
-        }
+        using DigestValue digest = await CreateDigestAsync(WellKnownCoseAlgorithms.Sha256, "policy document"u8.ToArray(), TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.ThrowsExactly<ArgumentException>(() =>
+            new AdESSignaturePolicyIdentifier(
+                id, new AdESDigestAlgorithmIntegerIdentifier(WellKnownCoseAlgorithms.Sha256), digest, qualifiers: []));
     }
 
 
@@ -1138,7 +1145,8 @@ internal sealed class CBAdESSignedHeaderModelTests
                 new AdESSignaturePolicyDocumentSpecification(specificationId)
             ]);
 
-        var oracle = new CborWriter(CborConformanceMode.Canonical);
+        var oracleBuffer = new ArrayBufferWriter<byte>();
+        var oracle = new CborWriter(oracleBuffer, CborOptions.RfcCanonical);
         oracle.WriteStartMap(4);
         oracle.WriteInt32(1);
         WriteOId(oracle, policyId.Id);
@@ -1161,7 +1169,7 @@ internal sealed class CBAdESSignedHeaderModelTests
         oracle.WriteEndMap();
         oracle.WriteEndArray();
         oracle.WriteEndMap();
-        byte[] expected = oracle.Encode();
+        byte[] expected = oracleBuffer.WrittenSpan.ToArray();
 
         using PooledMemory actual = CBAdESSerialization.EncodeSignaturePolicyIdentifier(identifier, BaseMemoryPool.Shared);
         Assert.IsTrue(expected.AsSpan().SequenceEqual(actual.AsReadOnlySpan()));
@@ -1247,7 +1255,8 @@ internal sealed class CBAdESSignedHeaderModelTests
         var policyId = "https://policy.example.org/v1";
         byte[] digestBytes = new byte[32];
 
-        var oracle = new CborWriter(CborConformanceMode.Canonical);
+        var oracleBuffer = new ArrayBufferWriter<byte>();
+        var oracle = new CborWriter(oracleBuffer, CborOptions.RfcCanonical);
         oracle.WriteStartMap(2);
         oracle.WriteInt32(1);
         WriteOId(oracle, policyId);
@@ -1258,7 +1267,7 @@ internal sealed class CBAdESSignedHeaderModelTests
         oracle.WriteEndArray();
         oracle.WriteEndMap();
 
-        bool success = CBAdESSerialization.TryParseSignaturePolicyIdentifier(oracle.Encode(), BaseMemoryPool.Shared, out AdESSignaturePolicyIdentifier? result);
+        bool success = CBAdESSerialization.TryParseSignaturePolicyIdentifier(oracleBuffer.WrittenSpan.ToArray(), BaseMemoryPool.Shared, out AdESSignaturePolicyIdentifier? result);
 
         Assert.IsTrue(success);
         using AdESSignaturePolicyIdentifier parsed = result!;
@@ -1435,7 +1444,8 @@ internal sealed class CBAdESSignedHeaderModelTests
     [TestMethod]
     public void TryParseSignaturePolicyIdentifierFailsClosedOnUnknownMapKey()
     {
-        var oracle = new CborWriter(CborConformanceMode.Canonical);
+        var oracleBuffer = new ArrayBufferWriter<byte>();
+        var oracle = new CborWriter(oracleBuffer, CborOptions.RfcCanonical);
         oracle.WriteStartMap(2);
         oracle.WriteInt32(1);
         WriteOId(oracle, "https://policy.example.org/v1");
@@ -1443,7 +1453,7 @@ internal sealed class CBAdESSignedHeaderModelTests
         oracle.WriteBoolean(true);
         oracle.WriteEndMap();
 
-        bool success = CBAdESSerialization.TryParseSignaturePolicyIdentifier(oracle.Encode(), BaseMemoryPool.Shared, out AdESSignaturePolicyIdentifier? result);
+        bool success = CBAdESSerialization.TryParseSignaturePolicyIdentifier(oracleBuffer.WrittenSpan.ToArray(), BaseMemoryPool.Shared, out AdESSignaturePolicyIdentifier? result);
 
         Assert.IsFalse(success);
         Assert.IsNull(result);
@@ -1458,7 +1468,8 @@ internal sealed class CBAdESSignedHeaderModelTests
     [TestMethod]
     public void TryParseSignaturePolicyIdentifierFailsClosedOnTrailingBytes()
     {
-        var oracle = new CborWriter(CborConformanceMode.Canonical);
+        var oracleBuffer = new ArrayBufferWriter<byte>();
+        var oracle = new CborWriter(oracleBuffer, CborOptions.RfcCanonical);
         oracle.WriteStartMap(2);
         oracle.WriteInt32(1);
         WriteOId(oracle, "https://policy.example.org/v1");
@@ -1468,7 +1479,7 @@ internal sealed class CBAdESSignedHeaderModelTests
         oracle.WriteByteString(new byte[32]);
         oracle.WriteEndArray();
         oracle.WriteEndMap();
-        byte[] withTrailer = [.. oracle.Encode(), 0x00];
+        byte[] withTrailer = [.. oracleBuffer.WrittenSpan.ToArray(), 0x00];
 
         bool success = CBAdESSerialization.TryParseSignaturePolicyIdentifier(withTrailer, BaseMemoryPool.Shared, out AdESSignaturePolicyIdentifier? result);
 
@@ -1482,7 +1493,8 @@ internal sealed class CBAdESSignedHeaderModelTests
     [TestMethod]
     public void TryParseSignaturePolicyIdentifierFailsClosedOnIndefiniteLengthMap()
     {
-        var oracle = new CborWriter(CborConformanceMode.Lax);
+        var oracleBuffer = new ArrayBufferWriter<byte>();
+        var oracle = new CborWriter(oracleBuffer, CborOptions.Lax);
         oracle.WriteStartMap(null);
         oracle.WriteInt32(1);
         WriteOId(oracle, "https://policy.example.org/v1");
@@ -1493,7 +1505,7 @@ internal sealed class CBAdESSignedHeaderModelTests
         oracle.WriteEndArray();
         oracle.WriteEndMap();
 
-        bool success = CBAdESSerialization.TryParseSignaturePolicyIdentifier(oracle.Encode(), BaseMemoryPool.Shared, out AdESSignaturePolicyIdentifier? result);
+        bool success = CBAdESSerialization.TryParseSignaturePolicyIdentifier(oracleBuffer.WrittenSpan.ToArray(), BaseMemoryPool.Shared, out AdESSignaturePolicyIdentifier? result);
 
         Assert.IsFalse(success, "An indefinite-length sigPId map must be rejected under canonical-mode parsing.");
         Assert.IsNull(result);
@@ -1579,7 +1591,8 @@ internal sealed class CBAdESSignedHeaderModelTests
             new AdESDigestAlgorithmIntegerIdentifier(WellKnownCoseAlgorithms.Sha256));
 #pragma warning restore CA2000 // Dispose objects before losing scope
 
-        var oracle = new CborWriter(CborConformanceMode.Canonical);
+        var oracleBuffer = new ArrayBufferWriter<byte>();
+        var oracle = new CborWriter(oracleBuffer, CborOptions.RfcCanonical);
         oracle.WriteStartMap(5);
         oracle.WriteInt32(1);
         WriteTag32Uri(oracle, CBAdESDetachedMechanisms.ObjectIdByURIHash);
@@ -1601,7 +1614,7 @@ internal sealed class CBAdESSignedHeaderModelTests
         oracle.WriteTextString("text/plain");
         oracle.WriteEndArray();
         oracle.WriteEndMap();
-        byte[] expected = oracle.Encode();
+        byte[] expected = oracleBuffer.WrittenSpan.ToArray();
 
         using PooledMemory actual = CBAdESSerialization.EncodeDetachedObjects(detachedObjects, BaseMemoryPool.Shared);
         Assert.IsTrue(expected.AsSpan().SequenceEqual(actual.AsReadOnlySpan()));
@@ -1665,7 +1678,8 @@ internal sealed class CBAdESSignedHeaderModelTests
     [TestMethod]
     public void TryParseDetachedObjectsFailsClosedWhenHashValuesLengthMismatchesReferences()
     {
-        var oracle = new CborWriter(CborConformanceMode.Canonical);
+        var oracleBuffer = new ArrayBufferWriter<byte>();
+        var oracle = new CborWriter(oracleBuffer, CborOptions.RfcCanonical);
         oracle.WriteStartMap(4);
         oracle.WriteInt32(1);
         WriteTag32Uri(oracle, CBAdESDetachedMechanisms.ObjectIdByURIHash);
@@ -1682,7 +1696,7 @@ internal sealed class CBAdESSignedHeaderModelTests
         oracle.WriteEndArray();
         oracle.WriteEndMap();
 
-        bool success = CBAdESSerialization.TryParseDetachedObjects(oracle.Encode(), BaseMemoryPool.Shared, out CBAdESDetachedObjects? result);
+        bool success = CBAdESSerialization.TryParseDetachedObjects(oracleBuffer.WrittenSpan.ToArray(), BaseMemoryPool.Shared, out CBAdESDetachedObjects? result);
 
         Assert.IsFalse(success);
         Assert.IsNull(result);
@@ -1697,7 +1711,8 @@ internal sealed class CBAdESSignedHeaderModelTests
     [TestMethod]
     public void TryParseDetachedObjectsFailsClosedWhenContentTypesLengthMismatchesReferences()
     {
-        var oracle = new CborWriter(CborConformanceMode.Canonical);
+        var oracleBuffer = new ArrayBufferWriter<byte>();
+        var oracle = new CborWriter(oracleBuffer, CborOptions.RfcCanonical);
         oracle.WriteStartMap(3);
         oracle.WriteInt32(1);
         WriteTag32Uri(oracle, CBAdESDetachedMechanisms.ObjectIdByURI);
@@ -1712,7 +1727,7 @@ internal sealed class CBAdESSignedHeaderModelTests
         oracle.WriteEndArray();
         oracle.WriteEndMap();
 
-        bool success = CBAdESSerialization.TryParseDetachedObjects(oracle.Encode(), BaseMemoryPool.Shared, out CBAdESDetachedObjects? result);
+        bool success = CBAdESSerialization.TryParseDetachedObjects(oracleBuffer.WrittenSpan.ToArray(), BaseMemoryPool.Shared, out CBAdESDetachedObjects? result);
 
         Assert.IsFalse(success);
         Assert.IsNull(result);
@@ -1727,7 +1742,8 @@ internal sealed class CBAdESSignedHeaderModelTests
     [TestMethod]
     public void TryParseDetachedObjectsFailsClosedWhenDigestAlgorithmPresentWithoutDigestValues()
     {
-        var oracle = new CborWriter(CborConformanceMode.Canonical);
+        var oracleBuffer = new ArrayBufferWriter<byte>();
+        var oracle = new CborWriter(oracleBuffer, CborOptions.RfcCanonical);
         oracle.WriteStartMap(3);
         oracle.WriteInt32(1);
         WriteTag32Uri(oracle, CBAdESDetachedMechanisms.ObjectIdByURIHash);
@@ -1739,7 +1755,7 @@ internal sealed class CBAdESSignedHeaderModelTests
         oracle.WriteInt32(WellKnownCoseAlgorithms.Sha256);
         oracle.WriteEndMap();
 
-        bool success = CBAdESSerialization.TryParseDetachedObjects(oracle.Encode(), BaseMemoryPool.Shared, out CBAdESDetachedObjects? result);
+        bool success = CBAdESSerialization.TryParseDetachedObjects(oracleBuffer.WrittenSpan.ToArray(), BaseMemoryPool.Shared, out CBAdESDetachedObjects? result);
 
         Assert.IsFalse(success);
         Assert.IsNull(result);
@@ -1758,7 +1774,8 @@ internal sealed class CBAdESSignedHeaderModelTests
     [TestMethod]
     public void TryParseDetachedObjectsFailsClosedOnEmptyReferencesArray()
     {
-        var oracle = new CborWriter(CborConformanceMode.Canonical);
+        var oracleBuffer = new ArrayBufferWriter<byte>();
+        var oracle = new CborWriter(oracleBuffer, CborOptions.RfcCanonical);
         oracle.WriteStartMap(2);
         oracle.WriteInt32(1);
         WriteTag32Uri(oracle, CBAdESDetachedMechanisms.ObjectIdByURI);
@@ -1767,7 +1784,7 @@ internal sealed class CBAdESSignedHeaderModelTests
         oracle.WriteEndArray();
         oracle.WriteEndMap();
 
-        bool success = CBAdESSerialization.TryParseDetachedObjects(oracle.Encode(), BaseMemoryPool.Shared, out CBAdESDetachedObjects? result);
+        bool success = CBAdESSerialization.TryParseDetachedObjects(oracleBuffer.WrittenSpan.ToArray(), BaseMemoryPool.Shared, out CBAdESDetachedObjects? result);
 
         Assert.IsFalse(success);
         Assert.IsNull(result);
@@ -1786,10 +1803,11 @@ internal sealed class CBAdESSignedHeaderModelTests
     [TestMethod]
     public void TryParseDetachedObjectsFailsClosedWhenMechanismIdentifierTagIsNotUri()
     {
-        var oracle = new CborWriter(CborConformanceMode.Canonical);
+        var oracleBuffer = new ArrayBufferWriter<byte>();
+        var oracle = new CborWriter(oracleBuffer, CborOptions.RfcCanonical);
         oracle.WriteStartMap(2);
         oracle.WriteInt32(1);
-        oracle.WriteTag((CborTag)0);
+        oracle.WriteTag(new CborTag((ulong)0));
         oracle.WriteTextString(CBAdESDetachedMechanisms.ObjectIdByURI);
         oracle.WriteInt32(2);
         oracle.WriteStartArray(1);
@@ -1797,7 +1815,7 @@ internal sealed class CBAdESSignedHeaderModelTests
         oracle.WriteEndArray();
         oracle.WriteEndMap();
 
-        bool success = CBAdESSerialization.TryParseDetachedObjects(oracle.Encode(), BaseMemoryPool.Shared, out CBAdESDetachedObjects? result);
+        bool success = CBAdESSerialization.TryParseDetachedObjects(oracleBuffer.WrittenSpan.ToArray(), BaseMemoryPool.Shared, out CBAdESDetachedObjects? result);
 
         Assert.IsFalse(success);
         Assert.IsNull(result);
@@ -1827,7 +1845,8 @@ internal sealed class CBAdESSignedHeaderModelTests
     [TestMethod]
     public void TryParseDetachedObjectsFailsClosedOnIndefiniteLengthMap()
     {
-        var oracle = new CborWriter(CborConformanceMode.Lax);
+        var oracleBuffer = new ArrayBufferWriter<byte>();
+        var oracle = new CborWriter(oracleBuffer, CborOptions.Lax);
         oracle.WriteStartMap(null);
         oracle.WriteInt32(1);
         WriteTag32Uri(oracle, CBAdESDetachedMechanisms.ObjectIdByURI);
@@ -1837,7 +1856,7 @@ internal sealed class CBAdESSignedHeaderModelTests
         oracle.WriteEndArray();
         oracle.WriteEndMap();
 
-        bool success = CBAdESSerialization.TryParseDetachedObjects(oracle.Encode(), BaseMemoryPool.Shared, out CBAdESDetachedObjects? result);
+        bool success = CBAdESSerialization.TryParseDetachedObjects(oracleBuffer.WrittenSpan.ToArray(), BaseMemoryPool.Shared, out CBAdESDetachedObjects? result);
 
         Assert.IsFalse(success, "An indefinite-length sigD map must be rejected under canonical-mode parsing.");
         Assert.IsNull(result);
@@ -1877,7 +1896,8 @@ internal sealed class CBAdESSignedHeaderModelTests
     {
         byte[] digestBytes = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08];
 
-        var oracle = new CborWriter(CborConformanceMode.Canonical);
+        var oracleBuffer = new ArrayBufferWriter<byte>();
+        var oracle = new CborWriter(oracleBuffer, CborOptions.RfcCanonical);
         oracle.WriteStartMap(4);
         oracle.WriteInt32(1);
         WriteTag32Uri(oracle, CBAdESDetachedMechanisms.ObjectIdByURIHash);
@@ -1892,7 +1912,7 @@ internal sealed class CBAdESSignedHeaderModelTests
         oracle.WriteByteString(digestBytes);
         oracle.WriteEndArray();
         oracle.WriteEndMap();
-        byte[] expected = oracle.Encode();
+        byte[] expected = oracleBuffer.WrittenSpan.ToArray();
 
         bool success = CBAdESSerialization.TryParseDetachedObjects(expected, BaseMemoryPool.Shared, out CBAdESDetachedObjects? parsed);
 
@@ -1921,7 +1941,8 @@ internal sealed class CBAdESSignedHeaderModelTests
     {
         byte[] digestBytes = [0xAA, 0xBB, 0xCC, 0xDD];
 
-        var oracle = new CborWriter(CborConformanceMode.Canonical);
+        var oracleBuffer = new ArrayBufferWriter<byte>();
+        var oracle = new CborWriter(oracleBuffer, CborOptions.RfcCanonical);
         oracle.WriteStartMap(4);
         oracle.WriteInt32(1);
         WriteTag32Uri(oracle, CBAdESDetachedMechanisms.ObjectIdByURIHash);
@@ -1936,7 +1957,7 @@ internal sealed class CBAdESSignedHeaderModelTests
         oracle.WriteByteString(digestBytes);
         oracle.WriteEndArray();
         oracle.WriteEndMap();
-        byte[] expected = oracle.Encode();
+        byte[] expected = oracleBuffer.WrittenSpan.ToArray();
 
         bool success = CBAdESSerialization.TryParseDetachedObjects(expected, BaseMemoryPool.Shared, out CBAdESDetachedObjects? parsed);
 
@@ -2002,7 +2023,8 @@ internal sealed class CBAdESSignedHeaderModelTests
     /// <returns>The parsed value; the caller disposes it.</returns>
     private static AdESSignaturePolicyIdentifier ParseMinimalSigPIdOracleWithOneQualifier(Action<CborWriter> writeQualifier)
     {
-        var oracle = new CborWriter(CborConformanceMode.Canonical);
+        var oracleBuffer = new ArrayBufferWriter<byte>();
+        var oracle = new CborWriter(oracleBuffer, CborOptions.RfcCanonical);
         oracle.WriteStartMap(3);
         oracle.WriteInt32(1);
         WriteOId(oracle, "https://policy.example.org/v1");
@@ -2017,7 +2039,7 @@ internal sealed class CBAdESSignedHeaderModelTests
         oracle.WriteEndArray();
         oracle.WriteEndMap();
 
-        bool success = CBAdESSerialization.TryParseSignaturePolicyIdentifier(oracle.Encode(), BaseMemoryPool.Shared, out AdESSignaturePolicyIdentifier? result);
+        bool success = CBAdESSerialization.TryParseSignaturePolicyIdentifier(oracleBuffer.WrittenSpan.ToArray(), BaseMemoryPool.Shared, out AdESSignaturePolicyIdentifier? result);
         Assert.IsTrue(success);
         Assert.HasCount(1, result!.Qualifiers!);
         return result;
@@ -2034,7 +2056,8 @@ internal sealed class CBAdESSignedHeaderModelTests
     /// <returns>The encoded <c>sigD</c> map bytes.</returns>
     private static byte[] BuildObjectIdByUriOracleBytes(string mechanismIdentifier, IReadOnlyList<string> references)
     {
-        var oracle = new CborWriter(CborConformanceMode.Canonical);
+        var oracleBuffer = new ArrayBufferWriter<byte>();
+        var oracle = new CborWriter(oracleBuffer, CborOptions.RfcCanonical);
         oracle.WriteStartMap(2);
         oracle.WriteInt32(1);
         WriteTag32Uri(oracle, mechanismIdentifier);
@@ -2047,7 +2070,7 @@ internal sealed class CBAdESSignedHeaderModelTests
 
         oracle.WriteEndArray();
         oracle.WriteEndMap();
-        return oracle.Encode();
+        return oracleBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -2160,7 +2183,8 @@ internal sealed class CBAdESSignedHeaderModelTests
     /// <returns>The encoded bytes.</returns>
     private static byte[] BuildDeeplyNestedArrayBytes(int depth)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         for(int i = 0; i < depth; i++)
         {
             writer.WriteStartArray(1);
@@ -2173,6 +2197,6 @@ internal sealed class CBAdESSignedHeaderModelTests
             writer.WriteEndArray();
         }
 
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 }

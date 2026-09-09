@@ -78,6 +78,17 @@ public ref struct TpmWriter
     }
 
     /// <summary>
+    /// Writes a signed 8-bit integer (two's complement) — a single octet, so there is no endianness to
+    /// choose.
+    /// </summary>
+    /// <param name="value">The value to write.</param>
+    public void WriteInt8(sbyte value)
+    {
+        remaining[0] = unchecked((byte)value);
+        Advance(1);
+    }
+
+    /// <summary>
     /// Writes a big-endian signed 32-bit integer (two's complement).
     /// </summary>
     /// <param name="value">The value to write.</param>

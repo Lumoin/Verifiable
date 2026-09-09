@@ -152,11 +152,11 @@ public sealed record Oid4VciWalletConfiguration
     /// <summary>Base64url-without-padding encoder for the holder proof's JWS segments and JWK coordinates.</summary>
     public required EncodeDelegate Base64UrlEncoder { get; init; }
 
-    /// <summary>Time source for the holder proof's <c>iat</c> claim. Defaults to <see cref="TimeProvider.System"/>.</summary>
-    public TimeProvider TimeProvider { get; init; } = TimeProvider.System;
+    /// <summary>Time source for the holder proof's <c>iat</c> claim.</summary>
+    public required TimeProvider TimeProvider { get; init; }
 
-    /// <summary>Memory pool for transient signing buffers. Defaults to <see cref="BaseMemoryPool.Shared"/>.</summary>
-    public BaseMemoryPool MemoryPool { get; init; } = BaseMemoryPool.Shared;
+    /// <summary>Memory pool for transient signing buffers, supplied by the wallet deployment.</summary>
+    public required BaseMemoryPool MemoryPool { get; init; }
 
     /// <summary>
     /// Optional RFC 9449 DPoP proof producer. Required when the §6 Token Response

@@ -40,6 +40,7 @@ jobs:
         languages: 'csharp'
         build-mode: none
         queries: security-and-quality
+        config-file: ./.github/codeql/codeql-config.yml
 
     - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
       with:

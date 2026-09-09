@@ -90,10 +90,12 @@ internal sealed class SdCwtKeyBindingFlowTests
         Assert.AreEqual(Cnonce, result.Cnonce);
         Assert.AreEqual(TimeProvider.GetUtcNow().ToUnixTimeSeconds(), result.IssuedAt?.ToUnixTimeSeconds());
 
-        IReadOnlyDictionary<string, string> claims = result.DisclosedClaims;
-        Assert.AreEqual("Erika", claims[ClaimKeyGivenName.ToString(CultureInfo.InvariantCulture)]);
-        Assert.AreEqual("Mustermann", claims[ClaimKeyFamilyName.ToString(CultureInfo.InvariantCulture)]);
-        Assert.IsFalse(claims.ContainsKey(ClaimKeyEmail.ToString(CultureInfo.InvariantCulture)),
+        //Path-keyed per RFC 9901 §9.3 (a claim name is not a stable identity across depths):
+        //embeddedToken.DisclosurePaths resolved each disclosure's real position, not its leaf name.
+        IReadOnlyDictionary<CredentialPath, object?> claims = result.DisclosedClaims;
+        Assert.AreEqual("Erika", claims[CredentialPath.FromJsonPointer(GivenNamePath)]);
+        Assert.AreEqual("Mustermann", claims[CredentialPath.FromJsonPointer(FamilyNamePath)]);
+        Assert.IsFalse(claims.ContainsKey(CredentialPath.FromJsonPointer(EmailPath)),
             "The withheld email claim must not appear in the disclosed set.");
 
         //The verifier observes the shortest disclosure salt length for the salt-length signal.
@@ -133,20 +135,20 @@ internal sealed class SdCwtKeyBindingFlowTests
     }
 
 
-    private static readonly Tag Sha256CommitmentTag = Tag.Create(HashAlgorithmName.SHA256);
+    private static Tag Sha256CommitmentTag { get; } = Tag.Create(HashAlgorithmName.SHA256);
 
 
     /// <summary>A verifier-side commitment store keyed by commitment bytes, shared across two verifications.</summary>
     private sealed class InMemoryCommitmentStore
     {
-        private readonly HashSet<string> seen = new(StringComparer.Ordinal);
+        private HashSet<string> Seen { get; } = new(StringComparer.Ordinal);
 
         public ValueTask<bool> IsSeen(DigestValue commitment, CancellationToken cancellationToken) =>
-            ValueTask.FromResult(seen.Contains(Convert.ToHexString(commitment.AsReadOnlySpan())));
+            ValueTask.FromResult(Seen.Contains(Convert.ToHexString(commitment.AsReadOnlySpan())));
 
         public ValueTask Record(DigestValue commitment, CancellationToken cancellationToken)
         {
-            seen.Add(Convert.ToHexString(commitment.AsReadOnlySpan()));
+            Seen.Add(Convert.ToHexString(commitment.AsReadOnlySpan()));
 
             return ValueTask.CompletedTask;
         }
@@ -255,10 +257,12 @@ internal sealed class SdCwtKeyBindingFlowTests
             kbtBytes,
             parseCoseSign1: CoseSerialization.ParseCoseSign1,
             extractKcwt: SdCwtVpParsing.ExtractKcwt,
-            parseSdCwt: bytes => SdCwtVpParsing.ParseEmbeddedSdCwt(bytes, TestSalts.TestSaltTag, Pool),
+            parseSdCwt: bytes => SdCwtVpParsing.ParseEmbeddedSdCwt(bytes, TestSalts.TestSaltTag, Pool, TestSetup.Base64UrlEncoder),
             extractHolderKey: SdCwtVpParsing.ExtractHolderKey,
             readKbtClaims: SdCwtVpParsing.ReadKbtClaims,
             extractIssuer: SdCwtVpParsing.ExtractIssuer,
+            extractCredentialType: SdCwtVpParsing.ExtractCredentialType,
+            extractStatus: SdCwtVpParsing.ExtractStatus,
             resolveIssuerKey: _ => issuerKey,
             verifyCredential: async (token, key, pool, ct) =>
             {

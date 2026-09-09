@@ -25,7 +25,12 @@ namespace Verifiable.Tpm.Spec.Structures;
 ///   <item><description>TPM_ALG_MLKEM: TPMS_MLKEM_PARMS</description></item>
 /// </list>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 12.2.3.7, Table 217 (v1.85).
+/// Every member above is representable here, including <c>TPM_ALG_SYMCIPHER</c> — a caller can build, parse
+/// and write <see cref="TpmsSymcipherParms"/> so <c>TPM2_TestParms()</c> can be asked about it, even though no
+/// simulator in this codebase implements a symmetric-cipher object as a creatable type.
+/// </para>
+/// <para>
+/// Specification reference: TPM 2.0 Library Part 2, clause 12.2.3.9, Table 233.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -65,6 +70,22 @@ public readonly struct TpmuPublicParms: IEquatable<TpmuPublicParms>
     /// Gets the keyed-hash parameters (when Type is TPM_ALG_KEYEDHASH).
     /// </summary>
     public TpmsKeyedHashParms? KeyedHashDetail { get; init; }
+
+    /// <summary>
+    /// Gets the symmetric block cipher parameters (when Type is TPM_ALG_SYMCIPHER).
+    /// </summary>
+    public TpmsSymcipherParms? SymDetail { get; init; }
+
+    /// <summary>
+    /// Creates symmetric block cipher public parameters.
+    /// </summary>
+    /// <param name="symParms">The symmetric block cipher parameters.</param>
+    /// <returns>The union containing symmetric block cipher parameters.</returns>
+    public static TpmuPublicParms SymCipher(TpmsSymcipherParms symParms) => new()
+    {
+        Type = TpmAlgIdConstants.TPM_ALG_SYMCIPHER,
+        SymDetail = symParms
+    };
 
     /// <summary>
     /// Creates RSA public parameters.
@@ -143,6 +164,7 @@ public readonly struct TpmuPublicParms: IEquatable<TpmuPublicParms>
         TpmAlgIdConstants.TPM_ALG_HASH_MLDSA => TpmsHashMlDsaParms.SerializedSize,
         TpmAlgIdConstants.TPM_ALG_MLKEM => MlKemDetail!.Value.SerializedSize,
         TpmAlgIdConstants.TPM_ALG_KEYEDHASH => KeyedHashDetail!.Value.SerializedSize,
+        TpmAlgIdConstants.TPM_ALG_SYMCIPHER => SymDetail!.Value.SerializedSize,
         _ => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization.")
     };
 
@@ -185,6 +207,11 @@ public readonly struct TpmuPublicParms: IEquatable<TpmuPublicParms>
             case(TpmAlgIdConstants.TPM_ALG_KEYEDHASH):
             {
                 KeyedHashDetail!.Value.WriteTo(ref writer);
+                break;
+            }
+            case(TpmAlgIdConstants.TPM_ALG_SYMCIPHER):
+            {
+                SymDetail!.Value.WriteTo(ref writer);
                 break;
             }
             default:
@@ -232,6 +259,11 @@ public readonly struct TpmuPublicParms: IEquatable<TpmuPublicParms>
             Type = type,
             KeyedHashDetail = TpmsKeyedHashParms.Parse(ref reader)
         },
+        TpmAlgIdConstants.TPM_ALG_SYMCIPHER => new TpmuPublicParms
+        {
+            Type = type,
+            SymDetail = TpmsSymcipherParms.Parse(ref reader)
+        },
         _ => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing.")
     };
 
@@ -243,13 +275,14 @@ public readonly struct TpmuPublicParms: IEquatable<TpmuPublicParms>
         Nullable.Equals(MlDsaDetail, other.MlDsaDetail) &&
         Nullable.Equals(HashMlDsaDetail, other.HashMlDsaDetail) &&
         Nullable.Equals(MlKemDetail, other.MlKemDetail) &&
-        Nullable.Equals(KeyedHashDetail, other.KeyedHashDetail);
+        Nullable.Equals(KeyedHashDetail, other.KeyedHashDetail) &&
+        Nullable.Equals(SymDetail, other.SymDetail);
 
     /// <inheritdoc/>
     public override bool Equals(object? obj) => obj is TpmuPublicParms other && Equals(other);
 
     /// <inheritdoc/>
-    public override int GetHashCode() => HashCode.Combine(Type, RsaDetail, EccDetail, MlDsaDetail, HashMlDsaDetail, MlKemDetail, KeyedHashDetail);
+    public override int GetHashCode() => HashCode.Combine(Type, RsaDetail, EccDetail, MlDsaDetail, HashMlDsaDetail, MlKemDetail, KeyedHashDetail, SymDetail);
 
     /// <summary>
     /// Equality operator.

@@ -700,7 +700,7 @@ internal static class PdfValueParser
         int dictionaryContentStart = pos;
 
         var entries = new Dictionary<string, PdfValue>(StringComparer.Ordinal);
-        int dictionaryContentEnd = pos;
+        int dictionaryContentEnd;
         while(true)
         {
             SkipWhitespaceAndComments(s, ref pos);

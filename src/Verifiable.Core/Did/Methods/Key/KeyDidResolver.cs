@@ -174,6 +174,7 @@ public static class KeyDidResolver
             DidDocument document = await new KeyDidBuilder().BuildAsync(
                 publicKey,
                 MultikeyVerificationMethodTypeInfo.Instance,
+                pool,
                 includeDefaultContext: false,
                 cancellationToken: cancellationToken).ConfigureAwait(false);
 
@@ -186,10 +187,9 @@ public static class KeyDidResolver
             //own worked example (L301-302) instead emits a single-element array ["https://www.w3.org/ns/did/v1.1"],
             //contradicting that normative requirement. The value below follows the normative L342 text and the
             //Multikey-suite interop convention (DID v1 + multikey/v1), not the example's v1.1 outlier.
-            document.Context = new Verifiable.Core.Model.Common.Context
-            {
-                Contexts = [Verifiable.Core.Model.Common.Context.DidCore10, Verifiable.Core.Model.Common.Context.Multikey10]
-            };
+            document.Context = Verifiable.Core.Model.Common.Context.FromIris(
+                Verifiable.Core.Model.Common.Context.DidCore10,
+                Verifiable.Core.Model.Common.Context.Multikey10);
 
             //did:key §Decode Public Key Algorithm: when enableEncryptionKeyDerivation is set, derive an
             //X25519 keyAgreement verification method from the Ed25519 signature key (multicodec 0xed).
@@ -217,7 +217,7 @@ public static class KeyDidResolver
                 Tag x25519Tag = Tag.Create(CryptoAlgorithm.X25519).With(Purpose.Exchange).With(EncodingScheme.Raw);
                 PublicKeyMemory x25519Key = new(x25519Material, x25519Tag);
 
-                AppendDerivedKeyAgreement(document, x25519Key, did);
+                AppendDerivedKeyAgreement(document, x25519Key, did, pool);
             }
 
             return DidResolutionResult.Success(
@@ -230,13 +230,14 @@ public static class KeyDidResolver
 
     //Appends the derived X25519 key as a separate keyAgreement verification method whose fragment is the
     //X25519 multibase (#z6LS...), per the did:key Ed25519-with-X25519 example.
-    private static void AppendDerivedKeyAgreement(DidDocument document, PublicKeyMemory x25519Key, string did)
+    private static void AppendDerivedKeyAgreement(DidDocument document, PublicKeyMemory x25519Key, string did, BaseMemoryPool pool)
     {
         string encodedX25519 = CryptoFormatConversions.DefaultAlgorithmToBase58Converter(
             CryptoAlgorithm.X25519,
             Purpose.Exchange,
             x25519Key.AsReadOnlySpan(),
-            DefaultCoderSelector.SelectEncoder(typeof(PublicKeyMultibase)));
+            DefaultCoderSelector.SelectEncoder(typeof(PublicKeyMultibase)),
+            pool);
 
         string verificationMethodId = $"{did}#{encodedX25519}";
 
@@ -245,7 +246,7 @@ public static class KeyDidResolver
             Id = verificationMethodId,
             Type = MultikeyVerificationMethodTypeInfo.Instance.TypeName,
             Controller = did,
-            KeyFormat = MultikeyVerificationMethodTypeInfo.Instance.CreateKeyFormat(x25519Key)
+            KeyFormat = MultikeyVerificationMethodTypeInfo.Instance.CreateKeyFormat(x25519Key, pool)
         };
 
         VerificationMethod[] existing = document.VerificationMethod ?? [];

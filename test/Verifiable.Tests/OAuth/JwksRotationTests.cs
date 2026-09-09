@@ -32,9 +32,9 @@ internal sealed class JwksRotationTests
 {
     private const string ClientId = "https://verifier.example.com/rotation";
 
-    private static readonly Uri BaseUri = new("https://verifier.example.com/rotation");
+    private static Uri BaseUri { get; } = new("https://verifier.example.com/rotation");
 
-    private static readonly ImmutableHashSet<CapabilityIdentifier> VerifierCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> VerifierCapabilities { get; } =
         ImmutableHashSet.Create(
             WellKnownCapabilityIdentifiers.VcVerifiablePresentation,
             WellKnownCapabilityIdentifiers.OAuthJwksEndpoint);

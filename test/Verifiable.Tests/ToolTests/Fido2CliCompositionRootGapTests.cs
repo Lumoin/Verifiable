@@ -1,11 +1,13 @@
+using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using System.Text;
 using System.Text.Json;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
+using Verifiable.Cbor;
 using Verifiable.Cbor.Mdoc;
 using Verifiable.Cryptography;
 using Verifiable.Fido2;
@@ -50,7 +52,7 @@ internal sealed class Fido2CliCompositionRootGapTests
     [TestInitialize]
     public void Initialize()
     {
-        tempDirectory = Path.Combine(Path.GetTempPath(), $"fido2-cli-gap-tests-{Guid.NewGuid():N}");
+        tempDirectory = Path.Join(Path.GetTempPath(), $"fido2-cli-gap-tests-{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDirectory);
     }
 
@@ -255,9 +257,9 @@ internal sealed class Fido2CliCompositionRootGapTests
         string clientDataPath = WriteTempFile("client-data.json", clientDataJsonBytes);
 
         //Neither file needs to exist nor be well-formed: the mutual-exclusion guard runs before either is read.
-        string trustAnchorPath = Path.Combine(tempDirectory, "unused-trust-anchor.der");
-        string mdsBlobPath = Path.Combine(tempDirectory, "unused-mds-blob.jws");
-        string mdsRootPath = Path.Combine(tempDirectory, "unused-mds-root.der");
+        string trustAnchorPath = Path.Join(tempDirectory, "unused-trust-anchor.der");
+        string mdsBlobPath = Path.Join(tempDirectory, "unused-mds-blob.jws");
+        string mdsRootPath = Path.Join(tempDirectory, "unused-mds-root.der");
 
         var result = await VerifiableCliTestHelpers.RunCliAsync(
             executablePath,
@@ -566,8 +568,8 @@ internal sealed class Fido2CliCompositionRootGapTests
         string? executablePath = RequireExecutable();
         if(executablePath is null) { return; }
 
-        string missingAttestationObjectPath = Path.Combine(tempDirectory, "does-not-exist-attestation-object.cbor");
-        string unusedClientDataPath = Path.Combine(tempDirectory, "unused-client-data.json");
+        string missingAttestationObjectPath = Path.Join(tempDirectory, "does-not-exist-attestation-object.cbor");
+        string unusedClientDataPath = Path.Join(tempDirectory, "unused-client-data.json");
 
         var result = await VerifiableCliTestHelpers.RunCliAsync(
             executablePath,
@@ -589,10 +591,10 @@ internal sealed class Fido2CliCompositionRootGapTests
         string? executablePath = RequireExecutable();
         if(executablePath is null) { return; }
 
-        string missingCredentialRecordPath = Path.Combine(tempDirectory, "does-not-exist-credential-record.json");
-        string unusedAuthenticatorDataPath = Path.Combine(tempDirectory, "unused-authenticator-data.bin");
-        string unusedSignaturePath = Path.Combine(tempDirectory, "unused-signature.bin");
-        string unusedClientDataPath = Path.Combine(tempDirectory, "unused-client-data.json");
+        string missingCredentialRecordPath = Path.Join(tempDirectory, "does-not-exist-credential-record.json");
+        string unusedAuthenticatorDataPath = Path.Join(tempDirectory, "unused-authenticator-data.bin");
+        string unusedSignaturePath = Path.Join(tempDirectory, "unused-signature.bin");
+        string unusedClientDataPath = Path.Join(tempDirectory, "unused-client-data.json");
 
         var result = await VerifiableCliTestHelpers.RunCliAsync(
             executablePath,
@@ -623,7 +625,7 @@ internal sealed class Fido2CliCompositionRootGapTests
 
         string attestationObjectPath = WriteTempFile("attestation-object.cbor", attestationObjectBytes);
         string clientDataPath = WriteTempFile("client-data.json", clientDataJsonBytes);
-        string missingTrustAnchorPath = Path.Combine(tempDirectory, "does-not-exist-trust-anchor.der");
+        string missingTrustAnchorPath = Path.Join(tempDirectory, "does-not-exist-trust-anchor.der");
 
         var result = await VerifiableCliTestHelpers.RunCliAsync(
             executablePath,
@@ -655,9 +657,9 @@ internal sealed class Fido2CliCompositionRootGapTests
 
         string attestationObjectPath = WriteTempFile("attestation-object.cbor", attestationObjectBytes);
         string clientDataPath = WriteTempFile("client-data.json", clientDataJsonBytes);
-        string missingMdsBlobPath = Path.Combine(tempDirectory, "does-not-exist-mds-blob.jws");
+        string missingMdsBlobPath = Path.Join(tempDirectory, "does-not-exist-mds-blob.jws");
         //Never read: the blob path throws first, so this argument's own existence is immaterial.
-        string unusedMdsRootPath = Path.Combine(tempDirectory, "unused-mds-root.der");
+        string unusedMdsRootPath = Path.Join(tempDirectory, "unused-mds-root.der");
 
         var result = await VerifiableCliTestHelpers.RunCliAsync(
             executablePath,
@@ -702,7 +704,7 @@ internal sealed class Fido2CliCompositionRootGapTests
         string authenticatorDataPath = WriteTempFile("authenticator-data.bin", authenticatorData);
         string signaturePath = WriteTempFile("signature.bin", signature);
         string clientDataPath = WriteTempFile("assertion-client-data.json", clientDataJson);
-        string missingUserHandlePath = Path.Combine(tempDirectory, "does-not-exist-user-handle.bin");
+        string missingUserHandlePath = Path.Join(tempDirectory, "does-not-exist-user-handle.bin");
 
         var result = await VerifiableCliTestHelpers.RunCliAsync(
             executablePath,
@@ -735,7 +737,7 @@ internal sealed class Fido2CliCompositionRootGapTests
     /// <summary>Writes <paramref name="content"/> to a fresh file under this test's temp directory.</summary>
     private string WriteTempFile(string fileName, byte[] content)
     {
-        string path = Path.Combine(tempDirectory, $"{Guid.NewGuid():N}-{fileName}");
+        string path = Path.Join(tempDirectory, $"{Guid.NewGuid():N}-{fileName}");
         File.WriteAllBytes(path, content);
 
         return path;
@@ -753,7 +755,7 @@ internal sealed class Fido2CliCompositionRootGapTests
 
         string attestationObjectPath = WriteTempFile("attestation-object.cbor", attestationObjectBytes);
         string clientDataPath = WriteTempFile("client-data.json", clientDataJsonBytes);
-        string recordOutputPath = Path.Combine(tempDirectory, $"{Guid.NewGuid():N}-credential-record.json");
+        string recordOutputPath = Path.Join(tempDirectory, $"{Guid.NewGuid():N}-credential-record.json");
 
         var result = await VerifiableCliTestHelpers.RunCliAsync(
             executablePath,
@@ -807,7 +809,9 @@ internal sealed class Fido2CliCompositionRootGapTests
     /// </summary>
     private static byte[] EncodeRsaCoseKeyCbor(CoseKey coseKey)
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(4);
         writer.WriteInt32(CoseKeyParameters.Kty);
         writer.WriteInt32(coseKey.Kty);
@@ -819,7 +823,7 @@ internal sealed class Fido2CliCompositionRootGapTests
         writer.WriteByteString(coseKey.E!.Value.Span);
         writer.WriteEndMap();
 
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -939,7 +943,9 @@ internal sealed class Fido2CliCompositionRootGapTests
     /// <summary>Encodes a valid <c>fido-u2f</c> <c>attStmt</c> CBOR map (<c>sig</c>/<c>x5c</c>, single-element certificate array).</summary>
     private static byte[] EncodeFidoU2fAttStmt(byte[] sig, byte[] certificateDerBytes)
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(2);
         writer.WriteTextString("sig");
         writer.WriteByteString(sig);
@@ -949,7 +955,7 @@ internal sealed class Fido2CliCompositionRootGapTests
         writer.WriteEndArray();
         writer.WriteEndMap();
 
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 

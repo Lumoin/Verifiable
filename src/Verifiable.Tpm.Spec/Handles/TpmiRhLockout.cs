@@ -16,7 +16,7 @@ namespace Verifiable.Tpm.Spec.Handles;
 /// <c>TPM_RC_VALUE</c>.
 /// </para>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 9.24, Table 71.
+/// Specification reference: TPM 2.0 Library Part 2, clause 9.24, Table 70.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]

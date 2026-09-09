@@ -14,7 +14,7 @@ internal sealed class SiopRequestSerializerTests
     private const string ClientId = "https://client.example.org/cb";
     private const string Nonce = "n-0S6_WzA2Mj";
 
-    private static readonly Uri RedirectUri = new("https://client.example.org/cb");
+    private static Uri RedirectUri { get; } = new("https://client.example.org/cb");
 
 
     [TestMethod]

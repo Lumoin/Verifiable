@@ -1039,7 +1039,7 @@ internal sealed class XAdESRealWireEndToEndTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using Materials materials = CreateMaterials(new FakeTimeProvider(TestClock.CanonicalEpoch));
-        (string bbDocument, WireCore core) = await BuildBBAsync(materials, TestClock.CanonicalEpoch, pool, TestContext.CancellationToken).ConfigureAwait(false);
+        (_, WireCore core) = await BuildBBAsync(materials, TestClock.CanonicalEpoch, pool, TestContext.CancellationToken).ConfigureAwait(false);
         using PkiCertificateMemory signingCertificate = ToCertificateCarrier(materials.Signer.Certificate.RawData, pool);
 
         string canonicalizationBlock = $"""<ds:CanonicalizationMethod Algorithm="{CanonicalizationUri}"/>""";
@@ -1110,7 +1110,7 @@ internal sealed class XAdESRealWireEndToEndTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using Materials materials = CreateMaterials(new FakeTimeProvider(TestClock.CanonicalEpoch));
-        (string bbDocument, WireCore core) = await BuildBBAsync(materials, TestClock.CanonicalEpoch, pool, TestContext.CancellationToken).ConfigureAwait(false);
+        (_, WireCore core) = await BuildBBAsync(materials, TestClock.CanonicalEpoch, pool, TestContext.CancellationToken).ConfigureAwait(false);
         using PkiCertificateMemory signingCertificate = ToCertificateCarrier(materials.Signer.Certificate.RawData, pool);
 
         string signaturePolicyStoreBlock = """
@@ -1151,7 +1151,7 @@ internal sealed class XAdESRealWireEndToEndTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using Materials materials = CreateMaterials(new FakeTimeProvider(TestClock.CanonicalEpoch));
-        (string bbDocument, WireCore core) = await BuildBBAsync(materials, TestClock.CanonicalEpoch, pool, TestContext.CancellationToken).ConfigureAwait(false);
+        (_, WireCore core) = await BuildBBAsync(materials, TestClock.CanonicalEpoch, pool, TestContext.CancellationToken).ConfigureAwait(false);
         using PkiCertificateMemory signingCertificate = ToCertificateCarrier(materials.Signer.Certificate.RawData, pool);
 
         string canonicalizationBlock = $"""<ds:CanonicalizationMethod Algorithm="{CanonicalizationUri}"/>""";
@@ -1176,10 +1176,9 @@ internal sealed class XAdESRealWireEndToEndTests
 
     /// <summary>
     /// Negative E2E over clause 6.3 letter x)/clause 6.1 c): a B-T-shaped wire augmented with real
-    /// <c>CertificateValues</c> but an EMPTY <c>TimeStampValidationData</c> — the exact shape the pre-fix ladder
-    /// rung used. <see cref="XAdESLevelRules.Check"/> reports the validation-data service violation at B-LT and <see
-    /// cref="XAdESLevelRules.Promote"/> mints nothing, closing the gap where an empty container satisfied the service
-    /// by mere presence rather than content.
+    /// <c>CertificateValues</c> but an EMPTY <c>TimeStampValidationData</c> — a container satisfying the service
+    /// by mere presence rather than content. <see cref="XAdESLevelRules.Check"/> reports the validation-data
+    /// service violation at B-LT and <see cref="XAdESLevelRules.Promote"/> mints nothing.
     /// Anchored to <see href="https://www.etsi.org/deliver/etsi_en/319100_319199/31913201/01.03.01_60/en_31913201v010301p.pdf">
     /// ETSI EN 319 132-1 V1.3.1</see> clause 6.3, Table 2, XA-6.3-t40, letter x, and clause 6.1 c).
     /// </summary>
@@ -1188,7 +1187,7 @@ internal sealed class XAdESRealWireEndToEndTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using Materials materials = CreateMaterials(new FakeTimeProvider(TestClock.CanonicalEpoch));
-        (string bbDocument, WireCore core) = await BuildBBAsync(materials, TestClock.CanonicalEpoch, pool, TestContext.CancellationToken).ConfigureAwait(false);
+        (_, WireCore core) = await BuildBBAsync(materials, TestClock.CanonicalEpoch, pool, TestContext.CancellationToken).ConfigureAwait(false);
         using PkiCertificateMemory signingCertificate = ToCertificateCarrier(materials.Signer.Certificate.RawData, pool);
 
         string canonicalizationBlock = $"""<ds:CanonicalizationMethod Algorithm="{CanonicalizationUri}"/>""";

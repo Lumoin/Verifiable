@@ -30,115 +30,115 @@ public static class DcqlParameterNames
     public static ReadOnlySpan<byte> IdUtf8 => "id"u8;
 
     /// <summary>The <c>id</c> member (Credential Query / Claims Query identifier).</summary>
-    public static readonly string Id = Utf8Constants.ToInternedString(IdUtf8);
+    public static string Id { get; } = Utf8Constants.ToInternedString(IdUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Format"/>.</summary>
     public static ReadOnlySpan<byte> FormatUtf8 => "format"u8;
 
     /// <summary>The <c>format</c> member of a Credential Query.</summary>
-    public static readonly string Format = Utf8Constants.ToInternedString(FormatUtf8);
+    public static string Format { get; } = Utf8Constants.ToInternedString(FormatUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Meta"/>.</summary>
     public static ReadOnlySpan<byte> MetaUtf8 => "meta"u8;
 
     /// <summary>The <c>meta</c> member of a Credential Query (§6.1).</summary>
-    public static readonly string Meta = Utf8Constants.ToInternedString(MetaUtf8);
+    public static string Meta { get; } = Utf8Constants.ToInternedString(MetaUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Claims"/>.</summary>
     public static ReadOnlySpan<byte> ClaimsUtf8 => "claims"u8;
 
     /// <summary>The <c>claims</c> member of a Credential Query.</summary>
-    public static readonly string Claims = Utf8Constants.ToInternedString(ClaimsUtf8);
+    public static string Claims { get; } = Utf8Constants.ToInternedString(ClaimsUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="ClaimSets"/>.</summary>
     public static ReadOnlySpan<byte> ClaimSetsUtf8 => "claim_sets"u8;
 
     /// <summary>The <c>claim_sets</c> member of a Credential Query.</summary>
-    public static readonly string ClaimSets = Utf8Constants.ToInternedString(ClaimSetsUtf8);
+    public static string ClaimSets { get; } = Utf8Constants.ToInternedString(ClaimSetsUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="TrustedAuthorities"/>.</summary>
     public static ReadOnlySpan<byte> TrustedAuthoritiesUtf8 => "trusted_authorities"u8;
 
     /// <summary>The <c>trusted_authorities</c> member of a Credential Query (§6.1.1).</summary>
-    public static readonly string TrustedAuthorities = Utf8Constants.ToInternedString(TrustedAuthoritiesUtf8);
+    public static string TrustedAuthorities { get; } = Utf8Constants.ToInternedString(TrustedAuthoritiesUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Multiple"/>.</summary>
     public static ReadOnlySpan<byte> MultipleUtf8 => "multiple"u8;
 
     /// <summary>The <c>multiple</c> member of a Credential Query.</summary>
-    public static readonly string Multiple = Utf8Constants.ToInternedString(MultipleUtf8);
+    public static string Multiple { get; } = Utf8Constants.ToInternedString(MultipleUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="RequireCryptographicHolderBinding"/>.</summary>
     public static ReadOnlySpan<byte> RequireCryptographicHolderBindingUtf8 => "require_cryptographic_holder_binding"u8;
 
     /// <summary>The <c>require_cryptographic_holder_binding</c> member of a Credential Query.</summary>
-    public static readonly string RequireCryptographicHolderBinding = Utf8Constants.ToInternedString(RequireCryptographicHolderBindingUtf8);
+    public static string RequireCryptographicHolderBinding { get; } = Utf8Constants.ToInternedString(RequireCryptographicHolderBindingUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Path"/>.</summary>
     public static ReadOnlySpan<byte> PathUtf8 => "path"u8;
 
     /// <summary>The <c>path</c> member of a Claims Query.</summary>
-    public static readonly string Path = Utf8Constants.ToInternedString(PathUtf8);
+    public static string Path { get; } = Utf8Constants.ToInternedString(PathUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Values"/>.</summary>
     public static ReadOnlySpan<byte> ValuesUtf8 => "values"u8;
 
     /// <summary>The <c>values</c> member (Claims Query value constraint / Trusted Authorities values).</summary>
-    public static readonly string Values = Utf8Constants.ToInternedString(ValuesUtf8);
+    public static string Values { get; } = Utf8Constants.ToInternedString(ValuesUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="IntentToRetain"/>.</summary>
     public static ReadOnlySpan<byte> IntentToRetainUtf8 => "intent_to_retain"u8;
 
     /// <summary>The <c>intent_to_retain</c> member of a Claims Query.</summary>
-    public static readonly string IntentToRetain = Utf8Constants.ToInternedString(IntentToRetainUtf8);
+    public static string IntentToRetain { get; } = Utf8Constants.ToInternedString(IntentToRetainUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="VctValues"/>.</summary>
     public static ReadOnlySpan<byte> VctValuesUtf8 => "vct_values"u8;
 
     /// <summary>The <c>vct_values</c> member of a Credential Query's meta (SD-JWT VC).</summary>
-    public static readonly string VctValues = Utf8Constants.ToInternedString(VctValuesUtf8);
+    public static string VctValues { get; } = Utf8Constants.ToInternedString(VctValuesUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="DoctypeValue"/>.</summary>
     public static ReadOnlySpan<byte> DoctypeValueUtf8 => "doctype_value"u8;
 
     /// <summary>The <c>doctype_value</c> member of a Credential Query's meta (ISO mdoc).</summary>
-    public static readonly string DoctypeValue = Utf8Constants.ToInternedString(DoctypeValueUtf8);
+    public static string DoctypeValue { get; } = Utf8Constants.ToInternedString(DoctypeValueUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Options"/>.</summary>
     public static ReadOnlySpan<byte> OptionsUtf8 => "options"u8;
 
     /// <summary>The <c>options</c> member of a Credential Set Query.</summary>
-    public static readonly string Options = Utf8Constants.ToInternedString(OptionsUtf8);
+    public static string Options { get; } = Utf8Constants.ToInternedString(OptionsUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Required"/>.</summary>
     public static ReadOnlySpan<byte> RequiredUtf8 => "required"u8;
 
     /// <summary>The <c>required</c> member of a Credential Set Query.</summary>
-    public static readonly string Required = Utf8Constants.ToInternedString(RequiredUtf8);
+    public static string Required { get; } = Utf8Constants.ToInternedString(RequiredUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Purpose"/>.</summary>
     public static ReadOnlySpan<byte> PurposeUtf8 => "purpose"u8;
 
     /// <summary>The <c>purpose</c> member of a Credential Set Query.</summary>
-    public static readonly string Purpose = Utf8Constants.ToInternedString(PurposeUtf8);
+    public static string Purpose { get; } = Utf8Constants.ToInternedString(PurposeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Credentials"/>.</summary>
     public static ReadOnlySpan<byte> CredentialsUtf8 => "credentials"u8;
 
     /// <summary>The <c>credentials</c> member of a DCQL Query.</summary>
-    public static readonly string Credentials = Utf8Constants.ToInternedString(CredentialsUtf8);
+    public static string Credentials { get; } = Utf8Constants.ToInternedString(CredentialsUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="CredentialSets"/>.</summary>
     public static ReadOnlySpan<byte> CredentialSetsUtf8 => "credential_sets"u8;
 
     /// <summary>The <c>credential_sets</c> member of a DCQL Query.</summary>
-    public static readonly string CredentialSets = Utf8Constants.ToInternedString(CredentialSetsUtf8);
+    public static string CredentialSets { get; } = Utf8Constants.ToInternedString(CredentialSetsUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Type"/>.</summary>
     public static ReadOnlySpan<byte> TypeUtf8 => "type"u8;
 
     /// <summary>The <c>type</c> member of a Trusted Authorities Query.</summary>
-    public static readonly string Type = Utf8Constants.ToInternedString(TypeUtf8);
+    public static string Type { get; } = Utf8Constants.ToInternedString(TypeUtf8);
 
 
     /// <summary>Returns <see langword="true"/> when <paramref name="value"/> is exactly <c>id</c>.</summary>

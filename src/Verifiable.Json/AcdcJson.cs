@@ -155,7 +155,8 @@ public static class AcdcJson
                 int integer => WriteWhole(writer, integer),
                 long wide => WriteWhole(writer, wide),
                 decimal exact => WriteFraction(writer, exact),
-                _ => throw new NotSupportedException($"Unsupported scalar value type in an ACDC field map: {value?.GetType()}.")
+                //value is already proven non-null here — the null pattern above is exhaustive over that case.
+                _ => throw new NotSupportedException($"Unsupported scalar value type in an ACDC field map: {value.GetType()}.")
             };
 
             if(child is not null)

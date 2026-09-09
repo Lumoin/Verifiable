@@ -21,8 +21,8 @@ namespace Verifiable.Tests.Tpm;
 
 /// <summary>
 /// Pins the two distinct keys one <see cref="TpmSession"/> derives from the same material — the authorization
-/// HMAC key of TPM 2.0 Library Part 1, clause 17.6.5 (equations 21 and 22) and the parameter-encryption
-/// <c>sessionValue</c> of clause 19.1 — and the attest family's declaration that its first command parameter and
+/// HMAC key of TPM 2.0 Library Part 1, clause 16.6.10 (equations 21 and 22) and the parameter-encryption
+/// <c>sessionValue</c> of clause 18.1 — and the attest family's declaration that its first command parameter and
 /// its first response parameter are the sized buffers those clauses may protect.
 /// </summary>
 /// <remarks>
@@ -54,11 +54,11 @@ internal sealed class TpmSessionBoundEncryptionKeyTests
     private const int HeaderSize = 10;
 
     /// <summary>The authorized entity's authorization value. It carries no trailing zero octet, so
-    /// <see cref="TpmSession.SetAuthValue"/>'s clause 17.6.4.3 trimming leaves it byte-identical and the oracle
+    /// <see cref="TpmSession.SetAuthValue"/>'s clause 16.6.4.3 trimming leaves it byte-identical and the oracle
     /// can fold the literal.</summary>
     private static ReadOnlySpan<byte> EntityAuthValue => "attest-signer-authorization-value"u8;
 
-    /// <summary>The bind entity's authorization value, the KDFa key of the bound session key (clause 17.6.10,
+    /// <summary>The bind entity's authorization value, the KDFa key of the bound session key (clause 16.6.10,
     /// equation 20). It is deliberately unlike <see cref="EntityAuthValue"/>.</summary>
     private static ReadOnlySpan<byte> BindAuthValue => "bind-entity-authorization-value"u8;
 
@@ -70,9 +70,9 @@ internal sealed class TpmSessionBoundEncryptionKeyTests
 
     /// <summary>
     /// A session whose <c>bind</c> entity is the entity it authorizes keys its command HMAC on <c>sessionKey</c>
-    /// alone — TPM 2.0 Library Part 1, clause 17.6.10 equation 22, against equation 21's
+    /// alone — TPM 2.0 Library Part 1, clause 16.6.10 equation 22, against equation 21's
     /// <c>sessionKey || authValue</c> — while its parameter encryption keys on <c>sessionKey || authValue</c>
-    /// all the same, because clause 19.1 says of the cipher's <c>sessionValue</c> that "The binding of the
+    /// all the same, because clause 18.1 says of the cipher's <c>sessionValue</c> that "The binding of the
     /// session is ignored". Both halves are recomputed by hand, and each is also shown to differ from the key
     /// the other half uses, so neither assertion can pass on a session that derives one key for both purposes.
     /// </summary>
@@ -98,7 +98,7 @@ internal sealed class TpmSessionBoundEncryptionKeyTests
                 bindAuth.AsReadOnlyMemory(),
                 startNonceCaller.AsReadOnlyMemory(),
                 Tpm2bNonce.Create(startNonceTpm.AsReadOnlySpan(), pool),
-                SessionAlg,
+                SessionAlg, TestEntropy.NewCounterStream(),
                 pool,
                 symmetric: TpmtSymDef.Xor(SessionAlg),
                 isBoundToAuthorizedEntity: true,
@@ -134,7 +134,7 @@ internal sealed class TpmSessionBoundEncryptionKeyTests
 
             Assert.IsTrue(
                 commandHmac.AsReadOnlySpan().SequenceEqual(hmacOnSessionKey.Span),
-                "A session bound to the entity it authorizes keys its command HMAC on sessionKey alone (TPM 2.0 Library Part 1, clause 17.6.10, equation 22).");
+                "A session bound to the entity it authorizes keys its command HMAC on sessionKey alone (TPM 2.0 Library Part 1, clause 16.6.10, equation 22).");
             Assert.IsFalse(
                 commandHmac.AsReadOnlySpan().SequenceEqual(hmacOnCipherKey.Span),
                 "The bound session's command HMAC must not be the equation 21 form, or the omission the TPM performs is not being performed here.");
@@ -156,7 +156,7 @@ internal sealed class TpmSessionBoundEncryptionKeyTests
 
             Assert.IsTrue(
                 underTest.Span.SequenceEqual(onCipherKey.Span),
-                "Parameter encryption keys on sessionKey || authValue even for a session bound to the entity it authorizes (TPM 2.0 Library Part 1, clause 19.1: \"The binding of the session is ignored\").");
+                "Parameter encryption keys on sessionKey || authValue even for a session bound to the entity it authorizes (TPM 2.0 Library Part 1, clause 18.1: \"The binding of the session is ignored\").");
             Assert.IsFalse(
                 underTest.Span.SequenceEqual(onSessionKey.Span),
                 "The cipher must not reuse the HMAC's bind-omitted key, or the entity's authValue is not protecting the parameter at all.");
@@ -170,7 +170,7 @@ internal sealed class TpmSessionBoundEncryptionKeyTests
     /// <summary>
     /// The same bound session that has NOT declared its bind entity to be the entity it authorizes keys BOTH
     /// its command HMAC and its parameter encryption on <c>sessionKey || authValue</c>: TPM 2.0 Library Part 1,
-    /// clause 17.6.10 omits the authValue from the HMAC key only when the authorization is for the bound entity,
+    /// clause 16.6.10 omits the authValue from the HMAC key only when the authorization is for the bound entity,
     /// and binding to some other entity (the entropy-raising use the clause's own note describes) leaves
     /// equation 21 in force.
     /// </summary>
@@ -194,7 +194,7 @@ internal sealed class TpmSessionBoundEncryptionKeyTests
             bindAuth.AsReadOnlyMemory(),
             startNonceCaller.AsReadOnlyMemory(),
             Tpm2bNonce.Create(startNonceTpm.AsReadOnlySpan(), pool),
-            SessionAlg,
+            SessionAlg, TestEntropy.NewCounterStream(),
             pool,
             symmetric: TpmtSymDef.Xor(SessionAlg),
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -210,9 +210,9 @@ internal sealed class TpmSessionBoundEncryptionKeyTests
 
     /// <summary>
     /// An unbound, unsalted session has an Empty Buffer for its session key (TPM 2.0 Library Part 1, clause
-    /// 17.6.9), so both keys reduce to the entity's authValue alone: the command HMAC by equation 21 with an
-    /// empty first term, and the parameter encryption by clause 19.1's <c>sessionKey || authValue</c> with the
-    /// same. Clause 19.1's own caution applies to this shape — the cipher's entropy is then entirely the
+    /// 16.6.9), so both keys reduce to the entity's authValue alone: the command HMAC by equation 21 with an
+    /// empty first term, and the parameter encryption by clause 18.1's <c>sessionKey || authValue</c> with the
+    /// same. Clause 18.1's own caution applies to this shape — the cipher's entropy is then entirely the
     /// authValue's.
     /// </summary>
     [TestMethod]
@@ -229,7 +229,7 @@ internal sealed class TpmSessionBoundEncryptionKeyTests
         using var session = new TpmSession(
             new TpmHandle(0x02000000u),
             Tpm2bNonce.Create(startNonceTpm.AsReadOnlySpan(), pool),
-            SessionAlg,
+            SessionAlg, TestEntropy.NewCounterStream(),
             pool,
             TpmtSymDef.Xor(SessionAlg));
 
@@ -242,7 +242,7 @@ internal sealed class TpmSessionBoundEncryptionKeyTests
     /// <summary>
     /// All five attest commands carry <c>qualifyingData</c> (<c>TPM2B_DATA</c>) as the first entry of their
     /// parameter area — TPM 2.0 Library Part 3, Tables 89, 91, 93, 99 and 254 — which is exactly the shape Part 1
-    /// clause 19.1 and clause 16.4 make eligible for the <c>decrypt</c> attribute, so each input declares it.
+    /// clause 18.1 and clause 15.4 make eligible for the <c>decrypt</c> attribute, so each input declares it.
     /// </summary>
     [TestMethod]
     public void AttestCommandInputsDeclareTheirFirstCommandParameterEncryptable()
@@ -262,26 +262,26 @@ internal sealed class TpmSessionBoundEncryptionKeyTests
         using NvCertifyInput nvCertify = NvCertifyInput.ForEcdsa(
             signHandle, (uint)TpmRh.TPM_RH_OWNER, 0x01000000u, QualifyingData, TpmAlgIdConstants.TPM_ALG_SHA256, size: 8, offset: 0, pool);
 
-        Assert.IsTrue(quote.FirstCommandParameterIsEncryptable, "TPM2_Quote's first parameter is qualifyingData (TPM 2.0 Library Part 3, Table 93).");
-        Assert.IsTrue(certify.FirstCommandParameterIsEncryptable, "TPM2_Certify's first parameter is qualifyingData (TPM 2.0 Library Part 3, Table 89).");
-        Assert.IsTrue(certifyCreation.FirstCommandParameterIsEncryptable, "TPM2_CertifyCreation's first parameter is qualifyingData (TPM 2.0 Library Part 3, Table 91).");
-        Assert.IsTrue(getTime.FirstCommandParameterIsEncryptable, "TPM2_GetTime's first parameter is qualifyingData (TPM 2.0 Library Part 3, Table 99).");
-        Assert.IsTrue(nvCertify.FirstCommandParameterIsEncryptable, "TPM2_NV_Certify's first parameter is qualifyingData (TPM 2.0 Library Part 3, Table 254).");
+        Assert.IsTrue(quote.FirstCommandParameterIsEncryptable, "TPM2_Quote's first parameter is qualifyingData (TPM 2.0 Library Part 3, Table 101).");
+        Assert.IsTrue(certify.FirstCommandParameterIsEncryptable, "TPM2_Certify's first parameter is qualifyingData (TPM 2.0 Library Part 3, Table 97).");
+        Assert.IsTrue(certifyCreation.FirstCommandParameterIsEncryptable, "TPM2_CertifyCreation's first parameter is qualifyingData (TPM 2.0 Library Part 3, Table 99).");
+        Assert.IsTrue(getTime.FirstCommandParameterIsEncryptable, "TPM2_GetTime's first parameter is qualifyingData (TPM 2.0 Library Part 3, Table 107).");
+        Assert.IsTrue(nvCertify.FirstCommandParameterIsEncryptable, "TPM2_NV_Certify's first parameter is qualifyingData (TPM 2.0 Library Part 3, Table 271).");
     }
 
     /// <summary>
     /// All five attest commands return a <c>TPM2B_ATTEST</c> as the first entry of their response parameter area
-    /// — TPM 2.0 Library Part 3, Tables 90, 92, 94, 100 and 255 — which is the shape Part 1 clause 19.1 and
-    /// clause 16.4 make eligible for the <c>encrypt</c> attribute, so each codec declares it.
+    /// — TPM 2.0 Library Part 3, Tables 98, 100, 102, 108 and 272 — which is the shape Part 1 clause 18.1 and
+    /// clause 15.4 make eligible for the <c>encrypt</c> attribute, so each codec declares it.
     /// </summary>
     [TestMethod]
     public void AttestResponseCodecsDeclareTheirFirstResponseParameterEncryptable()
     {
-        Assert.IsTrue(TpmResponseCodec.Quote.ResponseFirstParameterIsEncryptable, "TPM2_Quote returns quoted (TPM2B_ATTEST) first (TPM 2.0 Library Part 3, Table 94).");
-        Assert.IsTrue(TpmResponseCodec.Certify.ResponseFirstParameterIsEncryptable, "TPM2_Certify returns certifyInfo (TPM2B_ATTEST) first (TPM 2.0 Library Part 3, Table 90).");
-        Assert.IsTrue(TpmResponseCodec.CertifyCreation.ResponseFirstParameterIsEncryptable, "TPM2_CertifyCreation returns certifyInfo (TPM2B_ATTEST) first (TPM 2.0 Library Part 3, Table 92).");
-        Assert.IsTrue(TpmResponseCodec.GetTime.ResponseFirstParameterIsEncryptable, "TPM2_GetTime returns timeInfo (TPM2B_ATTEST) first (TPM 2.0 Library Part 3, Table 100).");
-        Assert.IsTrue(TpmResponseCodec.NvCertify.ResponseFirstParameterIsEncryptable, "TPM2_NV_Certify returns certifyInfo (TPM2B_ATTEST) first (TPM 2.0 Library Part 3, Table 255).");
+        Assert.IsTrue(TpmResponseCodec.Quote.ResponseFirstParameterIsEncryptable, "TPM2_Quote returns quoted (TPM2B_ATTEST) first (TPM 2.0 Library Part 3, Table 102).");
+        Assert.IsTrue(TpmResponseCodec.Certify.ResponseFirstParameterIsEncryptable, "TPM2_Certify returns certifyInfo (TPM2B_ATTEST) first (TPM 2.0 Library Part 3, Table 98).");
+        Assert.IsTrue(TpmResponseCodec.CertifyCreation.ResponseFirstParameterIsEncryptable, "TPM2_CertifyCreation returns certifyInfo (TPM2B_ATTEST) first (TPM 2.0 Library Part 3, Table 100).");
+        Assert.IsTrue(TpmResponseCodec.GetTime.ResponseFirstParameterIsEncryptable, "TPM2_GetTime returns timeInfo (TPM2B_ATTEST) first (TPM 2.0 Library Part 3, Table 108).");
+        Assert.IsTrue(TpmResponseCodec.NvCertify.ResponseFirstParameterIsEncryptable, "TPM2_NV_Certify returns certifyInfo (TPM2B_ATTEST) first (TPM 2.0 Library Part 3, Table 272).");
     }
 
     /// <summary>
@@ -289,8 +289,8 @@ internal sealed class TpmSessionBoundEncryptionKeyTests
     /// executor's admissibility gate, and what reaches it is ciphertext: the qualifying data on the wire is not
     /// the plaintext the caller supplied, and it recovers to that plaintext under
     /// <c>sessionKey || authValue</c> with the command direction's nonce order — nonceNewer = nonceCaller,
-    /// nonceOlder = nonceTPM (TPM 2.0 Library Part 1, clause 19.2). Only the data portion is transformed; the
-    /// TPM2B size field is untouched (clause 19.1), which is what lets the recovered length match.
+    /// nonceOlder = nonceTPM (TPM 2.0 Library Part 1, clause 18.2). Only the data portion is transformed; the
+    /// TPM2B size field is untouched (clause 18.1), which is what lets the recovered length match.
     /// </summary>
     [TestMethod]
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
@@ -310,6 +310,8 @@ internal sealed class TpmSessionBoundEncryptionKeyTests
         using Tpm2bAuth sessionKey = await DeriveBoundSessionKeyOracleAsync(
             bindAuth.AsReadOnlyMemory(), startNonceTpm.AsReadOnlyMemory(), startNonceCaller.AsReadOnlyMemory(), pool, TestContext.CancellationToken).ConfigureAwait(false);
 
+        //capturedOwner is declared null and assigned once inside the Handler local function below; a using
+        //declaration cannot target a variable assigned after its declaration (CS1656).
         IMemoryOwner<byte>? capturedOwner = null;
         int capturedLength = 0;
 
@@ -324,14 +326,14 @@ internal sealed class TpmSessionBoundEncryptionKeyTests
 
         try
         {
-            using var device = TpmDevice.Create(Handler);
+            using var device = TpmDevice.Create(Handler, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
             using TpmSession session = await TpmSession.CreateBoundAsync(
                 new TpmHandle(0x02000000u),
                 bindAuth.AsReadOnlyMemory(),
                 startNonceCaller.AsReadOnlyMemory(),
                 Tpm2bNonce.Create(startNonceTpm.AsReadOnlySpan(), pool),
-                SessionAlg,
+                SessionAlg, TestEntropy.NewCounterStream(),
                 pool,
                 symmetric: TpmtSymDef.Xor(SessionAlg),
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -364,7 +366,7 @@ internal sealed class TpmSessionBoundEncryptionKeyTests
             int wireOctets = wireQualifyingData.Length;
             Assert.AreEqual(
                 plaintextOctets, wireOctets,
-                "Neither XOR obfuscation nor CFB pads, so the encrypted parameter has the plaintext's length (TPM 2.0 Library Part 1, clause 19.1).");
+                "Neither XOR obfuscation nor CFB pads, so the encrypted parameter has the plaintext's length (TPM 2.0 Library Part 1, clause 18.1).");
             Assert.IsFalse(
                 wireQualifyingData.Span.SequenceEqual(QualifyingData),
                 "The qualifying data must not appear on the wire in the clear when a session carries the decrypt attribute.");
@@ -380,7 +382,7 @@ internal sealed class TpmSessionBoundEncryptionKeyTests
 
             Assert.IsTrue(
                 recovered.Span.SequenceEqual(QualifyingData),
-                "The wire bytes must recover to the caller's qualifying data under sessionKey || authValue with nonceNewer = nonceCaller and nonceOlder = nonceTPM (TPM 2.0 Library Part 1, clause 19.2).");
+                "The wire bytes must recover to the caller's qualifying data under sessionKey || authValue with nonceNewer = nonceCaller and nonceOlder = nonceTPM (TPM 2.0 Library Part 1, clause 18.2).");
         }
         finally
         {
@@ -420,7 +422,7 @@ internal sealed class TpmSessionBoundEncryptionKeyTests
 
         Assert.IsTrue(
             commandHmac.AsReadOnlySpan().SequenceEqual(expectedHmac.Span),
-            "The command HMAC must be keyed on sessionKey || authValue (TPM 2.0 Library Part 1, clause 17.6.5, equation 21).");
+            "The command HMAC must be keyed on sessionKey || authValue (TPM 2.0 Library Part 1, clause 16.6.10, equation 21).");
 
         using IMemoryOwner<byte> underTestOwner = pool.Rent(QualifyingData.Length);
         Memory<byte> underTest = underTestOwner.Memory[..QualifyingData.Length];
@@ -434,7 +436,7 @@ internal sealed class TpmSessionBoundEncryptionKeyTests
 
         Assert.IsTrue(
             underTest.Span.SequenceEqual(expectedCipher.Span),
-            "Parameter encryption must be keyed on sessionKey || authValue (TPM 2.0 Library Part 1, clause 19.1).");
+            "Parameter encryption must be keyed on sessionKey || authValue (TPM 2.0 Library Part 1, clause 18.1).");
     }
 
     /// <summary>
@@ -472,7 +474,7 @@ internal sealed class TpmSessionBoundEncryptionKeyTests
     }
 
     /// <summary>
-    /// Reads <c>nonceCaller</c> out of a serialized <c>TPMS_AUTH_COMMAND</c> (TPM 2.0 Library Part 1, Table 19:
+    /// Reads <c>nonceCaller</c> out of a serialized <c>TPMS_AUTH_COMMAND</c> (TPM 2.0 Library Part 1, Table 22:
     /// sessionHandle, nonceCaller, sessionAttributes, hmac).
     /// </summary>
     /// <param name="authCommand">The serialized authorization entry.</param>
@@ -505,7 +507,7 @@ internal sealed class TpmSessionBoundEncryptionKeyTests
 
     /// <summary>
     /// Reads the data portion of the first command parameter out of a serialized command, skipping the whole
-    /// authorization area (TPM 2.0 Library Part 1, clause 16.6: authorizationSize precedes it).
+    /// authorization area (TPM 2.0 Library Part 1, clause 15.6: authorizationSize precedes it).
     /// </summary>
     /// <param name="command">The whole command frame.</param>
     /// <param name="handleAreaSize">The command's handle-area width in octets.</param>
@@ -523,7 +525,7 @@ internal sealed class TpmSessionBoundEncryptionKeyTests
 
     /// <summary>
     /// Derives the bound session key by hand: <c>KDFa(SHA-256, bindAuthValue, "ATH", nonceTPM, nonceCaller,
-    /// 256)</c> (TPM 2.0 Library Part 1, clause 17.6.10, equation 20).
+    /// 256)</c> (TPM 2.0 Library Part 1, clause 16.6.10, equation 20).
     /// </summary>
     /// <param name="bindAuth">The bind entity's authorization value.</param>
     /// <param name="startNonceTpm">The TPM nonce from the StartAuthSession response.</param>
@@ -553,7 +555,7 @@ internal sealed class TpmSessionBoundEncryptionKeyTests
 
     /// <summary>
     /// Computes the command authorization HMAC by hand: <c>HMAC_sessionAlg(key, cpHash || nonceCaller ||
-    /// nonceTPM || sessionAttributes)</c> (TPM 2.0 Library Part 1, clause 17.6.5, equation 17 with the command
+    /// nonceTPM || sessionAttributes)</c> (TPM 2.0 Library Part 1, clause 16.6.5, equation 17 with the command
     /// direction's nonce order).
     /// </summary>
     /// <param name="key">The <c>sessionValue</c> keying the HMAC.</param>

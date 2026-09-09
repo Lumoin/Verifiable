@@ -28,7 +28,7 @@ public static class Oid4VciEndpoints
     /// The endpoint builder delegate. Pass this to
     /// <see cref="Verifiable.Server.ServerConfiguration.EndpointBuilders"/>.
     /// </summary>
-    public static readonly EndpointBuilderDelegate Builder = static (registration, context, ct) =>
+    public static EndpointBuilderDelegate Builder { get; } = static (registration, context, ct) =>
     {
         List<EndpointCandidate> candidates = [];
 
@@ -984,7 +984,7 @@ public static class Oid4VciEndpoints
         }
 
         ServerHttpResponse? attestationFailure = ValidateKeyAttestationRequirement(
-            configuration, request, oauth.Codecs.Decoder);
+            configuration, request, oauth.Codecs.Decoder, oauth.MemoryPool!);
         if(attestationFailure is not null)
         {
             return attestationFailure;
@@ -1064,14 +1064,15 @@ public static class Oid4VciEndpoints
     private static ServerHttpResponse? ValidateKeyAttestationRequirement(
         IReadOnlyDictionary<string, object>? configuration,
         CredentialRequest request,
-        DecodeDelegate? decoder)
+        DecodeDelegate? decoder,
+        BaseMemoryPool pool)
     {
         if(configuration is null || !ConfigurationRequiresKeyAttestation(configuration))
         {
             return null;
         }
 
-        if(RequestCarriesKeyAttestation(request, decoder))
+        if(RequestCarriesKeyAttestation(request, decoder, pool))
         {
             return null;
         }
@@ -1106,7 +1107,7 @@ public static class Oid4VciEndpoints
 
 
     /// <summary>Whether the request supplies attestation evidence — a standalone <c>attestation</c> proof or a <c>key_attestation</c>-headed <c>jwt</c> proof.</summary>
-    private static bool RequestCarriesKeyAttestation(CredentialRequest request, DecodeDelegate? decoder)
+    private static bool RequestCarriesKeyAttestation(CredentialRequest request, DecodeDelegate? decoder, BaseMemoryPool pool)
     {
         if(request.Proofs.TryGetValue(
                 AttestationProofParameterNames.AttestationProofType, out IReadOnlyList<string>? attestations)
@@ -1121,7 +1122,7 @@ public static class Oid4VciEndpoints
         {
             foreach(string jwtProof in jwtProofs)
             {
-                if(JwtProofHasKeyAttestationHeader(jwtProof, decoder))
+                if(JwtProofHasKeyAttestationHeader(jwtProof, decoder, pool))
                 {
                     return true;
                 }
@@ -1133,7 +1134,7 @@ public static class Oid4VciEndpoints
 
 
     /// <summary>Whether a compact <c>jwt</c> proof's JOSE header carries a <c>key_attestation</c> member.</summary>
-    private static bool JwtProofHasKeyAttestationHeader(string jwtProof, DecodeDelegate decoder)
+    private static bool JwtProofHasKeyAttestationHeader(string jwtProof, DecodeDelegate decoder, BaseMemoryPool pool)
     {
         int firstDot = jwtProof.IndexOf('.', StringComparison.Ordinal);
         if(firstDot <= 0)
@@ -1142,7 +1143,7 @@ public static class Oid4VciEndpoints
         }
 
         string headerSegment = jwtProof.AsSpan(0, firstDot).ToString();
-        using IMemoryOwner<byte> headerOwner = decoder(headerSegment, BaseMemoryPool.Shared);
+        using IMemoryOwner<byte> headerOwner = decoder(headerSegment, pool);
 
         return JwkJsonReader.ContainsKey(
             headerOwner.Memory.Span, AttestationProofParameterNames.KeyAttestationUtf8);

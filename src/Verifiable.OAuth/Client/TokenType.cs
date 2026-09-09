@@ -88,7 +88,7 @@ public readonly struct TokenType: IEquatable<TokenType>
     /// <see cref="ConcurrentDictionary{TKey, TValue}.TryAdd"/> instead of racing on a separate
     /// contains-check followed by an add.
     /// </summary>
-    private static ConcurrentDictionary<int, TokenType> registeredTokenTypesByCode { get; } = new()
+    private static ConcurrentDictionary<int, TokenType> RegisteredTokenTypesByCode { get; } = new()
     {
         [AccessToken.Code] = AccessToken,
         [RefreshToken.Code] = RefreshToken,
@@ -102,10 +102,10 @@ public readonly struct TokenType: IEquatable<TokenType>
     /// <summary>
     /// Gets all registered token type values including any custom ones. The enumeration order is
     /// whatever <see cref="ConcurrentDictionary{TKey, TValue}.Values"/> yields for
-    /// <see cref="registeredTokenTypesByCode"/> — UNSPECIFIED, and MUST NOT be relied upon by callers
+    /// <see cref="RegisteredTokenTypesByCode"/> — UNSPECIFIED, and MUST NOT be relied upon by callers
     /// (it is not insertion order, code order, or otherwise stable across framework versions).
     /// </summary>
-    public static IReadOnlyList<TokenType> TokenTypes => [.. registeredTokenTypesByCode.Values];
+    public static IReadOnlyList<TokenType> TokenTypes => [.. RegisteredTokenTypesByCode.Values];
 
 
     /// <summary>
@@ -119,7 +119,7 @@ public readonly struct TokenType: IEquatable<TokenType>
     public static TokenType Create(int code)
     {
         TokenType newTokenType = new(code);
-        if(!registeredTokenTypesByCode.TryAdd(code, newTokenType))
+        if(!RegisteredTokenTypesByCode.TryAdd(code, newTokenType))
         {
             throw new ArgumentException(
                 $"A token type with code {code} is already registered.", nameof(code));

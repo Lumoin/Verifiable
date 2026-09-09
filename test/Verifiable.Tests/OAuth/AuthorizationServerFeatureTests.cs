@@ -313,7 +313,8 @@ internal sealed class AuthorizationServerFeatureTests
             LoadFlowStateAsync = (tenantId, key, ctx, ct) =>
                 ValueTask.FromResult<(FlowState?, int)>((null, 0)),
             ResolvePolicyAsync = (registration, ctx, ct) =>
-                PolicyProfiles.DefaultResolvePolicyAsync((ClientRecord)registration, ctx, ct)
+                PolicyProfiles.DefaultResolvePolicyAsync((ClientRecord)registration, ctx, ct),
+            MemoryPool = BaseMemoryPool.Shared
         };
 
         InvalidOperationException ex =
@@ -344,8 +345,9 @@ internal sealed class AuthorizationServerFeatureTests
             SaveFlowStateAsync = (tenantId, key, state, stepCount, ctx, ct) =>
                 ValueTask.CompletedTask,
             LoadFlowStateAsync = (tenantId, key, ctx, ct) =>
-                ValueTask.FromResult<(FlowState?, int)>((null, 0))
+                ValueTask.FromResult<(FlowState?, int)>((null, 0)),
             //ResolvePolicyAsync deliberately omitted.
+            MemoryPool = BaseMemoryPool.Shared
         };
 
         InvalidOperationException ex =
@@ -395,7 +397,7 @@ internal sealed class AuthorizationServerFeatureTests
         {
             Encoder = TestSetup.Base64UrlEncoder,
             Decoder = TestSetup.Base64UrlDecoder,
-            ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             JwtHeaderSerializer = static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
                 (Dictionary<string, object>)header,
                 TestSetup.DefaultSerializationOptions),
@@ -630,8 +632,8 @@ internal sealed class AuthorizationServerFeatureTests
         Assert.IsInstanceOfType<PresentationVerifiedState>(
             app.GetFlowState(parHandle).State,
             "Flow started after key rotation must reach PresentationVerified.");
-        Assert.IsTrue(verified.Claims.ContainsKey("pid"),
-            "Verified claims must contain the pid credential.");
+        Assert.IsTrue(verified.Credentials.ContainsKey(new CredentialQueryId("pid")),
+            "Verified credentials must contain the pid credential.");
     }
 
 
@@ -716,7 +718,7 @@ internal sealed class AuthorizationServerFeatureTests
         string compactJweA = await walletA.HandleResponsePostAsync(
             walletFlowId, TestContext.CancellationToken).ConfigureAwait(false);
 
-        PresentationVerifiedState verifiedA = await app.HandleDirectPostAsync(keysA,
+        await app.HandleDirectPostAsync(keysA,
             parHandleA,
             compactJweA,
             redirectUri: null,
@@ -797,7 +799,7 @@ internal sealed class AuthorizationServerFeatureTests
 
         await using TestHostShell app = new(TimeProvider);
 
-        IDisposable subscription = app.Server.Events.Subscribe(
+        using IDisposable subscription = app.Server.Events.Subscribe(
             new CollectingObserver<ClientRegistrationEvent>(received));
         using VerifierKeyMaterial firstKeys = app.RegisterClient("https://first.example.com", VerifierBaseUri, Oid4VpCapabilities);
 
@@ -877,7 +879,7 @@ internal sealed class AuthorizationServerFeatureTests
 
 
 
-        (Uri requestUri, string parHandle) = await app.HandleParAsync(keys,
+        (_, string parHandle) = await app.HandleParAsync(keys,
             new TransactionNonce("nonce-jar-shape-01"),
             CreatePreparedQuery(),
             TestContext.CancellationToken).ConfigureAwait(false);
@@ -2516,8 +2518,8 @@ internal sealed class AuthorizationServerFeatureTests
     }
 
 
-    private static readonly string[] SingleAudience = ["https://api1"];
-    private static readonly string[] MultiAudience = ["https://api1", "https://api2"];
+    private static string[] SingleAudience { get; } = ["https://api1"];
+    private static string[] MultiAudience { get; } = ["https://api1", "https://api2"];
 
 
     [TestMethod]

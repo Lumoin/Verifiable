@@ -561,7 +561,7 @@ public static class JarExtensions
             compactJar.AsSpan(0, firstDot).ToString(), memoryPool);
 
         string? alg = JwkJsonReader.ExtractStringValue(
-            headerBytes.Memory.Span, "alg"u8);
+            headerBytes.Memory.Span, WellKnownJoseHeaderNames.AlgUtf8);
 
         if(!string.Equals(alg, WellKnownJwaValues.None, StringComparison.Ordinal))
         {

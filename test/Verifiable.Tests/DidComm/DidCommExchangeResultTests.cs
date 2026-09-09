@@ -13,7 +13,7 @@ namespace Verifiable.Tests.DidComm;
 [TestClass]
 internal sealed class DidCommExchangeResultTests
 {
-    private static readonly BaseMemoryPool Pool = BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool { get; } = BaseMemoryPool.Shared;
 
     /// <summary>A dedicated tag distinct from any production tag, so assertions never coincide with a real buffer role by accident.</summary>
     private static Tag TestTag { get; } = Tag.Create("test-reply");
@@ -36,7 +36,7 @@ internal sealed class DidCommExchangeResultTests
     public void DoubleDisposeIsSafeForARentedReply()
     {
         PooledMemory replyBody = PooledMemory.FromBytes([0x01], Pool, TestTag);
-        DidCommExchangeResult result = DidCommExchangeResult.Accepted(200, replyBody, null);
+        using DidCommExchangeResult result = DidCommExchangeResult.Accepted(200, replyBody, null);
 
         result.Dispose();
         result.Dispose();
@@ -53,10 +53,10 @@ internal sealed class DidCommExchangeResultTests
     [TestMethod]
     public void ReplyLessResultsDisposeAsNoOpsOnTheSharedEmpty()
     {
-        DidCommExchangeResult accepted = DidCommExchangeResult.Accepted(202);
-        DidCommExchangeResult rejected = DidCommExchangeResult.Rejected(400);
-        DidCommExchangeResult deniedByPolicy = DidCommExchangeResult.DeniedByPolicy();
-        DidCommExchangeResult transportFailed = DidCommExchangeResult.TransportFailed();
+        using DidCommExchangeResult accepted = DidCommExchangeResult.Accepted(202);
+        using DidCommExchangeResult rejected = DidCommExchangeResult.Rejected(400);
+        using DidCommExchangeResult deniedByPolicy = DidCommExchangeResult.DeniedByPolicy();
+        using DidCommExchangeResult transportFailed = DidCommExchangeResult.TransportFailed();
 
         accepted.Dispose();
         rejected.Dispose();

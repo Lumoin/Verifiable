@@ -1,3 +1,4 @@
+using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.JCose.Eudi;
 
@@ -11,12 +12,51 @@ internal class DcqlQueryBuilderTests
 {
     public TestContext TestContext { get; set; } = null!;
 
+    /// <summary>The credential type of the secondary credential the credential-set cases ask for.</summary>
+    private const string EmailVct = "https://credentials.example/email_credential";
+
+    /// <summary>The credential type of the third credential the credential-set cases ask for.</summary>
+    private const string PhoneVct = "https://credentials.example/phone_credential";
+
+    /// <summary>The credential type of the optional credential the optional-set case asks for.</summary>
+    private const string LoyaltyVct = "https://credentials.example/loyalty_card";
+
+
+    /// <summary>
+    /// Proves the builder produces a query the library's own validation accepts, so a caller
+    /// composing through it never assembles a request the evaluator refuses. The rule the
+    /// SD-JWT arm answers is
+    /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#appendix-B.3.5">
+    /// OpenID for Verifiable Presentations 1.0, Appendix B.3.5</see>: "vct_values: REQUIRED. A
+    /// non-empty array of strings that specifies allowed values for the type of the requested
+    /// Verifiable Credential."
+    /// </summary>
+    [TestMethod]
+    public async Task EveryQueryTheBuilderProducesPassesValidation()
+    {
+        var builder = new DcqlQueryBuilder()
+            .WithSdJwtCredential(EudiPid.DefaultCredentialQueryId,
+                [EudiPid.SdJwtVct],
+                [ClaimsQuery.ForPath([EudiPid.SdJwt.GivenName])])
+            .WithMdocCredential("mdl", EudiMdl.Doctype,
+                [ClaimsQuery.ForMdocPath(true, EudiMdl.Namespace, EudiMdl.Attributes.FamilyName)]);
+
+        var query = await builder.BuildAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        IReadOnlyList<string> issues = query.Validate();
+
+        Assert.IsEmpty(
+            issues,
+            $"Appendix B.3.5 makes vct_values REQUIRED for dc+sd-jwt, so the builder must not be able to express a query without it. Issues: {string.Join("; ", issues)}");
+    }
+
 
     [TestMethod]
     public async Task BuildSingleSdJwtCredentialProducesValidQuery()
     {
         var builder = new DcqlQueryBuilder()
             .WithSdJwtCredential(EudiPid.DefaultCredentialQueryId,
+                [EudiPid.SdJwtVct],
                 [ClaimsQuery.ForPath([EudiPid.SdJwt.GivenName]),
                  ClaimsQuery.ForPath([EudiPid.SdJwt.FamilyName])]);
 
@@ -37,11 +77,14 @@ internal class DcqlQueryBuilderTests
     {
         var builder = new DcqlQueryBuilder()
             .WithSdJwtCredential(EudiPid.DefaultCredentialQueryId,
+                [EudiPid.SdJwtVct],
                 [ClaimsQuery.ForPath([EudiPid.SdJwt.GivenName]),
                  ClaimsQuery.ForPath([EudiPid.SdJwt.FamilyName])])
             .WithSdJwtCredential("email",
+                [EmailVct],
                 [ClaimsQuery.ForPath([EudiPid.SdJwt.Email])])
             .WithSdJwtCredential("phone",
+                [PhoneVct],
                 [ClaimsQuery.ForPath([EudiPid.SdJwt.PhoneNumber])])
             .WithCredentialSet(true, [[EudiPid.DefaultCredentialQueryId], ["email", "phone"]]);
 
@@ -60,8 +103,10 @@ internal class DcqlQueryBuilderTests
     {
         var builder = new DcqlQueryBuilder()
             .WithSdJwtCredential(EudiPid.DefaultCredentialQueryId,
+                [EudiPid.SdJwtVct],
                 [ClaimsQuery.ForPath([EudiPid.SdJwt.GivenName])])
             .WithSdJwtCredential("loyalty",
+                [LoyaltyVct],
                 [ClaimsQuery.ForPath(["tier"])])
             .WithCredentialSet(false, "Loyalty card for personalized offers.", [["loyalty"]]);
 
@@ -143,6 +188,7 @@ internal class DcqlQueryBuilderTests
     {
         var builder = new DcqlQueryBuilder()
             .WithSdJwtCredential(EudiPid.DefaultCredentialQueryId,
+                [EudiPid.SdJwtVct],
                 [ClaimsQuery.ForPath([EudiPid.SdJwt.GivenName])])
             .WithCredentialSet(true, [[EudiPid.DefaultCredentialQueryId], ["nonexistent"]]);
 
@@ -159,8 +205,10 @@ internal class DcqlQueryBuilderTests
     {
         var builder = new DcqlQueryBuilder()
             .WithSdJwtCredential(EudiPid.DefaultCredentialQueryId,
+                [EudiPid.SdJwtVct],
                 [ClaimsQuery.ForPath([EudiPid.SdJwt.GivenName])])
             .WithSdJwtCredential(EudiPid.DefaultCredentialQueryId,
+                [EudiPid.SdJwtVct],
                 [ClaimsQuery.ForPath([EudiPid.SdJwt.FamilyName])]);
 
         await Assert.ThrowsAsync<InvalidOperationException>(
@@ -174,6 +222,7 @@ internal class DcqlQueryBuilderTests
     {
         var builder = new DcqlQueryBuilder()
             .WithSdJwtCredential(EudiPid.DefaultCredentialQueryId,
+                [EudiPid.SdJwtVct],
                 [ClaimsQuery.ForPath([EudiPid.SdJwt.GivenName])]);
 
         var query1 = await builder.BuildAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -192,6 +241,7 @@ internal class DcqlQueryBuilderTests
     {
         var builder = new DcqlQueryBuilder()
             .WithSdJwtCredential(EudiPid.DefaultCredentialQueryId,
+                [EudiPid.SdJwtVct],
                 [ClaimsQuery.ForPath([EudiPid.SdJwt.GivenName])])
             .With((query, bldr, state) =>
             {

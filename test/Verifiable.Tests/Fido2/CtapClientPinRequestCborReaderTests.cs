@@ -1,6 +1,7 @@
 using System;
 using System.Buffers;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
+using Verifiable.Cbor;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
@@ -92,14 +93,16 @@ internal sealed class CtapClientPinRequestCborReaderTests
     [TestMethod]
     public void ThrowsWhenSubCommandMemberIsMissing()
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(1);
         writer.WriteInt32(WellKnownCtapClientPinRequestKeys.PinUvAuthProtocol);
         writer.WriteInt32(2);
         writer.WriteEndMap();
 
         Fido2FormatException exception = Assert.ThrowsExactly<Fido2FormatException>(
-            () => CtapClientPinRequestCborReader.Read(writer.Encode()));
+            () => CtapClientPinRequestCborReader.Read(writerBuffer.WrittenSpan.ToArray()));
 
         Assert.Contains("subCommand", exception.Message, StringComparison.Ordinal);
     }
@@ -113,7 +116,9 @@ internal sealed class CtapClientPinRequestCborReaderTests
     [TestMethod]
     public void IgnoresUnrecognizedTopLevelMemberKey()
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(2);
         writer.WriteInt32(WellKnownCtapClientPinRequestKeys.SubCommand);
         writer.WriteInt32(WellKnownCtapClientPinSubCommands.GetPinRetries);
@@ -121,7 +126,7 @@ internal sealed class CtapClientPinRequestCborReaderTests
         writer.WriteUInt32(42);
         writer.WriteEndMap();
 
-        CtapClientPinRequest decoded = CtapClientPinRequestCborReader.Read(writer.Encode());
+        CtapClientPinRequest decoded = CtapClientPinRequestCborReader.Read(writerBuffer.WrittenSpan.ToArray());
 
         Assert.AreEqual(WellKnownCtapClientPinSubCommands.GetPinRetries, decoded.SubCommand);
     }

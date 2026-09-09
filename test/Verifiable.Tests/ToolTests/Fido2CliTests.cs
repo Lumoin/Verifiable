@@ -1,12 +1,13 @@
 using System.Buffers;
 using System.Buffers.Text;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
+using Verifiable.Cbor;
 using Verifiable.Cbor.Mdoc;
 using Verifiable.Cryptography;
 using Verifiable.Fido2;
@@ -54,7 +55,7 @@ internal sealed class Fido2CliTests
     [TestInitialize]
     public void Initialize()
     {
-        tempDirectory = Path.Combine(Path.GetTempPath(), $"fido2-cli-tests-{Guid.NewGuid():N}");
+        tempDirectory = Path.Join(Path.GetTempPath(), $"fido2-cli-tests-{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDirectory);
     }
 
@@ -548,7 +549,7 @@ internal sealed class Fido2CliTests
     /// <summary>Writes <paramref name="content"/> to a fresh file under this test's temp directory.</summary>
     private string WriteTempFile(string fileName, byte[] content)
     {
-        string path = Path.Combine(tempDirectory, $"{Guid.NewGuid():N}-{fileName}");
+        string path = Path.Join(tempDirectory, $"{Guid.NewGuid():N}-{fileName}");
         File.WriteAllBytes(path, content);
 
         return path;
@@ -599,7 +600,7 @@ internal sealed class Fido2CliTests
 
         string attestationObjectPath = WriteTempFile("attestation-object.cbor", attestationObjectBytes);
         string clientDataPath = WriteTempFile("client-data.json", clientDataJsonBytes);
-        string recordOutputPath = Path.Combine(tempDirectory, $"{Guid.NewGuid():N}-credential-record.json");
+        string recordOutputPath = Path.Join(tempDirectory, $"{Guid.NewGuid():N}-credential-record.json");
 
         var result = await VerifiableCliTestHelpers.RunCliAsync(
             executablePath,
@@ -708,7 +709,9 @@ internal sealed class Fido2CliTests
     /// <summary>Encodes a valid <c>attestationObject</c> CBOR map in the CTAP2 canonical CBOR encoding form.</summary>
     private static byte[] EncodeAttestationObject(string format, byte[] attStmtCbor, byte[] authData)
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(3);
         writer.WriteTextString("fmt");
         writer.WriteTextString(format);
@@ -718,14 +721,16 @@ internal sealed class Fido2CliTests
         writer.WriteByteString(authData);
         writer.WriteEndMap();
 
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
     /// <summary>Encodes a valid <c>packed</c> <c>attStmt</c> CBOR map (<c>alg</c>/<c>sig</c>/<c>x5c</c>).</summary>
     private static byte[] EncodePackedAttStmt(int alg, byte[] sig, IReadOnlyList<byte[]> x5c)
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(3);
         writer.WriteTextString("alg");
         writer.WriteInt32(alg);
@@ -741,7 +746,7 @@ internal sealed class Fido2CliTests
         writer.WriteEndArray();
         writer.WriteEndMap();
 
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -752,7 +757,9 @@ internal sealed class Fido2CliTests
     /// </summary>
     private static byte[] EncodeRsaCoseKeyCbor(CoseKey coseKey)
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(4);
         writer.WriteInt32(CoseKeyParameters.Kty);
         writer.WriteInt32(coseKey.Kty);
@@ -764,7 +771,7 @@ internal sealed class Fido2CliTests
         writer.WriteByteString(coseKey.E!.Value.Span);
         writer.WriteEndMap();
 
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 

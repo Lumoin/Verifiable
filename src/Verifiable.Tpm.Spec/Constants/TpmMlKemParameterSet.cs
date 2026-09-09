@@ -11,7 +11,7 @@ namespace Verifiable.Tpm.Spec.Constants;
 /// security levels per NIST FIPS 203.
 /// </para>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 6.3.21 (v1.85).
+/// Specification reference: TPM 2.0 Library Part 2, clause 11.2.6.1 (v1.85).
 /// </para>
 /// </remarks>
 [SuppressMessage("Design", "CA1008:Enums should have zero value", Justification = "This follows the TPM 2.0 specification.")]

@@ -14,6 +14,7 @@ using Verifiable.Json;
 using Verifiable.Microsoft;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.JCose;
 
@@ -25,7 +26,7 @@ namespace Verifiable.Tests.JCose;
 /// </summary>
 /// <remarks>
 /// Every signing key is P-256, minted through <see cref="TestKeyMaterialProvider.CreateP256KeyMaterial"/>, wired
-/// through <see cref="MicrosoftCryptographicFunctions.SignP256Async"/>/<see cref="MicrosoftCryptographicFunctions.VerifyP256Async"/> —
+/// through <see cref="MicrosoftCryptographicFunctionsAdapter.SignP256Async"/>/<see cref="MicrosoftCryptographicFunctionsAdapter.VerifyP256Async"/> —
 /// mirroring <c>JAdESSignatureCreationTests</c>'s own explicit-delegate composition pattern. E2E round trips are
 /// FIREWALLED per serialization form: creation produces wire bytes only, and validation is handed nothing but
 /// those bytes plus the public key — never a shared in-memory object.
@@ -56,7 +57,7 @@ internal sealed class JAdESSignatureValidationTests
             ConformantHeaders(sigT: new JAdESClaimedSigningTime(TestClock.CanonicalEpoch)),
             new JAdESAttachedPayloadInput(payload), unsignedHeaders: null, privateKey, TestContext.CancellationToken).ConfigureAwait(false);
 
-        foreach(JoseSerializationFormat format in (JoseSerializationFormat[])[JoseSerializationFormat.Compact, JoseSerializationFormat.FlattenedJson, JoseSerializationFormat.GeneralJson])
+        foreach(JoseSerializationFormat format in new[] { JoseSerializationFormat.Compact, JoseSerializationFormat.FlattenedJson, JoseSerializationFormat.GeneralJson })
         {
             byte[] wireBytes = JAdESSignatureCreation.Serialize(created, format, TestSetup.Base64UrlEncoder, JsonSerialize);
 
@@ -527,7 +528,7 @@ internal sealed class JAdESSignatureValidationTests
             JAdESEtsiUJson.Encode,
             TestSetup.Base64UrlEncoder,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             dereference,
             dereferenceContext,
             unknownMechanismHandler,
@@ -552,7 +553,7 @@ internal sealed class JAdESSignatureValidationTests
             JAdESProtectedHeaderJson.DetectX5tPresence,
             JAdESEtsiUJson.TryParse,
             publicKey,
-            MicrosoftCryptographicFunctions.VerifyP256Async,
+            MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             TestSetup.Base64UrlDecoder,
             TestSetup.Base64UrlEncoder,
             dereference,
@@ -576,8 +577,7 @@ internal sealed class JAdESSignatureValidationTests
         //§5.1 concatenation a second time.
         using IMemoryOwner<byte> signingInput = Jws.RentSigningInput(
             protectedSegment, payload, true, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared, out int length);
-        (Signature signature, _) = await MicrosoftCryptographicFunctions.SignP256Async(
-            privateKey.AsReadOnlyMemory(), signingInput.Memory[..length], BaseMemoryPool.Shared, cancellationToken: cancellationToken).ConfigureAwait(false);
+        (Signature signature, _) = await MicrosoftCryptographicFunctions.SignP256Async(privateKey.AsReadOnlyMemory(), signingInput.Memory[..length], BaseMemoryPool.Shared, cancellationToken: cancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch)).ConfigureAwait(false);
 
         using(signature)
         {

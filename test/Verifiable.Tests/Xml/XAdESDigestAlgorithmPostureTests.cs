@@ -124,6 +124,9 @@ internal sealed class XAdESDigestAlgorithmPostureTests
             </OtherTimeStamp>
             """;
         using XmlNodeTable table = Parse(document, BaseMemoryPool.Shared);
+        //owned is a collection of disposables, not one disposable value: a using declaration disposes one
+        //variable's own value, not a collection's elements, so the foreach below in the finally block is
+        //the release point.
         var owned = new List<PooledMemory>();
         try
         {

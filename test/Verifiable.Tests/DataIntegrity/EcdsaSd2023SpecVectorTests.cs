@@ -39,7 +39,7 @@ internal sealed class EcdsaSd2023W3cVectorTests
 
     //Canonicalization/signing here is in-memory; a default context yields the
     //secure-default SSRF policy and satisfies the policy-carrying parameter.
-    private static readonly ExchangeContext EmptyContext = new();
+    private static ExchangeContext EmptyContext { get; } = new();
 
 
     /// <summary>
@@ -418,7 +418,7 @@ internal sealed class EcdsaSd2023W3cVectorTests
         bool baseSignatureValid = await issuerPublicKey.VerifyAsync(
             baseProofResult.BaseSignatureData.Memory[..baseProofResult.BaseSignatureDataLength],
             baseProofResult.BaseSignature,
-            BouncyCastleCryptographicFunctions.VerifyP256Async).ConfigureAwait(false);
+            BouncyCastleCryptographicFunctionsAdapter.VerifyP256Async).ConfigureAwait(false);
 
         Assert.IsTrue(baseSignatureValid, "Base signature must be valid.");
 
@@ -431,7 +431,7 @@ internal sealed class EcdsaSd2023W3cVectorTests
         bool w3cSignatureValid = await issuerPublicKey.VerifyAsync(
             baseProofResult.BaseSignatureData.Memory[..baseProofResult.BaseSignatureDataLength],
             w3cBaseSignature,
-            BouncyCastleCryptographicFunctions.VerifyP256Async).ConfigureAwait(false);
+            BouncyCastleCryptographicFunctionsAdapter.VerifyP256Async).ConfigureAwait(false);
 
         Assert.IsTrue(w3cSignatureValid, "W3C Example 81 base signature must verify with computed signature data.");
 
@@ -459,7 +459,7 @@ internal sealed class EcdsaSd2023W3cVectorTests
             bool w3cSigValid = await ephemeralPublicKey.VerifyAsync(
                 statementBytes,
                 w3cSig,
-                BouncyCastleCryptographicFunctions.VerifyP256Async).ConfigureAwait(false);
+                BouncyCastleCryptographicFunctionsAdapter.VerifyP256Async).ConfigureAwait(false);
 
             Assert.IsTrue(w3cSigValid, $"W3C Example 81 signature '{i}' must verify against statement.");
         }
@@ -564,7 +564,7 @@ internal sealed class EcdsaSd2023W3cVectorTests
         //Holder: Verify base proof with verbose output.
         var (holderVerifyResult, holderContext) = await signedCredential.VerifyBaseProofVerboseAsync(
             issuerPublicKey,
-            BouncyCastleCryptographicFunctions.VerifyP256Async,
+            BouncyCastleCryptographicFunctionsAdapter.VerifyP256Async,
             EcdsaSd2023CborSerializer.ParseBaseProof,
             JsonLdSelection.PartitionStatements,
             rdfcCanonicalizer,
@@ -624,7 +624,7 @@ internal sealed class EcdsaSd2023W3cVectorTests
             CredentialPath.FromJsonPointer("/validUntil")
         };
 
-        var (derivedCredential, selectionResult) = await signedCredential.DeriveProofVerboseAsync(
+        var (derivedCredential, _) = await signedCredential.DeriveProofVerboseAsync(
             verifierRequestedPaths,
             userExclusions: null,
             JsonLdSelection.PartitionStatements,
@@ -655,7 +655,7 @@ internal sealed class EcdsaSd2023W3cVectorTests
         //Verifier: Verify derived proof with verbose output.
         var (verifierResult, verifierContext) = await derivedCredential.VerifyDerivedProofVerboseAsync(
             issuerPublicKey,
-            BouncyCastleCryptographicFunctions.VerifyP256Async,
+            BouncyCastleCryptographicFunctionsAdapter.VerifyP256Async,
             EcdsaSd2023CborSerializer.ParseDerivedProof,
             rdfcCanonicalizer,
             contextResolver,

@@ -104,21 +104,21 @@ internal static class WebPlusTestResolver
 internal sealed class RoutingTransport
 {
     /// <summary>The per-URL canned responses.</summary>
-    private readonly Dictionary<string, (int Status, string? Body)> routes;
+    private Dictionary<string, (int Status, string? Body)> Routes { get; }
 
 
     /// <summary>Creates a routing transport over the given per-URL responses.</summary>
     /// <param name="routes">The per-URL canned (status, body) responses.</param>
     public RoutingTransport(Dictionary<string, (int Status, string? Body)> routes)
     {
-        this.routes = routes;
+        this.Routes = routes;
     }
 
 
     /// <summary>The transport delegate dispatching each request by its absolute URL.</summary>
     public OutboundTransportDelegate Delegate => (request, context, cancellationToken) =>
     {
-        if(!routes.TryGetValue(request.Target.AbsoluteUri, out (int Status, string? Body) route))
+        if(!Routes.TryGetValue(request.Target.AbsoluteUri, out (int Status, string? Body) route))
         {
             route = (404, null);
         }

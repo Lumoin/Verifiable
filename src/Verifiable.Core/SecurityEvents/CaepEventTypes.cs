@@ -23,49 +23,49 @@ public static class CaepEventTypes
     public static ReadOnlySpan<byte> SessionRevokedUtf8 => "https://schemas.openid.net/secevent/caep/event-type/session-revoked"u8;
 
     /// <summary>Session Revoked (<c>session-revoked</c>) — CAEP §3.1.</summary>
-    public static readonly string SessionRevoked = Utf8Constants.ToInternedString(SessionRevokedUtf8);
+    public static string SessionRevoked { get; } = Utf8Constants.ToInternedString(SessionRevokedUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="TokenClaimsChange"/>.</summary>
     public static ReadOnlySpan<byte> TokenClaimsChangeUtf8 => "https://schemas.openid.net/secevent/caep/event-type/token-claims-change"u8;
 
     /// <summary>Token Claims Change (<c>token-claims-change</c>) — CAEP §3.2.</summary>
-    public static readonly string TokenClaimsChange = Utf8Constants.ToInternedString(TokenClaimsChangeUtf8);
+    public static string TokenClaimsChange { get; } = Utf8Constants.ToInternedString(TokenClaimsChangeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="CredentialChange"/>.</summary>
     public static ReadOnlySpan<byte> CredentialChangeUtf8 => "https://schemas.openid.net/secevent/caep/event-type/credential-change"u8;
 
     /// <summary>Credential Change (<c>credential-change</c>) — CAEP §3.3.</summary>
-    public static readonly string CredentialChange = Utf8Constants.ToInternedString(CredentialChangeUtf8);
+    public static string CredentialChange { get; } = Utf8Constants.ToInternedString(CredentialChangeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="AssuranceLevelChange"/>.</summary>
     public static ReadOnlySpan<byte> AssuranceLevelChangeUtf8 => "https://schemas.openid.net/secevent/caep/event-type/assurance-level-change"u8;
 
     /// <summary>Assurance Level Change (<c>assurance-level-change</c>) — CAEP §3.4.</summary>
-    public static readonly string AssuranceLevelChange = Utf8Constants.ToInternedString(AssuranceLevelChangeUtf8);
+    public static string AssuranceLevelChange { get; } = Utf8Constants.ToInternedString(AssuranceLevelChangeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="DeviceComplianceChange"/>.</summary>
     public static ReadOnlySpan<byte> DeviceComplianceChangeUtf8 => "https://schemas.openid.net/secevent/caep/event-type/device-compliance-change"u8;
 
     /// <summary>Device Compliance Change (<c>device-compliance-change</c>) — CAEP §3.5.</summary>
-    public static readonly string DeviceComplianceChange = Utf8Constants.ToInternedString(DeviceComplianceChangeUtf8);
+    public static string DeviceComplianceChange { get; } = Utf8Constants.ToInternedString(DeviceComplianceChangeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="SessionEstablished"/>.</summary>
     public static ReadOnlySpan<byte> SessionEstablishedUtf8 => "https://schemas.openid.net/secevent/caep/event-type/session-established"u8;
 
     /// <summary>Session Established (<c>session-established</c>) — CAEP §3.6.</summary>
-    public static readonly string SessionEstablished = Utf8Constants.ToInternedString(SessionEstablishedUtf8);
+    public static string SessionEstablished { get; } = Utf8Constants.ToInternedString(SessionEstablishedUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="SessionPresented"/>.</summary>
     public static ReadOnlySpan<byte> SessionPresentedUtf8 => "https://schemas.openid.net/secevent/caep/event-type/session-presented"u8;
 
     /// <summary>Session Presented (<c>session-presented</c>) — CAEP §3.7.</summary>
-    public static readonly string SessionPresented = Utf8Constants.ToInternedString(SessionPresentedUtf8);
+    public static string SessionPresented { get; } = Utf8Constants.ToInternedString(SessionPresentedUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="RiskLevelChange"/>.</summary>
     public static ReadOnlySpan<byte> RiskLevelChangeUtf8 => "https://schemas.openid.net/secevent/caep/event-type/risk-level-change"u8;
 
     /// <summary>Risk Level Change (<c>risk-level-change</c>) — CAEP §3.8.</summary>
-    public static readonly string RiskLevelChange = Utf8Constants.ToInternedString(RiskLevelChangeUtf8);
+    public static string RiskLevelChange { get; } = Utf8Constants.ToInternedString(RiskLevelChangeUtf8);
 
 
     /// <summary>Whether <paramref name="eventType"/> is <see cref="SessionRevoked"/>.</summary>

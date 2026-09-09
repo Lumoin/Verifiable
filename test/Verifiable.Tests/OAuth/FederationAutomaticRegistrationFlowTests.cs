@@ -55,20 +55,20 @@ internal sealed class FederationAutomaticRegistrationFlowTests
 
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
-    private static readonly EntityTypeIdentifier RpType =
+    private static EntityTypeIdentifier RpType { get; } =
         WellKnownEntityTypeIdentifiers.OpenIdRelyingParty;
 
     private const string RpEntityId = "https://rp.example.com";
     private const string FederationRedirectUri = "https://rp.example.com/cb";
 
     /// <summary>Header deserializer mirroring the authorization server's wiring.</summary>
-    private static readonly JwtHeaderDeserializer HeaderDeserializer = static bytes =>
+    private static JwtHeaderDeserializer HeaderDeserializer { get; } = static bytes =>
         JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
             bytes, TestSetup.DefaultSerializationOptions)
         ?? throw new FormatException("Header JSON parsed to null.");
 
     /// <summary>Payload deserializer mirroring the authorization server's wiring.</summary>
-    private static readonly JwtPayloadDeserializer PayloadDeserializer = static bytes =>
+    private static JwtPayloadDeserializer PayloadDeserializer { get; } = static bytes =>
         JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
             bytes, TestSetup.DefaultSerializationOptions)
         ?? throw new FormatException("Payload JSON parsed to null.");

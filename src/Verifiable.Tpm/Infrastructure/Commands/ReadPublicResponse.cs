@@ -10,7 +10,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Response structure (TPM 2.0 Part 3, Section 12.4):
+/// Response structure (TPM 2.0 Library Part 3, clause 12.4):
 /// </para>
 /// <list type="bullet">
 ///   <item><description>outPublic (TPM2B_PUBLIC): The public area of the object.</description></item>

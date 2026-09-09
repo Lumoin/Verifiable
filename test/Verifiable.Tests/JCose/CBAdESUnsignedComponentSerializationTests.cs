@@ -1,6 +1,7 @@
 using System;
+using System.Buffers;
 using System.Collections.Generic;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
@@ -145,7 +146,8 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
     [TestMethod]
     public void ParseSignaturePolicyStoreFailsClosedWhenDocOrLocalUriHasBothArms()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(1); // docOrLocalUri, Table 9.
         writer.WriteStartMap(2);
@@ -156,7 +158,7 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
         writer.WriteEndMap();
         writer.WriteEndMap();
 
-        bool parsed = CBAdESSerialization.TryParseSignaturePolicyStore(writer.Encode(), out CBAdESSignaturePolicyStore? result);
+        bool parsed = CBAdESSerialization.TryParseSignaturePolicyStore(writerBuffer.WrittenSpan.ToArray(), out CBAdESSignaturePolicyStore? result);
 
         Assert.IsFalse(parsed, "A DocOrLocalURI submap declaring both arms must fail closed.");
         Assert.IsNull(result);
@@ -170,14 +172,15 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
     [TestMethod]
     public void ParseSignaturePolicyStoreFailsClosedWhenDocOrLocalUriHasNoArms()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(1); // docOrLocalUri, Table 9.
         writer.WriteStartMap(0);
         writer.WriteEndMap();
         writer.WriteEndMap();
 
-        bool parsed = CBAdESSerialization.TryParseSignaturePolicyStore(writer.Encode(), out CBAdESSignaturePolicyStore? result);
+        bool parsed = CBAdESSerialization.TryParseSignaturePolicyStore(writerBuffer.WrittenSpan.ToArray(), out CBAdESSignaturePolicyStore? result);
 
         Assert.IsFalse(parsed, "A DocOrLocalURI submap declaring neither arm must fail closed.");
         Assert.IsNull(result);
@@ -188,7 +191,8 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
     [TestMethod]
     public void ParseSignaturePolicyStoreFailsClosedOnMissingRequiredDocOrLocalUri()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(2); // spDSpec, Table 9.
         writer.WriteStartMap(1);
@@ -197,7 +201,7 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
         writer.WriteEndMap();
         writer.WriteEndMap();
 
-        bool parsed = CBAdESSerialization.TryParseSignaturePolicyStore(writer.Encode(), out CBAdESSignaturePolicyStore? result);
+        bool parsed = CBAdESSerialization.TryParseSignaturePolicyStore(writerBuffer.WrittenSpan.ToArray(), out CBAdESSignaturePolicyStore? result);
 
         Assert.IsFalse(parsed, "A sigPSt map missing the required 'docOrLocalUri' member must fail closed.");
         Assert.IsNull(result);
@@ -212,7 +216,8 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
     [TestMethod]
     public void ParseSignaturePolicyStoreFailsClosedOnMissingTag32ForLocalUri()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(1); // docOrLocalUri, Table 9.
         writer.WriteStartMap(1);
@@ -221,7 +226,7 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
         writer.WriteEndMap();
         writer.WriteEndMap();
 
-        bool parsed = CBAdESSerialization.TryParseSignaturePolicyStore(writer.Encode(), out CBAdESSignaturePolicyStore? result);
+        bool parsed = CBAdESSerialization.TryParseSignaturePolicyStore(writerBuffer.WrittenSpan.ToArray(), out CBAdESSignaturePolicyStore? result);
 
         Assert.IsFalse(parsed, "An untagged text string in place of the tag-32 URI 'sigPolLocalURI' member must fail closed.");
         Assert.IsNull(result);
@@ -246,7 +251,8 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
     [TestMethod]
     public void ParseSignaturePolicyStoreFailsClosedOnIndefiniteLengthMap()
     {
-        var writer = new CborWriter(CborConformanceMode.Lax);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Lax);
         writer.WriteStartMap(null);
         writer.WriteInt32(1); // docOrLocalUri, Table 9.
         writer.WriteStartMap(1);
@@ -255,7 +261,7 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
         writer.WriteEndMap();
         writer.WriteEndMap();
 
-        bool parsed = CBAdESSerialization.TryParseSignaturePolicyStore(writer.Encode(), out CBAdESSignaturePolicyStore? result);
+        bool parsed = CBAdESSerialization.TryParseSignaturePolicyStore(writerBuffer.WrittenSpan.ToArray(), out CBAdESSignaturePolicyStore? result);
 
         Assert.IsFalse(parsed, "An indefinite-length sigPSt map must be rejected under canonical-mode parsing.");
         Assert.IsNull(result);
@@ -437,11 +443,12 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
     [TestMethod]
     public void ParseValidationDataFailsClosedOnEmptyMap()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(0);
         writer.WriteEndMap();
 
-        bool parsed = CBAdESSerialization.TryParseValidationData(writer.Encode(), out CBAdESValidationData? result);
+        bool parsed = CBAdESSerialization.TryParseValidationData(writerBuffer.WrittenSpan.ToArray(), out CBAdESValidationData? result);
 
         Assert.IsFalse(parsed, "An empty valData map must fail closed.");
         Assert.IsNull(result);
@@ -456,14 +463,15 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
     [TestMethod]
     public void ParseValidationDataFailsClosedOnEmptyCertificateValuesArray()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(1); // xVals, Table 10.
         writer.WriteStartArray(0);
         writer.WriteEndArray();
         writer.WriteEndMap();
 
-        bool parsed = CBAdESSerialization.TryParseValidationData(writer.Encode(), out CBAdESValidationData? result);
+        bool parsed = CBAdESSerialization.TryParseValidationData(writerBuffer.WrittenSpan.ToArray(), out CBAdESValidationData? result);
 
         Assert.IsFalse(parsed, "An empty xVals array must fail closed.");
         Assert.IsNull(result);
@@ -474,7 +482,8 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
     [TestMethod]
     public void ParseValidationDataFailsClosedOnEmptyCrlValuesArray()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(2); // rVals, Table 10.
         writer.WriteStartMap(1);
@@ -484,7 +493,7 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
         writer.WriteEndMap();
         writer.WriteEndMap();
 
-        bool parsed = CBAdESSerialization.TryParseValidationData(writer.Encode(), out CBAdESValidationData? result);
+        bool parsed = CBAdESSerialization.TryParseValidationData(writerBuffer.WrittenSpan.ToArray(), out CBAdESValidationData? result);
 
         Assert.IsFalse(parsed, "An empty rVals.crlVals array must fail closed.");
         Assert.IsNull(result);
@@ -495,7 +504,8 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
     [TestMethod]
     public void ParseValidationDataFailsClosedOnX509OrOtherEntryWithBothKeysPresent()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(1); // xVals, Table 10.
         writer.WriteStartArray(1);
@@ -508,7 +518,7 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
         writer.WriteEndArray();
         writer.WriteEndMap();
 
-        bool parsed = CBAdESSerialization.TryParseValidationData(writer.Encode(), out CBAdESValidationData? result);
+        bool parsed = CBAdESSerialization.TryParseValidationData(writerBuffer.WrittenSpan.ToArray(), out CBAdESValidationData? result);
 
         Assert.IsFalse(parsed, "An X509OrOther entry declaring both arms must fail closed.");
         Assert.IsNull(result);
@@ -519,7 +529,8 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
     [TestMethod]
     public void ParseValidationDataFailsClosedOnX509OrOtherEntryWithNoKeysPresent()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(1); // xVals, Table 10.
         writer.WriteStartArray(1);
@@ -528,7 +539,7 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
         writer.WriteEndArray();
         writer.WriteEndMap();
 
-        bool parsed = CBAdESSerialization.TryParseValidationData(writer.Encode(), out CBAdESValidationData? result);
+        bool parsed = CBAdESSerialization.TryParseValidationData(writerBuffer.WrittenSpan.ToArray(), out CBAdESValidationData? result);
 
         Assert.IsFalse(parsed, "An X509OrOther entry declaring neither arm must fail closed.");
         Assert.IsNull(result);
@@ -539,14 +550,15 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
     [TestMethod]
     public void ParseValidationDataFailsClosedOnWrongMajorTypeForXValsMember()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(1); // xVals, Table 10.
         writer.WriteStartMap(0);
         writer.WriteEndMap();
         writer.WriteEndMap();
 
-        bool parsed = CBAdESSerialization.TryParseValidationData(writer.Encode(), out CBAdESValidationData? result);
+        bool parsed = CBAdESSerialization.TryParseValidationData(writerBuffer.WrittenSpan.ToArray(), out CBAdESValidationData? result);
 
         Assert.IsFalse(parsed, "A map in place of the array-typed 'xVals' member must fail closed.");
         Assert.IsNull(result);
@@ -571,7 +583,8 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
     [TestMethod]
     public void ParseValidationDataFailsClosedOnIndefiniteLengthMap()
     {
-        var writer = new CborWriter(CborConformanceMode.Lax);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Lax);
         writer.WriteStartMap(null);
         writer.WriteInt32(1); // xVals, Table 10.
         writer.WriteStartArray(1);
@@ -582,7 +595,7 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
         writer.WriteEndArray();
         writer.WriteEndMap();
 
-        bool parsed = CBAdESSerialization.TryParseValidationData(writer.Encode(), out CBAdESValidationData? result);
+        bool parsed = CBAdESSerialization.TryParseValidationData(writerBuffer.WrittenSpan.ToArray(), out CBAdESValidationData? result);
 
         Assert.IsFalse(parsed, "An indefinite-length valData map must be rejected under canonical-mode parsing.");
         Assert.IsNull(result);
@@ -1000,12 +1013,13 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
     [TestMethod]
     public void ReferencesRoundTripsWithOtherReferencesOpaqueBytes()
     {
-        var itemWriter = new CborWriter(CborConformanceMode.Canonical);
+        var itemWriterBuffer = new ArrayBufferWriter<byte>();
+        var itemWriter = new CborWriter(itemWriterBuffer, CborOptions.RfcCanonical);
         itemWriter.WriteStartArray(2);
         itemWriter.WriteInt32(42);
         itemWriter.WriteTextString("alternative validation data");
         itemWriter.WriteEndArray();
-        byte[] otherItem = itemWriter.Encode();
+        byte[] otherItem = itemWriterBuffer.WrittenSpan.ToArray();
 
         byte[] expected = BuildReferencesBytes(
             certificateReferenceWriters: null, crlReferenceWriters: null, ocspReferenceWriters: null,
@@ -1083,11 +1097,12 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
     [TestMethod]
     public void ParseReferencesFailsClosedOnEmptyMap()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(0);
         writer.WriteEndMap();
 
-        bool parsed = CBAdESSerialization.TryParseReferences(writer.Encode(), BaseMemoryPool.Shared, out CBAdESReferences? result);
+        bool parsed = CBAdESSerialization.TryParseReferences(writerBuffer.WrittenSpan.ToArray(), BaseMemoryPool.Shared, out CBAdESReferences? result);
 
         Assert.IsFalse(parsed, "An empty refs map must fail closed.");
         Assert.IsNull(result);
@@ -1099,14 +1114,15 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
     [TestMethod]
     public void ParseReferencesFailsClosedOnEmptyCertificateReferencesArray()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(1); // xRefs, Table A.1 (refs).
         writer.WriteStartArray(0);
         writer.WriteEndArray();
         writer.WriteEndMap();
 
-        bool parsed = CBAdESSerialization.TryParseReferences(writer.Encode(), BaseMemoryPool.Shared, out CBAdESReferences? result);
+        bool parsed = CBAdESSerialization.TryParseReferences(writerBuffer.WrittenSpan.ToArray(), BaseMemoryPool.Shared, out CBAdESReferences? result);
 
         Assert.IsFalse(parsed, "An empty xRefs array must fail closed.");
         Assert.IsNull(result);
@@ -1118,14 +1134,15 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
     [TestMethod]
     public void ParseReferencesFailsClosedOnEmptyRevocationReferencesMap()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(2); // rRefs, Table A.1 (refs).
         writer.WriteStartMap(0);
         writer.WriteEndMap();
         writer.WriteEndMap();
 
-        bool parsed = CBAdESSerialization.TryParseReferences(writer.Encode(), BaseMemoryPool.Shared, out CBAdESReferences? result);
+        bool parsed = CBAdESSerialization.TryParseReferences(writerBuffer.WrittenSpan.ToArray(), BaseMemoryPool.Shared, out CBAdESReferences? result);
 
         Assert.IsFalse(parsed, "An empty rRefs map must fail closed.");
         Assert.IsNull(result);
@@ -1137,7 +1154,8 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
     [TestMethod]
     public void ParseReferencesFailsClosedOnEmptyCrlReferencesArray()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(2); // rRefs, Table A.1 (refs).
         writer.WriteStartMap(1);
@@ -1147,7 +1165,7 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
         writer.WriteEndMap();
         writer.WriteEndMap();
 
-        bool parsed = CBAdESSerialization.TryParseReferences(writer.Encode(), BaseMemoryPool.Shared, out CBAdESReferences? result);
+        bool parsed = CBAdESSerialization.TryParseReferences(writerBuffer.WrittenSpan.ToArray(), BaseMemoryPool.Shared, out CBAdESReferences? result);
 
         Assert.IsFalse(parsed, "An empty crlRefs array must fail closed.");
         Assert.IsNull(result);
@@ -1159,7 +1177,8 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
     [TestMethod]
     public void ParseReferencesFailsClosedOnEmptyOcspReferencesArray()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(2); // rRefs, Table A.1 (refs).
         writer.WriteStartMap(1);
@@ -1169,7 +1188,7 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
         writer.WriteEndMap();
         writer.WriteEndMap();
 
-        bool parsed = CBAdESSerialization.TryParseReferences(writer.Encode(), BaseMemoryPool.Shared, out CBAdESReferences? result);
+        bool parsed = CBAdESSerialization.TryParseReferences(writerBuffer.WrittenSpan.ToArray(), BaseMemoryPool.Shared, out CBAdESReferences? result);
 
         Assert.IsFalse(parsed, "An empty ocspRefs array must fail closed.");
         Assert.IsNull(result);
@@ -1181,7 +1200,8 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
     [TestMethod]
     public void ParseReferencesFailsClosedOnEmptyOtherReferencesArray()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(2); // rRefs, Table A.1 (refs).
         writer.WriteStartMap(1);
@@ -1191,7 +1211,7 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
         writer.WriteEndMap();
         writer.WriteEndMap();
 
-        bool parsed = CBAdESSerialization.TryParseReferences(writer.Encode(), BaseMemoryPool.Shared, out CBAdESReferences? result);
+        bool parsed = CBAdESSerialization.TryParseReferences(writerBuffer.WrittenSpan.ToArray(), BaseMemoryPool.Shared, out CBAdESReferences? result);
 
         Assert.IsFalse(parsed, "An empty otherRefs array must fail closed.");
         Assert.IsNull(result);
@@ -1203,7 +1223,8 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
     [TestMethod]
     public void ParseReferencesFailsClosedOnMissingRequiredThumbprintInCertId()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(1); // xRefs, Table A.1 (refs).
         writer.WriteStartArray(1);
@@ -1214,7 +1235,7 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
         writer.WriteEndArray();
         writer.WriteEndMap();
 
-        bool parsed = CBAdESSerialization.TryParseReferences(writer.Encode(), BaseMemoryPool.Shared, out CBAdESReferences? result);
+        bool parsed = CBAdESSerialization.TryParseReferences(writerBuffer.WrittenSpan.ToArray(), BaseMemoryPool.Shared, out CBAdESReferences? result);
 
         Assert.IsFalse(parsed, "A CertId map missing the required x5t member must fail closed.");
         Assert.IsNull(result);
@@ -1230,7 +1251,8 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
     [TestMethod]
     public void ParseReferencesFailsClosedOnMissingRequiredIssuerInCrlId()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(2); // rRefs, Table A.1 (refs).
         writer.WriteStartMap(1);
@@ -1249,7 +1271,7 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
         writer.WriteEndMap();
         writer.WriteEndMap();
 
-        bool parsed = CBAdESSerialization.TryParseReferences(writer.Encode(), BaseMemoryPool.Shared, out CBAdESReferences? result);
+        bool parsed = CBAdESSerialization.TryParseReferences(writerBuffer.WrittenSpan.ToArray(), BaseMemoryPool.Shared, out CBAdESReferences? result);
 
         Assert.IsFalse(parsed, "A CRLId map missing the required issuer member must fail closed.");
         Assert.IsNull(result);
@@ -1261,7 +1283,8 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
     [TestMethod]
     public void ParseReferencesFailsClosedOnMissingRequiredResponderInOcspId()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(2); // rRefs, Table A.1 (refs).
         writer.WriteStartMap(1);
@@ -1280,7 +1303,7 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
         writer.WriteEndMap();
         writer.WriteEndMap();
 
-        bool parsed = CBAdESSerialization.TryParseReferences(writer.Encode(), BaseMemoryPool.Shared, out CBAdESReferences? result);
+        bool parsed = CBAdESSerialization.TryParseReferences(writerBuffer.WrittenSpan.ToArray(), BaseMemoryPool.Shared, out CBAdESReferences? result);
 
         Assert.IsFalse(parsed, "An OCSPId map missing the required responderChoice member must fail closed.");
         Assert.IsNull(result);
@@ -1292,7 +1315,8 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
     [TestMethod]
     public void ParseReferencesFailsClosedOnUnknownResponderIdChoiceKey()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(2); // rRefs, Table A.1 (refs).
         writer.WriteStartMap(1);
@@ -1316,7 +1340,7 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
         writer.WriteEndMap();
         writer.WriteEndMap();
 
-        bool parsed = CBAdESSerialization.TryParseReferences(writer.Encode(), BaseMemoryPool.Shared, out CBAdESReferences? result);
+        bool parsed = CBAdESSerialization.TryParseReferences(writerBuffer.WrittenSpan.ToArray(), BaseMemoryPool.Shared, out CBAdESReferences? result);
 
         Assert.IsFalse(parsed, "An unknown ResponderIdChoice key must fail closed.");
         Assert.IsNull(result);
@@ -1328,7 +1352,8 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
     [TestMethod]
     public void ParseReferencesFailsClosedOnWrongMajorTypeForThumbprintDigestValue()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(1); // xRefs, Table A.1 (refs).
         writer.WriteStartArray(1);
@@ -1342,7 +1367,7 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
         writer.WriteEndArray();
         writer.WriteEndMap();
 
-        bool parsed = CBAdESSerialization.TryParseReferences(writer.Encode(), BaseMemoryPool.Shared, out CBAdESReferences? result);
+        bool parsed = CBAdESSerialization.TryParseReferences(writerBuffer.WrittenSpan.ToArray(), BaseMemoryPool.Shared, out CBAdESReferences? result);
 
         Assert.IsFalse(parsed, "A text string in place of the byte-string x5t digest value must fail closed.");
         Assert.IsNull(result);
@@ -1371,7 +1396,8 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
     [TestMethod]
     public void ParseReferencesFailsClosedOnIndefiniteLengthMap()
     {
-        var writer = new CborWriter(CborConformanceMode.Lax);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Lax);
         writer.WriteStartMap(null);
         writer.WriteInt32(1); // xRefs, Table A.1 (refs).
         writer.WriteStartArray(1);
@@ -1382,7 +1408,7 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
         writer.WriteEndArray();
         writer.WriteEndMap();
 
-        bool parsed = CBAdESSerialization.TryParseReferences(writer.Encode(), BaseMemoryPool.Shared, out CBAdESReferences? result);
+        bool parsed = CBAdESSerialization.TryParseReferences(writerBuffer.WrittenSpan.ToArray(), BaseMemoryPool.Shared, out CBAdESReferences? result);
 
         Assert.IsFalse(parsed, "An indefinite-length refs map must be rejected under canonical-mode parsing.");
         Assert.IsNull(result);
@@ -1705,7 +1731,8 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
     /// <returns>The expected canonical CBOR bytes.</returns>
     private static byte[] BuildMinimalTimestampContainerBytes()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(1); // tstTokens, Table 13.
         writer.WriteStartArray(1);
@@ -1715,7 +1742,7 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
         writer.WriteEndMap();
         writer.WriteEndArray();
         writer.WriteEndMap();
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -1723,7 +1750,8 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
     /// <returns>The encoded bytes.</returns>
     private static byte[] BuildIndefiniteLengthTimestampContainerBytes()
     {
-        var writer = new CborWriter(CborConformanceMode.Lax);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Lax);
         writer.WriteStartMap(null);
         writer.WriteInt32(1); // tstTokens, Table 13.
         writer.WriteStartArray(1);
@@ -1733,7 +1761,7 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
         writer.WriteEndMap();
         writer.WriteEndArray();
         writer.WriteEndMap();
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -1810,7 +1838,8 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
         bool hasRVals = crlValues is not null || ocspValues is not null || otherValues is not null;
         int memberCount = (certificateEntries is not null ? 1 : 0) + (hasRVals ? 1 : 0);
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(memberCount);
 
         if(certificateEntries is not null)
@@ -1839,7 +1868,7 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
         }
 
         writer.WriteEndMap();
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
 
         static void WritePkiObArrayIfPresent(CborWriter writer, int key, IReadOnlyList<byte[]>? values)
         {
@@ -1870,7 +1899,8 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
     {
         int memberCount = 1 + (spDSpec is not null ? 1 : 0);
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(memberCount);
 
         writer.WriteInt32(1); // docOrLocalUri, Table 9.
@@ -1898,7 +1928,7 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
         }
 
         writer.WriteEndMap();
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -2076,7 +2106,8 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
         bool hasRRefs = crlReferenceWriters is not null || ocspReferenceWriters is not null || otherReferenceItems is not null;
         int memberCount = (certificateReferenceWriters is not null ? 1 : 0) + (hasRRefs ? 1 : 0);
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(memberCount);
 
         if(certificateReferenceWriters is not null)
@@ -2137,7 +2168,7 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
         }
 
         writer.WriteEndMap();
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -2151,7 +2182,8 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
     /// <returns>The encoded bytes.</returns>
     private static byte[] BuildDeeplyNestedArrayBytes(int depth)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         for(int i = 0; i < depth; i++)
         {
             writer.WriteStartArray(1);
@@ -2164,7 +2196,7 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
             writer.WriteEndArray();
         }
 
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 

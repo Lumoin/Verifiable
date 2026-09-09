@@ -158,6 +158,11 @@ public static class XAdESRenewedDigestsV2Processing
     /// <see cref="XAdESProcessingFailure.InvalidCanonicalizationParameter"/> for a malformed or over-length
     /// <c>InclusiveNamespaces PrefixList</c>.</param>
     /// <returns><see langword="true"/> when the input was computed.</returns>
+    /// <remarks>
+    /// <strong>Manual disposal, not a <see langword="using"/> declaration.</strong> <c>canonical</c> is bound
+    /// through <see cref="XmlReferenceProcessing.TryCanonicalizeForAlgorithm"/>'s <see langword="out"/>
+    /// parameter, so it is declared <see langword="null"/> and disposed in the <see langword="finally"/> below.
+    /// </remarks>
     public static bool TryComputeOriginalRefDigestInput(
         XmlNodeTable table,
         XAdESRenewedDigestsV2 renewedDigestsV2,

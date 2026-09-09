@@ -1,4 +1,4 @@
-﻿namespace Verifiable.Cesr;
+namespace Verifiable.Cesr;
 
 /// <summary>
 /// The representation domain a CESR primitive or group is expressed in. Every CESR value exists in

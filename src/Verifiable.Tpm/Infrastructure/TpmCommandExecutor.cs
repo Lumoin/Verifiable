@@ -59,7 +59,7 @@ public static class TpmCommandExecutor
     /// <summary>
     /// The smallest a single <c>TPMS_AUTH_RESPONSE</c> entry can be on the wire: an empty nonce (its 2-octet
     /// size field alone), the 1-octet <c>sessionAttributes</c>, and an empty HMAC (its 2-octet size field alone)
-    /// - TPM 2.0 Library Part 2, Section 10.10.2.
+    /// - TPM 2.0 Library Part 2, clause 10.12.3, Table 157.
     /// </summary>
     private const int MinimumAuthResponseSize = sizeof(ushort) + sizeof(byte) + sizeof(ushort);
 
@@ -72,7 +72,7 @@ public static class TpmCommandExecutor
     /// <param name="sessions">The sessions (empty for no auth).</param>
     /// <param name="handleNames">
     /// The Name of each command handle, in handle order, or <see langword="null"/> when no handle needs an
-    /// explicit Name. Per TPM 2.0 Part 1, clause 16.7, equation 15, cpHash is computed over entity Names, not handle values.
+    /// explicit Name. Per TPM 2.0 Library Part 1, clause 15.7, equation 15, cpHash is computed over entity Names, not handle values.
     /// The executor derives the Name of a permanent, PCR, or session handle itself (its Name is the 4-byte
     /// handle value), so the corresponding entry may be left empty (or the whole argument left
     /// <see langword="null"/> when every handle is of those kinds). The Name of a transient or persistent
@@ -86,6 +86,20 @@ public static class TpmCommandExecutor
     /// <param name="registry">The response codec registry.</param>
     /// <param name="cancellationToken">Token to observe across the device round-trip and crypto primitives.</param>
     /// <returns>The result containing the typed response, TPM error, or transport error.</returns>
+    /// <remarks>
+    /// <strong>Manual disposal, not <see langword="using"/> declarations.</strong> <c>namesOwner</c> and
+    /// <c>foldedNoncesOwner</c> are declared <see langword="null"/> and assigned only when a session actually
+    /// needs a cpHash or a folded-nonce set (<c>namesOwner</c> through an <see langword="out"/> parameter,
+    /// neither of which a <see langword="using"/> declaration's single-assignment-at-declaration shape
+    /// admits); <c>cpHashCache</c> is a per-algorithm list of rented buffers, not one disposable value. The
+    /// outer <see langword="finally"/> below disposes all three on every exit path. The response side mirrors
+    /// this shape once per response: <c>preparedAuthHmacs</c> and <c>responseParamsOwner</c> (the latter
+    /// zeroed before disposal — a recovered plaintext parameter-encryption value), <c>rpHashCache</c> and
+    /// <c>parsedAuthResponses</c> (per-session lists), and <c>authOwner</c> (kept alongside its sibling
+    /// rentals' explicit <see langword="try"/>/<see langword="finally"/> nesting rather than singled out as a
+    /// <see langword="using"/> declaration, so the disposal order these deeply nested HMAC-verification steps
+    /// depend on stays visible at each level) are all disposed the same way, for the same reasons.
+    /// </remarks>
     public static async ValueTask<TpmResult<TResponse>> ExecuteAsync<TResponse>(
         TpmDevice device,
         ITpmCommandInput input,
@@ -142,7 +156,7 @@ public static class TpmCommandExecutor
         }
 
         //Discover the (at most one each) decrypt and encrypt sessions for session-based parameter encryption
-        //(TPM 2.0 Part 1, Section 19.1: the encrypt/decrypt attribute may be set in at most one session each).
+        //(TPM 2.0 Library Part 1, clause 18.1: the encrypt/decrypt attribute may be set in at most one session each).
         FindParameterEncryptionSessions(sessions, out TpmSessionBase? decryptSession, out TpmSessionBase? encryptSession);
 
         //Fail fast when a session requests parameter encryption the command or codec cannot satisfy, mirroring
@@ -196,11 +210,11 @@ public static class TpmCommandExecutor
         }
 
         //Compute cpHash if sessions that need it are present. Password sessions (TPM_ALG_NULL) don't need cpHash.
-        //cpHash is computed once per DISTINCT session hash algorithm actually negotiated (Part 1, clause 16.7,
+        //cpHash is computed once per DISTINCT session hash algorithm actually negotiated (Part 1, clause 15.7,
         //equation 15), not once for the whole command: two sessions negotiating different hash algorithms (e.g. a
         //SHA-256 auth session alongside a SHA-384 decrypt session) each need cpHash under their OWN algorithm.
         //Reusing one session's hash for every session falsely rejects an honest, spec-legal mixed-hash
-        //multi-session command (the simulator recomputes cpHash per session per clause 16.7 and would disagree).
+        //multi-session command (the simulator recomputes cpHash per session per clause 15.7 and would disagree).
         //Cached by algorithm since sessions.Count is small (at most 3: one auth handle plus one decrypt and one
         //encrypt companion) and sessions commonly share the same algorithm.
         Memory<byte>[] cpHashPerSession = new Memory<byte>[sessions.Count];
@@ -220,8 +234,8 @@ public static class TpmCommandExecutor
                     session.RollNonceCaller(pool);
                 }
 
-                //Encrypt the data portion of the first command parameter (Part 1 §19) before cpHash is computed
-                //(§19.1) when a session carries the decrypt attribute. Admissibility was validated above, so the
+                //Encrypt the data portion of the first command parameter (Part 1, clause 18) before cpHash is computed
+                //(clause 19.1) when a session carries the decrypt attribute. Admissibility was validated above, so the
                 //first parameter is a sized buffer; only its data (after the 2-octet size field) is encrypted.
                 if(decryptSession is not null)
                 {
@@ -258,7 +272,7 @@ public static class TpmCommandExecutor
                     //the Name of a permanent/PCR/session handle (Name == handle); an object or NV index Name must
                     //come from handleNames or this throws rather than producing a cpHash the TPM would reject.
                     ReadOnlyMemory<byte> cpHashHandleArea = ResolveCpHashHandleArea(
-                        handlesMemory, inputHandleCount, handleNames, pool, out namesOwner);
+                        handlesMemory, inputHandleCount, handleNames, input, pool, out namesOwner);
 
                     for(int i = 0; i < sessions.Count; i++)
                     {
@@ -296,14 +310,16 @@ public static class TpmCommandExecutor
             }
 
             //Fold an OTHER session's nonceTPM into the FIRST session's command HMAC when that first session
-            //itself authorizes a command handle (TPM 2.0 Library Part 1, clause 17.6.3.4): the fold's own
-            //precondition is "session 0 is the first session in the authorization area AND it authorizes an
-            //entity", and by this codebase's session-ordering convention (handleNames' own per-handle contract)
-            //session 0 corresponds to the first command handle whenever one exists. Never a session's own
-            //nonceTPM into itself (guarded by reference equality), and never when the command has no handle for
-            //session 0 to authorize (GetRandom-shaped commands), matching the two existing sites this applies to.
+            //itself authorizes a command handle (TPM 2.0 Library Part 1, clause 16.6.5; Part 4
+            //SessionProcess.c's ComputeCommandHMAC(): "if(sessionIndex == 0 && s_associatedHandles[sessionIndex]
+            //!= TPM_RH_UNASSIGNED)"). The fold's precondition is session 0 being ASSOCIATED WITH a handle, not
+            //merely the command having one: a no-authorization command's handle (TPM2_ReadPublic(),
+            //TPM2_RSA_Encrypt(), and the rest of the sixteen) carries no '@' decoration, so session 0 there is
+            //always a companion, never an authorizer, and the fold must not apply — the command's own
+            //ITpmCommandInput.IsFirstHandleAuthorized declares which case a command is. Never a session's own
+            //nonceTPM into itself (guarded by reference equality).
             ReadOnlyMemory<byte> foldedSessionNonces = ReadOnlyMemory<byte>.Empty;
-            if(hasSessions && inputHandleCount > 0)
+            if(hasSessions && inputHandleCount > 0 && input.IsFirstHandleAuthorized)
             {
                 TpmSessionBase firstSession = sessions[0];
                 bool foldsDecrypt = decryptSession is not null && !ReferenceEquals(decryptSession, firstSession);
@@ -404,7 +420,7 @@ public static class TpmCommandExecutor
                 TpmResponseLayout layout = layoutResult.Value;
 
                 //A successful response to a command authorized by a session that verifies the response MUST itself
-                //carry that session's authorization (TPM 2.0 Library Part 1, clauses 16.6.1 and 17.6.5: a
+                //carry that session's authorization (TPM 2.0 Library Part 1, clauses 15.6.1 and 16.6.5: a
                 //successful response carries one entry per request session, each keyed as the command's was). The
                 //requirement is derived from the REQUEST's session set, never from the response tag: deciding it
                 //from the tag lets anything on the transport strip the authorization area, answer TPM_ST_NO_SESSIONS
@@ -430,7 +446,7 @@ public static class TpmCommandExecutor
                     if(hasResponseSessions)
                     {
                         //Every session in the request contributes exactly one entry to the response authorization
-                        //area (Part 1, clause 16.6.1), so an area too short to hold them is a malformed or
+                        //area (Part 1, clause 15.6.1), so an area too short to hold them is a malformed or
                         //truncated response - refused before any entry is parsed out of it, so a hostile framing
                         //cannot drive the reader past the copied bytes.
                         if(layout.AuthLength < (long)sessions.Count * MinimumAuthResponseSize)
@@ -444,14 +460,14 @@ public static class TpmCommandExecutor
 
                         //Verify the session HMAC(s) BEFORE interpreting or decrypting the response parameters.
                         //rpHash is computed over the response parameter bytes as received (still encrypted, per
-                        //Part 1 §19.1), so verification does not need the typed parse; deferring both the parse
+                        //Part 1, clause 18.1), so verification does not need the typed parse; deferring both the parse
                         //and the decryption until after verification keeps a forged or corrupt response from
                         //being interpreted. This mirrors TPM 2.0 Library Part 4's response path: the TPM encrypts the first response
                         //parameter before computing rpHash, so on the caller side the first parameter is
                         //decrypted only after the response HMAC verifies.
                         //
                         //Like cpHash (above), rpHash is computed once per DISTINCT session hash algorithm actually
-                        //negotiated (Part 1, clause 16.8, equation 16) and each session verifies against its OWN
+                        //negotiated (Part 1, clause 15.8, equation 16) and each session verifies against its OWN
                         //algorithm's rpHash, never one session's hash reused for every session.
                         Memory<byte>[] rpHashPerSession = new Memory<byte>[sessions.Count];
                         List<(TpmAlgIdConstants Alg, IMemoryOwner<byte> Owner, Memory<byte> Memory)> rpHashCache = new(Math.Min(sessions.Count, 3));
@@ -504,6 +520,7 @@ public static class TpmCommandExecutor
                                 List<TpmsAuthResponse> parsedAuthResponses = new(sessions.Count);
                                 try
                                 {
+                                    try
                                     {
                                         var authReader = new TpmReader(authMemory.Span);
                                         for(int i = 0; i < sessions.Count; i++)
@@ -511,6 +528,14 @@ public static class TpmCommandExecutor
                                             parsedAuthResponses.Add(TpmsAuthResponse.Parse(ref authReader, pool));
                                         }
                                         authReaderRemaining = authReader.Remaining;
+                                    }
+                                    catch(Exception ex) when(ex is ArgumentOutOfRangeException or InvalidOperationException)
+                                    {
+                                        //A response authorization area whose interior lengths overrun the area, or declare
+                                        //more than their type's bound, is a size fault answered inside the TpmResult contract
+                                        //(TPM 2.0 Library Part 2, Table 18: TPM_RC_SIZE "structure is the wrong size"), never
+                                        //an escape — the parameter parse below takes the same posture.
+                                        return TpmResult<TResponse>.TpmError(TpmRcConstants.TPM_RC_SIZE);
                                     }
 
                                     for(int i = 0; i < sessions.Count; i++)
@@ -550,7 +575,7 @@ public static class TpmCommandExecutor
                             }
                         }
 
-                        //Decrypt the data portion of the first response parameter (Part 1 §19), now that the
+                        //Decrypt the data portion of the first response parameter (Part 1, clause 18), now that the
                         //response HMAC has verified and the encrypt session has adopted the new nonceTPM. Only
                         //its data (after the 2-octet size field) is encrypted.
                         if(encryptSession is not null && codec.ResponseFirstParameterIsEncryptable && !encryptSession.Symmetric.IsNull)
@@ -571,19 +596,43 @@ public static class TpmCommandExecutor
                         }
                     }
 
-                    //Interpret the response parameters with the codec, after verification and decryption.
+                    //Interpret the response parameters with the codec, after verification and decryption. A codec
+                    //carrying a parser parses over an actual parameter area, or over an empty one when the response
+                    //also carries a handle: a handle-returning command with no response parameters
+                    //(TPM2_SignSequenceStart(), TPM 2.0 Library Part 3, clause 17.5, Table 88;
+                    //TPM2_VerifySequenceStart(), Table 90) is answered by its handle alone, and only the parser can
+                    //bind that handle into the typed response. A parser-bearing codec with no out handles and a
+                    //genuinely empty parameter area (a malformed or fault-injected response) falls to the
+                    //parameterless branch below and answers TPM_RC_FAILURE, matching the fail-closed posture the
+                    //TpmResult contract commits to.
                     TResponse typedResponse;
-                    if(codec.HasResponseParameters && layout.ParametersLength > 0)
+                    if(codec.HasResponseParameters && (layout.ParametersLength > 0 || codec.OutHandleCount > 0))
                     {
                         ReadOnlySpan<byte> parametersArea = hasResponseSessions
                             ? responseParamsMemory.Span
                             : response.AsReadOnlySpan().Slice(layout.ParametersStart, layout.ParametersLength);
                         var paramReader = new TpmReader(parametersArea);
 
-                        ITpmWireType parsed = codec.ParseResponse(ref paramReader, layout.OutHandles, pool);
+                        ITpmWireType parsed;
+                        try
+                        {
+                            parsed = codec.ParseResponse(ref paramReader, layout.OutHandles, pool);
+                        }
+                        catch(ArgumentOutOfRangeException)
+                        {
+                            //A response shorter than its declared type demands underruns the reader; that is a size
+                            //fault, not an escape from the TpmResult contract (TPM 2.0 Library Part 3, clause 6.2's
+                            //fail-closed posture; Part 2, Table 18: TPM_RC_SIZE "structure is the wrong size").
+                            return TpmResult<TResponse>.TpmError(TpmRcConstants.TPM_RC_SIZE);
+                        }
 
                         if(parsed is not TResponse typed)
                         {
+                            //The parse produced a value but not the expected response type: release whatever pooled
+                            //carriers it rented before reporting the failure, so a mismatched parse cannot orphan a
+                            //rental.
+                            (parsed as IDisposable)?.Dispose();
+
                             return TpmResult<TResponse>.TpmError(TpmRcConstants.TPM_RC_FAILURE);
                         }
 
@@ -592,6 +641,10 @@ public static class TpmCommandExecutor
                         //Verify no trailing bytes.
                         if(paramReader.Remaining > 0)
                         {
+                            //The response parsed cleanly but carried extra octets beyond its own shape: release the
+                            //parsed response's pooled carriers before reporting the size fault.
+                            (typedResponse as IDisposable)?.Dispose();
+
                             return TpmResult<TResponse>.TpmError(TpmRcConstants.TPM_RC_SIZE);
                         }
                     }
@@ -652,7 +705,7 @@ public static class TpmCommandExecutor
     /// <param name="encryptSession">Receives the encrypt session, or <see langword="null"/> when none sets it.</param>
     /// <exception cref="ArgumentException">
     /// More than one session sets the <c>decrypt</c> attribute, or more than one sets the <c>encrypt</c>
-    /// attribute. Per TPM 2.0 Part 1, Section 19.1 each attribute may be set in at most one session per command.
+    /// attribute. Per TPM 2.0 Library Part 1, clause 18.1 each attribute may be set in at most one session per command.
     /// </exception>
     private static void FindParameterEncryptionSessions(
         IReadOnlyList<TpmSessionBase> sessions,
@@ -692,13 +745,17 @@ public static class TpmCommandExecutor
 
     /// <summary>
     /// Resolves the handle-area input to cpHash: the concatenation of each handle's entity Name in handle
-    /// order (TPM 2.0 Part 1, clause 16.7, equation 15). A permanent, PCR, or session handle's Name is its 4-byte handle
-    /// value (derived here); a transient or persistent object or an NV index has Name <c>nameAlg ||
+    /// order (TPM 2.0 Library Part 1, clause 15.7, equation 15). A permanent, PCR, or session handle's Name is its 4-byte handle
+    /// value (derived here); a sequence handle's Name is the Empty Buffer — a present, zero-length term (Part 1,
+    /// clause 29.4.6; Part 3, clause 17.7.1), derived here from the input's own declaration
+    /// (<see cref="ITpmCommandInput.HandleIsSequence"/>) because the handle value cannot tell a sequence from a
+    /// key; a transient or persistent object or an NV index has Name <c>nameAlg ||
     /// H(publicArea)</c>, which only the caller knows, so it must be supplied in <paramref name="handleNames"/>.
     /// </summary>
     /// <param name="handlesMemory">The pre-serialized big-endian handle values.</param>
     /// <param name="handleCount">The number of command handles.</param>
     /// <param name="handleNames">The caller-supplied per-handle Names, or <see langword="null"/>.</param>
+    /// <param name="input">The command input, which declares which of its handles name a sequence.</param>
     /// <param name="pool">The memory pool for the concatenated Names buffer.</param>
     /// <param name="namesOwner">
     /// Receives the rented buffer backing the returned memory (or <see langword="null"/> when no buffer is
@@ -706,12 +763,14 @@ public static class TpmCommandExecutor
     /// </param>
     /// <returns>The concatenated Names to feed into cpHash.</returns>
     /// <exception cref="ArgumentException">
-    /// An object or NV-index handle has no supplied Name, so cpHash cannot be computed correctly.
+    /// An object or NV-index handle has no supplied Name, so cpHash cannot be computed correctly; or a Name was
+    /// supplied for a handle the input declares as a sequence, whose Name is the Empty Buffer by definition.
     /// </exception>
     private static ReadOnlyMemory<byte> ResolveCpHashHandleArea(
         ReadOnlyMemory<byte> handlesMemory,
         int handleCount,
         IReadOnlyList<ReadOnlyMemory<byte>>? handleNames,
+        ITpmCommandInput input,
         BaseMemoryPool pool,
         out IMemoryOwner<byte>? namesOwner)
     {
@@ -735,7 +794,23 @@ public static class TpmCommandExecutor
                 || handleType == (byte)TpmHt.TPM_HT_NV_INDEX;
 
             ReadOnlyMemory<byte> name;
-            if(handleNames is not null && !handleNames[i].IsEmpty)
+            if(input.HandleIsSequence(i))
+            {
+                //A sequence object's Name is the Empty Buffer (Part 1, clause 29.4.6): a present term of zero
+                //octets. A caller-supplied Name for it would fold octets the TPM never folds, so it is refused
+                //rather than silently ignored.
+                if(handleNames is not null && !handleNames[i].IsEmpty)
+                {
+                    uint handle = BinaryPrimitives.ReadUInt32BigEndian(handleBytes.Span);
+
+                    throw new ArgumentException(
+                        $"Handle {i} (0x{handle:X8}) is a sequence handle; its cpHash Name is the Empty Buffer and must not be supplied in handleNames.",
+                        nameof(handleNames));
+                }
+
+                name = ReadOnlyMemory<byte>.Empty;
+            }
+            else if(handleNames is not null && !handleNames[i].IsEmpty)
             {
                 name = handleNames[i];
             }
@@ -869,7 +944,7 @@ public static class TpmCommandExecutor
 
         //A truncated or hostile response must not drive an out-of-bounds read: the header, the codec's fixed
         //output handles, and (for a TPM_ST_SESSIONS response) the 4-byte parameterSize field must all fit within
-        //the already-validated responseSize before anything is read from them (Part 1, §16.10 response framing).
+        //the already-validated responseSize before anything is read from them (Part 1, clause 15.10 response framing).
         bool responseHasSessions = responseTag == (ushort)TpmStConstants.TPM_ST_SESSIONS;
         long handlesEnd = (long)TpmConstants.HeaderSize + ((long)outHandleCount * sizeof(uint));
         long minimumSize = responseHasSessions ? handlesEnd + sizeof(uint) : handlesEnd;
@@ -905,8 +980,8 @@ public static class TpmCommandExecutor
 
             //parameterSize is attacker-influenced wire data: bound it to the bytes actually remaining in the
             //response so it can neither drive a huge pool rental nor, once cast to int, go negative and throw an
-            //out-of-range exception past the fail-closed TpmResult contract (Part 1, §16.10 parameter/auth split).
-            if(parameterSize > (uint)(responseSize - (uint)parametersStart))
+            //out-of-range exception past the fail-closed TpmResult contract (Part 1, clause 15.10 parameter/auth split).
+            if(parameterSize > responseSize - (uint)parametersStart)
             {
                 return TpmResult<TpmResponseLayout>.TpmError(TpmRcConstants.TPM_RC_SIZE);
             }
@@ -940,7 +1015,7 @@ public static class TpmCommandExecutor
     }
 
     /// <summary>
-    /// Asynchronously computes cpHash per TPM 2.0 Part 1, Section 16.7.
+    /// Asynchronously computes cpHash per TPM 2.0 Library Part 1, clause 15.7.
     /// </summary>
     private static async ValueTask ComputeCpHashAsync(
         TpmAlgIdConstants hashAlg,
@@ -980,7 +1055,7 @@ public static class TpmCommandExecutor
     }
 
     /// <summary>
-    /// Asynchronously computes rpHash per TPM 2.0 Part 1, Section 16.8.
+    /// Asynchronously computes rpHash per TPM 2.0 Library Part 1, clause 15.8.
     /// </summary>
     private static async ValueTask ComputeRpHashAsync(
         TpmAlgIdConstants hashAlg,

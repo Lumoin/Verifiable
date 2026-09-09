@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Security.Cryptography;
 using Verifiable.Cryptography;
 using Verifiable.Microsoft;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Cryptography;
 
@@ -24,7 +25,7 @@ internal sealed class KeyExtensionsHmacTests
         using HmacValue viaExtension = await key.ComputeHmacAsync(
             message,
             32,
-            MicrosoftHmacFunctions.ComputeHmacAsync,
+            MicrosoftHmacFunctionsAdapter.ComputeHmacAsync,
             BaseMemoryPool.Shared,
             null,
             TestContext.CancellationToken).ConfigureAwait(false);
@@ -46,11 +47,11 @@ internal sealed class KeyExtensionsHmacTests
         using SymmetricKeyMemory key = new(keyOwner, CryptoTags.HmacSha256Key);
 
         using HmacValue mac = await key.ComputeHmacAsync(
-            message, 32, MicrosoftHmacFunctions.ComputeHmacAsync,
+            message, 32, MicrosoftHmacFunctionsAdapter.ComputeHmacAsync,
             BaseMemoryPool.Shared, null, TestContext.CancellationToken).ConfigureAwait(false);
 
         bool isValid = await key.VerifyHmacAsync(
-            message, mac, MicrosoftHmacFunctions.VerifyHmacAsync,
+            message, mac, MicrosoftHmacFunctionsAdapter.VerifyHmacAsync,
             BaseMemoryPool.Shared, null, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isValid);
@@ -73,7 +74,7 @@ internal sealed class KeyExtensionsHmacTests
         bool isValid = await key.VerifyHmacAsync(
             message,
             expectedMac.AsMemory(),
-            MicrosoftHmacFunctions.VerifyHmacAsync,
+            MicrosoftHmacFunctionsAdapter.VerifyHmacAsync,
             BaseMemoryPool.Shared,
             null,
             TestContext.CancellationToken).ConfigureAwait(false);
@@ -99,7 +100,7 @@ internal sealed class KeyExtensionsHmacTests
         bool isValid = await key.VerifyHmacAsync(
             message,
             tampered.AsMemory(),
-            MicrosoftHmacFunctions.VerifyHmacAsync,
+            MicrosoftHmacFunctionsAdapter.VerifyHmacAsync,
             BaseMemoryPool.Shared,
             null,
             TestContext.CancellationToken).ConfigureAwait(false);

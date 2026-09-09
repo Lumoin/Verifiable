@@ -34,10 +34,10 @@ internal sealed class Oid4VciAuthorizationRequestParamsTests
     private const string ClientId = "https://wallet.client.test";
 
     /// <summary>The base URI the registered client is reachable at.</summary>
-    private static readonly Uri ClientBaseUri = new("https://wallet.client.test");
+    private static Uri ClientBaseUri { get; } = new("https://wallet.client.test");
 
     /// <summary>The registered redirect URI the fixture's clients use.</summary>
-    private static readonly Uri RedirectUri = new("https://client.example.com/callback");
+    private static Uri RedirectUri { get; } = new("https://client.example.com/callback");
 
     /// <summary>The authenticated End-User established at the authorize step.</summary>
     private const string SubjectId = "urn:uuid:end-user-42";
@@ -54,7 +54,7 @@ internal sealed class Oid4VciAuthorizationRequestParamsTests
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     /// <summary>The capabilities the Authorization Code flow tests need.</summary>
-    private static readonly ImmutableHashSet<CapabilityIdentifier> AuthCodeCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> AuthCodeCapabilities { get; } =
         ImmutableHashSet.Create(
             WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
             WellKnownCapabilityIdentifiers.OAuthPushedAuthorization);

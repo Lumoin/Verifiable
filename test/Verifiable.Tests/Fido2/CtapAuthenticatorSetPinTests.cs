@@ -36,7 +36,7 @@ internal sealed class CtapAuthenticatorSetPinTests
     [DataRow(CtapPinUvAuthProtocolId.Two, DisplayName = "protocol two")]
     public async Task SetPinHappyPathSucceedsAndFlipsClientPinToTrue(CtapPinUvAuthProtocolId protocolId)
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator($"setpin-happy-{protocolId}");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator($"setpin-happy-{protocolId}",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapGetInfoResponse beforeInfo = await GetInfoAsync(simulator, pool);
@@ -67,7 +67,7 @@ internal sealed class CtapAuthenticatorSetPinTests
     [TestMethod]
     public async Task SetPinMissingMandatoryParametersReturnsMissingParameter()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("setpin-missing-params");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("setpin-missing-params",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapPlatformPinSession session = await CtapPinCryptoFixtures.EstablishSessionAsync(
             simulator.TransceiveAsync, CtapPinUvAuthProtocolId.Two, pool, TestContext.CancellationToken);
@@ -99,7 +99,7 @@ internal sealed class CtapAuthenticatorSetPinTests
     [TestMethod]
     public async Task SetPinUnsupportedProtocolReturnsInvalidParameter()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("setpin-unsupported-protocol");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("setpin-unsupported-protocol",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapPlatformPinSession session = await CtapPinCryptoFixtures.EstablishSessionAsync(
             simulator.TransceiveAsync, CtapPinUvAuthProtocolId.Two, pool, TestContext.CancellationToken);
@@ -119,7 +119,7 @@ internal sealed class CtapAuthenticatorSetPinTests
     [TestMethod]
     public async Task SetPinWhenAlreadySetReturnsPinAuthInvalid()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("setpin-already-set");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("setpin-already-set",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         await EstablishPinAsync(simulator, pool, "1234");
 
@@ -141,7 +141,7 @@ internal sealed class CtapAuthenticatorSetPinTests
     [TestMethod]
     public async Task SetPinWithBadSignatureReturnsPinAuthInvalid()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("setpin-bad-signature");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("setpin-bad-signature",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapPlatformPinSession session = await CtapPinCryptoFixtures.EstablishSessionAsync(
             simulator.TransceiveAsync, CtapPinUvAuthProtocolId.Two, pool, TestContext.CancellationToken);
@@ -168,7 +168,7 @@ internal sealed class CtapAuthenticatorSetPinTests
     [TestMethod]
     public async Task SetPinWithNonSixtyFourBytePaddedPinReturnsInvalidParameter()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("setpin-bad-padded-length");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("setpin-bad-padded-length",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapPlatformPinSession session = await CtapPinCryptoFixtures.EstablishSessionAsync(
             simulator.TransceiveAsync, CtapPinUvAuthProtocolId.Two, pool, TestContext.CancellationToken);
@@ -191,7 +191,7 @@ internal sealed class CtapAuthenticatorSetPinTests
     [TestMethod]
     public async Task SetPinBelowMinimumCodePointLengthReturnsPinPolicyViolation()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("setpin-too-short");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("setpin-too-short",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapPlatformPinSession session = await CtapPinCryptoFixtures.EstablishSessionAsync(
             simulator.TransceiveAsync, CtapPinUvAuthProtocolId.Two, pool, TestContext.CancellationToken);
@@ -215,7 +215,7 @@ internal sealed class CtapAuthenticatorSetPinTests
     [TestMethod]
     public async Task SetPinCountsCodePointsNotUtf8BytesForTheMinimum()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("setpin-code-point-counting-reject");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("setpin-code-point-counting-reject",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapPlatformPinSession session = await CtapPinCryptoFixtures.EstablishSessionAsync(
             simulator.TransceiveAsync, CtapPinUvAuthProtocolId.Two, pool, TestContext.CancellationToken);
@@ -241,7 +241,7 @@ internal sealed class CtapAuthenticatorSetPinTests
     [TestMethod]
     public async Task SetPinWithFourMultiByteCodePointsSucceeds()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("setpin-code-point-counting-accept");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("setpin-code-point-counting-accept",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapPlatformPinSession session = await CtapPinCryptoFixtures.EstablishSessionAsync(
             simulator.TransceiveAsync, CtapPinUvAuthProtocolId.Two, pool, TestContext.CancellationToken);
@@ -266,7 +266,7 @@ internal sealed class CtapAuthenticatorSetPinTests
     [TestMethod]
     public async Task SetPinWithSixtyThreeByteMaximumLengthPinSucceeds()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("setpin-63-byte-max");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("setpin-63-byte-max",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapPlatformPinSession session = await CtapPinCryptoFixtures.EstablishSessionAsync(
             simulator.TransceiveAsync, CtapPinUvAuthProtocolId.Two, pool, TestContext.CancellationToken);
@@ -297,7 +297,7 @@ internal sealed class CtapAuthenticatorSetPinTests
     [DataRow(CtapPinUvAuthProtocolId.Two, 64, DisplayName = "protocol two: 64-byte shared secret")]
     public async Task SetPinZeroesTheSharedSecretBeforeReturningItToThePool(CtapPinUvAuthProtocolId protocolId, int sharedSecretLength)
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator($"setpin-zeroization-{protocolId}");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator($"setpin-zeroization-{protocolId}",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapPlatformPinSession session = await CtapPinCryptoFixtures.EstablishSessionAsync(
             simulator.TransceiveAsync, protocolId, pool, TestContext.CancellationToken);

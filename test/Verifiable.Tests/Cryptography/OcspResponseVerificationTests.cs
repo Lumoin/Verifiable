@@ -482,6 +482,9 @@ internal sealed class OcspResponseVerificationTests
     /// stated exponent; a certificate whose real signing key genuinely uses 65537 but whose DER falsely
     /// declares a different exponent must be rejected rather than verified against a key it does not name.
     /// </summary>
+    /// <summary><c>rsaRootCertificate</c> and <c>rsaRootKey</c> are tuple-deconstruction targets, disposed
+    /// in the <see langword="finally"/> block below because a <see langword="using"/> declaration cannot
+    /// target one.</summary>
     [TestMethod]
     public async Task RsaSignerWithForgedNonStandardExponentIsRejected()
     {
@@ -526,6 +529,8 @@ internal sealed class OcspResponseVerificationTests
     [DataRow(3072, "SHA512withRSA")]
     public async Task RsaResponderSignaturesInsideTheAcceptanceBandVerify(int keySizeBits, string signatureAlgorithm)
     {
+        //rsaRootCertificate/rsaRootKey are tuple-deconstruction targets, disposed in the finally block below
+        //because a using declaration cannot target one.
         (X509Certificate2 rsaRootCertificate, RSA rsaRootKey) = OcspTestFixtures.MintRsaRootCa($"OCSP Verify RSA {keySizeBits} Root", NotBefore, NotAfter, keySizeBits);
         try
         {
@@ -627,6 +632,8 @@ internal sealed class OcspResponseVerificationTests
     [TestMethod]
     public async Task RsaResponderWithASubFloorKeyIsSignatureInvalid()
     {
+        //rsaRootCertificate/rsaRootKey are tuple-deconstruction targets, disposed in the finally block below
+        //because a using declaration cannot target one.
         (X509Certificate2 rsaRootCertificate, RSA rsaRootKey) = OcspTestFixtures.MintRsaRootCa("OCSP Verify RSA Sub-Floor Root", NotBefore, NotAfter, keySizeBits: 1024);
         try
         {

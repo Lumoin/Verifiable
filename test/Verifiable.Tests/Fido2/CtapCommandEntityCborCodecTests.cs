@@ -1,7 +1,8 @@
 using System;
 using System.Buffers;
 using System.Collections.Generic;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
+using Verifiable.Cbor;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
@@ -28,15 +29,17 @@ internal sealed class CtapCommandEntityCborCodecTests
     [TestMethod]
     public void WriteParametersEncodesAlgIn24To255BandAsExactTwoByteForm()
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         var parameters = new PublicKeyCredentialParameters { Type = WellKnownPublicKeyCredentialTypes.PublicKey, Alg = 100 };
         CtapCommandEntityCborCodec.WriteParameters(writer, parameters);
-        byte[] encoded = writer.Encode();
+        byte[] encoded = writerBuffer.WrittenSpan.ToArray();
 
         Assert.AreEqual(0x18, encoded[5]);
         Assert.AreEqual(0x64, encoded[6]);
 
-        PublicKeyCredentialParameters decoded = CtapCommandEntityCborCodec.ReadParameters(new CborReader(encoded, CborConformanceMode.Ctap2Canonical));
+        PublicKeyCredentialParameters decoded = CtapCommandEntityCborCodec.ReadParameters(new CborReader(encoded, CborOptions.Ctap2Canonical));
         Assert.AreEqual(100, decoded.Alg);
     }
 
@@ -48,16 +51,18 @@ internal sealed class CtapCommandEntityCborCodecTests
     [TestMethod]
     public void WriteParametersEncodesAlgIn256To65535BandAsExactThreeByteForm()
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         var parameters = new PublicKeyCredentialParameters { Type = WellKnownPublicKeyCredentialTypes.PublicKey, Alg = 1000 };
         CtapCommandEntityCborCodec.WriteParameters(writer, parameters);
-        byte[] encoded = writer.Encode();
+        byte[] encoded = writerBuffer.WrittenSpan.ToArray();
 
         Assert.AreEqual(0x19, encoded[5]);
         Assert.AreEqual(0x03, encoded[6]);
         Assert.AreEqual(0xE8, encoded[7]);
 
-        PublicKeyCredentialParameters decoded = CtapCommandEntityCborCodec.ReadParameters(new CborReader(encoded, CborConformanceMode.Ctap2Canonical));
+        PublicKeyCredentialParameters decoded = CtapCommandEntityCborCodec.ReadParameters(new CborReader(encoded, CborOptions.Ctap2Canonical));
         Assert.AreEqual(1000, decoded.Alg);
     }
 
@@ -69,10 +74,12 @@ internal sealed class CtapCommandEntityCborCodecTests
     [TestMethod]
     public void WriteParametersEncodesAlgIn65536To4294967295BandAsExactFiveByteForm()
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         var parameters = new PublicKeyCredentialParameters { Type = WellKnownPublicKeyCredentialTypes.PublicKey, Alg = 100000 };
         CtapCommandEntityCborCodec.WriteParameters(writer, parameters);
-        byte[] encoded = writer.Encode();
+        byte[] encoded = writerBuffer.WrittenSpan.ToArray();
 
         Assert.AreEqual(0x1A, encoded[5]);
         Assert.AreEqual(0x00, encoded[6]);
@@ -80,7 +87,7 @@ internal sealed class CtapCommandEntityCborCodecTests
         Assert.AreEqual(0x86, encoded[8]);
         Assert.AreEqual(0xA0, encoded[9]);
 
-        PublicKeyCredentialParameters decoded = CtapCommandEntityCborCodec.ReadParameters(new CborReader(encoded, CborConformanceMode.Ctap2Canonical));
+        PublicKeyCredentialParameters decoded = CtapCommandEntityCborCodec.ReadParameters(new CborReader(encoded, CborOptions.Ctap2Canonical));
         Assert.AreEqual(100000, decoded.Alg);
     }
 
@@ -100,14 +107,16 @@ internal sealed class CtapCommandEntityCborCodecTests
             entries.Add(new PublicKeyCredentialParameters { Type = WellKnownPublicKeyCredentialTypes.PublicKey, Alg = WellKnownCoseAlgorithms.Es256 });
         }
 
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         CtapCommandEntityCborCodec.WriteParametersArray(writer, entries);
-        byte[] encoded = writer.Encode();
+        byte[] encoded = writerBuffer.WrittenSpan.ToArray();
 
         Assert.AreEqual(0x98, encoded[0]);
         Assert.AreEqual(0x18, encoded[1]);
 
-        List<PublicKeyCredentialParameters> decoded = CtapCommandEntityCborCodec.ReadParametersArray(new CborReader(encoded, CborConformanceMode.Ctap2Canonical));
+        List<PublicKeyCredentialParameters> decoded = CtapCommandEntityCborCodec.ReadParametersArray(new CborReader(encoded, CborOptions.Ctap2Canonical));
         Assert.HasCount(24, decoded);
     }
 
@@ -126,7 +135,9 @@ internal sealed class CtapCommandEntityCborCodecTests
     {
         //Canonical CBOR map-key order is length-first: "id" (2 chars) precedes "icon" (4 chars)
         //regardless of content, so both maps below write "id" first.
-        var rpWriter = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var rpWriterBuffer = new ArrayBufferWriter<byte>();
+        var rpWriter = new CborWriter(rpWriterBuffer, CborOptions.Ctap2Canonical);
+
         rpWriter.WriteStartMap(2);
         rpWriter.WriteTextString("id");
         rpWriter.WriteTextString("icon.example");
@@ -134,10 +145,12 @@ internal sealed class CtapCommandEntityCborCodecTests
         rpWriter.WriteTextString("https://example.com/icon.png");
         rpWriter.WriteEndMap();
 
-        CtapPublicKeyCredentialRpEntity rp = CtapCommandEntityCborCodec.ReadRpEntity(new CborReader(rpWriter.Encode(), CborConformanceMode.Ctap2Canonical));
+        CtapPublicKeyCredentialRpEntity rp = CtapCommandEntityCborCodec.ReadRpEntity(new CborReader(rpWriterBuffer.WrittenSpan.ToArray(), CborOptions.Ctap2Canonical));
         Assert.AreEqual("icon.example", rp.Id);
 
-        var userWriter = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var userWriterBuffer = new ArrayBufferWriter<byte>();
+        var userWriter = new CborWriter(userWriterBuffer, CborOptions.Ctap2Canonical);
+
         userWriter.WriteStartMap(2);
         userWriter.WriteTextString("id");
         userWriter.WriteByteString([0x01, 0x02, 0x03]);
@@ -146,7 +159,7 @@ internal sealed class CtapCommandEntityCborCodecTests
         userWriter.WriteEndMap();
 
         CtapPublicKeyCredentialUserEntity user = CtapCommandEntityCborCodec.ReadUserEntity(
-            new CborReader(userWriter.Encode(), CborConformanceMode.Ctap2Canonical), BaseMemoryPool.Shared);
+            new CborReader(userWriterBuffer.WrittenSpan.ToArray(), CborOptions.Ctap2Canonical), BaseMemoryPool.Shared);
         try
         {
             Assert.HasCount(3, user.Id.AsReadOnlySpan());

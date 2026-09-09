@@ -104,8 +104,8 @@ public static class MdocIssuerSignedTrimmer
         ArgumentException.ThrowIfNullOrEmpty(nameSpace);
         ArgumentException.ThrowIfNullOrEmpty(elementIdentifier);
 
-        Verifiable.JsonPointer.JsonPointer pointer =
-            Verifiable.JsonPointer.JsonPointer.Root
+        Lumoin.Veritas.JsonPointer.JsonPointer pointer =
+            Lumoin.Veritas.JsonPointer.JsonPointer.Root
                 .Append(nameSpace)
                 .Append(elementIdentifier);
 

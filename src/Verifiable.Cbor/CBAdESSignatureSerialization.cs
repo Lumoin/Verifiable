@@ -2,7 +2,7 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.JCose;
@@ -28,7 +28,7 @@ namespace Verifiable.Cbor;
 /// RFC 9052 §4.2 <c>COSE_Sign1</c> envelope itself.
 /// </para>
 /// <para>
-/// <strong>Conformance mode: <see cref="CborConformanceMode.Canonical"/> throughout</strong> — for both the
+/// <strong>Conformance mode: <see cref="CborConformanceMode.RfcCanonical"/> throughout</strong> — for both the
 /// per-member value writers and the whole-message/protected-header readers — matching
 /// <see cref="CBAdESSerialization"/>'s own convention rather than <see cref="CoseSerialization"/>'s more
 /// permissive <see cref="CborConformanceMode.Lax"/> reader. <see cref="CoseSerialization"/> parses ANY
@@ -262,7 +262,8 @@ public static class CBAdESSignatureSerialization
 
         entries.Sort(static (left, right) => CompareByCanonicalLabelEncoding(left.Label, right.Label));
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(entries.Count);
         foreach((CoseHeaderLabel Label, ReadOnlyMemory<byte> Value) entry in entries)
         {
@@ -282,14 +283,14 @@ public static class CBAdESSignatureSerialization
 
         writer.WriteEndMap();
 
-        return EncodedCoseProtectedHeader.FromBytes(writer.Encode(), pool);
+        return EncodedCoseProtectedHeader.FromBytes(buffer.WrittenSpan, pool);
 
         /// <summary>
         /// Compares <paramref name="left"/> and <paramref name="right"/> under the RFC 8949 §4.2.3 canonical
         /// map-key ordering (length-first, then bytewise-lexicographic) over each label's OWN canonical CBOR
         /// encoding — the general <c>label: int / tstr</c> union's ordering, not merely the
         /// integer-only ordering <see cref="CborReaderExtensions.ReadAscendingMapKey"/> implements. The .NET
-        /// <see cref="CborConformanceMode.Canonical"/> writer re-sorts the map's entries itself at
+        /// <see cref="CborConformanceMode.RfcCanonical"/> writer re-sorts the map's entries itself at
         /// <see cref="CborWriter.WriteEndMap"/>, so this explicit sort is documentation-of-intent, not the sole
         /// mechanism producing canonical wire order.
         /// </summary>
@@ -306,7 +307,8 @@ public static class CBAdESSignatureSerialization
 
             static byte[] EncodeLabelCanonical(CoseHeaderLabel label)
             {
-                var labelWriter = new CborWriter(CborConformanceMode.Canonical);
+                var labelBuffer = new ArrayBufferWriter<byte>();
+                var labelWriter = new CborWriter(labelBuffer, CborOptions.RfcCanonical);
                 switch(label)
                 {
                     case CoseHeaderIntegerLabel integerLabel:
@@ -318,7 +320,7 @@ public static class CBAdESSignatureSerialization
                         break;
                 }
 
-                return labelWriter.Encode();
+                return labelBuffer.WrittenSpan.ToArray();
             }
         }
     };
@@ -349,7 +351,7 @@ public static class CBAdESSignatureSerialization
 
         using PooledMemory encodedArray = CBAdESSerialization.EncodeUnsignedHeaders(unsignedHeaders, pool);
 
-        var reader = new CborReader(encodedArray.AsReadOnlyMemory(), CborConformanceMode.Canonical);
+        var reader = new CborReader(encodedArray.AsReadOnlyMemory(), CborOptions.RfcCanonical);
         int count = reader.ReadStartArrayExpectLengthRange(1, int.MaxValue);
         var elements = new List<object>(Math.Min(count, 64));
         for(int i = 0; i < count; i++)
@@ -382,7 +384,7 @@ public static class CBAdESSignatureSerialization
     /// general-purpose writer (<see cref="CborValueConverter.WriteValue"/>) re-wraps it in a FRESH <c>bstr</c>
     /// at final serialize time — never a double-wrap, since neither delegate ever hands that writer an
     /// already-framed item. The freshly-written framing is byte-identical to the original: <see cref="ParseCBAdESSign1"/>
-    /// reads the augmented signature's raw input under <see cref="CborConformanceMode.Canonical"/>, so every
+    /// reads the augmented signature's raw input under <see cref="CborConformanceMode.RfcCanonical"/>, so every
     /// successfully-parsed element's <c>bstr</c> header is already the RFC 8949 section 9 minimal-length
     /// encoding for that exact content length — the same length-driven encoding the downstream Canonical-mode
     /// writer independently re-derives when it writes the fresh <c>bstr</c> over the identical content. Only a
@@ -426,7 +428,7 @@ public static class CBAdESSignatureSerialization
 
             if(rawUnsignedHeaders is not null)
             {
-                var reader = new CborReader(rawUnsignedHeaders.AsReadOnlyMemory(), CborConformanceMode.Canonical);
+                var reader = new CborReader(rawUnsignedHeaders.AsReadOnlyMemory(), CborOptions.RfcCanonical);
                 int rawCount = reader.ReadStartArrayExpectLengthRange(1, int.MaxValue);
                 if(rawCount != decodedElementCount)
                 {
@@ -511,7 +513,7 @@ public static class CBAdESSignatureSerialization
 
         try
         {
-            var reader = new CborReader(wireBytes, CborConformanceMode.Canonical);
+            var reader = new CborReader(wireBytes, CborOptions.RfcCanonical);
 
             //CB-4.3: clause 4.3's untagged MAY is CB-AdES-specific (see the class remarks) -- a tag, when
             //present, must be the COSE_Sign1_Tagged value 18; its absence is not itself a failure, unlike
@@ -519,10 +521,10 @@ public static class CBAdESSignatureSerialization
             if(reader.PeekState() == CborReaderState.Tag)
             {
                 CborTag tag = reader.ReadTag();
-                if((int)tag != CoseTags.Sign1)
+                if((int)tag.Value != CoseTags.Sign1)
                 {
                     throw new CborContentException(
-                        $"Expected COSE_Sign1 tag ({CoseTags.Sign1}), got {(int)tag} (ETSI TS 119 152-1 V1.1.1, clause 4.3).");
+                        $"Expected COSE_Sign1 tag ({CoseTags.Sign1}), got {(int)tag.Value} (ETSI TS 119 152-1 V1.1.1, clause 4.3).");
                 }
             }
 
@@ -610,7 +612,7 @@ public static class CBAdESSignatureSerialization
             //canonical (length-first-then-lex) ordering over each key's ENCODED bytes rather than
             //ReadAscendingMapKey's integer-only comparison -- unprofiled labels, of either
             //arm, are carried opaque (CB-4.4-07).
-            var headerReader = new CborReader(protectedHeaderBytes, CborConformanceMode.Canonical);
+            var headerReader = new CborReader(protectedHeaderBytes, CborOptions.RfcCanonical);
             int? headerMapLength = headerReader.ReadStartMap();
             if(headerMapLength is null)
             {
@@ -776,13 +778,10 @@ public static class CBAdESSignatureSerialization
             signaturePolicyIdentifier = null;
             detachedObjects = null;
 
-            CBAdESSign1ParseResult success = CBAdESSign1ParseResult.Success(headers, rawProtectedHeader, payloadIsPresent, payload, signatureCarrier, unsignedHeaders, rawUnsignedHeaders);
-            rawProtectedHeader = null;
-            signatureCarrier = null;
-            unsignedHeaders = null;
-            rawUnsignedHeaders = null;
-
-            return success;
+            //Nothing between this call and the return below can throw, so — unlike the five
+            //locals nulled above the Success(…) call — these four need no catch-side
+            //double-dispose guard.
+            return CBAdESSign1ParseResult.Success(headers, rawProtectedHeader, payloadIsPresent, payload, signatureCarrier, unsignedHeaders, rawUnsignedHeaders);
         }
         catch(Exception ex) when(IsFailClosedParseException(ex))
         {
@@ -836,7 +835,7 @@ public static class CBAdESSignatureSerialization
 
             previousKeyBytes = keyBytes.ToArray();
 
-            var labelReader = new CborReader(keyBytes, CborConformanceMode.Canonical);
+            var labelReader = new CborReader(keyBytes, CborOptions.RfcCanonical);
             return labelReader.PeekState() == CborReaderState.TextString
                 ? new CoseHeaderTextLabel(labelReader.ReadTextString())
                 : new CoseHeaderIntegerLabel(labelReader.ReadInt32());
@@ -867,7 +866,7 @@ public static class CBAdESSignatureSerialization
 
         try
         {
-            var headerReader = new CborReader(protectedHeaderBytes, CborConformanceMode.Canonical);
+            var headerReader = new CborReader(protectedHeaderBytes, CborOptions.RfcCanonical);
             int? headerMapLength = headerReader.ReadStartMap();
             if(headerMapLength is null)
             {
@@ -1056,7 +1055,7 @@ public static class CBAdESSignatureSerialization
 
             previousKeyBytes = keyBytes.ToArray();
 
-            var labelReader = new CborReader(keyBytes, CborConformanceMode.Canonical);
+            var labelReader = new CborReader(keyBytes, CborOptions.RfcCanonical);
             return labelReader.PeekState() == CborReaderState.TextString
                 ? new CoseHeaderTextLabel(labelReader.ReadTextString())
                 : new CoseHeaderIntegerLabel(labelReader.ReadInt32());
@@ -1100,21 +1099,21 @@ public static class CBAdESSignatureSerialization
         Signature? signatureCarrier = null;
         CBAdESUnsignedHeaders? signerUnsignedHeaders = null;
         EncodedCBAdESUnsignedHeaders? signerRawUnsignedHeaders = null;
-        List<CBAdESSignerParseResult>? signers = [];
+        List<CBAdESSignerParseResult> signers = [];
 
         try
         {
-            var reader = new CborReader(wireBytes, CborConformanceMode.Canonical);
+            var reader = new CborReader(wireBytes, CborOptions.RfcCanonical);
 
             //CB-4.3: a tag, when present, must be the COSE_Sign_Tagged value 98; its absence is not itself a
             //failure (mirrors ParseCBAdESSign1's own tolerance for tag 18).
             if(reader.PeekState() == CborReaderState.Tag)
             {
                 CborTag tag = reader.ReadTag();
-                if((int)tag != CoseTags.Sign)
+                if((int)tag.Value != CoseTags.Sign)
                 {
                     throw new CborContentException(
-                        $"Expected COSE_Sign tag ({CoseTags.Sign}), got {(int)tag} (ETSI TS 119 152-1 V1.1.1, clause 4.3).");
+                        $"Expected COSE_Sign tag ({CoseTags.Sign}), got {(int)tag.Value} (ETSI TS 119 152-1 V1.1.1, clause 4.3).");
                 }
             }
 
@@ -1243,11 +1242,9 @@ public static class CBAdESSignatureSerialization
                 throw new CborContentException("Trailing bytes after the COSE_Sign structure.");
             }
 
-            CBAdESSignParseResult success = CBAdESSignParseResult.Success(bodyProtectedHeaderCarrier, payloadIsPresent, payload, signers);
-            bodyProtectedHeaderCarrier = null;
-            signers = null;
-
-            return success;
+            //Nothing between this call and the return below can throw, so bodyProtectedHeaderCarrier
+            //and signers need no catch-side double-dispose guard the way the per-signer locals above do.
+            return CBAdESSignParseResult.Success(bodyProtectedHeaderCarrier, payloadIsPresent, payload, signers);
         }
         catch(Exception ex) when(IsFailClosedParseException(ex))
         {
@@ -1256,12 +1253,9 @@ public static class CBAdESSignatureSerialization
             signatureCarrier?.Dispose();
             signerUnsignedHeaders?.Dispose();
             signerRawUnsignedHeaders?.Dispose();
-            if(signers is not null)
+            foreach(CBAdESSignerParseResult signer in signers)
             {
-                foreach(CBAdESSignerParseResult signer in signers)
-                {
-                    signer.Dispose();
-                }
+                signer.Dispose();
             }
 
             return CBAdESSignParseResult.Failure();
@@ -1286,8 +1280,9 @@ public static class CBAdESSignatureSerialization
         ArgumentNullException.ThrowIfNull(message);
         ArgumentNullException.ThrowIfNull(pool);
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
-        writer.WriteTag((CborTag)CoseTags.Sign1);
+        using var buffer = new SlabBufferWriter(pool);
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
+        writer.WriteTag(new CborTag((ulong)CoseTags.Sign1));
         writer.WriteStartArray(4);
 
         writer.WriteByteString(message.ProtectedHeader.AsReadOnlySpan());
@@ -1321,14 +1316,9 @@ public static class CBAdESSignatureSerialization
         writer.WriteByteString(message.Signature.AsReadOnlySpan());
         writer.WriteEndArray();
 
-        int size = writer.BytesWritten;
-        IMemoryOwner<byte> owner = pool.Rent(size);
-        int written = writer.Encode(owner.Memory.Span);
-        if(written != size)
-        {
-            owner.Dispose();
-            throw new InvalidOperationException($"CborWriter.Encode wrote {written} bytes, expected {size}.");
-        }
+        using IMemoryOwner<byte> encoded = buffer.Detach();
+        IMemoryOwner<byte> owner = pool.Rent(encoded.Memory.Length);
+        encoded.Memory.Span.CopyTo(owner.Memory.Span);
 
         return new EncodedCoseSign1(owner, CryptoTags.CoseEncodedSign1);
     };
@@ -1342,9 +1332,10 @@ public static class CBAdESSignatureSerialization
     /// <returns>The encoded item bytes.</returns>
     private static byte[] EncodeAlgorithm(int algorithm)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteInt32(algorithm);
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
     }
 
 
@@ -1359,7 +1350,8 @@ public static class CBAdESSignatureSerialization
     /// <exception cref="NotSupportedException">A <paramref name="criticalLabels"/> entry is an unknown arm.</exception>
     private static byte[] EncodeCritical(IReadOnlyList<CoseHeaderLabel> criticalLabels)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteStartArray(criticalLabels.Count);
         foreach(CoseHeaderLabel label in criticalLabels)
         {
@@ -1372,7 +1364,7 @@ public static class CBAdESSignatureSerialization
         }
 
         writer.WriteEndArray();
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
 
         static bool WriteInteger(CborWriter writer, CoseHeaderIntegerLabel integerLabel)
         {
@@ -1398,7 +1390,8 @@ public static class CBAdESSignatureSerialization
     /// <exception cref="NotSupportedException"><paramref name="contentType"/> is an unknown arm.</exception>
     private static byte[] EncodeContentType(CBAdESContentTypeIndicator contentType)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         _ = contentType switch
         {
             CBAdESContentTypeText text => WriteText(writer, text),
@@ -1406,7 +1399,7 @@ public static class CBAdESSignatureSerialization
             _ => throw new NotSupportedException($"Unknown content type indicator arm '{contentType.GetType()}'.")
         };
 
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
 
         static bool WriteText(CborWriter writer, CBAdESContentTypeText text)
         {
@@ -1449,9 +1442,10 @@ public static class CBAdESSignatureSerialization
     /// <returns>The encoded item bytes.</returns>
     private static byte[] EncodeKeyId(ReadOnlyMemory<byte> keyId)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteByteString(keyId.Span);
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
     }
 
 
@@ -1464,12 +1458,13 @@ public static class CBAdESSignatureSerialization
     /// <returns>The encoded item bytes.</returns>
     private static byte[] EncodeCwtClaims(CBAdESCwtClaims cwtClaims)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(WellKnownCwtClaimNames.Iat);
         writer.WriteInt64(cwtClaims.IssuedAt.ToUnixTimeSeconds());
         writer.WriteEndMap();
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
     }
 
 
@@ -1550,7 +1545,8 @@ public static class CBAdESSignatureSerialization
     /// <exception cref="NotSupportedException"><paramref name="x5Chain"/> is an unknown arm.</exception>
     private static byte[] EncodeSignedX5Chain(CBAdESX5Chain x5Chain)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         _ = x5Chain switch
         {
             CBAdESX5ChainSingleCertificate single => WriteSingle(writer, single),
@@ -1558,7 +1554,7 @@ public static class CBAdESSignatureSerialization
             _ => throw new NotSupportedException($"Unknown signed x5chain arm '{x5Chain.GetType()}'.")
         };
 
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
 
         static bool WriteSingle(CborWriter writer, CBAdESX5ChainSingleCertificate single)
         {
@@ -1615,9 +1611,10 @@ public static class CBAdESSignatureSerialization
     /// <returns>The encoded item bytes.</returns>
     private static byte[] EncodeCertificateThumbprintSingle(AdESCertificateThumbprint thumbprint)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         CBAdESSerialization.WriteHashAlgorithmDigestPair(writer, thumbprint.HashAlgorithm, thumbprint.Digest);
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
     }
 
 
@@ -1629,9 +1626,10 @@ public static class CBAdESSignatureSerialization
     /// <returns>The encoded item bytes.</returns>
     private static byte[] EncodeX5Url(Uri x5u)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteTextString(x5u.IsAbsoluteUri ? x5u.AbsoluteUri : x5u.OriginalString);
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
     }
 
 
@@ -1676,7 +1674,7 @@ public static class CBAdESSignatureSerialization
     {
         using PooledMemory singleElementArray = CBAdESSerialization.EncodeUnsignedHeaders(new CBAdESUnsignedHeaders([element]), pool);
 
-        var reader = new CborReader(singleElementArray.AsReadOnlyMemory(), CborConformanceMode.Canonical);
+        var reader = new CborReader(singleElementArray.AsReadOnlyMemory(), CborOptions.RfcCanonical);
         reader.ReadStartArrayExpectLength(1);
         byte[] content = reader.ReadByteString();
         reader.ReadEndArray();
@@ -1710,6 +1708,6 @@ public static class CBAdESSignatureSerialization
     /// <param name="exception">The exception to classify.</param>
     /// <returns><see langword="true"/> when the exception should be swallowed and reported as a parse failure.</returns>
     private static bool IsFailClosedParseException(Exception exception) =>
-        exception is CborContentException or InvalidOperationException or ArgumentException
+        exception is CborException or InvalidOperationException or ArgumentException
             or IndexOutOfRangeException or OverflowException or FormatException;
 }

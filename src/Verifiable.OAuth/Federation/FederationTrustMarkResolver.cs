@@ -45,7 +45,7 @@ public static class FederationTrustMarkResolver
     /// <param name="verifySignature">The app's compact-JWS signature primitive (wraps <c>Jws.VerifyAsync</c>).</param>
     /// <param name="base64UrlDecoder">Base64url decoder used when reconstructing chain keys.</param>
     /// <param name="memoryPool">Pool the resolved key material rents from.</param>
-    /// <param name="timeProvider">Time source for the §7.3 exp/iat checks and result stamping; <see langword="null"/> uses system time.</param>
+    /// <param name="timeProvider">Time source for the §7.3 exp/iat checks and result stamping.</param>
     /// <param name="clockSkew">Tolerance for the exp/iat checks.</param>
     /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
     /// <returns>One verdict per candidate, in input order.</returns>
@@ -55,7 +55,7 @@ public static class FederationTrustMarkResolver
         VerifyCompactJwsDelegate verifySignature,
         DecodeDelegate base64UrlDecoder,
         BaseMemoryPool memoryPool,
-        TimeProvider? timeProvider,
+        TimeProvider timeProvider,
         TimeSpan clockSkew,
         CancellationToken cancellationToken = default)
     {
@@ -64,10 +64,10 @@ public static class FederationTrustMarkResolver
         ArgumentNullException.ThrowIfNull(verifySignature);
         ArgumentNullException.ThrowIfNull(base64UrlDecoder);
         ArgumentNullException.ThrowIfNull(memoryPool);
+        ArgumentNullException.ThrowIfNull(timeProvider);
 
-        TimeProvider time = timeProvider ?? TimeProvider.System;
-        DateTimeOffset now = time.GetUtcNow();
-        TrustMarkValidator validator = TrustMarkValidator.Default(time);
+        DateTimeOffset now = timeProvider.GetUtcNow();
+        TrustMarkValidator validator = TrustMarkValidator.Default(timeProvider);
 
         var verdicts = new List<TrustMarkVerdict>(candidates.Count);
         foreach(TrustMarkCandidate candidate in candidates)

@@ -30,14 +30,14 @@ internal sealed class DidCommEncryptedAnoncryptXc20pVectorTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly BaseMemoryPool Pool = BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool { get; } = BaseMemoryPool.Shared;
 
     //A non-network resolution context; it only satisfies the SSRF-policy-carrying parameter.
-    private static readonly ExchangeContext Context = new();
+    private static ExchangeContext Context { get; } = new();
 
     //A non-nested anoncrypt message never triggers nested-signature resolution, so this resolver is never
     //invoked; it satisfies the unpack overload's resolver parameter.
-    private static readonly DidResolver NestedSignerResolver = new DidResolver(DidMethodSelectors.FromResolvers(
+    private static DidResolver NestedSignerResolver { get; } = new DidResolver(DidMethodSelectors.FromResolvers(
         ("did:example", (_, _, _, _) => ValueTask.FromResult(DidResolutionResult.Failure(DidResolutionErrors.NotFound)))));
 
     //Appendix C.1 plaintext (the message every C.3 vector encrypts). The C.3/C.2 vector bytes use the "http"

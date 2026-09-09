@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Net;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using Microsoft.AspNetCore.Builder;
@@ -10,6 +9,7 @@ using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Time.Testing;
 using StringValues = Microsoft.Extensions.Primitives.StringValues;
 using Verifiable.Core;
 using Verifiable.Server.Pipeline;
@@ -49,8 +49,8 @@ namespace Verifiable.Tests.WebFinger;
 [DebuggerDisplay("WebFingerHttpApplication")]
 internal sealed class WebFingerHttpApplication
 {
-    private readonly EndpointServer server;
-    private readonly ConcurrentQueue<string> requestLog = new();
+    private EndpointServer Server { get; }
+    private ConcurrentQueue<string> RequestLogEntries { get; } = new();
 
 
     /// <summary>Wraps <paramref name="server"/> so Kestrel dispatches every inbound request through it.</summary>
@@ -58,12 +58,12 @@ internal sealed class WebFingerHttpApplication
     public WebFingerHttpApplication(EndpointServer server)
     {
         ArgumentNullException.ThrowIfNull(server);
-        this.server = server;
+        this.Server = server;
     }
 
 
     /// <summary>Every request path+query string this application has dispatched, in arrival order.</summary>
-    public IReadOnlyCollection<string> RequestLog => requestLog;
+    public IReadOnlyCollection<string> RequestLog => RequestLogEntries;
 
 
     /// <summary>
@@ -77,12 +77,12 @@ internal sealed class WebFingerHttpApplication
     {
         string path = context.Request.Path.HasValue ? context.Request.Path.Value! : string.Empty;
         string queryString = context.Request.QueryString.HasValue ? context.Request.QueryString.Value! : string.Empty;
-        requestLog.Enqueue(path + queryString);
+        RequestLogEntries.Enqueue(path + queryString);
 
         IncomingRequest incomingRequest = BuildIncomingRequest(context.Request);
         ExchangeContext exchangeContext = new();
 
-        ServerHttpResponse response = await server.DispatchAsync(
+        ServerHttpResponse response = await Server.DispatchAsync(
             incomingRequest, exchangeContext, context.RequestAborted).ConfigureAwait(false);
 
         await WriteResponseAsync(response, context.Response, context.RequestAborted).ConfigureAwait(false);
@@ -209,6 +209,7 @@ internal sealed class WebFingerHttpApplication
         EndpointServer server = new()
         {
             Integration = integration,
+            TimeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch),
             Configuration = new ServerConfiguration
             {
                 EndpointBuilders = new EndpointBuilderSet([WebFingerEndpoints.Builder])
@@ -252,14 +253,14 @@ internal sealed class WebFingerHttpApplication
     /// </summary>
     internal sealed class Host: IAsyncDisposable
     {
-        private readonly WebApplication app;
-        private readonly WebFingerHttpApplication application;
+        private WebApplication App { get; }
+        private WebFingerHttpApplication Application { get; }
 
 
         private Host(WebApplication app, WebFingerHttpApplication application, Uri baseAddress, X509Certificate2 certificate)
         {
-            this.app = app;
-            this.application = application;
+            this.App = app;
+            this.Application = application;
             BaseAddress = baseAddress;
             Certificate = certificate;
         }
@@ -277,13 +278,13 @@ internal sealed class WebFingerHttpApplication
         public X509Certificate2 Certificate { get; }
 
         /// <summary>The number of requests this node has served.</summary>
-        public int TotalRequests => application.RequestLog.Count;
+        public int TotalRequests => Application.RequestLog.Count;
 
 
         /// <summary>Whether any served request's path+query contains <paramref name="substring"/> — used to prove a query actually crossed the socket.</summary>
         public bool WasRequestedWithQueryContaining(string substring)
         {
-            foreach(string entry in application.RequestLog)
+            foreach(string entry in Application.RequestLog)
             {
                 if(entry.Contains(substring, StringComparison.Ordinal))
                 {
@@ -302,15 +303,18 @@ internal sealed class WebFingerHttpApplication
         {
             ArgumentNullException.ThrowIfNull(server);
 
-            X509Certificate2 certificate = LoopbackTls.CreateServerCertificate("webfinger-loopback-test-node");
+            //A test topology can start several nodes side by side (a trusted node and an impostor
+            //node pinning-rejection proves against, for example), so each node needs a genuinely
+            //distinct TLS identity rather than the process-wide shared leaf.
+            X509Certificate2 certificate = LoopbackTls.CreateDistinctServerCertificate("webfinger-loopback-test-node");
 
             WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
-            builder.Logging.ClearProviders();
+            LoopbackKestrel.ConfigureLoopbackLogging(builder.Logging);
 
             //A single explicit HTTPS Listen call — no UseUrls, so this is the ONLY endpoint Kestrel
             //binds: there is no plaintext HTTP fallback on this node at all.
             builder.WebHost.ConfigureKestrel(options =>
-                options.Listen(IPAddress.Loopback, port: 0, listenOptions => listenOptions.UseHttps(certificate)));
+                LoopbackKestrel.ConfigureLoopbackListener(options, certificate));
 
             WebApplication app = builder.Build();
 
@@ -332,8 +336,8 @@ internal sealed class WebFingerHttpApplication
         /// <inheritdoc/>
         public async ValueTask DisposeAsync()
         {
-            await app.StopAsync(CancellationToken.None).ConfigureAwait(false);
-            await app.DisposeAsync().ConfigureAwait(false);
+            await App.StopAsync(CancellationToken.None).ConfigureAwait(false);
+            await App.DisposeAsync().ConfigureAwait(false);
             Certificate.Dispose();
         }
     }

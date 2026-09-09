@@ -1,4 +1,5 @@
-using System.Formats.Cbor;
+using System.Buffers;
+using Lumoin.Veritas.Cbor;
 using Verifiable.JCose;
 
 namespace Verifiable.Cbor.Mdoc;
@@ -25,7 +26,8 @@ public static class MdocCborCoseKeyWriter
     {
         ArgumentNullException.ThrowIfNull(coseKey);
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
 
         int entryCount = CountEntries(coseKey);
 
@@ -68,7 +70,7 @@ public static class MdocCborCoseKeyWriter
 
         writer.WriteEndMap();
 
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
     }
 
 

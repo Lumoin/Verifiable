@@ -1,6 +1,7 @@
 using System;
+using System.Buffers;
 using System.Diagnostics;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 
 namespace Verifiable.Cbor;
 
@@ -40,7 +41,7 @@ namespace Verifiable.Cbor;
 ///     <description>
 ///       <see cref="Wrap"/> constructs a Tag 24 wrapper around already-encoded
 ///       inner bytes by emitting the Tag 24 + byte-string header in
-///       <see cref="CborConformanceMode.Canonical"/> form. This is the
+///       <see cref="CborConformanceMode.RfcCanonical"/> form. This is the
 ///       issuer-side path that commits to a canonical wrapper encoding;
 ///       different conformance modes would produce different wire bytes, so
 ///       the issuer's choice is part of the published-digest contract.
@@ -51,7 +52,7 @@ namespace Verifiable.Cbor;
 /// <para>
 /// SD-CWT's own claim-redaction machinery (<c>SdCwtClaimRedaction</c>) does
 /// not use Tag 24 — its disclosures are bare CBOR arrays under
-/// <see cref="CborConformanceMode.Canonical"/>, relying on canonical-form
+/// <see cref="CborConformanceMode.RfcCanonical"/>, relying on canonical-form
 /// determinism rather than byte preservation. This wrapper is independent
 /// of that machinery and intentionally does NOT canonicalise on
 /// <see cref="Read"/>; the byte-preservation contract is mdoc-driven.
@@ -63,7 +64,7 @@ public readonly struct EncodedCborItem: IEquatable<EncodedCborItem>
     /// <summary>The CBOR tag number for "Encoded CBOR data item" per RFC 8949 §3.4.5.1.</summary>
     public const ulong TagNumber = 24;
 
-    private const CborTag Tag24 = (CborTag)24;
+    private static CborTag Tag24 { get; } = CborTag.EncodedCborDataItem;
 
 
     /// <summary>
@@ -108,7 +109,7 @@ public readonly struct EncodedCborItem: IEquatable<EncodedCborItem>
         //Probe-reader pass to validate the shape and find the inner offset.
         //We never feed the probe-reader output back to the caller; only
         //wireBytes (verbatim) and a slice of it.
-        var probe = new CborReader(wireBytes);
+        var probe = new CborReader(wireBytes, CborOptions.Strict);
         if(probe.PeekState() != CborReaderState.Tag)
         {
             throw new CborContentException(
@@ -120,7 +121,7 @@ public readonly struct EncodedCborItem: IEquatable<EncodedCborItem>
         if(tag != Tag24)
         {
             throw new CborContentException(
-                $"Expected CBOR Tag 24 (encoded CBOR data item) but got tag {(ulong)tag}.");
+                $"Expected CBOR Tag 24 (encoded CBOR data item) but got tag {tag.Value}.");
         }
 
         if(probe.PeekState() != CborReaderState.ByteString)
@@ -154,10 +155,11 @@ public readonly struct EncodedCborItem: IEquatable<EncodedCborItem>
     /// </param>
     public static EncodedCborItem Wrap(ReadOnlySpan<byte> innerBytes)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteTag(Tag24);
         writer.WriteByteString(innerBytes);
-        byte[] wireBytes = writer.Encode();
+        byte[] wireBytes = buffer.WrittenSpan.ToArray();
 
         int innerOffset = wireBytes.Length - innerBytes.Length;
         ReadOnlyMemory<byte> innerSlice = new(wireBytes, innerOffset, innerBytes.Length);

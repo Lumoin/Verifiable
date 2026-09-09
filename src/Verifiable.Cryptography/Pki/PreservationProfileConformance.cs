@@ -584,8 +584,8 @@ public static class PreservationProfileConformance
     private static PreservationProfileItemReport StateStorageModel(PreservationProfile profile) => profile.StorageModel switch
     {
         null or "" => Row(PreservationProfileContentItem.StorageModel, PreservationProfileItemOutcome.NotStated),
-        string model when PreservationWellKnown.IsStorageModel(model) => Row(PreservationProfileContentItem.StorageModel, PreservationProfileItemOutcome.Stated),
-        string model => Row(
+        var model when PreservationWellKnown.IsStorageModel(model) => Row(PreservationProfileContentItem.StorageModel, PreservationProfileItemOutcome.Stated),
+        var model => Row(
             PreservationProfileContentItem.StorageModel,
             PreservationProfileItemOutcome.Unusable,
             string.Create(CultureInfo.InvariantCulture, $"'{model}' is not one of the three storage models clause 4.1 defines."))
@@ -684,8 +684,8 @@ public static class PreservationProfileConformance
     private static PreservationProfileItemReport StateSchemeIdentifier(PreservationProfile profile) => profile.SchemeIdentifier switch
     {
         null or "" => Row(PreservationProfileContentItem.SchemeIdentifier, PreservationProfileItemOutcome.NotApplicable),
-        string scheme when PreservationWellKnown.IsSchemeIdentifier(scheme) => Row(PreservationProfileContentItem.SchemeIdentifier, PreservationProfileItemOutcome.Stated),
-        string scheme => Row(
+        var scheme when PreservationWellKnown.IsSchemeIdentifier(scheme) => Row(PreservationProfileContentItem.SchemeIdentifier, PreservationProfileItemOutcome.Stated),
+        var scheme => Row(
             PreservationProfileContentItem.SchemeIdentifier,
             PreservationProfileItemOutcome.Stated,
             string.Create(CultureInfo.InvariantCulture, $"Scheme '{scheme}' is not one of the four the companion protocol standard's Annex F defines, which the item permits."))

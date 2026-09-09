@@ -21,31 +21,31 @@ public static class WellKnownCtapVersions
     public static ReadOnlySpan<byte> Fido23Utf8 => "FIDO_2_3"u8;
 
     /// <summary>CTAP2.3.</summary>
-    public static readonly string Fido23 = Utf8Constants.ToInternedString(Fido23Utf8);
+    public static string Fido23 { get; } = Utf8Constants.ToInternedString(Fido23Utf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Fido21"/>.</summary>
     public static ReadOnlySpan<byte> Fido21Utf8 => "FIDO_2_1"u8;
 
     /// <summary>CTAP2.1.</summary>
-    public static readonly string Fido21 = Utf8Constants.ToInternedString(Fido21Utf8);
+    public static string Fido21 { get; } = Utf8Constants.ToInternedString(Fido21Utf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Fido21Pre"/>.</summary>
     public static ReadOnlySpan<byte> Fido21PreUtf8 => "FIDO_2_1_PRE"u8;
 
     /// <summary>CTAP2.1 preview features.</summary>
-    public static readonly string Fido21Pre = Utf8Constants.ToInternedString(Fido21PreUtf8);
+    public static string Fido21Pre { get; } = Utf8Constants.ToInternedString(Fido21PreUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Fido20"/>.</summary>
     public static ReadOnlySpan<byte> Fido20Utf8 => "FIDO_2_0"u8;
 
     /// <summary>CTAP2.0.</summary>
-    public static readonly string Fido20 = Utf8Constants.ToInternedString(Fido20Utf8);
+    public static string Fido20 { get; } = Utf8Constants.ToInternedString(Fido20Utf8);
 
     /// <summary>The UTF-8 source literal of <see cref="U2fV2"/>.</summary>
     public static ReadOnlySpan<byte> U2fV2Utf8 => "U2F_V2"u8;
 
     /// <summary>CTAP1/U2F.</summary>
-    public static readonly string U2fV2 = Utf8Constants.ToInternedString(U2fV2Utf8);
+    public static string U2fV2 { get; } = Utf8Constants.ToInternedString(U2fV2Utf8);
 
 
     /// <summary>

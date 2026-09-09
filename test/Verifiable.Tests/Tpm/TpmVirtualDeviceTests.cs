@@ -8,6 +8,7 @@ using Verifiable.Tpm;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Spec.Constants;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -140,7 +141,7 @@ internal sealed class TpmVirtualDeviceTests
             return ValueTask.FromResult(SuccessFrame(cannedResponse, handlerPool));
         }
 
-        using(TpmDevice captureDevice = TpmDevice.Create(CaptureHandler))
+        using(TpmDevice captureDevice = TpmDevice.Create(CaptureHandler, BaseMemoryPool.Shared, TestEntropy.NewCounterStream()))
         {
             TpmResult<GetRandomResponse> warmup = await TpmCommandExecutor.ExecuteAsync<GetRandomResponse>(
                 captureDevice, new GetRandomInput(RequestedBytes), [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
@@ -155,7 +156,7 @@ internal sealed class TpmVirtualDeviceTests
         var virtualDevice = new TpmVirtualDevice();
         virtualDevice.Record(capturedCommand, cannedResponse);
 
-        using TpmDevice replayDevice = TpmDevice.Create(virtualDevice.SubmitAsync);
+        using TpmDevice replayDevice = TpmDevice.Create(virtualDevice.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResult<GetRandomResponse> result = await TpmCommandExecutor.ExecuteAsync<GetRandomResponse>(
             replayDevice, new GetRandomInput(RequestedBytes), [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 

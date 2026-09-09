@@ -33,7 +33,7 @@ namespace Verifiable.Fido2.Tpm.Ctap.Authenticator.Custody;
 /// the Index if present (tolerating <c>TPM_RC_HANDLE</c> — nothing was there, for example the very first
 /// <c>setPIN</c>), then defines it fresh with the new PIN hash as its OWN authValue via
 /// <c>DefinePinFailIndexAsync</c>, which also owner-writes a clean <c>{pinCount: 0, pinLimit: 8}</c> counter
-/// window. A PIN Fail Index forbids <c>TPMA_NV_AUTHWRITE</c> (TPM 2.0 Library Part 1, Section 37.2.6.1), so
+/// window. A PIN Fail Index forbids <c>TPMA_NV_AUTHWRITE</c> (TPM 2.0 Library Part 1, clause 34.2.6.1), so
 /// there is no way to change its authValue other than a fresh definition under the same handle — a stale
 /// snapshot's own superseded PIN hash can therefore never again resolve authorization once this adapter has
 /// provisioned a new one.
@@ -41,7 +41,7 @@ namespace Verifiable.Fido2.Tpm.Ctap.Authenticator.Custody;
 /// <para>
 /// <b>The TPM does the compare.</b> <see cref="CtapPinRetriesCustody.VerifyPinAttemptAsync"/> composes
 /// <c>VerifyPinAsync</c>'s Index-authorized <c>TPM2_NV_Read</c>, whose compare-and-move is one atomic TPM
-/// command (TPM 2.0 Library Part 1, Section 37.2.6.6): a match resets <c>pinCount</c> to zero (reported back
+/// command (TPM 2.0 Library Part 1, clause 34.2.6.6): a match resets <c>pinCount</c> to zero (reported back
 /// as <see cref="CtapPinAttemptVerdict.RetriesRemaining"/> equal to <c>pinLimit</c>); a mismatch answers
 /// <c>TPM_RC_BAD_AUTH</c>, after which this adapter follows up with the owner-authorized, no-oracle
 /// <c>ReadPinCountersAsync</c> to report the post-attempt budget (two wire calls on the mismatch path — the
@@ -65,7 +65,7 @@ namespace Verifiable.Fido2.Tpm.Ctap.Authenticator.Custody;
 /// any byte content — and every provisioned PIN hash is always exactly 16 octets (<c>LEFT(SHA-256(pin), 16)</c>,
 /// CTAP 2.3 lines 5592/5710) — so a zero-length candidate can NEVER accidentally match the real one, without
 /// this adapter needing to know, store, or guess it. The Index's own <c>IsPinAuthUnavailable</c> pre-gate
-/// (TPM 2.0 Library Part 1, Section 37.2.6.6) fires identically for this sentinel as for a genuine wrong
+/// (TPM 2.0 Library Part 1, clause 34.2.6.6) fires identically for this sentinel as for a genuine wrong
 /// guess, so an at-limit penalize correctly reports blocked rather than advancing past <c>pinLimit</c>. This
 /// is the "use the closest verb" resolution for this exact gap, rather than composing an owner
 /// <c>NV_Write</c> outside the verb group's
@@ -169,7 +169,7 @@ internal sealed class TpmNvPinRetriesCustodyBinding
     internal async ValueTask ProvisionPinAsync(ReadOnlyMemory<byte> pinHash, CancellationToken cancellationToken)
     {
         TpmResult<NvUndefineSpaceResponse> undefineResult = await Tpm.UndefinePinIndexAsync(OwnerAuth, PinIndexHandle, cancellationToken).ConfigureAwait(false);
-        if(!undefineResult.IsSuccess && !(undefineResult.IsTpmError && undefineResult.ResponseCode == TpmRcConstants.TPM_RC_HANDLE))
+        if(!undefineResult.IsSuccess && !(undefineResult.IsTpmError && undefineResult.BaseError == TpmRcConstants.TPM_RC_HANDLE))
         {
             throw new TpmNvPinRetriesCustodyException(
                 $"Undefining the PIN Fail NV index before provisioning a fresh PIN failed: {DescribeFailure(undefineResult)}.");
@@ -189,8 +189,7 @@ internal sealed class TpmNvPinRetriesCustodyBinding
             //{0, PinLimit} via the owner-authorized write ResetPinCountAsync composes on its own, though
             //under a GENUINE concurrent ProvisionPinAsync race the authValue installed is whichever
             //attempt's own NV_DefineSpace actually created the Index — CTAP's sequential single-command
-            //execution model means this narrow window is not reachable via the shipped CTAP command surface
-            //(documented residual).
+            //execution model means this narrow window is not reachable via the shipped CTAP command surface.
             TpmResult<NvWriteResponse> resetResult = await Tpm.ResetPinCountAsync(OwnerAuth, PinIndexHandle, PinLimit, cancellationToken).ConfigureAwait(false);
             if(resetResult.IsSuccess)
             {
@@ -254,7 +253,7 @@ internal sealed class TpmNvPinRetriesCustodyBinding
         TpmResult<TpmPinCounterParameters> readResult = await Tpm.ReadPinCountersAsync(OwnerAuth, PinIndexHandle, cancellationToken).ConfigureAwait(false);
         if(!readResult.IsSuccess)
         {
-            if(readResult.IsTpmError && readResult.ResponseCode == TpmRcConstants.TPM_RC_HANDLE)
+            if(readResult.IsTpmError && readResult.BaseError == TpmRcConstants.TPM_RC_HANDLE)
             {
                 return new CtapPinAttemptVerdict(IsMatch: false, RetriesRemaining: (int)PinLimit, IsBlocked: false, IsProvisioned: false);
             }
@@ -275,7 +274,7 @@ internal sealed class TpmNvPinRetriesCustodyBinding
     internal async ValueTask RetirePinAsync(CancellationToken cancellationToken)
     {
         TpmResult<NvUndefineSpaceResponse> undefineResult = await Tpm.UndefinePinIndexAsync(OwnerAuth, PinIndexHandle, cancellationToken).ConfigureAwait(false);
-        if(undefineResult.IsSuccess || (undefineResult.IsTpmError && undefineResult.ResponseCode == TpmRcConstants.TPM_RC_HANDLE))
+        if(undefineResult.IsSuccess || (undefineResult.IsTpmError && undefineResult.BaseError == TpmRcConstants.TPM_RC_HANDLE))
         {
             return;
         }
@@ -319,7 +318,7 @@ internal sealed class TpmNvPinRetriesCustodyBinding
         //exist) lets a racing/absent tier answer a defined CTAP status instead of an uncaught exception;
         //CreateWithCustodyAsync's own reconciliation is what actually clears the stale local PIN so
         //setPIN can recover — this arm only has to avoid crashing the in-flight command.
-        if(verifyResult.IsTpmError && verifyResult.ResponseCode == TpmRcConstants.TPM_RC_HANDLE)
+        if(verifyResult.IsTpmError && verifyResult.BaseError == TpmRcConstants.TPM_RC_HANDLE)
         {
             return new CtapPinAttemptVerdict(IsMatch: false, RetriesRemaining: (int)PinLimit, IsBlocked: false, IsProvisioned: false);
         }

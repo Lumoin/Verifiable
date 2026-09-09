@@ -22,10 +22,18 @@ public enum JtiReplayOutcome
     Replayed,
 
     /// <summary>
-    /// The policy is <see cref="JtiReplayPolicy.Required"/> but no replay store is wired —
-    /// the caller must fail closed rather than proceed without replay defense.
+    /// No replay store is wired under <see cref="JtiReplayPolicy.Required"/>, or the wired
+    /// store cannot resolve what it recorded under either <see cref="JtiReplayPolicy.Required"/>
+    /// or <see cref="JtiReplayPolicy.OptionalIfStorePresent"/> — the caller must fail closed
+    /// rather than proceed on a defense that cannot prove it is working.
     /// </summary>
-    StoreUnavailable
+    StoreUnavailable,
+
+    /// <summary>
+    /// The <c>jti</c> exceeds <see cref="JtiReplayGuard.MaxJtiLength"/> and cannot be tracked —
+    /// the caller must reject the presentation as malformed before any store is consulted.
+    /// </summary>
+    Unacceptable
 }
 
 
@@ -41,10 +49,41 @@ public enum JtiReplayOutcome
 /// <see cref="AuthorizationServerIntegration.SaveFlowStateAsync"/> under
 /// <see cref="FlowKind.JtiReplay"/>), so there is no second parallel tracker to keep
 /// coherent. The <c>(issuer, jti)</c> composite isolates issuers — a bare <c>jti</c> would
-/// conflate independent issuers into false rejections.
+/// conflate independent issuers into false rejections. A store that records a first use is
+/// proved, not assumed: immediately after saving, the guard resolves the very key it just
+/// wrote and requires the resolved value to equal the saved flow id, so a store wired for
+/// other correlation kinds but never for <see cref="FlowKind.JtiReplay"/> — which would
+/// otherwise answer <see cref="JtiReplayOutcome.FirstUse"/> to every consultation and make
+/// the defense a silent no-op — is caught on its first use.
 /// </summary>
 public static class JtiReplayGuard
 {
+    /// <summary>
+    /// The longest <c>jti</c> the guard will track (RFC 9449 §11.1: "In order to guard
+    /// against memory exhaustion attacks, a server that is tracking jti values should
+    /// reject DPoP proof JWTs with unnecessarily large jti values or store only a hash
+    /// thereof."). A <c>jti</c> longer than this is refused via
+    /// <see cref="JtiReplayOutcome.Unacceptable"/> before any store access.
+    /// </summary>
+    public const int MaxJtiLength = 1024;
+
+    /// <summary>
+    /// Composes the one <c>(issuer, jti)</c> correlation key every replay-defense path and
+    /// every host's flow-state store uses, so no site re-derives the shape. Mirrored by
+    /// <see cref="Verifiable.OAuth.Server.States.JtiSeenState.CorrelationKey"/> for the state
+    /// a host indexes under.
+    /// </summary>
+    /// <param name="issuer">The issuer the <c>jti</c> was presented under.</param>
+    /// <param name="jti">The presented <c>jti</c> value.</param>
+    public static string CorrelationKey(string issuer, string jti)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(issuer);
+        ArgumentException.ThrowIfNullOrEmpty(jti);
+
+        return $"{issuer}:{jti}";
+    }
+
+
     /// <summary>
     /// Consults the replay store for <paramref name="jti"/> under <paramref name="issuer"/>,
     /// governed by the request's <see cref="JtiReplayPolicy"/>. The read and the first-use
@@ -52,7 +91,11 @@ public static class JtiReplayGuard
     /// a miss is recorded immediately, so a deployment can never end up reading without
     /// recording (which would make the defense a silent no-op). Under
     /// <see cref="JtiReplayPolicy.Required"/> a missing store yields
-    /// <see cref="JtiReplayOutcome.StoreUnavailable"/> so the caller fails closed.
+    /// <see cref="JtiReplayOutcome.StoreUnavailable"/> so the caller fails closed. Once a
+    /// first use is recorded, the guard resolves the same key again and requires equality
+    /// with the flow id it just saved; a store that cannot reproduce what it recorded is
+    /// treated as unavailable under every policy (a defective store is neither "present"
+    /// nor "absent").
     /// </summary>
     /// <param name="server">The authorization server (its integration store and clock).</param>
     /// <param name="context">The exchange context carrying the resolved policy and tenant.</param>
@@ -83,6 +126,13 @@ public static class JtiReplayGuard
             return JtiReplayOutcome.FirstUse;
         }
 
+        //RFC 9449 §11.1's memory-exhaustion rule: an oversized jti is refused before it ever
+        //reaches a store, under every policy that consults the store at all.
+        if(jti.Length > MaxJtiLength)
+        {
+            return JtiReplayOutcome.Unacceptable;
+        }
+
         //The store is the (issuer, jti)-keyed correlation index. The read delegate, the
         //write delegate, and the id generator the write needs must ALL be present for the
         //defense to actually record — a read-only half-wiring would never trip, so the
@@ -98,7 +148,7 @@ public static class JtiReplayGuard
                 : JtiReplayOutcome.FirstUse;
         }
 
-        string correlationKey = $"{issuer}:{jti}";
+        string correlationKey = CorrelationKey(issuer, jti);
         string? existing = await oauth.ResolveCorrelationKeyAsync!(
             tenantId, FlowKind.JtiReplay, correlationKey, context, cancellationToken).ConfigureAwait(false);
         if(existing is not null)
@@ -120,9 +170,25 @@ public static class JtiReplayGuard
             Jti = jti,
             SeenAt = now
         };
+        //The jti marker addresses itself: the correlation key IS the flow id SaveFlowStateAsync
+        //saves under (there is no separate flow to link back to), while the freshly generated
+        //identifier only populates the required FlowState.FlowId — a jti record's own identity,
+        //never a storage key.
         await oauth.SaveFlowStateAsync!(
             tenantId, correlationKey, state, stepCount: 0, context, cancellationToken).ConfigureAwait(false);
 
-        return JtiReplayOutcome.FirstUse;
+        //The self-check: a store that saved the entry must also be able to resolve it back
+        //under the same (tenant, FlowKind.JtiReplay, key) it was saved under, and the
+        //resolved value must equal the flow id just saved (correlationKey, above) — mere
+        //presence is not enough, since a store could resolve a stale or foreign id. A store
+        //that fails this is defective under BOTH policies: Required was never going to
+        //tolerate it, and OptionalIfStorePresent tolerates a store's absence, not its
+        //malfunction.
+        string? proof = await oauth.ResolveCorrelationKeyAsync!(
+            tenantId, FlowKind.JtiReplay, correlationKey, context, cancellationToken).ConfigureAwait(false);
+
+        return string.Equals(proof, correlationKey, StringComparison.Ordinal)
+            ? JtiReplayOutcome.FirstUse
+            : JtiReplayOutcome.StoreUnavailable;
     }
 }

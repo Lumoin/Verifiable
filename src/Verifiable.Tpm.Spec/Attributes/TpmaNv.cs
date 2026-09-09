@@ -13,7 +13,7 @@ namespace Verifiable.Tpm.Spec.Attributes;
 /// This attribute is part of NV public area structures and is validated/used by NV commands (DefineSpace, Read/Write, Lock, etc.).
 /// </para>
 /// <para>
-/// Specification: <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2: Structures, section 13.4 (TPMA_NV).
+/// Specification: <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2: Structures, clause 13.4 (TPMA_NV).
 /// </para>
 /// </remarks>
 [Flags]
@@ -150,7 +150,7 @@ public enum TpmaNv: uint
 /// It is provided as a language-binding convenience for the multi-bit field TPM_NT (bits 7:4).
 /// </para>
 /// <para>
-/// Specification: <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2: Structures, section 13.4 (TPMA_NV).
+/// Specification: <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2: Structures, clause 13.4 (TPMA_NV).
 /// </para>
 /// </remarks>
 public static class TpmaNvFields

@@ -268,28 +268,28 @@ internal sealed class FederationChainPropertyTests
 /// </summary>
 internal sealed class FederationTopologyFixture: IAsyncDisposable
 {
-    private readonly TestHostShell host;
-    private readonly Uri verifierEntityId;
-    private readonly Uri intermediateEntityId;
-    private readonly Uri anchorEntityId;
-    private readonly string verifierSegment;
-    private readonly string intermediateSegment;
-    private readonly string anchorSegment;
-    private readonly PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> verifierFederationKeys;
-    private readonly PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> intermediateFederationKeys;
-    private readonly PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> anchorFederationKeys;
-    private readonly VerifierKeyMaterial verifierKeys;
-    private readonly VerifierKeyMaterial intermediateKeys;
-    private readonly VerifierKeyMaterial anchorKeys;
+    private TestHostShell Host { get; }
+    private Uri VerifierEntityId { get; }
+    private Uri IntermediateEntityId { get; }
+    private Uri AnchorEntityId { get; }
+    private string VerifierSegment { get; }
+    private string IntermediateSegment { get; }
+    private string AnchorSegment { get; }
+    private PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> VerifierFederationKeys { get; }
+    private PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> IntermediateFederationKeys { get; }
+    private PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> AnchorFederationKeys { get; }
+    private VerifierKeyMaterial VerifierKeys { get; }
+    private VerifierKeyMaterial IntermediateKeys { get; }
+    private VerifierKeyMaterial AnchorKeys { get; }
 
     /// <summary>Header deserializer mirroring the authorization server's wiring.</summary>
-    private static readonly JwtHeaderDeserializer HeaderDeserializer = static bytes =>
+    private static JwtHeaderDeserializer HeaderDeserializer { get; } = static bytes =>
         JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
             bytes, TestSetup.DefaultSerializationOptions)
         ?? throw new FormatException("Header JSON parsed to null.");
 
     /// <summary>Payload deserializer mirroring the authorization server's wiring.</summary>
-    private static readonly JwtPayloadDeserializer PayloadDeserializer = static bytes =>
+    private static JwtPayloadDeserializer PayloadDeserializer { get; } = static bytes =>
         JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
             bytes, TestSetup.DefaultSerializationOptions)
         ?? throw new FormatException("Payload JSON parsed to null.");
@@ -315,19 +315,19 @@ internal sealed class FederationTopologyFixture: IAsyncDisposable
         FederationTestRingNode anchorNode,
         FederationTestRingNode verifierNode)
     {
-        this.host = host;
-        this.verifierEntityId = verifierEntityId;
-        this.intermediateEntityId = intermediateEntityId;
-        this.anchorEntityId = anchorEntityId;
-        this.verifierSegment = verifierSegment;
-        this.intermediateSegment = intermediateSegment;
-        this.anchorSegment = anchorSegment;
-        this.verifierFederationKeys = verifierFederationKeys;
-        this.intermediateFederationKeys = intermediateFederationKeys;
-        this.anchorFederationKeys = anchorFederationKeys;
-        this.verifierKeys = verifierKeys;
-        this.intermediateKeys = intermediateKeys;
-        this.anchorKeys = anchorKeys;
+        this.Host = host;
+        this.VerifierEntityId = verifierEntityId;
+        this.IntermediateEntityId = intermediateEntityId;
+        this.AnchorEntityId = anchorEntityId;
+        this.VerifierSegment = verifierSegment;
+        this.IntermediateSegment = intermediateSegment;
+        this.AnchorSegment = anchorSegment;
+        this.VerifierFederationKeys = verifierFederationKeys;
+        this.IntermediateFederationKeys = intermediateFederationKeys;
+        this.AnchorFederationKeys = anchorFederationKeys;
+        this.VerifierKeys = verifierKeys;
+        this.IntermediateKeys = intermediateKeys;
+        this.AnchorKeys = anchorKeys;
         AnchorNode = anchorNode;
         VerifierNode = verifierNode;
     }
@@ -501,20 +501,20 @@ internal sealed class FederationTopologyFixture: IAsyncDisposable
     /// </summary>
     public async Task<string[]> FetchChainAsync(CancellationToken cancellationToken)
     {
-        HostedAuthorizationServer defaultHost = host.Host("default");
-        HostedAuthorizationServer intermediateHost = host.Host("intermediate");
-        HostedAuthorizationServer anchorHost = host.Host("anchor");
+        HostedAuthorizationServer defaultHost = Host.Host("default");
+        HostedAuthorizationServer intermediateHost = Host.Host("intermediate");
+        HostedAuthorizationServer anchorHost = Host.Host("anchor");
 
         Uri verifierEcUrl = new(defaultHost.HttpBaseAddress!,
-            $"/connect/{verifierSegment}/.well-known/openid-federation");
+            $"/connect/{VerifierSegment}/.well-known/openid-federation");
         Uri intermediateEcUrl = new(intermediateHost.HttpBaseAddress!,
-            $"/connect/{intermediateSegment}/.well-known/openid-federation");
+            $"/connect/{IntermediateSegment}/.well-known/openid-federation");
         Uri anchorEcUrl = new(anchorHost.HttpBaseAddress!,
-            $"/connect/{anchorSegment}/.well-known/openid-federation");
+            $"/connect/{AnchorSegment}/.well-known/openid-federation");
         Uri intermediateSsUrl = new(intermediateHost.HttpBaseAddress!,
-            $"/connect/{intermediateSegment}/federation_fetch?sub={Uri.EscapeDataString(verifierEntityId.ToString())}");
+            $"/connect/{IntermediateSegment}/federation_fetch?sub={Uri.EscapeDataString(VerifierEntityId.ToString())}");
         Uri anchorSsUrl = new(anchorHost.HttpBaseAddress!,
-            $"/connect/{anchorSegment}/federation_fetch?sub={Uri.EscapeDataString(intermediateEntityId.ToString())}");
+            $"/connect/{AnchorSegment}/federation_fetch?sub={Uri.EscapeDataString(IntermediateEntityId.ToString())}");
 
         string verifierEc = await FetchAsync(defaultHost.SharedHttpClient!, verifierEcUrl, cancellationToken).ConfigureAwait(false);
         string intermediateSsAboutVerifier = await FetchAsync(intermediateHost.SharedHttpClient!, intermediateSsUrl, cancellationToken).ConfigureAwait(false);
@@ -548,7 +548,7 @@ internal sealed class FederationTopologyFixture: IAsyncDisposable
         return await validateChain(
             chain,
             trustAnchors,
-            host.Time.GetUtcNow(),
+            Host.Time.GetUtcNow(),
             TimeSpan.FromMinutes(5),
             BaseMemoryPool.Shared,
             cancellationToken).ConfigureAwait(false);
@@ -570,9 +570,9 @@ internal sealed class FederationTopologyFixture: IAsyncDisposable
     {
         AnchorNode.Dispose();
         VerifierNode.Dispose();
-        verifierKeys.Dispose();
-        intermediateKeys.Dispose();
-        anchorKeys.Dispose();
-        await host.DisposeAsync().ConfigureAwait(false);
+        VerifierKeys.Dispose();
+        IntermediateKeys.Dispose();
+        AnchorKeys.Dispose();
+        await Host.DisposeAsync().ConfigureAwait(false);
     }
 }

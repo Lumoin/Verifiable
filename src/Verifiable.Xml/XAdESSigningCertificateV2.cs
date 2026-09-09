@@ -205,8 +205,8 @@ public sealed class XAdESSigningCertificateV2: IDisposable
     /// clause 5.2.2, <c>CompleteCertificateRefsV2</c>/<c>AttributeCertificateRefsV2</c> Annex A.1.1/A.1.3), since
     /// each entry decodes a full <c>CertDigest</c> (and, often, a base64 <c>IssuerSerialV2</c>) and the schema's
     /// own <c>maxOccurs="unbounded"</c> content model sets no numeric limit. Chosen generously above any
-    /// legitimate certificate chain's own length; <c>XAdESGrowthBoundsCostTests.CertIdListV2FloodIsRefusedWithinTheCeiling</c>
-    /// measures a flood one entry past this bound refusing well inside its own loose ceiling.
+    /// legitimate certificate chain's own length; <c>XAdESGrowthBoundsCostTests.CertIdListV2FloodIsRefusedAfterExactlyThreeRentsPerEntry</c>
+    /// measures a flood one entry past this bound refusing after exactly three pool rents per decoded entry.
     /// </summary>
     public const int MaximumCertIdListEntryCount = 4096;
 

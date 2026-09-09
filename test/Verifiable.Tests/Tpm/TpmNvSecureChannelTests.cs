@@ -19,6 +19,8 @@ using Verifiable.Tpm.Spec.Attributes;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
+using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -32,14 +34,14 @@ namespace Verifiable.Tests.Tpm;
 /// <remarks>
 /// <para>
 /// <b>The channel itself.</b> <c>VerifyPinAsync</c>'s default composes an UNBOUND, unsalted HMAC session (TPM
-/// 2.0 Library Part 1, Section 17.6.9's Empty Buffer session key) whose authValue term is the candidate PIN
-/// hash - never a session bound to the PIN Index itself, which Part 1, Section 35.2.8.3 forbids outright
+/// 2.0 Library Part 1, clause 16.6.9's Empty Buffer session key) whose authValue term is the candidate PIN
+/// hash - never a session bound to the PIN Index itself, which Part 1, clause 34.2.8.3 forbids outright
 /// (<c>TPM_RC_HANDLE</c>: "the sequence in which the TPM processes authorizations would enable a hammering
 /// attack on the Index"). A wrong candidate is therefore an HMAC mismatch, never a plaintext compare, and the
 /// candidate never crosses the bus as bytes a passive observer can read.
 /// </para>
 /// <para>
-/// <b>The throttle.</b> Part 1, Section 35.2.6.6's pinCount rule is written purely in terms of "the authValue
+/// <b>The throttle.</b> Part 1, clause 34.2.6.6's pinCount rule is written purely in terms of "the authValue
 /// of a PIN Index is used for authorization... succeeds/fails" - an outcome, not a mechanism - so it applies
 /// identically whether that authValue is presented as a password or folded into an HMAC session's key. A
 /// mismatch increments pinCount and answers a session-encoded <c>TPM_RC_BAD_AUTH</c> (a PIN Fail Index is
@@ -57,7 +59,7 @@ internal sealed class TpmNvSecureChannelTests
     /// <summary>Every RSA storage-parent-shaped template this simulator builds fixes nameAlg to SHA-256.</summary>
     private const TpmAlgIdConstants TpmKeyNameAlg = TpmAlgIdConstants.TPM_ALG_SHA256;
 
-    /// <summary>The RSA public exponent the framework RSA key generator uses (TPM 2.0 Library Part 2, Table 215).</summary>
+    /// <summary>The RSA public exponent the framework RSA key generator uses (TPM 2.0 Library Part 2, Table 228).</summary>
     private const uint DefaultRsaExponent = 65537;
 
     /// <summary>The primary PIN Fail Index handle: its most-significant octet is TPM_HT_NV_INDEX (0x01).</summary>
@@ -83,7 +85,7 @@ internal sealed class TpmNvSecureChannelTests
         const uint PinLimit = 3;
 
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         TpmResult<NvWriteResponse> defineResult = await plainDevice.DefinePinFailIndexAsync(
             ReadOnlyMemory<byte>.Empty, PinIndexHandle, CorrectPinHash, PinLimit, TestContext.CancellationToken).ConfigureAwait(false);
@@ -101,7 +103,7 @@ internal sealed class TpmNvSecureChannelTests
             return await simulator.SubmitAsync(command, commandPool, ct).ConfigureAwait(false);
         }
 
-        using TpmDevice capturingDevice = TpmDevice.Create(CaptureAsync);
+        using TpmDevice capturingDevice = TpmDevice.Create(CaptureAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         TpmResult<TpmPinCounterParameters> verifyResult = await capturingDevice.VerifyPinAsync(
             PinIndexHandle, CorrectPinHash, TestContext.CancellationToken).ConfigureAwait(false);
@@ -118,7 +120,7 @@ internal sealed class TpmNvSecureChannelTests
     /// <summary>
     /// A wrong candidate is a genuine HMAC mismatch: the returned response code's base error is
     /// <c>TPM_RC_BAD_AUTH</c>, but the raw wire response code is NOT the bare constant - it carries the
-    /// session-index modifier (TPM 2.0 Library Part 2, Section 6.6.2) that only a session-authorized rejection
+    /// session-index modifier (TPM 2.0 Library Part 2, clause 6.6.2) that only a session-authorized rejection
     /// applies, distinguishing it from the password channel's own bare-coded rejection. pinCount advances by
     /// exactly one.
     /// </summary>
@@ -128,7 +130,7 @@ internal sealed class TpmNvSecureChannelTests
         const uint PinLimit = 3;
 
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         TpmResult<NvWriteResponse> defineResult = await tpm.DefinePinFailIndexAsync(
             ReadOnlyMemory<byte>.Empty, PinIndexHandle, CorrectPinHash, PinLimit, TestContext.CancellationToken).ConfigureAwait(false);
@@ -153,10 +155,12 @@ internal sealed class TpmNvSecureChannelTests
 
     /// <summary>
     /// Once pinCount reaches pinLimit, even the CORRECT candidate is refused with <c>TPM_RC_AUTH_UNAVAILABLE</c>
-    /// BEFORE any HMAC work runs (TPM 2.0 Library Part 1, Section 35.2.6.6's first sentence: "the authorization
-    /// will fail" - a condition distinct from, and checked ahead of, the compare itself). This gate precedes the
-    /// HMAC-session verification queue entirely, so the returned code carries no session-index modifier: the
-    /// bare constant equals the raw wire response code directly, unlike a genuine mismatch.
+    /// (TPM 2.0 Library Part 3, clause 5.6, Authorization Checks) BEFORE any HMAC work runs (TPM 2.0 Library
+    /// Part 1, clause 34.2.6.6: "If the authValue of an PIN Index is used for authorization, then the
+    /// authorization will fail if the pinCount field of the Index is not less than the pinLimit field..." - a
+    /// condition distinct from, and checked ahead of, the compare itself). This gate precedes the HMAC-session
+    /// verification queue entirely, so the returned code carries no session-index modifier: the bare constant
+    /// equals the raw wire response code directly, unlike a genuine mismatch.
     /// </summary>
     [TestMethod]
     public async Task VerifyPinAsyncAtPinLimitRefusesTheCorrectPinWithAuthUnavailableBeforeAnyHmacWork()
@@ -164,7 +168,7 @@ internal sealed class TpmNvSecureChannelTests
         const uint PinLimit = 2;
 
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         TpmResult<NvWriteResponse> defineResult = await tpm.DefinePinFailIndexAsync(
             ReadOnlyMemory<byte>.Empty, PinIndexHandle, CorrectPinHash, PinLimit, TestContext.CancellationToken).ConfigureAwait(false);
@@ -191,7 +195,7 @@ internal sealed class TpmNvSecureChannelTests
     /// <summary>
     /// Captures every command byte VerifyPinAsync's default composition sends (StartAuthSession, NV_ReadPublic,
     /// NV_Read, FlushContext) and proves the candidate PIN hash never appears as a contiguous byte sequence in
-    /// any of them: the candidate enters only as the HMAC session's authValue key term (Part 1, Section 17.6.9),
+    /// any of them: the candidate enters only as the HMAC session's authValue key term (Part 1, clause 16.6.9),
     /// never as wire content the command itself carries.
     /// </summary>
     /// <remarks>
@@ -209,7 +213,7 @@ internal sealed class TpmNvSecureChannelTests
         const uint PinLimit = 3;
 
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         TpmResult<NvWriteResponse> defineResult = await plainDevice.DefinePinFailIndexAsync(
             ReadOnlyMemory<byte>.Empty, PinIndexHandle, CorrectPinHash, PinLimit, TestContext.CancellationToken).ConfigureAwait(false);
@@ -222,7 +226,7 @@ internal sealed class TpmNvSecureChannelTests
             return await simulator.SubmitAsync(command, commandPool, ct).ConfigureAwait(false);
         }
 
-        using TpmDevice capturingDevice = TpmDevice.Create(CaptureAsync);
+        using TpmDevice capturingDevice = TpmDevice.Create(CaptureAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         TpmResult<TpmPinCounterParameters> verifyResult = await capturingDevice.VerifyPinAsync(
             PinIndexHandle, CorrectPinHash, TestContext.CancellationToken).ConfigureAwait(false);
@@ -239,7 +243,7 @@ internal sealed class TpmNvSecureChannelTests
 
     /// <summary>
     /// A session bound directly to a PIN Fail Index is refused with <c>TPM_RC_HANDLE</c> (TPM 2.0 Library Part
-    /// 1, Section 35.2.8.3): "If a PIN Pass or PIN Fail Index is referenced as a bind entity, the TPM must
+    /// 1, clause 34.2.8.3): "If a PIN Pass or PIN Fail Index is referenced as a bind entity, the TPM must
     /// return TPM_RC_HANDLE." This is why <c>VerifyPinAsync</c>'s default session is unbound rather than
     /// bound-to-self - the bind attempt itself never gets far enough to matter.
     /// </summary>
@@ -250,7 +254,7 @@ internal sealed class TpmNvSecureChannelTests
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_StartAuthSession, TpmResponseCodec.StartAuthSession);
 
@@ -258,17 +262,17 @@ internal sealed class TpmNvSecureChannelTests
             ReadOnlyMemory<byte>.Empty, PinIndexHandle, CorrectPinHash, PinLimit, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(defineResult.IsSuccess, $"DefinePinFailIndexAsync failed: '{defineResult.ResponseCode}'.");
 
-        StartAuthSessionInput startInput = StartAuthSessionInput.CreateBoundUnsaltedHmacSession(PinIndexHandle, SessionAlg);
+        StartAuthSessionInput startInput = StartAuthSessionInput.CreateBoundUnsaltedHmacSession(PinIndexHandle, SessionAlg, TestEntropy.NewCounterStream(), pool);
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             tpm, startInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(startResult.IsSuccess, "Binding a session directly to a PIN Fail Index must never succeed.");
-        Assert.AreEqual(TpmRcConstants.TPM_RC_HANDLE, startResult.ResponseCode);
+        Assert.AreEqual(HmacKeyHarness.HandleEncodedRc(TpmRcConstants.TPM_RC_HANDLE, 1), startResult.ResponseCode, "Table 14: bind is TPM2_StartAuthSession()'s second handle (handle 2); a session bound directly to a PIN Fail Index is handle-encoded TPM_RC_HANDLE at index 1.");
     }
 
     /// <summary>
     /// The salted overload succeeds against an RSA tpmKey and resets pinCount exactly as the unsalted default
-    /// does - the salt (Part 1, Section 17.6.12, equation 25) changes only where the session key's entropy comes
+    /// does - the salt (Part 1, clause 16.6.12, equation 25) changes only where the session key's entropy comes
     /// from, never the atomic compare-and-move semantics.
     /// </summary>
     [TestMethod]
@@ -278,7 +282,7 @@ internal sealed class TpmNvSecureChannelTests
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRsaKeyRegistry();
 
         TpmResult<NvWriteResponse> defineResult = await tpm.DefinePinFailIndexAsync(
@@ -325,7 +329,7 @@ internal sealed class TpmNvSecureChannelTests
             return await simulator.SubmitAsync(command, commandPool, ct).ConfigureAwait(false);
         }
 
-        using TpmDevice tpm = TpmDevice.Create(CaptureAsync);
+        using TpmDevice tpm = TpmDevice.Create(CaptureAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         TpmResult<NvWriteResponse> defineResult = await tpm.DefinePinFailIndexAsync(
             ReadOnlyMemory<byte>.Empty, PinIndexHandle, CorrectPinHash, PinLimit, TestContext.CancellationToken).ConfigureAwait(false);
@@ -355,7 +359,7 @@ internal sealed class TpmNvSecureChannelTests
 
         TpmResult<TpmPinCounterParameters> afterUndefineResult = await tpm.ReadPinCountersAsync(
             ReadOnlyMemory<byte>.Empty, PinIndexHandle, TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(TpmRcConstants.TPM_RC_HANDLE, afterUndefineResult.ResponseCode, "The Index must genuinely no longer exist once UndefinePinIndexAsync has run.");
+        Assert.AreEqual(HmacKeyHarness.HandleEncodedRc(TpmRcConstants.TPM_RC_HANDLE, 0), afterUndefineResult.ResponseCode, "The Index must genuinely no longer exist once UndefinePinIndexAsync has run.");
 
         Assert.IsNotEmpty(capturedCommands, "The capturing wrapper must have observed at least one command.");
         foreach(byte[] command in capturedCommands)
@@ -393,7 +397,7 @@ internal sealed class TpmNvSecureChannelTests
             return await simulator.SubmitAsync(command, commandPool, ct).ConfigureAwait(false);
         }
 
-        using TpmDevice tpm = TpmDevice.Create(CaptureAsync);
+        using TpmDevice tpm = TpmDevice.Create(CaptureAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         TpmResult<NvWriteResponse> defineResult = await tpm.DefinePinFailIndexWithPasswordAsync(
             ReadOnlyMemory<byte>.Empty, PinIndexHandle, CorrectPinHash, PinLimit, TestContext.CancellationToken).ConfigureAwait(false);
@@ -436,7 +440,7 @@ internal sealed class TpmNvSecureChannelTests
     /// An active transport that answers the session-authorized <c>TPM2_NV_Read</c> with a forged, perfectly
     /// well-formed <c>TPM_ST_NO_SESSIONS</c> success carrying attacker-chosen counter parameters must be
     /// REFUSED, even though every byte of it parses: a response to a command an HMAC session authorized has to
-    /// carry that session's own response authorization (TPM 2.0 Library Part 1, clauses 16.6.1 and 17.6.5 - a
+    /// carry that session's own response authorization (TPM 2.0 Library Part 1, clauses 15.6.1 and 16.6.5 - a
     /// successful response carries one entry per request session, each keyed as the command's was).
     /// Accepting the untagged form would let anything on the bus turn a WRONG PIN into
     /// <c>TpmResult.Success</c> with a fabricated retry budget - the channel would prove the PIN to the TPM
@@ -448,7 +452,7 @@ internal sealed class TpmNvSecureChannelTests
         const uint PinLimit = 3;
 
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         TpmResult<NvWriteResponse> defineResult = await plainDevice.DefinePinFailIndexAsync(
             ReadOnlyMemory<byte>.Empty, PinIndexHandle, CorrectPinHash, PinLimit, TestContext.CancellationToken).ConfigureAwait(false);
@@ -467,7 +471,7 @@ internal sealed class TpmNvSecureChannelTests
             return await simulator.SubmitAsync(command, commandPool, ct).ConfigureAwait(false);
         }
 
-        using TpmDevice forgingDevice = TpmDevice.Create(ForgeNvReadAsync);
+        using TpmDevice forgingDevice = TpmDevice.Create(ForgeNvReadAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         TpmResult<TpmPinCounterParameters> verifyResult = await forgingDevice.VerifyPinAsync(
             PinIndexHandle, WrongPinHash, TestContext.CancellationToken).ConfigureAwait(false);
@@ -482,9 +486,9 @@ internal sealed class TpmNvSecureChannelTests
     }
 
     /// <summary>
-    /// Trailing zero octets are not part of an authorization value (TPM 2.0 Library Part 1, Section 17.6.4.3:
+    /// Trailing zero octets are not part of an authorization value (TPM 2.0 Library Part 1, clause 16.6.4.3:
     /// "Trailing octets of zero are to be removed from any string before it is used as an authValue", and
-    /// Section 17.6.5's identical note on the authValue term of the HMAC key), so the stored PIN form and the
+    /// clause 16.6.5's identical note on the authValue term of the HMAC key), so the stored PIN form and the
     /// candidate authorize against each other's stripped form on BOTH sides of the channel: an Index provisioned
     /// with a value ending in zero octets accepts the candidate without them, and an Index provisioned without
     /// them accepts a candidate that carries them.
@@ -498,7 +502,7 @@ internal sealed class TpmNvSecureChannelTests
         byte[] paddedPinHash = [.. CorrectPinHash, 0x00, 0x00];
 
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         TpmResult<NvWriteResponse> paddedDefineResult = await tpm.DefinePinFailIndexAsync(
             ReadOnlyMemory<byte>.Empty, PinIndexHandle, paddedPinHash, PinLimit, TestContext.CancellationToken).ConfigureAwait(false);
@@ -535,7 +539,7 @@ internal sealed class TpmNvSecureChannelTests
         const uint PinLimit = 3;
 
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         TpmResult<NvWriteResponse> defineResult = await plainDevice.DefinePinFailIndexAsync(
             ReadOnlyMemory<byte>.Empty, PinIndexHandle, CorrectPinHash, PinLimit, TestContext.CancellationToken).ConfigureAwait(false);
@@ -554,7 +558,7 @@ internal sealed class TpmNvSecureChannelTests
             return await simulator.SubmitAsync(command, commandPool, ct).ConfigureAwait(false);
         }
 
-        using TpmDevice tamperingDevice = TpmDevice.Create(ClaimEncryptOnNvReadAsync);
+        using TpmDevice tamperingDevice = TpmDevice.Create(ClaimEncryptOnNvReadAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         TpmResult<TpmPinCounterParameters> verifyResult = await tamperingDevice.VerifyPinAsync(
             PinIndexHandle, CorrectPinHash, TestContext.CancellationToken).ConfigureAwait(false);
@@ -571,8 +575,9 @@ internal sealed class TpmNvSecureChannelTests
     /// <summary>
     /// The default enrollment encrypts the stored PIN form on the bus: it rides <c>TPM2_NV_DefineSpace</c>'s
     /// <c>auth</c> command parameter over an owner-authorized session that carries the decrypt attribute (Part 3,
-    /// Section 31.3; Part 1, Section 21), so the pinHash never appears as a contiguous byte sequence in the
-    /// definition command. This closes the enrollment exclusion the verification-wire-capture test documented.
+    /// clause 31.3; Part 1, clause 18.1, Session-based encryption, Introduction), so the pinHash never appears
+    /// as a contiguous byte sequence in the definition command. This closes the enrollment exclusion the
+    /// verification-wire-capture test documented.
     /// </summary>
     [TestMethod]
     public async Task DefinePinFailIndexAsyncEncryptsTheAuthParameterSoThePinHashNeverAppearsInTheDefineCommand()
@@ -593,7 +598,7 @@ internal sealed class TpmNvSecureChannelTests
             return await simulator.SubmitAsync(command, commandPool, ct).ConfigureAwait(false);
         }
 
-        using TpmDevice capturingDevice = TpmDevice.Create(CaptureAsync);
+        using TpmDevice capturingDevice = TpmDevice.Create(CaptureAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         TpmResult<NvWriteResponse> defineResult = await capturingDevice.DefinePinFailIndexAsync(
             ReadOnlyMemory<byte>.Empty, PinIndexHandle, CorrectPinHash, PinLimit, TestContext.CancellationToken).ConfigureAwait(false);
@@ -629,7 +634,7 @@ internal sealed class TpmNvSecureChannelTests
             return await simulator.SubmitAsync(command, commandPool, ct).ConfigureAwait(false);
         }
 
-        using TpmDevice capturingDevice = TpmDevice.Create(CaptureAsync);
+        using TpmDevice capturingDevice = TpmDevice.Create(CaptureAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         TpmResult<NvWriteResponse> defineResult = await capturingDevice.DefinePinFailIndexWithPasswordAsync(
             ReadOnlyMemory<byte>.Empty, PinIndexHandle, CorrectPinHash, PinLimit, TestContext.CancellationToken).ConfigureAwait(false);
@@ -655,7 +660,7 @@ internal sealed class TpmNvSecureChannelTests
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRsaKeyRegistry();
 
         using CreatePrimaryResponse tpmKey = await CreateRsaDecryptKeyAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -697,7 +702,7 @@ internal sealed class TpmNvSecureChannelTests
     /// <summary>
     /// The confidentiality boundary, proven both ways by ONE independent keystream derivation: the parameter
     /// encryption is keyed on <c>sessionValue = KDFa("ATH", key, nonceTPM, nonceCaller)</c> then the XOR mask
-    /// <c>KDFa("XOR", sessionValue, nonceCaller, nonceTPM)</c> (TPM 2.0 Library Part 1, Sections 17.6.10 and
+    /// <c>KDFa("XOR", sessionValue, nonceCaller, nonceTPM)</c> (TPM 2.0 Library Part 1, clauses 16.6.10 and
     /// 19.2), assembled here through the project's own <c>Kdfa</c>/<c>TpmParameterEncryption</c> seam - the same
     /// primitives <c>KdfaTests</c> pins to known-answer vectors. For the UNSALTED default (empty owner authValue)
     /// the key seed is empty, so this fully public derivation recovers the pinHash from the captured auth
@@ -768,7 +773,7 @@ internal sealed class TpmNvSecureChannelTests
     /// <summary>
     /// <c>TPM2_NV_Read</c>'s Index-authValue arm, authorized over a REAL HMAC session whose <c>authHandle</c>
     /// equals the Index itself, runs the <c>TPMA_NV_AUTHREAD</c> availability gate BEFORE the session entry's
-    /// HMAC work (TPM 2.0 Library Part 3, Section 5.6): an Index defined with <c>TPMA_NV_AUTHREAD</c> CLEAR
+    /// HMAC work (TPM 2.0 Library Part 3, clause 5.6): an Index defined with <c>TPMA_NV_AUTHREAD</c> CLEAR
     /// (<c>TPMA_NV_AUTHWRITE</c> and <c>TPMA_NV_OWNERREAD</c> SET, so it is definable and owner-readable but
     /// never USER-readable) answers the bare <c>TPM_RC_AUTH_UNAVAILABLE</c> for a WRONG session-keyed
     /// credential exactly as it would for a correct one - the gate fires ahead of the Name hop and the
@@ -791,7 +796,7 @@ internal sealed class TpmNvSecureChannelTests
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvReadOverHmacRegistry();
 
         using(TpmPasswordSession ownerAuth = TpmPasswordSession.CreateEmpty(pool))
@@ -828,7 +833,7 @@ internal sealed class TpmNvSecureChannelTests
             pool, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(before.IsSuccess, $"GetDictionaryAttackParametersAsync (before) failed: '{before.ResponseCode}'.");
 
-        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(SessionAlg);
+        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(SessionAlg, TestEntropy.NewCounterStream(), pool);
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             tpm, startInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession failed: '{startResult.ResponseCode}'.");
@@ -838,7 +843,7 @@ internal sealed class TpmNvSecureChannelTests
 
         try
         {
-            using TpmSession indexAuthSession = new(new TpmHandle(sessionHandle), started.NonceTPM, SessionAlg, pool);
+            using TpmSession indexAuthSession = new(new TpmHandle(sessionHandle), started.NonceTPM, SessionAlg, TestEntropy.NewCounterStream(), pool);
             indexAuthSession.SetAuthValue(wrongIndexAuth, pool);
 
             var readInput = new NvReadInput(AuthReadClearIndexHandle, AuthReadClearIndexHandle, Size: IndexDataSize, Offset: 0);
@@ -955,7 +960,7 @@ internal sealed class TpmNvSecureChannelTests
 
     /// <summary>
     /// The handle-area size of each single-session-authorized NV command this file's owner verbs compose
-    /// (TPM 2.0 Library Part 3, Sections 31.3/31.4/31.7/31.13); a code not in this set answers -1.
+    /// (TPM 2.0 Library Part 3, clauses 31.3/31.4/31.7/31.13); a code not in this set answers -1.
     /// </summary>
     /// <param name="code">The command code to map.</param>
     /// <returns>The handle count, or -1 when the code carries no authorizing session this file inspects.</returns>
@@ -1010,7 +1015,7 @@ internal sealed class TpmNvSecureChannelTests
             return result;
         }
 
-        return TpmDevice.Create(CaptureAsync);
+        return TpmDevice.Create(CaptureAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
     }
 
     /// <summary>Returns the command and response bytes of the first recorded triple whose command code equals <paramref name="code"/>.</summary>
@@ -1041,7 +1046,7 @@ internal sealed class TpmNvSecureChannelTests
     /// Extracts the two initial session nonces from a captured <c>TPM2_StartAuthSession</c> exchange: the caller
     /// nonce from the command (after <c>tpmKey</c> and <c>bind</c>) and the TPM nonce from the response (after
     /// <c>sessionHandle</c>) - the KDFa <c>contextU</c>/<c>contextV</c> a bound session key derives from (TPM 2.0
-    /// Library Part 1, Section 17.6.10, equation 20). Navigated with a <see cref="TpmReader"/> so it holds
+    /// Library Part 1, clause 16.6.10, equation 20). Navigated with a <see cref="TpmReader"/> so it holds
     /// regardless of nonce widths.
     /// </summary>
     /// <param name="startCommand">The captured StartAuthSession command bytes.</param>
@@ -1069,7 +1074,7 @@ internal sealed class TpmNvSecureChannelTests
     /// Extracts the command caller nonce and the encrypted <c>auth</c> ciphertext from a captured
     /// <c>TPM2_NV_DefineSpace</c> command: single handle area (<c>@authHandle</c>), then the one authorizing
     /// session, then the first parameter <c>auth</c> (a <c>TPM2B_AUTH</c>, its size never encrypted, Part 1,
-    /// Section 21.1). Navigated with a <see cref="TpmReader"/> so it holds regardless of nonce/HMAC widths.
+    /// clause 20.1). Navigated with a <see cref="TpmReader"/> so it holds regardless of nonce/HMAC widths.
     /// </summary>
     /// <param name="defineCommand">The captured NV_DefineSpace command bytes.</param>
     /// <returns>The command caller nonce and the encrypted auth data portion.</returns>
@@ -1096,8 +1101,8 @@ internal sealed class TpmNvSecureChannelTests
     /// <summary>
     /// Reconstructs the stored PIN form a passive bus observer could recover from a captured define, assuming NO
     /// salt and an empty owner authValue: derives the session key it would compute, <c>KDFa(SHA-256, Empty,
-    /// "ATH", nonceTPM, nonceCaller)</c> (TPM 2.0 Library Part 1, Section 17.6.10), then XOR-decrypts the auth
-    /// ciphertext with the command-direction mask keyed on that value (Section 19.2). Uses the project's own
+    /// "ATH", nonceTPM, nonceCaller)</c> (TPM 2.0 Library Part 1, clause 16.6.10), then XOR-decrypts the auth
+    /// ciphertext with the command-direction mask keyed on that value (clause 18.2). Uses the project's own
     /// <c>Kdfa</c> and <c>TpmParameterEncryption</c> primitives, so a match means the encryption was genuinely
     /// keyed on public material and a mismatch means it was not.
     /// </summary>
@@ -1124,7 +1129,7 @@ internal sealed class TpmNvSecureChannelTests
 
         byte[] recovered = (byte[])ciphertext.Clone();
 
-        //Command direction (Part 1, Section 19.2): nonceNewer = nonceCaller, nonceOlder = nonceTPM; nonceTPM for
+        //Command direction (Part 1, clause 18.2): nonceNewer = nonceCaller, nonceOlder = nonceTPM; nonceTPM for
         //the first command over the session is still the StartAuthSession response nonce (not yet rolled).
         await TpmParameterEncryption.XorAsync(
             HashAlgorithmName.SHA256, sessionKey.Memory[..SessionKeyBytes], commandNonceCaller, startNonceTpm, recovered, pool, cancellationToken).ConfigureAwait(false);
@@ -1204,7 +1209,7 @@ internal sealed class TpmNvSecureChannelTests
     private async Task<TpmSimulator> CreateOperationalAsync()
     {
         var simulator = new TpmSimulator(
-            "tpm-in-house-nv-secure-channel", signingBackend: BouncyCastleTpmEccSigningBackend.Create(), rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create());
+            "tpm-in-house-nv-secure-channel", signingBackend: BouncyCastleTpmEccSigningBackend.Create(), rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;

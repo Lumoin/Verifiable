@@ -13,8 +13,12 @@ namespace Verifiable.Core.Model.Mdoc;
 /// <para>
 /// The verifier-side CBOR seam the OID4VP VP-token flow orchestration composes
 /// but does not perform itself (the flow layer cannot decode CBOR). Wired by
-/// the application to
-/// <c>Verifiable.Cbor.Mdoc.MdocCborDeviceResponseReader.Read</c>.
+/// the application to <c>Verifiable.Cbor.Mdoc.MdocCborDeviceResponseReader.Read</c>, which
+/// normalizes a malformed DeviceResponse to <see cref="FormatException"/> at its own public
+/// boundary rather than let <c>Lumoin.Veritas.Cbor.CborException</c> escape — a type the
+/// OID4VP verifier's Wallet-attributable-malformed classification cannot name (the project's
+/// CBOR-leaf layering rule bans that namespace outside <c>Verifiable.Cbor</c>). Implementations
+/// MUST throw <see cref="FormatException"/> for a wire-shape rejection.
 /// </para>
 /// <para>
 /// <strong>Ownership.</strong> A successful parse returns an owned

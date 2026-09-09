@@ -86,7 +86,7 @@ internal sealed class JAdESCapstoneFirewalledFlowTests
     private static ReadOnlyMemory<byte> Content { get; } = new("the JAdES capstone content"u8.ToArray());
 
     /// <summary>Encodes the countersigner's own plain RFC 7515 header (JA-5.3.2-04) to UTF-8 JSON bytes.</summary>
-    private static readonly JwtPartEncoder<Dictionary<string, object>> CounterSignerHeaderEncoder =
+    private static JwtPartEncoder<Dictionary<string, object>> CounterSignerHeaderEncoder { get; } =
         static header => new TaggedMemory<byte>(JsonSerializer.SerializeToUtf8Bytes(header), Tag.Create(Purpose.Data));
 
 
@@ -248,7 +248,7 @@ internal sealed class JAdESCapstoneFirewalledFlowTests
                 CounterSignerHeaderEncoder,
                 TestSetup.Base64UrlEncoder,
                 counterSignerPrivateKey,
-                MicrosoftCryptographicFunctions.SignP256Async,
+                MicrosoftCryptographicFunctionsAdapter.SignP256Async,
                 BaseMemoryPool.Shared,
                 counterSignerUnprotectedHeader: null,
                 cancellationToken: cancellationToken).ConfigureAwait(false);

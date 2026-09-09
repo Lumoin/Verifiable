@@ -15,8 +15,8 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </para>
 /// <para>
 /// This command has no parameters. It is authorized, so it is sent with <c>TPM_ST_SESSIONS</c>, and is
-/// permitted even while the TPM is in general Lockout mode. See TPM 2.0 Library Part 3, Section 25.2
-/// (Table 180).
+/// permitted even while the TPM is in general Lockout mode. See TPM 2.0 Library Part 3, clause 25.2
+/// (Table 210).
 /// </para>
 /// </remarks>
 /// <param name="LockHandle">The lockout hierarchy authorizing the reset (<c>TPM_RH_LOCKOUT</c>).</param>

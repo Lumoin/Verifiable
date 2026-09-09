@@ -610,6 +610,13 @@ public static class JAdESLevelRules
     /// <paramref name="base64UrlEncoder"/>, <paramref name="resolvePublicKey"/>, or <paramref name="pool"/> is
     /// <see langword="null"/>.
     /// </exception>
+    /// <remarks>
+    /// <strong>Manual disposal, not a <see langword="using"/> declaration.</strong> <c>decoded</c> is bound
+    /// through <paramref name="tryDecodeCounterSignature"/>'s <see langword="out"/> parameter inside the
+    /// loop's own <see langword="try"/> (a <see langword="using"/> declaration accepts only a single simple
+    /// declaration, never an <see langword="out"/>-parameter target); the <see langword="finally"/> disposes
+    /// it once per iteration regardless of outcome.
+    /// </remarks>
     public static async ValueTask<IReadOnlyList<JAdESRuleViolation>> CheckCounterSignaturesAsync(
         JAdESUnsignedHeaders? unsignedHeaders,
         JAdESEtsiUIncorporationMode mode,
@@ -1028,7 +1035,7 @@ public static class JAdESLevelRules
     /// </summary>
     private sealed class CandidateDigestIndex(IReadOnlyList<ReadOnlyMemory<byte>> candidates, BaseMemoryPool pool)
     {
-        private readonly Dictionary<int, HashSet<string>> digestsByOutputLength = [];
+        private Dictionary<int, HashSet<string>> DigestsByOutputLength { get; } = [];
 
         /// <summary>
         /// Determines whether <paramref name="referenceDigest"/> (declared under <paramref name="algorithm"/>)
@@ -1055,10 +1062,10 @@ public static class JAdESLevelRules
             }
 
             int outputLength = referenceDigest.Length;
-            if(!digestsByOutputLength.TryGetValue(outputLength, out HashSet<string>? digests))
+            if(!DigestsByOutputLength.TryGetValue(outputLength, out HashSet<string>? digests))
             {
                 digests = await BuildIndexAsync(tag, outputLength, cancellationToken).ConfigureAwait(false);
-                digestsByOutputLength[outputLength] = digests;
+                DigestsByOutputLength[outputLength] = digests;
             }
 
             return digests.Contains(Convert.ToHexStringLower(referenceDigest.AsReadOnlySpan()));

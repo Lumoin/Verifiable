@@ -20,7 +20,7 @@ namespace Verifiable.Tpm.Extensions.Pin;
 
 /// <summary>
 /// The <c>TPMS_NV_PIN_COUNTER_PARAMETERS</c> structure retained by a PIN Index's data area (TPM 2.0 Library
-/// Part 2, Section 13.3): the current attempt count and the attempt threshold it is compared against.
+/// Part 2, clause 13.3): the current attempt count and the attempt threshold it is compared against.
 /// </summary>
 /// <param name="PinCount">The current attempt count.</param>
 /// <param name="PinLimit">The attempt threshold; the Index's own authValue stops being usable once <see cref="PinCount"/> reaches this.</param>
@@ -29,12 +29,12 @@ public readonly record struct TpmPinCounterParameters(uint PinCount, uint PinLim
 /// <summary>
 /// Persistent PIN-retry-budget ("throttle") business-capability extensions for <see cref="TpmDevice"/>, composed
 /// over a <c>TPM_NT_PIN_FAIL</c> NV Index (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">
-/// TPM 2.0 Library Specification</see>, Part 1, Section 35.2.6.6).
+/// TPM 2.0 Library Specification</see>, Part 1, clause 34.2.6.6).
 /// </summary>
 /// <remarks>
 /// <para>
 /// These verbs compose the shipped <c>TPM2_NV_DefineSpace</c>/<c>TPM2_NV_Read</c>/<c>TPM2_NV_Write</c>/
-/// <c>TPM2_NV_UndefineSpace</c>/<c>TPM2_NV_ChangeAuth</c> surface (Part 3, Sections 31.3, 31.13, 31.7, 31.4,
+/// <c>TPM2_NV_UndefineSpace</c>/<c>TPM2_NV_ChangeAuth</c> surface (Part 3, clauses 31.3, 31.13, 31.7, 31.4,
 /// 31.15) into a single business
 /// capability: a PIN-retry counter whose own compare-and-move is one atomic TPM command, so there is no
 /// window between "check the PIN" and "record the attempt" for a caller to exploit. Every session this group
@@ -47,31 +47,31 @@ public readonly record struct TpmPinCounterParameters(uint PinCount, uint PinLim
 /// </para>
 /// <list type="bullet">
 ///   <item><description><see cref="VerifyPinAsync(uint, ReadOnlyMemory{byte}, CancellationToken)"/>
-///   composes an UNBOUND, unsalted HMAC session (TPM 2.0 Library Part 1, Section 17.6.9's Empty Buffer session
+///   composes an UNBOUND, unsalted HMAC session (TPM 2.0 Library Part 1, clause 16.6.9's Empty Buffer session
 ///   key) and sets <paramref name="candidatePinHash"/> as that session's authValue - never a session bound to
-///   the PIN Index itself, which Part 1, Section 35.2.8.3 forbids outright (<c>TPM_RC_HANDLE</c>): "the sequence
+///   the PIN Index itself, which Part 1, clause 34.2.8.3 forbids outright (<c>TPM_RC_HANDLE</c>): "the sequence
 ///   in which the TPM processes authorizations would enable a hammering attack on the Index." The candidate PIN
 ///   never crosses the bus as a password; a wrong candidate is an HMAC mismatch, not a plaintext compare. See
 ///   that verb's own remarks for the honest channel accounting - this default closes the on-the-wire plaintext
 ///   exposure, not the offline-guessing surface, which the salted overload closes.</description></item>
 ///   <item><description>The four owner-authorized verbs (<see cref="DefinePinFailIndexAsync(ReadOnlyMemory{byte}, uint, ReadOnlyMemory{byte}, uint, CancellationToken)"/>,
 ///   <see cref="ReadPinCountersAsync"/>, <see cref="ResetPinCountAsync"/>, <see cref="UndefinePinIndexAsync"/>)
-///   default to an HMAC session BOUND to <c>TPM_RH_OWNER</c> (Part 1, Section 17.6.10, equation 20): the owner
+///   default to an HMAC session BOUND to <c>TPM_RH_OWNER</c> (Part 1, clause 16.6.10, equation 20): the owner
 ///   authorization value feeds the session key's KDFa derivation, so a genuinely secret owner authValue never
 ///   crosses the bus and the command carries a structured cpHash/nonce-bound authHMAC a password session cannot
 ///   offer. As with <c>Extensions/Policy</c>'s <c>PolicySecretAsync</c>, when the owner's own authorization value
 ///   is empty (unset), that KDFa key is derivable by anyone who observed the <c>TPM2_StartAuthSession</c>
 ///   exchange (its nonces cross the wire in the clear); the mechanism still becomes real integrity protection
 ///   the moment a real owner authValue is set. Each of these four verbs folds the target PIN Index's own real,
-///   current Name (Part 1, Section 14, Table 6) into the cpHash of every command it composes against an
+///   current Name (Part 1, clause 13, Table 9) into the cpHash of every command it composes against an
 ///   ALREADY-DEFINED Index, deriving it host-side via
 ///   <see cref="Nv.TpmDeviceExtensions.NvReadPublicAsync(uint, CancellationToken)"/> rather than recomputing it
 ///   blind. The composed <c>TPM2_NV_DefineSpace</c> is the exception: it is single-handle, and no Index exists
 ///   yet to have a Name, so its cpHash carries the owner handle alone.</description></item>
 ///   <item><description><see cref="ChangePinAsync(uint, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, CancellationToken)"/>
 ///   is the one verb with NO <c>…WithPasswordAsync</c> opt-out at all: <c>TPM2_NV_ChangeAuth</c> authorizes the
-///   Index at ADMIN role, which an NV Index can satisfy only with a policy session (Part 3, Section 31.15.1;
-///   Part 1, Section 17.2 and Section 35.2.3), so no plaintext arm can exist to offer. It composes an UNBOUND
+///   Index at ADMIN role, which an NV Index can satisfy only with a policy session (Part 3, clause 31.15.1;
+///   Part 1, clause 16.2 and clause 34.2.3), so no plaintext arm can exist to offer. It composes an UNBOUND
 ///   policy session that folds the current PIN form in via <c>TPM2_PolicyAuthValue</c>, plus a separate decrypt
 ///   companion carrying the replacement value - see that verb's own remarks for the full accounting.</description></item>
 /// </list>
@@ -96,7 +96,7 @@ public readonly record struct TpmPinCounterParameters(uint PinCount, uint PinLim
 /// <b>Rotation is in place.</b> Every Index this group defines carries the <c>authPolicy</c>
 /// <see cref="CreatePinIndexAuthPolicy"/> computes, which exists for exactly one purpose: it lets
 /// <see cref="ChangePinAsync(uint, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, CancellationToken)"/> replace the
-/// Index's authorization value with one <c>TPM2_NV_ChangeAuth</c> (Part 3, Section 31.15) instead of undefining
+/// Index's authorization value with one <c>TPM2_NV_ChangeAuth</c> (Part 3, clause 31.15) instead of undefining
 /// and redefining the Index. The Index is never absent and its data area is never touched, so the throttle state
 /// - <c>pinCount</c>, <c>pinLimit</c>, the written flag - and the Index's Name all survive a PIN change. That
 /// policy is not an authorization path for anything else: the attributes below route read, write, and undefine
@@ -117,13 +117,13 @@ public readonly record struct TpmPinCounterParameters(uint PinCount, uint PinLim
 /// <para>
 /// <b>PIN_FAIL only.</b> This group defines and drives only <c>TPM_NT_PIN_FAIL</c> Indexes: a wrong candidate
 /// increments <c>pinCount</c>, a correct one below <c>pinLimit</c> resets it to zero, and at <c>pinLimit</c>
-/// even the correct value is refused (Part 1, Section 35.2.6.6). <c>TPM_NT_PIN_PASS</c> composes the opposite
+/// even the correct value is refused (Part 1, clause 34.2.6.6). <c>TPM_NT_PIN_PASS</c> composes the opposite
 /// semantics (increment on success) and is out of this group's scope.
 /// </para>
 /// <para>
 /// <b>Attributes are hard-coded.</b> Every Index this group defines carries exactly <c>TPM_NT_PIN_FAIL |
 /// TPMA_NV_NO_DA | TPMA_NV_AUTHREAD | TPMA_NV_OWNERWRITE | TPMA_NV_OWNERREAD</c>: <c>NO_DA</c> is
-/// spec-mandated for a PIN Fail Index (Part 2, Section 13.4) so its own localized throttle never doubles up
+/// spec-mandated for a PIN Fail Index (Part 2, clause 13.4) so its own localized throttle never doubles up
 /// with the TPM-wide dictionary-attack counter; <c>AUTHWRITE</c> is deliberately absent, so the Index's own
 /// authValue can never write it (the PIN oracle the automaton's <c>TPM2_NV_DefineSpace()</c> gate refuses to
 /// define in the first place); <c>OWNERWRITE</c>/<c>OWNERREAD</c> make the owner hierarchy the sole
@@ -139,7 +139,7 @@ public readonly record struct TpmPinCounterParameters(uint PinCount, uint PinLim
 [SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "Analyzer does not recognize C# 13 extension type syntax.")]
 public static class TpmDeviceExtensions
 {
-    /// <summary>The declared data area size (octets) of every PIN Fail Index this group defines - the whole 8-octet <c>TPMS_NV_PIN_COUNTER_PARAMETERS</c> (TPM 2.0 Library Part 2, Section 13.3).</summary>
+    /// <summary>The declared data area size (octets) of every PIN Fail Index this group defines - the whole 8-octet <c>TPMS_NV_PIN_COUNTER_PARAMETERS</c> (TPM 2.0 Library Part 2, clause 13.3).</summary>
     private const ushort PinCounterParametersSize = 8;
 
     /// <summary>The Name hash algorithm fixed for every PIN Fail Index this group defines.</summary>
@@ -154,7 +154,7 @@ public static class TpmDeviceExtensions
 
     /// <summary>
     /// The hard-coded <c>TPMA_NV</c> attribute set for every PIN Fail Index this group defines (TPM 2.0 Library
-    /// Part 1, Section 35.2.6.1 and 35.2.6.6; Part 2, Section 13.4): <c>TPM_NT_PIN_FAIL</c>, spec-mandated
+    /// Part 1, clause 34.2.6.1 and 34.2.6.6; Part 2, clause 13.4): <c>TPM_NT_PIN_FAIL</c>, spec-mandated
     /// <c>TPMA_NV_NO_DA</c>, Index-authValue reads via <c>TPMA_NV_AUTHREAD</c>, and owner-hierarchy
     /// provisioning/reporting via <c>TPMA_NV_OWNERWRITE</c>/<c>TPMA_NV_OWNERREAD</c>. <c>TPMA_NV_AUTHWRITE</c>
     /// is deliberately absent - the Index's own authValue may never write it.
@@ -172,7 +172,7 @@ public static class TpmDeviceExtensions
         /// </summary>
         /// <remarks>
         /// <para>
-        /// A PIN Fail Index forbids <c>TPMA_NV_AUTHWRITE</c> (Part 1, Section 35.2.6.1), so the counter
+        /// A PIN Fail Index forbids <c>TPMA_NV_AUTHWRITE</c> (Part 1, clause 34.2.6.1), so the counter
         /// parameters can only ever be established by the owner-authorized write this verb composes -
         /// provisioning and the later <see cref="ResetPinCountAsync"/> recovery share the identical write
         /// shape. The Index is defined with the <c>authPolicy</c> <see cref="CreatePinIndexAuthPolicy"/>
@@ -191,7 +191,7 @@ public static class TpmDeviceExtensions
         /// </para>
         /// <para>
         /// <b>Honest channel accounting for <paramref name="pinHash"/>.</b> It is installed as the new Index's
-        /// authValue by riding <c>TPM2_NV_DefineSpace</c>'s <c>auth</c> command PARAMETER (Part 3, Section 31.3),
+        /// authValue by riding <c>TPM2_NV_DefineSpace</c>'s <c>auth</c> command PARAMETER (Part 3, clause 31.3),
         /// the reference's DECRYPT_2-eligible first parameter, which a decrypt-attributed session encrypts on the
         /// bus. Its confidentiality against a bus observer tracks the session key exactly as the owner-verb
         /// integrity does: an empty owner authValue over an unsalted session keys that encryption from the public
@@ -232,12 +232,12 @@ public static class TpmDeviceExtensions
         /// <remarks>
         /// <para>
         /// The stored PIN form still enters as <c>TPM2_NV_DefineSpace</c>'s <c>auth</c> command PARAMETER
-        /// (Part 3, Section 31.3), but here the encrypting session is SALTED
+        /// (Part 3, clause 31.3), but here the encrypting session is SALTED
         /// (<see cref="Infrastructure.Commands.StartAuthSessionInputExtensions.CreateSaltedHmacSession(uint, ReadOnlyMemory{byte}, uint, TpmAlgIdConstants, TpmAlgIdConstants, TpmRsaOaepEncryptDelegate, BaseMemoryPool, CancellationToken, TpmtSymDef?)"/>):
-        /// a fresh salt is RSA-OAEP-encrypted (TPM 2.0 Library Part 1, Annex B.10.2) to <paramref name="tpmKeyModulus"/>/
+        /// a fresh salt is RSA-OAEP-encrypted (TPM 2.0 Library Part 1, clause 16.6.13) to <paramref name="tpmKeyModulus"/>/
         /// <paramref name="tpmKeyExponent"/>, so only the TPM holding <paramref name="tpmKey"/>'s matching private
-        /// key can recover it. The session key then folds that recovered salt (Part 1, Section 17.6.12, equation
-        /// 25), so the parameter-encryption keystream keyed on it (Part 1, Section 21) is genuinely secret - unlike
+        /// key can recover it. The session key then folds that recovered salt (Part 1, clause 16.6.12, equation
+        /// 25), so the parameter-encryption keystream keyed on it (Part 1, clause 20) is genuinely secret - unlike
         /// the unsalted default (see <see cref="DefinePinFailIndexAsync(ReadOnlyMemory{byte}, uint, ReadOnlyMemory{byte}, uint, CancellationToken)"/>),
         /// an adversary who captured the enrollment transcript cannot recompute it, so the stored PIN form is no
         /// longer recoverable from the bus. This is where genuine enrollment confidentiality lives.
@@ -318,11 +318,11 @@ public static class TpmDeviceExtensions
         /// <para>
         /// <b>There is no <c>…WithPasswordAsync</c> opt-out, and there cannot be one.</b>
         /// <c>TPM2_NV_ChangeAuth</c> authorizes <paramref name="pinIndexHandle"/> at ADMIN role (TPM 2.0 Library
-        /// Part 3, Section 31.15.1: the command "requires that a policy session be used for authorization of
+        /// Part 3, clause 31.15.1: the command "requires that a policy session be used for authorization of
         /// nvIndex so that the ADMIN role may be asserted and that commandCode in the policy session context shall
-        /// be TPM_CC_NV_ChangeAuth"). Part 1, Section 17.2's ADMIN-role bullet offers an authValue path only for an
+        /// be TPM_CC_NV_ChangeAuth"). Part 1, clause 16.2's ADMIN-role bullet offers an authValue path only for an
         /// object whose <c>adminWithPolicy</c> attribute is CLEAR, and an NV Index has no such attribute to be
-        /// CLEAR - Part 1, Section 35.2.3 states the requirement for the NV family's other ADMIN-role command
+        /// CLEAR - Part 1, clause 34.2.3 states the requirement for the NV family's other ADMIN-role command
         /// unconditionally, with no fallback clause at all. A password session, or a plain HMAC session on the
         /// Index, therefore cannot authorize this command at any protection level, so this verb has no
         /// plaintext-password arm to fall back to the way every other verb in this group does.
@@ -331,14 +331,14 @@ public static class TpmDeviceExtensions
         /// <b>The Index must have been enrolled rotation-capable.</b> Only an Index whose <c>authPolicy</c> is the
         /// one <see cref="CreatePinIndexAuthPolicy"/> computes can satisfy that ADMIN check, which is why every
         /// define path in this group installs it. An Index defined elsewhere with an Empty Policy can never
-        /// satisfy it (Part 1, Section 11.2), so its authorization value is fixed for the Index's whole lifetime
+        /// satisfy it (Part 1, clause 10.2), so its authorization value is fixed for the Index's whole lifetime
         /// and the only PIN change available to it is the destructive undefine-and-redefine that takes the
         /// throttle history with it.
         /// </para>
         /// <para>
         /// <b>Rotation deliberately costs the current PIN, and a wrong guess costs a retry.</b> The composed
         /// policy folds <c>TPM2_PolicyAuthValue</c>, so the session's command HMAC key incorporates the Index's
-        /// CURRENT authorization value (Part 1, Section 17.6.5's policy note): <paramref name="oldPinHash"/> is
+        /// CURRENT authorization value (Part 1, clause 16.6.5's policy note): <paramref name="oldPinHash"/> is
         /// proven by HMAC exactly as <see cref="VerifyPinAsync(uint, ReadOnlyMemory{byte}, CancellationToken)"/>
         /// proves a candidate. The three consequences are the intended ones, not accidents:
         /// </para>
@@ -350,12 +350,12 @@ public static class TpmDeviceExtensions
         ///   <c>pinCount</c> to zero, exactly as a successful verification does.</description></item>
         ///   <item><description>An Index already at <c>pinLimit</c> refuses the rotation with
         ///   <c>TPM_RC_AUTH_UNAVAILABLE</c> before the HMAC is ever evaluated, even for the correct
-        ///   <paramref name="oldPinHash"/> (Part 1, Section 35.2.6.6). Recovering such an Index is the owner's
+        ///   <paramref name="oldPinHash"/> (Part 1, clause 34.2.6.6). Recovering such an Index is the owner's
         ///   job - <see cref="ResetPinCountAsync"/> first, then rotate.</description></item>
         /// </list>
         /// <para>
         /// <b>Honest channel accounting.</b> The authorizing policy session is UNBOUND and unsalted (Part 1,
-        /// Section 17.6.9's Empty Buffer session key), so its HMAC key IS the PIN form that leg proves and the
+        /// clause 16.6.9's Empty Buffer session key), so its HMAC key IS the PIN form that leg proves and the
         /// offline-guessing surface is identical to the one
         /// <see cref="VerifyPinAsync(uint, ReadOnlyMemory{byte}, CancellationToken)"/>'s own remarks describe in
         /// full: every other value the key derivation consumes crosses the wire in the clear, so a captured
@@ -363,10 +363,10 @@ public static class TpmDeviceExtensions
         /// <c>pinLimit</c> throttle defends only the online path. BOTH PIN forms are exposed that way, not just
         /// the old one - the command leg is keyed on <paramref name="oldPinHash"/> and, because the rotation
         /// commits before the response is framed, the response leg is keyed on <paramref name="newPinHash"/>
-        /// (Part 3, Section 31.15.1), so one transcript verifies guesses at either. Separately,
+        /// (Part 3, clause 31.15.1), so one transcript verifies guesses at either. Separately,
         /// <paramref name="newPinHash"/> rides <c>TPM2_NV_ChangeAuth</c>'s <c>newAuth</c> command PARAMETER
-        /// (Part 3, Section 31.15) - the command's sole, and therefore first, sized parameter, which Part 1,
-        /// Section 19.1 makes eligible for session encryption - under a SEPARATE decrypt session, never the
+        /// (Part 3, clause 31.15) - the command's sole, and therefore first, sized parameter, which Part 1,
+        /// clause 18.1 makes eligible for session encryption - under a SEPARATE decrypt session, never the
         /// authorizing one. That session is unsalted here, so its keystream derives from the public
         /// <c>TPM2_StartAuthSession</c> nonces alone and a bus observer can recompute it: the encryption is
         /// structural, not confidential, the same caveat enrollment carries. The salted overload of this verb
@@ -376,13 +376,13 @@ public static class TpmDeviceExtensions
         /// <b>The replacement value.</b> The TPM strips trailing zero octets from <paramref name="newPinHash"/>
         /// and then refuses anything still longer than <see cref="PinNameAlgorithm"/>'s digest size with
         /// <c>TPM_RC_SIZE</c>; hashing an over-long secret down to that size first is a caller-side convention the
-        /// TPM does not perform (Part 1, Section 17.6.4.3: "The TPM does not enforce this transformation"). The
+        /// TPM does not perform (Part 1, clause 16.6.4.3: "The TPM does not enforce this transformation"). The
         /// PIN-normalization contract this group's own remarks state binds <paramref name="newPinHash"/> against
         /// every later verification exactly as it binds the enrollment hash.
         /// </para>
         /// <para>
         /// <b>The Name does not move.</b> An Index's authValue lives outside its <c>TPMS_NV_PUBLIC</c>, which is
-        /// what the Name is computed over (Part 1, Section 14, Table 6), so a Name - or an attestation carrying
+        /// what the Name is computed over (Part 1, clause 13, Table 9), so a Name - or an attestation carrying
         /// one - obtained before the rotation stays valid after it and no caller needs to re-resolve it.
         /// </para>
         /// </remarks>
@@ -418,20 +418,20 @@ public static class TpmDeviceExtensions
         /// for the authorizing one,
         /// <see cref="Infrastructure.Commands.StartAuthSessionInputExtensions.CreateSaltedHmacSession(uint, ReadOnlyMemory{byte}, uint, TpmAlgIdConstants, TpmAlgIdConstants, TpmRsaOaepEncryptDelegate, BaseMemoryPool, CancellationToken, TpmtSymDef?)"/>
         /// for the companion), and each draws its OWN salt: two independent secrets, never one reused across the
-        /// pair. Every salt is RSA-OAEP-encrypted (TPM 2.0 Library Part 1, Annex B.10.2) to
+        /// pair. Every salt is RSA-OAEP-encrypted (TPM 2.0 Library Part 1, clause 16.6.13) to
         /// <paramref name="tpmKeyModulus"/>/<paramref name="tpmKeyExponent"/>, so only the TPM holding
         /// <paramref name="tpmKey"/>'s matching private key can recover it, and each recovered salt keys its own
-        /// session's derived session key (Part 1, Section 17.6.12, equation 25).
+        /// session's derived session key (Part 1, clause 16.6.12, equation 25).
         /// </para>
         /// <para>
         /// <b>The authorizing session's salt is what closes the offline oracle.</b> That session's per-command
-        /// HMAC key is <c>sessionValue = sessionKey || authValue</c> (Part 1, Section 17.6.5), and
+        /// HMAC key is <c>sessionValue = sessionKey || authValue</c> (Part 1, clause 16.6.5), and
         /// <c>TPM2_PolicyAuthValue</c> is what puts the Index's authorization value into the authValue term. With
         /// an unsalted session the <c>sessionKey</c> in front of it is the Empty Buffer, leaving the PIN form as
         /// the key's only unknown; salting makes <c>sessionKey</c> a value no observer can reconstruct, so the
         /// key stops being derivable from public transcript data plus a guess. That holds on both legs and for
         /// both PIN forms: the command leg keyed on <paramref name="oldPinHash"/>, and - because the rotation
-        /// commits before the response is framed (Part 3, Section 31.15.1) - the response leg keyed on
+        /// commits before the response is framed (Part 3, clause 31.15.1) - the response leg keyed on
         /// <paramref name="newPinHash"/>. Neither can be recomputed offline, so <c>pinLimit</c>'s throttle governs
         /// the only guessing path that remains, which is the honest caveat the unsalted default still carries.
         /// </para>
@@ -440,7 +440,7 @@ public static class TpmDeviceExtensions
         /// <paramref name="newPinHash"/> rides <c>newAuth</c> under a session separate from the authorizing one,
         /// never the same session, because a policy session carrying the decrypt attribute would fold the Index's
         /// authValue into its <c>sessionValue</c> whether or not the policy asserted <c>TPM2_PolicyAuthValue</c>
-        /// (Part 1, Section 19.1's note) - keying the encryption of the NEW PIN form on the OLD one. Salted, that
+        /// (Part 1, clause 18.1's note) - keying the encryption of the NEW PIN form on the OLD one. Salted, that
         /// companion's keystream is genuinely secret rather than merely structural, so the replacement value is
         /// not recoverable from a captured transcript the way the unsalted default leaves it.
         /// </para>
@@ -485,8 +485,8 @@ public static class TpmDeviceExtensions
         /// </summary>
         /// <remarks>
         /// <para>
-        /// The compare and the <c>pinCount</c> move are resolved as ONE atomic TPM command (Part 1, Section
-        /// 35.2.6.6): a correct candidate below <c>pinLimit</c> resets <c>pinCount</c> to zero and returns the
+        /// The compare and the <c>pinCount</c> move are resolved as ONE atomic TPM command (Part 1, clause
+        /// 34.2.6.6): a correct candidate below <c>pinLimit</c> resets <c>pinCount</c> to zero and returns the
         /// reset parameters; a wrong one increments <c>pinCount</c> and answers a session-encoded
         /// <c>TPM_RC_BAD_AUTH</c> (a PIN Fail Index is spec-mandated <c>TPMA_NV_NO_DA</c>, so a wrong PIN is
         /// never <c>TPM_RC_AUTH_FAIL</c>; the code carries the session-index modifier - compare against
@@ -495,10 +495,10 @@ public static class TpmDeviceExtensions
         /// moving <c>pinCount</c> further. There is no TOCTOU window between comparing and recording.
         /// </para>
         /// <para>
-        /// <b>Why unbound, never bound to the Index.</b> Part 1, Section 35.2.8.3 forbids binding an
+        /// <b>Why unbound, never bound to the Index.</b> Part 1, clause 34.2.8.3 forbids binding an
         /// authorization session to a PIN Pass or PIN Fail Index outright (<c>TPM_RC_HANDLE</c>): "the sequence
         /// in which the TPM processes authorizations would enable a hammering attack on the Index." This verb's
-        /// session is therefore unbound (Part 1, Section 17.6.9's Empty Buffer session key); <paramref name="candidatePinHash"/>
+        /// session is therefore unbound (Part 1, clause 16.6.9's Empty Buffer session key); <paramref name="candidatePinHash"/>
         /// is instead set as the session's authValue, so it becomes the per-command HMAC key's authValue term
         /// (<c>sessionValue = sessionKey || authValue = Empty || candidatePinHash</c>) - the same mechanism
         /// <c>SetAuthValue</c> gives any authorized entity, applied here to an unbound rather than a bound
@@ -546,15 +546,15 @@ public static class TpmDeviceExtensions
         /// <remarks>
         /// <para>
         /// Composes <see cref="Infrastructure.Commands.StartAuthSessionInputExtensions.CreateSaltedHmacSession(uint, ReadOnlyMemory{byte}, uint, TpmAlgIdConstants, TpmAlgIdConstants, TpmRsaOaepEncryptDelegate, BaseMemoryPool, CancellationToken, TpmtSymDef?)"/>:
-        /// a fresh salt is RSA-OAEP-encrypted (TPM 2.0 Library Part 1, Annex B.10.2) to <paramref name="tpmKeyModulus"/>/
+        /// a fresh salt is RSA-OAEP-encrypted (TPM 2.0 Library Part 1, clause 16.6.13) to <paramref name="tpmKeyModulus"/>/
         /// <paramref name="tpmKeyExponent"/>, so only the TPM holding <paramref name="tpmKey"/>'s matching
-        /// private key can recover it. The session key then folds that recovered salt (Part 1, Section 17.6.12,
+        /// private key can recover it. The session key then folds that recovered salt (Part 1, clause 16.6.12,
         /// equation 25) alongside <paramref name="candidatePinHash"/> as the session's authValue - unlike the
         /// unsalted default (see <see cref="VerifyPinAsync(uint, ReadOnlyMemory{byte}, CancellationToken)"/>'s
         /// own remarks), an adversary who captured the wire transcript cannot recompute this key offline without
         /// also breaking the RSA-OAEP encryption, so a captured transcript alone no longer lets a candidate PIN be
         /// tested without the live TPM. The session remains unbound (never bound to
-        /// <paramref name="pinIndexHandle"/>, which Part 1, Section 35.2.8.3 forbids) - only the source of key
+        /// <paramref name="pinIndexHandle"/>, which Part 1, clause 34.2.8.3 forbids) - only the source of key
         /// entropy changes.
         /// </para>
         /// <para>
@@ -597,8 +597,8 @@ public static class TpmDeviceExtensions
         /// <remarks>
         /// The candidate PIN hash is sent in the clear as the session's password field - a passive bus observer
         /// reads it directly, with no HMAC derivation step to attack offline at all (there is nothing to derive;
-        /// the value itself is the wire content). The atomic compare-and-move semantics of Part 1, Section
-        /// 35.2.6.6 are otherwise identical to the HMAC default. Fine for diagnostics or an already-protected
+        /// the value itself is the wire content). The atomic compare-and-move semantics of Part 1, clause
+        /// 34.2.6.6 are otherwise identical to the HMAC default. Fine for diagnostics or an already-protected
         /// transport; wrong for anything where <see cref="VerifyPinAsync(uint, ReadOnlyMemory{byte}, CancellationToken)"/>'s
         /// unbound HMAC default (or its salted overload) is the appropriate channel.
         /// </remarks>
@@ -627,8 +627,8 @@ public static class TpmDeviceExtensions
         /// PIN-consuming <see cref="VerifyPinAsync(uint, ReadOnlyMemory{byte}, CancellationToken)"/>
         /// guess, a caller may poll this as often as needed. An unwritten Index answers
         /// <c>TPM_RC_NV_UNINITIALIZED</c> on this arm specifically (the Index-arm's
-        /// <c>TPM_RC_AUTH_UNAVAILABLE</c> pre-gate does not apply here, TPM 2.0 Library Part 1, Section
-        /// 35.2.6.6). Use <see cref="ReadPinCountersWithPasswordAsync"/> for the plaintext-owner-password
+        /// <c>TPM_RC_AUTH_UNAVAILABLE</c> pre-gate does not apply here, TPM 2.0 Library Part 1, clause
+        /// 34.2.6.6). Use <see cref="ReadPinCountersWithPasswordAsync"/> for the plaintext-owner-password
         /// opt-out.
         /// </remarks>
         /// <param name="ownerAuth">The owner hierarchy's authorization value, or empty when the owner has no auth set.</param>
@@ -672,7 +672,7 @@ public static class TpmDeviceExtensions
         /// Resets <paramref name="pinIndexHandle"/>'s <c>pinCount</c> to zero and (re)establishes
         /// <paramref name="pinLimit"/>, composing an owner-authorized <c>TPM2_NV_Write</c> of the full 8-octet
         /// counter window over a bound HMAC session internally - the sole recovery path once <c>pinCount</c> has
-        /// reached <c>pinLimit</c> (Part 1, Section 35.2.8.1's "no automatic self-heal" note).
+        /// reached <c>pinLimit</c> (Part 1, clause 34.2.8.1's "no automatic self-heal" note).
         /// </summary>
         /// <remarks>
         /// Use <see cref="ResetPinCountWithPasswordAsync"/> for the plaintext-owner-password opt-out.
@@ -724,7 +724,7 @@ public static class TpmDeviceExtensions
         /// </summary>
         /// <remarks>
         /// <para>
-        /// Authorization is resolved against the owner hierarchy's own authValue (TPM 2.0 Library Part 3, Section
+        /// Authorization is resolved against the owner hierarchy's own authValue (TPM 2.0 Library Part 3, clause
         /// 31.4): a wrong <paramref name="ownerAuth"/> is refused with a session-encoded <c>TPM_RC_BAD_AUTH</c>
         /// and the Index is left defined, so this verb is not a path to an unauthenticated PIN-throttle reset by
         /// undefining and re-running <see cref="DefinePinFailIndexAsync(ReadOnlyMemory{byte}, uint, ReadOnlyMemory{byte}, uint, CancellationToken)"/>.
@@ -786,10 +786,10 @@ public static class TpmDeviceExtensions
     /// </para>
     /// <para>
     /// The <c>PolicyCommandCode</c> assertion is what makes the policy satisfy an ADMIN-role check at all: TPM 2.0
-    /// Library Part 3, Section 31.15.1 requires the authorizing policy session's <c>commandCode</c> to be
-    /// <c>TPM_CC_NV_ChangeAuth</c>, and Part 1, Section 17.2's ADMIN note states the same rule generically. The
+    /// Library Part 3, clause 31.15.1 requires the authorizing policy session's <c>commandCode</c> to be
+    /// <c>TPM_CC_NV_ChangeAuth</c>, and Part 1, clause 16.2's ADMIN note states the same rule generically. The
     /// <c>PolicyAuthValue</c> assertion is the deliberate design choice on top of that requirement: it makes the
-    /// session's command HMAC key incorporate the Index's CURRENT authorization value (Part 1, Section 17.6.5's
+    /// session's command HMAC key incorporate the Index's CURRENT authorization value (Part 1, clause 16.6.5's
     /// policy note), so a rotation can only be performed by a caller who already knows the PIN being rotated away
     /// from - a wrong one is an HMAC mismatch that burns a retry against <c>pinCount</c> exactly as a failed
     /// verification does.
@@ -809,8 +809,8 @@ public static class TpmDeviceExtensions
     /// <para>
     /// The digest is folded over <see cref="PinNameAlgorithm"/> because that is the algorithm the authorizing
     /// session runs under. A policy session accumulates its <c>policyDigest</c> under the session's OWN
-    /// <c>authHash</c> - the one fixed at <c>TPM2_StartAuthSession</c> (TPM 2.0 Library Part 3, Section 11.1),
-    /// never one read from the entity being authorized (Part 1, Section 17.7). The Index's stored
+    /// <c>authHash</c> - the one fixed at <c>TPM2_StartAuthSession</c> (TPM 2.0 Library Part 3, clause 11.1),
+    /// never one read from the entity being authorized (Part 1, clause 16.7). The Index's stored
     /// <c>authPolicy</c> is then compared against that accumulated digest, so the comparison carries meaning
     /// only when the two algorithms agree. That is the whole reason this group holds
     /// <see cref="PinAuthSessionHash"/> equal to <see cref="PinNameAlgorithm"/>: a session started under any
@@ -824,7 +824,7 @@ public static class TpmDeviceExtensions
     /// demands ADMIN role - the authValue rotation
     /// <see cref="ChangePinAsync(uint, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, CancellationToken)"/> composes.
     /// Installing it is a definition-time decision that cannot be revisited: an Index defined with an Empty Policy
-    /// can never satisfy an ADMIN-role check (Part 1, Section 11.2: a zero-length <c>authPolicy</c> disables the
+    /// can never satisfy an ADMIN-role check (Part 1, clause 10.2: a zero-length <c>authPolicy</c> disables the
     /// policy, and no digest is zero-length), so its authorization value is fixed for the Index's whole lifetime
     /// and the only way to change the PIN is the destructive undefine-and-redefine that discards the throttle
     /// history with it.
@@ -839,7 +839,7 @@ public static class TpmDeviceExtensions
         int digestSize = TpmPolicyDigest.Size(PinNameAlgorithm);
         using IMemoryOwner<byte> digestOwner = pool.Rent(digestSize);
         Span<byte> digest = digestOwner.Memory.Span[..digestSize];
-        _ = PinIndexRotationPolicy.ComputeDigest(PinNameAlgorithm, digest);
+        _ = PinIndexRotationPolicy.ComputeDigest(PinNameAlgorithm, digest, pool);
 
         return Tpm2bDigest.Create(digest, pool);
     }
@@ -864,7 +864,7 @@ public static class TpmDeviceExtensions
         uint pinLimit,
         CancellationToken cancellationToken)
     {
-        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = device.Pool;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_NV_DefineSpace, TpmResponseCodec.NvDefineSpace);
         _ = registry.Register(TpmCcConstants.TPM_CC_NV_Write, TpmResponseCodec.NvWrite);
@@ -919,7 +919,7 @@ public static class TpmDeviceExtensions
     /// </summary>
     /// <remarks>
     /// The <c>auth</c> value is installed by riding <c>TPM2_NV_DefineSpace</c>'s <c>auth</c> command PARAMETER
-    /// (TPM 2.0 Library Part 3, Section 31.3), which the session encrypts on the bus while it carries the decrypt
+    /// (TPM 2.0 Library Part 3, clause 31.3), which the session encrypts on the bus while it carries the decrypt
     /// attribute. That attribute is set for the definition only and cleared before the provisioning
     /// <c>TPM2_NV_Write</c>, whose own arm exposes no parameter this group encrypts.
     /// </remarks>
@@ -975,7 +975,7 @@ public static class TpmDeviceExtensions
     /// attribute encrypts <c>TPM2_NV_DefineSpace</c>'s <c>auth</c> parameter under a key only the TPM can recover.
     /// </summary>
     /// <remarks>
-    /// Mirrors <see cref="VerifyPinSaltedCoreAsync"/>'s session shape (TPM 2.0 Library Part 1, Section 17.6.12,
+    /// Mirrors <see cref="VerifyPinSaltedCoreAsync"/>'s session shape (TPM 2.0 Library Part 1, clause 16.6.12,
     /// equation 25): a fresh salt is RSA-OAEP-encrypted to <paramref name="tpmKey"/>, so the session key - and
     /// therefore the parameter-encryption keystream keyed on it - cannot be reproduced from the wire transcript
     /// alone, closing the offline-recovery surface the unsalted default leaves open for an empty owner authValue.
@@ -1008,7 +1008,7 @@ public static class TpmDeviceExtensions
         TpmRsaOaepEncryptDelegate encryptSalt,
         CancellationToken cancellationToken)
     {
-        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = device.Pool;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_NV_DefineSpace, TpmResponseCodec.NvDefineSpace);
         _ = registry.Register(TpmCcConstants.TPM_CC_NV_Write, TpmResponseCodec.NvWrite);
@@ -1019,7 +1019,7 @@ public static class TpmDeviceExtensions
         //session shape VerifyPinAsync's salted overload composes, except the authValue term authorizes the owner
         //rather than the PIN Index. SetAuthValue below makes ownerAuth the per-command authValue term.
         (StartAuthSessionInput Input, IMemoryOwner<byte> Salt, int SaltLength) salted = await StartAuthSessionInput.CreateSaltedHmacSession(
-            tpmKey, tpmKeyModulus, tpmKeyExponent, tpmKeyNameAlg, PinAuthSessionHash, encryptSalt, pool, cancellationToken, TpmtSymDef.Xor(PinAuthSessionHash)).ConfigureAwait(false);
+            tpmKey, tpmKeyModulus, tpmKeyExponent, tpmKeyNameAlg, PinAuthSessionHash, encryptSalt, device.Rng, pool, cancellationToken, TpmtSymDef.Xor(PinAuthSessionHash)).ConfigureAwait(false);
 
         try
         {
@@ -1038,7 +1038,7 @@ public static class TpmDeviceExtensions
             {
                 using TpmSession ownerSession = await TpmSession.CreateBoundAsync(
                     new TpmHandle(sessionHandle), ReadOnlyMemory<byte>.Empty, salted.Input.NonceCaller, started.NonceTPM,
-                    PinAuthSessionHash, pool, symmetric: TpmtSymDef.Xor(PinAuthSessionHash), salt: salted.Salt.Memory[..salted.SaltLength], cancellationToken: cancellationToken).ConfigureAwait(false);
+                    PinAuthSessionHash, device.Rng, pool, symmetric: TpmtSymDef.Xor(PinAuthSessionHash), salt: salted.Salt.Memory[..salted.SaltLength], cancellationToken: cancellationToken).ConfigureAwait(false);
                 ownerSession.SetAuthValue(ownerAuth.Span, pool);
 
                 return await DefineAndProvisionOverSessionAsync(
@@ -1084,7 +1084,7 @@ public static class TpmDeviceExtensions
         uint pinLimit,
         CancellationToken cancellationToken)
     {
-        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = device.Pool;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_NV_DefineSpace, TpmResponseCodec.NvDefineSpace);
         _ = registry.Register(TpmCcConstants.TPM_CC_NV_Write, TpmResponseCodec.NvWrite);
@@ -1151,7 +1151,7 @@ public static class TpmDeviceExtensions
         ReadOnlyMemory<byte> newPinHash,
         CancellationToken cancellationToken)
     {
-        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = device.Pool;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_NV_ChangeAuth, TpmResponseCodec.NvChangeAuth);
         _ = registry.Register(TpmCcConstants.TPM_CC_StartAuthSession, TpmResponseCodec.StartAuthSession);
@@ -1170,13 +1170,13 @@ public static class TpmDeviceExtensions
         {
             //A SEPARATE session carries the decrypt attribute: the authorizing policy session may not, because a
             //policy session used for parameter encryption folds the entity's authValue into its sessionValue
-            //whether or not the policy asserted TPM2_PolicyAuthValue (TPM 2.0 Library Part 1, Section 19.1's
+            //whether or not the policy asserted TPM2_PolicyAuthValue (TPM 2.0 Library Part 1, clause 18.1's
             //note) - a different rule from the authorization-HMAC one, and one that would key the encryption of
             //the NEW PIN form on the OLD one. This companion is unbound and unsalted, so its own sessionValue is
-            //the Empty Buffer session key (Section 17.6.9) and the encryption is structural rather than
+            //the Empty Buffer session key (clause 16.6.9) and the encryption is structural rather than
             //confidential; ChangePinAsync's salted overload is where genuine confidentiality lives.
             StartAuthSessionInput decryptStartInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(
-                PinAuthSessionHash, TpmtSymDef.Xor(PinAuthSessionHash));
+                PinAuthSessionHash, device.Rng, pool, TpmtSymDef.Xor(PinAuthSessionHash));
 
             TpmResult<StartAuthSessionResponse> decryptStartResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
                 device, decryptStartInput, [], null, pool, registry, cancellationToken).ConfigureAwait(false);
@@ -1192,7 +1192,7 @@ public static class TpmDeviceExtensions
             try
             {
                 using TpmSession decryptSession = new(
-                    new TpmHandle(decryptSessionHandle), decryptStarted.NonceTPM, PinAuthSessionHash, pool, TpmtSymDef.Xor(PinAuthSessionHash));
+                    new TpmHandle(decryptSessionHandle), decryptStarted.NonceTPM, PinAuthSessionHash, device.Rng, pool, TpmtSymDef.Xor(PinAuthSessionHash));
 
                 return await ChangePinOverSessionsAsync(
                     device, pool, registry, pinIndexHandle, authSession, decryptSession, oldPinHash, newPinHash, cancellationToken).ConfigureAwait(false);
@@ -1230,7 +1230,7 @@ public static class TpmDeviceExtensions
     /// <paramref name="tpmKey"/> - the authorizing policy session, so neither leg of its HMAC can be recomputed
     /// from a captured transcript, and the decrypt companion, so the keystream protecting
     /// <paramref name="newPinHash"/> derives from a secret only the TPM holding <paramref name="tpmKey"/> can
-    /// recover (TPM 2.0 Library Part 1, Section 17.6.12, equation 25).
+    /// recover (TPM 2.0 Library Part 1, clause 16.6.12, equation 25).
     /// </summary>
     /// <remarks>
     /// The two sessions draw their salts from two independent <c>TPM2_StartAuthSession</c> exchanges, so each
@@ -1260,7 +1260,7 @@ public static class TpmDeviceExtensions
         TpmRsaOaepEncryptDelegate encryptSalt,
         CancellationToken cancellationToken)
     {
-        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = device.Pool;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_NV_ChangeAuth, TpmResponseCodec.NvChangeAuth);
         _ = registry.Register(TpmCcConstants.TPM_CC_StartAuthSession, TpmResponseCodec.StartAuthSession);
@@ -1283,7 +1283,7 @@ public static class TpmDeviceExtensions
             //here to the replacement one: unbound, salted, negotiating XOR so it can carry the decrypt attribute.
             //Its salt is drawn by this call alone and shares nothing with the authorizing session's.
             (StartAuthSessionInput Input, IMemoryOwner<byte> Salt, int SaltLength) salted = await StartAuthSessionInput.CreateSaltedHmacSession(
-                tpmKey, tpmKeyModulus, tpmKeyExponent, tpmKeyNameAlg, PinAuthSessionHash, encryptSalt, pool, cancellationToken, TpmtSymDef.Xor(PinAuthSessionHash)).ConfigureAwait(false);
+                tpmKey, tpmKeyModulus, tpmKeyExponent, tpmKeyNameAlg, PinAuthSessionHash, encryptSalt, device.Rng, pool, cancellationToken, TpmtSymDef.Xor(PinAuthSessionHash)).ConfigureAwait(false);
 
             try
             {
@@ -1302,7 +1302,7 @@ public static class TpmDeviceExtensions
                 {
                     using TpmSession decryptSession = await TpmSession.CreateBoundAsync(
                         new TpmHandle(decryptSessionHandle), ReadOnlyMemory<byte>.Empty, salted.Input.NonceCaller, decryptStarted.NonceTPM,
-                        PinAuthSessionHash, pool, symmetric: TpmtSymDef.Xor(PinAuthSessionHash), salt: salted.Salt.Memory[..salted.SaltLength], cancellationToken: cancellationToken).ConfigureAwait(false);
+                        PinAuthSessionHash, device.Rng, pool, symmetric: TpmtSymDef.Xor(PinAuthSessionHash), salt: salted.Salt.Memory[..salted.SaltLength], cancellationToken: cancellationToken).ConfigureAwait(false);
 
                     return await ChangePinOverSessionsAsync(
                         device, pool, registry, pinIndexHandle, authSession, decryptSession, oldPinHash, newPinHash, cancellationToken).ConfigureAwait(false);
@@ -1349,10 +1349,10 @@ public static class TpmDeviceExtensions
     /// <remarks>
     /// <para>
     /// The plain <see cref="TpmSession"/> constructor is the honest model of an unbound, unsalted session: the
-    /// session key is the Empty Buffer with no KDFa derivation at all (TPM 2.0 Library Part 1, Section 17.6.9),
+    /// session key is the Empty Buffer with no KDFa derivation at all (TPM 2.0 Library Part 1, clause 16.6.9),
     /// so once the caller sets the Index's authorization value the session's HMAC key
     /// (<c>sessionValue = sessionKey || authValue</c>) reduces to that value alone - exactly the term
-    /// <c>TPM2_PolicyAuthValue</c> makes the TPM fold in on its own side (Part 1, Section 17.6.5's policy note).
+    /// <c>TPM2_PolicyAuthValue</c> makes the TPM fold in on its own side (Part 1, clause 16.6.5's policy note).
     /// The alternative policy-session wrapper in this library deliberately sends an EMPTY authorization instead,
     /// which is right for a policy satisfied without an authValue and wrong here.
     /// </para>
@@ -1374,7 +1374,7 @@ public static class TpmDeviceExtensions
         TpmResponseRegistry registry,
         CancellationToken cancellationToken)
     {
-        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedPolicySession(PinAuthSessionHash);
+        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedPolicySession(PinAuthSessionHash, device.Rng, pool);
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             device, startInput, [], null, pool, registry, cancellationToken).ConfigureAwait(false);
 
@@ -1386,7 +1386,7 @@ public static class TpmDeviceExtensions
         StartAuthSessionResponse started = startResult.Value;
 
         //The session takes ownership of started's nonceTPM, so the response is never disposed independently.
-        var session = new TpmSession(new TpmHandle(started.SessionHandle.Value), started.NonceTPM, PinAuthSessionHash, pool);
+        var session = new TpmSession(new TpmHandle(started.SessionHandle.Value), started.NonceTPM, PinAuthSessionHash, device.Rng, pool);
 
         return TpmResult<TpmSession>.Success(session);
     }
@@ -1399,14 +1399,14 @@ public static class TpmDeviceExtensions
     /// <remarks>
     /// <para>
     /// <c>TPM2_StartAuthSession</c> derives <c>sessionKey</c> identically for every session type (TPM 2.0
-    /// Library Part 3, Section 11.1.1), so a POLICY session takes the same KDFa-over-the-recovered-salt recipe
-    /// an HMAC session does (Part 1, Section 17.6.12, equation 25). Salting does not touch what the policy
+    /// Library Part 3, clause 11.1.1), so a POLICY session takes the same KDFa-over-the-recovered-salt recipe
+    /// an HMAC session does (Part 1, clause 16.6.12, equation 25). Salting does not touch what the policy
     /// asserts or how the digest folds - it replaces the Empty Buffer session key the unsalted sibling
-    /// (<see cref="StartRotationPolicySessionAsync"/>) is left with (Part 1, Section 17.6.9). The caller's
+    /// (<see cref="StartRotationPolicySessionAsync"/>) is left with (Part 1, clause 16.6.9). The caller's
     /// <c>SetAuthValue</c> then layers the Index's authorization value on top exactly as before
     /// (<c>sessionValue = sessionKey || authValue</c>), which is what makes the difference load-bearing: with a
     /// secret <c>sessionKey</c> in front of it, the authValue term is no longer the key's only unknown, so a
-    /// captured transcript plus a candidate PIN no longer reproduces the HMAC (Part 1, Section 17.6.5).
+    /// captured transcript plus a candidate PIN no longer reproduces the HMAC (Part 1, clause 16.6.5).
     /// </para>
     /// <para>
     /// The salt is zeroized and returned to the pool as soon as <c>CreateBoundAsync</c> has folded it into the
@@ -1440,10 +1440,10 @@ public static class TpmDeviceExtensions
     {
         //No symmetric definition is negotiated: this session authorizes only. A policy session that also carried
         //the decrypt attribute would fold the Index's authValue into its sessionValue whether or not the policy
-        //asserted TPM2_PolicyAuthValue (TPM 2.0 Library Part 1, Section 19.1's note), which is precisely why the
+        //asserted TPM2_PolicyAuthValue (TPM 2.0 Library Part 1, clause 18.1's note), which is precisely why the
         //replacement value rides a separate companion session instead.
         (StartAuthSessionInput Input, IMemoryOwner<byte> Salt, int SaltLength) salted = await StartAuthSessionInput.CreateSaltedPolicySession(
-            tpmKey, tpmKeyModulus, tpmKeyExponent, tpmKeyNameAlg, PinAuthSessionHash, encryptSalt, pool, cancellationToken).ConfigureAwait(false);
+            tpmKey, tpmKeyModulus, tpmKeyExponent, tpmKeyNameAlg, PinAuthSessionHash, encryptSalt, device.Rng, pool, cancellationToken).ConfigureAwait(false);
 
         try
         {
@@ -1465,7 +1465,7 @@ public static class TpmDeviceExtensions
                 //independently.
                 TpmSession session = await TpmSession.CreateBoundAsync(
                     new TpmHandle(sessionHandle), ReadOnlyMemory<byte>.Empty, salted.Input.NonceCaller, started.NonceTPM,
-                    PinAuthSessionHash, pool, salt: salted.Salt.Memory[..salted.SaltLength], cancellationToken: cancellationToken).ConfigureAwait(false);
+                    PinAuthSessionHash, device.Rng, pool, salt: salted.Salt.Memory[..salted.SaltLength], cancellationToken: cancellationToken).ConfigureAwait(false);
 
                 return TpmResult<TpmSession>.Success(session);
             }
@@ -1502,10 +1502,10 @@ public static class TpmDeviceExtensions
     /// (<see cref="PinIndexRotationPolicy"/>), so the session reaches the Index's stored <c>authPolicy</c> by
     /// construction: <c>TPM2_PolicyAuthValue</c> first, then
     /// <c>TPM2_PolicyCommandCode(TPM_CC_NV_ChangeAuth)</c>, which is what lets the session assert ADMIN role at
-    /// all (TPM 2.0 Library Part 3, Section 31.15.1).
+    /// all (TPM 2.0 Library Part 3, clause 31.15.1).
     /// </para>
     /// <para>
-    /// <b>The response is keyed on the NEW value.</b> Part 3, Section 31.15.1: "Since the NV Index authorization
+    /// <b>The response is keyed on the NEW value.</b> Part 3, clause 31.15.1: "Since the NV Index authorization
     /// is changed before the response HMAC is calculated, the newAuth value is used when generating the response
     /// HMAC key if required" - and it is required here, because <c>TPM2_PolicyAuthValue</c> put the Index's
     /// authorization value into this session's HMAC key. The command HMAC must therefore be keyed on the OLD
@@ -1515,7 +1515,7 @@ public static class TpmDeviceExtensions
     /// <paramref name="device"/>: the command is forwarded verbatim to the real device (whose own observers still
     /// see the exchange), and the authorization value is swapped the moment the response comes back off the
     /// transport, before the executor verifies it. <c>SetAuthValue</c> strips trailing zero octets on both sides
-    /// of the swap, matching what the TPM stores and keys on (Part 1, Section 17.6.4.3).
+    /// of the swap, matching what the TPM stores and keys on (Part 1, clause 16.6.4.3).
     /// </para>
     /// </remarks>
     /// <param name="device">The TPM device.</param>
@@ -1567,7 +1567,7 @@ public static class TpmDeviceExtensions
 
         using Tpm2bAuth newAuth = Tpm2bAuth.Create(newPinHash.Span, pool);
         using NvChangeAuthInput input = new(pinIndexHandle, newAuth);
-        using TpmDevice rotationDevice = TpmDevice.Create(SubmitThenAdoptNewAuthAsync);
+        using TpmDevice rotationDevice = TpmDevice.Create(SubmitThenAdoptNewAuthAsync, pool, device.Rng);
 
         return await TpmCommandExecutor.ExecuteAsync<NvChangeAuthResponse>(
             rotationDevice, input, [authSession, decryptSession], handleNames, pool, registry, cancellationToken).ConfigureAwait(false);
@@ -1602,15 +1602,15 @@ public static class TpmDeviceExtensions
         ReadOnlyMemory<byte> candidatePinHash,
         CancellationToken cancellationToken)
     {
-        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = device.Pool;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_NV_Read, TpmResponseCodec.NvRead);
         _ = registry.Register(TpmCcConstants.TPM_CC_StartAuthSession, TpmResponseCodec.StartAuthSession);
         _ = registry.Register(TpmCcConstants.TPM_CC_FlushContext, TpmResponseCodec.FlushContext);
 
-        //Unbound, unsalted (Part 1, Section 17.6.9): TPM_RH_NULL bind, Empty Buffer sessionKey. Never bound to
-        //pinIndexHandle - Part 1, Section 35.2.8.3 forbids binding a session to a PIN Index outright.
-        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(PinAuthSessionHash);
+        //Unbound, unsalted (Part 1, clause 16.6.9): TPM_RH_NULL bind, Empty Buffer sessionKey. Never bound to
+        //pinIndexHandle - Part 1, clause 34.2.8.3 forbids binding a session to a PIN Index outright.
+        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(PinAuthSessionHash, device.Rng, pool);
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             device, startInput, [], null, pool, registry, cancellationToken).ConfigureAwait(false);
 
@@ -1628,7 +1628,7 @@ public static class TpmDeviceExtensions
             //candidatePinHash the session's authValue term, so sessionValue = Empty || candidatePinHash =
             //candidatePinHash - the candidate becomes the per-command HMAC key exactly as this verb's own
             //remarks describe.
-            using TpmSession session = new(new TpmHandle(sessionHandle), started.NonceTPM, PinAuthSessionHash, pool);
+            using TpmSession session = new(new TpmHandle(sessionHandle), started.NonceTPM, PinAuthSessionHash, device.Rng, pool);
             session.SetAuthValue(candidatePinHash.Span, pool);
 
             return await VerifyPinOverSessionAsync(device, pool, registry, pinIndexHandle, session, cancellationToken).ConfigureAwait(false);
@@ -1672,14 +1672,14 @@ public static class TpmDeviceExtensions
         TpmRsaOaepEncryptDelegate encryptSalt,
         CancellationToken cancellationToken)
     {
-        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = device.Pool;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_NV_Read, TpmResponseCodec.NvRead);
         _ = registry.Register(TpmCcConstants.TPM_CC_StartAuthSession, TpmResponseCodec.StartAuthSession);
         _ = registry.Register(TpmCcConstants.TPM_CC_FlushContext, TpmResponseCodec.FlushContext);
 
         (StartAuthSessionInput Input, IMemoryOwner<byte> Salt, int SaltLength) salted = await StartAuthSessionInput.CreateSaltedHmacSession(
-            tpmKey, tpmKeyModulus, tpmKeyExponent, tpmKeyNameAlg, PinAuthSessionHash, encryptSalt, pool, cancellationToken).ConfigureAwait(false);
+            tpmKey, tpmKeyModulus, tpmKeyExponent, tpmKeyNameAlg, PinAuthSessionHash, encryptSalt, device.Rng, pool, cancellationToken).ConfigureAwait(false);
 
         try
         {
@@ -1701,7 +1701,7 @@ public static class TpmDeviceExtensions
                 //longer reproduce the HMAC key - see this overload's own remarks.
                 using TpmSession session = await TpmSession.CreateBoundAsync(
                     new TpmHandle(sessionHandle), ReadOnlyMemory<byte>.Empty, salted.Input.NonceCaller, started.NonceTPM,
-                    PinAuthSessionHash, pool, salt: salted.Salt.Memory[..salted.SaltLength], cancellationToken: cancellationToken).ConfigureAwait(false);
+                    PinAuthSessionHash, device.Rng, pool, salt: salted.Salt.Memory[..salted.SaltLength], cancellationToken: cancellationToken).ConfigureAwait(false);
                 session.SetAuthValue(candidatePinHash.Span, pool);
 
                 return await VerifyPinOverSessionAsync(device, pool, registry, pinIndexHandle, session, cancellationToken).ConfigureAwait(false);
@@ -1787,7 +1787,7 @@ public static class TpmDeviceExtensions
         ReadOnlyMemory<byte> candidatePinHash,
         CancellationToken cancellationToken)
     {
-        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = device.Pool;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_NV_Read, TpmResponseCodec.NvRead);
 
@@ -1810,7 +1810,7 @@ public static class TpmDeviceExtensions
     /// <summary>
     /// Composes the owner-authorized arm of <c>TPM2_NV_Read</c> against the full counter window over a bound
     /// HMAC session - a no-oracle retry-count query that never moves <c>pinCount</c> (TPM 2.0 Library Part 3,
-    /// Section 31.13).
+    /// clause 31.13).
     /// </summary>
     /// <param name="device">The TPM device.</param>
     /// <param name="ownerAuth">The owner hierarchy's authorization value.</param>
@@ -1823,7 +1823,7 @@ public static class TpmDeviceExtensions
         uint pinIndexHandle,
         CancellationToken cancellationToken)
     {
-        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = device.Pool;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_NV_Read, TpmResponseCodec.NvRead);
         _ = registry.Register(TpmCcConstants.TPM_CC_StartAuthSession, TpmResponseCodec.StartAuthSession);
@@ -1895,7 +1895,7 @@ public static class TpmDeviceExtensions
         uint pinIndexHandle,
         CancellationToken cancellationToken)
     {
-        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = device.Pool;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_NV_Read, TpmResponseCodec.NvRead);
 
@@ -1932,7 +1932,7 @@ public static class TpmDeviceExtensions
         uint pinLimit,
         CancellationToken cancellationToken)
     {
-        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = device.Pool;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_NV_Write, TpmResponseCodec.NvWrite);
         _ = registry.Register(TpmCcConstants.TPM_CC_StartAuthSession, TpmResponseCodec.StartAuthSession);
@@ -1982,7 +1982,7 @@ public static class TpmDeviceExtensions
         uint pinLimit,
         CancellationToken cancellationToken)
     {
-        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = device.Pool;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_NV_Write, TpmResponseCodec.NvWrite);
 
@@ -2032,7 +2032,7 @@ public static class TpmDeviceExtensions
         uint pinIndexHandle,
         CancellationToken cancellationToken)
     {
-        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = device.Pool;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_NV_UndefineSpace, TpmResponseCodec.NvUndefineSpace);
         _ = registry.Register(TpmCcConstants.TPM_CC_StartAuthSession, TpmResponseCodec.StartAuthSession);
@@ -2092,7 +2092,7 @@ public static class TpmDeviceExtensions
         uint pinIndexHandle,
         CancellationToken cancellationToken)
     {
-        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = device.Pool;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_NV_UndefineSpace, TpmResponseCodec.NvUndefineSpace);
 
@@ -2109,7 +2109,7 @@ public static class TpmDeviceExtensions
     /// </summary>
     /// <remarks>
     /// Mirrors <c>Extensions/Policy/TpmDeviceExtensions.cs</c>'s <c>PolicySecretCoreAsync</c>/
-    /// <c>CreateAuthorizationSessionAsync</c> bracket (TPM 2.0 Library Part 1, Section 17.6.10, equation 20):
+    /// <c>CreateAuthorizationSessionAsync</c> bracket (TPM 2.0 Library Part 1, clause 16.6.10, equation 20):
     /// binding folds <paramref name="ownerAuth"/> into the session key via KDFa, so the per-command authHMAC's
     /// key genuinely incorporates the owner's authorization value rather than sending it in the clear the way
     /// <c>…WithPasswordAsync</c> does. This is Pin's own sibling of that Policy-file helper - the two files are
@@ -2135,7 +2135,7 @@ public static class TpmDeviceExtensions
         CancellationToken cancellationToken,
         TpmtSymDef? symmetric = null)
     {
-        StartAuthSessionInput startInput = StartAuthSessionInput.CreateBoundUnsaltedHmacSession((uint)TpmRh.TPM_RH_OWNER, PinAuthSessionHash, symmetric);
+        StartAuthSessionInput startInput = StartAuthSessionInput.CreateBoundUnsaltedHmacSession((uint)TpmRh.TPM_RH_OWNER, PinAuthSessionHash, device.Rng, pool, symmetric);
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             device, startInput, [], null, pool, registry, cancellationToken).ConfigureAwait(false);
 
@@ -2156,12 +2156,12 @@ public static class TpmDeviceExtensions
         try
         {
             //The bind authValue enters the session-key KDFa with its trailing zeros already removed (TPM 2.0
-            //Library Part 1, Section 17.6.4.3, and CreateBoundAsync's own documented precondition): the TPM keys
-            //eq. 20 (Part 1, clause 17.6.10) on the stripped form, so an owner authValue ending in zero octets would otherwise derive a
+            //Library Part 1, clause 16.6.4.3, and CreateBoundAsync's own documented precondition): the TPM keys
+            //eq. 20 (Part 1, clause 16.6.10) on the stripped form, so an owner authValue ending in zero octets would otherwise derive a
             //session key the TPM never agrees with.
             TpmSession session = await TpmSession.CreateBoundAsync(
                 new TpmHandle(sessionHandle), StripTrailingZeros(ownerAuth), startInput.NonceCaller, started.NonceTPM,
-                PinAuthSessionHash, pool, symmetric: symmetric, cancellationToken: cancellationToken).ConfigureAwait(false);
+                PinAuthSessionHash, device.Rng, pool, symmetric: symmetric, cancellationToken: cancellationToken).ConfigureAwait(false);
 
             return TpmResult<TpmSession>.Success(session);
         }
@@ -2183,8 +2183,8 @@ public static class TpmDeviceExtensions
 
     /// <summary>
     /// Removes trailing zero octets from an authorization value before it is used in an authorization
-    /// computation (TPM 2.0 Library Part 1, Section 17.6.4.3: "Trailing octets of zero are to be removed from any
-    /// string before it is used as an authValue"; Section 17.6.5 states the same for the authValue term of the
+    /// computation (TPM 2.0 Library Part 1, clause 16.6.4.3: "Trailing octets of zero are to be removed from any
+    /// string before it is used as an authValue"; clause 16.6.5 states the same for the authValue term of the
     /// HMAC key).
     /// </summary>
     /// <remarks>

@@ -27,7 +27,7 @@ namespace Verifiable.JCose;
 /// the map's own encoded bytes become <c>body_protected</c> in the Sig_structure
 /// (<see cref="BuildSigStructureDelegate"/>) both signer and verifier must reproduce byte-for-byte. The
 /// implementation in <c>Verifiable.Cbor</c> is expected to route through the same
-/// <c>CborConformanceMode.Canonical</c> writer <c>CoseSerialization</c> already uses for the substrate's own
+/// <c>CborConformanceMode.RfcCanonical</c> writer <c>CoseSerialization</c> already uses for the substrate's own
 /// protected-header encoding.
 /// </para>
 /// </remarks>

@@ -1,7 +1,6 @@
 using System;
 using System.Buffers;
 using System.Linq;
-using System.Net;
 using System.Net.Security;
 using System.Net.WebSockets;
 using System.Security.Cryptography;
@@ -29,21 +28,26 @@ namespace Verifiable.Tests.TestInfrastructure;
 internal static class DidCommLoopbackWebSocketBootstrap
 {
     /// <summary>
-    /// Builds (but does not yet start) a Kestrel host bound to <c>wss://127.0.0.1:{port}</c> with a fresh
-    /// self-signed leaf certificate (<see cref="LoopbackTls"/>): a single explicit HTTPS <c>Listen</c>
-    /// call, no <c>UseUrls</c>, so there is no plaintext fallback on the host at all.
+    /// Builds (but does not yet start) a Kestrel host bound to <c>wss://127.0.0.1:{port}</c> presenting
+    /// the process-wide shared leaf certificate (<see cref="LoopbackTls.CreateServerCertificate"/>): a
+    /// single explicit HTTPS <c>Listen</c> call, no <c>UseUrls</c>, so there is no plaintext fallback on
+    /// the host at all.
     /// </summary>
-    /// <param name="certificateSubjectName">The certificate subject's common name, distinguishing one fixture's cert from another's in test output.</param>
+    /// <param name="certificateSubjectName">
+    /// Validated non-empty for call-site parity with <see cref="LoopbackTls.CreateDistinctServerCertificate"/>;
+    /// the shared certificate's own subject was fixed when it was first minted, so this argument does not
+    /// select the returned certificate's identity.
+    /// </param>
     /// <returns>The built (not yet started) application and the certificate its listener presents.</returns>
     public static (WebApplication App, X509Certificate2 Certificate) Build(string certificateSubjectName)
     {
         X509Certificate2 certificate = LoopbackTls.CreateServerCertificate(certificateSubjectName);
 
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
-        builder.Logging.ClearProviders();
+        LoopbackKestrel.ConfigureLoopbackLogging(builder.Logging);
 
         builder.WebHost.ConfigureKestrel(options =>
-            options.Listen(IPAddress.Loopback, port: 0, listenOptions => listenOptions.UseHttps(certificate)));
+            LoopbackKestrel.ConfigureLoopbackListener(options, certificate));
 
         WebApplication app = builder.Build();
         app.UseWebSockets();
@@ -122,7 +126,8 @@ internal static class DidCommLoopbackWebSocketBootstrap
 /// </summary>
 internal sealed class WebSocketCertificatePinning
 {
-    private readonly X509Certificate2 pinnedCertificate;
+    /// <summary>The exact certificate the loopback listener presents, pinned byte-for-byte.</summary>
+    private X509Certificate2 PinnedCertificate { get; }
 
 
     /// <param name="pinnedCertificate">The exact certificate the loopback listener presents.</param>
@@ -130,14 +135,14 @@ internal sealed class WebSocketCertificatePinning
     {
         ArgumentNullException.ThrowIfNull(pinnedCertificate);
 
-        this.pinnedCertificate = pinnedCertificate;
+        this.PinnedCertificate = pinnedCertificate;
     }
 
 
     /// <summary>Whether the TLS handshake invoked this callback at all — <see langword="false"/> before a connection attempt runs.</summary>
     public bool WasInvoked { get; private set; }
 
-    /// <summary>Whether the invoked callback's presented certificate matched <see cref="pinnedCertificate"/> byte-for-byte.</summary>
+    /// <summary>Whether the invoked callback's presented certificate matched <see cref="PinnedCertificate"/> byte-for-byte.</summary>
     public bool DidMatchPinnedCertificate { get; private set; }
 
 
@@ -149,7 +154,7 @@ internal sealed class WebSocketCertificatePinning
         {
             WasInvoked = true;
             DidMatchPinnedCertificate = certificate is not null
-                && CryptographicOperations.FixedTimeEquals(certificate.GetRawCertData(), pinnedCertificate.RawData);
+                && CryptographicOperations.FixedTimeEquals(certificate.GetRawCertData(), PinnedCertificate.RawData);
 
             return DidMatchPinnedCertificate;
         };

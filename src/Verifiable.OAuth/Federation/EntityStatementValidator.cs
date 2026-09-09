@@ -21,7 +21,7 @@ namespace Verifiable.OAuth.Federation;
 /// </para>
 /// <para>
 /// Applications can supply a custom rule list via the
-/// <see cref="EntityStatementValidator(string, IList{ClaimDelegate{EntityStatementValidationContext}}, TimeProvider?)"/>
+/// <see cref="EntityStatementValidator(string, IList{ClaimDelegate{EntityStatementValidationContext}}, TimeProvider)"/>
 /// constructor to extend the §3.2 baseline with deployment-specific checks.
 /// </para>
 /// </remarks>
@@ -45,14 +45,12 @@ public sealed class EntityStatementValidator
     /// optionally extended with deployment-specific rules.
     /// </param>
     /// <param name="timeProvider">
-    /// Time provider for <see cref="ClaimIssueResult.CreationTimestampInUtc"/>
-    /// stamping. When <see langword="null"/>,
-    /// <see cref="TimeProvider.System"/> is used.
+    /// Time provider for <see cref="ClaimIssueResult.CreationTimestampInUtc"/> stamping.
     /// </param>
     public EntityStatementValidator(
         string issuerId,
         IList<ClaimDelegate<EntityStatementValidationContext>> validationRules,
-        TimeProvider? timeProvider = null)
+        TimeProvider timeProvider)
     {
         ArgumentException.ThrowIfNullOrEmpty(issuerId);
         ArgumentNullException.ThrowIfNull(validationRules);
@@ -66,7 +64,7 @@ public sealed class EntityStatementValidator
     /// Builds an Entity Statement validator configured with the OpenID
     /// Federation 1.0 §3.2 baseline rule set.
     /// </summary>
-    public static EntityStatementValidator Default(TimeProvider? timeProvider = null) =>
+    public static EntityStatementValidator Default(TimeProvider timeProvider) =>
         new(WellKnownFederationAssessorIds.ValidateEntityStatement,
             FederationValidationProfiles.EntityStatementRules(),
             timeProvider);

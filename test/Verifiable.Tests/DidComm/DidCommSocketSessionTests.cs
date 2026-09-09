@@ -1,14 +1,15 @@
 using System;
 using System.Buffers.Text;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Net.WebSockets;
-using System.Reflection;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
@@ -24,6 +25,7 @@ using Verifiable.Foundation;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Microsoft;
+using Verifiable.Tests.Foundation;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.DidComm;
@@ -63,17 +65,20 @@ internal sealed class DidCommSocketSessionTests
     /// <summary>The test framework's per-test context, including the cooperative cancellation token.</summary>
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly BaseMemoryPool Pool = BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool { get; } = BaseMemoryPool.Shared;
 
-    private static readonly JwtHeaderSerializer HeaderSerializer =
+    /// <summary>The suite's fixed clock, passed to every <see cref="DidCommSocketSession"/> construction in this class.</summary>
+    private static FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch);
+
+    private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)header,
             TestSetup.DefaultSerializationOptions);
 
-    private static readonly DidResolver NestedSignerResolver = new(DidMethodSelectors.FromResolvers(
+    private static DidResolver NestedSignerResolver { get; } = new(DidMethodSelectors.FromResolvers(
         ("did:example", (_, _, _, _) => ValueTask.FromResult(DidResolutionResult.Failure(DidResolutionErrors.NotFound)))));
 
-    private static readonly ExchangeContext UnpackContext = new();
+    private static ExchangeContext UnpackContext { get; } = new();
 
 
     //Anoncrypts message for recipientKid/recipientPublic through the SAME registry-resolving pack surface
@@ -96,7 +101,7 @@ internal sealed class DidCommSocketSessionTests
             HeaderSerializer,
             TestSetup.Base64UrlEncoder,
             CryptoFormatConversions.DefaultTagToEpkCrvConverter,
-            MicrosoftEntropyFunctions.GenerateNonce,
+            MicrosoftEntropyFunctionsAdapter.GenerateNonce,
             Pool,
             cancellationToken).ConfigureAwait(false);
     }
@@ -181,7 +186,7 @@ internal sealed class DidCommSocketSessionTests
     {
         var fake = new FakeSessionTransport();
         var unsolicited = new RecordingUnsolicited();
-        await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool);
+        await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool, TimeProvider);
 
         byte[] garbage = [0x00, 0x01, 0x02, 0xFF, 0xFE];
         DidCommInboundFrameResult result = await session.AcceptInboundFrameAsync(garbage, null, default).ConfigureAwait(false);
@@ -227,7 +232,7 @@ internal sealed class DidCommSocketSessionTests
     {
         var fake = new FakeSessionTransport();
         var unsolicited = new RecordingUnsolicited();
-        await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool);
+        await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool, TimeProvider);
 
         byte[] first = "{\"ciphertext\":\"first\"}"u8.ToArray();
         byte[] second = "{\"ciphertext\":\"second\"}"u8.ToArray();
@@ -273,13 +278,13 @@ internal sealed class DidCommSocketSessionTests
         var fakeWith = new FakeSessionTransport();
         var unsolicitedWith = new RecordingUnsolicited();
         await using var sessionWith = new DidCommSocketSession(
-            fakeWith.SendAsync, new DidCommSocketSessionOptions { NegotiatedSubprotocol = "didcomm/v2" }, unsolicitedWith.HandleAsync, Pool);
+            fakeWith.SendAsync, new DidCommSocketSessionOptions { NegotiatedSubprotocol = "didcomm/v2" }, unsolicitedWith.HandleAsync, Pool, TimeProvider);
         sessionWith.SetLiveDelivery(true);
 
         var fakeWithout = new FakeSessionTransport();
         var unsolicitedWithout = new RecordingUnsolicited();
         await using var sessionWithout = new DidCommSocketSession(
-            fakeWithout.SendAsync, new DidCommSocketSessionOptions(), unsolicitedWithout.HandleAsync, Pool);
+            fakeWithout.SendAsync, new DidCommSocketSessionOptions(), unsolicitedWithout.HandleAsync, Pool, TimeProvider);
 
         DidCommInboundFrameResult resultWith = await sessionWith.AcceptInboundFrameAsync(envelope, null, default).ConfigureAwait(false);
         DidCommInboundFrameResult resultWithout = await sessionWithout.AcceptInboundFrameAsync(envelope, null, default).ConfigureAwait(false);
@@ -319,7 +324,7 @@ internal sealed class DidCommSocketSessionTests
     {
         var fake = new FakeSessionTransport();
         var unsolicited = new RecordingUnsolicited();
-        await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool);
+        await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool, TimeProvider);
 
         DidCommMessage requestWithoutReturnRoute = new() { Id = "no-return-route-1", Type = WellKnownMessagePickupNames.StatusRequestType };
 
@@ -340,7 +345,7 @@ internal sealed class DidCommSocketSessionTests
     {
         var fake = new FakeSessionTransport();
         var unsolicited = new RecordingUnsolicited();
-        await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool);
+        await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool, TimeProvider);
 
         DidCommMessage emptyThreadRequest = new DidCommMessage { Id = "", Type = WellKnownMessagePickupNames.StatusRequestType }
             .WithReturnRoute(WellKnownReturnRouteNames.All);
@@ -391,7 +396,7 @@ internal sealed class DidCommSocketSessionTests
     {
         var fake = new FakeSessionTransport();
         var unsolicited = new RecordingUnsolicited();
-        await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool);
+        await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool, TimeProvider);
 
         DidCommMessage plaintext = new() { Id = "content-type-1", Type = "https://example.com/protocols/lets_do_lunch/1.0/proposal" };
         await session.SendAsync("{\"ciphertext\":\"x\"}"u8.ToArray(), "application/my-custom-type", plaintext, default).ConfigureAwait(false);
@@ -421,7 +426,7 @@ internal sealed class DidCommSocketSessionTests
         var fake = new FakeSessionTransport();
         var unsolicited = new RecordingUnsolicited();
         var options = new DidCommSocketSessionOptions { MaxReceiveBytes = 8 };
-        await using var session = new DidCommSocketSession(fake.SendAsync, options, unsolicited.HandleAsync, Pool);
+        await using var session = new DidCommSocketSession(fake.SendAsync, options, unsolicited.HandleAsync, Pool, TimeProvider);
 
         DidCommMessage request = MessagePickupExtensions.CreateStatusRequest("cap-thid-1");
         ValueTask<DidCommExchangeResult> pending = session.ExchangeAsync("{\"ciphertext\":\"x\"}"u8.ToArray(), request, default);
@@ -486,7 +491,7 @@ internal sealed class DidCommSocketSessionTests
         var fake = new FakeSessionTransport();
         var unsolicited = new RecordingUnsolicited();
         var options = new DidCommSocketSessionOptions { MaxReceiveBytes = 8 };
-        await using var session = new DidCommSocketSession(fake.SendAsync, options, unsolicited.HandleAsync, Pool);
+        await using var session = new DidCommSocketSession(fake.SendAsync, options, unsolicited.HandleAsync, Pool, TimeProvider);
 
         byte[] overCapFrame = new byte[16];
         DidCommInboundFrameResult refusal = await session.AcceptInboundFrameAsync(overCapFrame, null, default).ConfigureAwait(false);
@@ -561,7 +566,7 @@ internal sealed class DidCommSocketSessionTests
     {
         var fake = new FakeSessionTransport();
         var unsolicited = new RecordingUnsolicited();
-        await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool);
+        await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool, TimeProvider);
 
         DidCommMessage request = MessagePickupExtensions.CreateStatusRequest("all-thid-1");
         ValueTask<DidCommExchangeResult> pending = session.ExchangeAsync("{\"ciphertext\":\"req\"}"u8.ToArray(), request, default);
@@ -589,7 +594,7 @@ internal sealed class DidCommSocketSessionTests
     {
         var fake = new FakeSessionTransport();
         var unsolicited = new RecordingUnsolicited();
-        await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool);
+        await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool, TimeProvider);
 
         Assert.IsFalse(session.IsReturnRouteEstablished, "Not established before anything is sent.");
 
@@ -621,7 +626,7 @@ internal sealed class DidCommSocketSessionTests
     {
         var fakeFirst = new FakeSessionTransport();
         var unsolicitedFirst = new RecordingUnsolicited();
-        await using var firstSession = new DidCommSocketSession(fakeFirst.SendAsync, new DidCommSocketSessionOptions(), unsolicitedFirst.HandleAsync, Pool);
+        await using var firstSession = new DidCommSocketSession(fakeFirst.SendAsync, new DidCommSocketSessionOptions(), unsolicitedFirst.HandleAsync, Pool, TimeProvider);
         Assert.IsFalse(firstSession.IsLiveDeliveryEnabled);
         firstSession.SetLiveDelivery(true);
         Assert.IsTrue(firstSession.IsLiveDeliveryEnabled);
@@ -629,7 +634,7 @@ internal sealed class DidCommSocketSessionTests
 
         var fakeSecond = new FakeSessionTransport();
         var unsolicitedSecond = new RecordingUnsolicited();
-        await using var secondSession = new DidCommSocketSession(fakeSecond.SendAsync, new DidCommSocketSessionOptions(), unsolicitedSecond.HandleAsync, Pool);
+        await using var secondSession = new DidCommSocketSession(fakeSecond.SendAsync, new DidCommSocketSessionOptions(), unsolicitedSecond.HandleAsync, Pool, TimeProvider);
         Assert.IsFalse(secondSession.IsLiveDeliveryEnabled, "A brand-new session after a broken connection starts disabled again, regardless of the prior connection's state.");
     }
 
@@ -657,7 +662,7 @@ internal sealed class DidCommSocketSessionTests
         {
             var fake = new FakeSessionTransport();
             var unsolicited = new RecordingUnsolicited();
-            await using var mediatorSession = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool);
+            await using var mediatorSession = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool, TimeProvider);
             mediatorSession.SetLiveDelivery(isLiveDeliveryEnabled);
 
             var queue = new List<byte[]>();
@@ -686,36 +691,61 @@ internal sealed class DidCommSocketSessionTests
 
 
     /// <summary>
+    /// Matches a public member declaration, capturing its name — a method (including <c>async</c>), a
+    /// property, a field, an <c>event</c>, or a <c>const</c> — across every modifier combination this
+    /// declaration head can carry (<c>static</c>, <c>async</c>, <c>virtual</c>, <c>override</c>,
+    /// <c>sealed</c>, <c>new</c>, <c>required</c>, <c>readonly</c>, <c>event</c>, <c>const</c>, in any order
+    /// and count) and every terminator its declaration line can end the name on: <c>(</c> for a method, <c>{</c>
+    /// for a property, and <c>=</c> or a bare <c>;</c> for a field, event, or const.
+    /// </summary>
+    private static Regex PublicMemberDeclarationPattern { get; } = new(
+        @"(?m)^\s*public\s+(?:(?:static|async|virtual|override|sealed|new|required|readonly|event|const)\s+)*[\w<>\[\],\.\?]+\??\s+(\w+)\s*[\(\{=;]",
+        RegexOptions.Compiled);
+
+
+    /// <summary>
     /// <see href="https://didcomm.org/messagepickup/3.0/">DIDComm Message Pickup Protocol 3.0</see> §Live Mode:
     /// "Live Mode MUST only be enabled when a persistent transport is used, such as WebSockets." Structural:
     /// <see cref="DidCommSocketSession.SetLiveDelivery"/> exists only on the persistent-channel construct.
     /// This test proves BOTH halves of the claim: the positive, reachable path over
     /// <see cref="DidCommSocketSession"/> by ordinary compiled code, AND the negative — that the one-shot
-    /// HTTP surfaces (<see cref="DidCommExchangeResult"/>, <see cref="DidCommTransportExtensions"/>) expose
-    /// NO live-mode member at all. No compile-time C# construct can express "this type has no member named
-    /// X" — a positive-only test proving the one reachable path would still be true even if a live-mode
-    /// member accidentally leaked onto the HTTP surface too, so the absence itself needs its own targeted
-    /// check: a single reflective member-name scan over the HTTP-surface types, asserting none contains
-    /// "Live" (case-insensitive) anywhere in its name.
+    /// HTTP surfaces (<see cref="DidCommExchangeResult"/>, <see cref="DidCommTransportExtensions"/>) declare no
+    /// live-mode member. No compile-time C# construct can express "this type has no member named X" — a
+    /// positive-only test proving the one reachable path would still be true even if a live-mode member
+    /// accidentally leaked onto the HTTP surface too, so the absence itself needs its own targeted check: a
+    /// source-text scan of each HTTP-surface type's own public member declaration lines, asserting none of
+    /// their names contains "Live" (case-insensitive) — the declaration lines only, not the surrounding doc
+    /// comments and prose, which legitimately use ordinary words such as "delivered" that themselves contain
+    /// the substring — with no runtime reflection over the loaded type.
     /// </summary>
     [TestMethod]
     public async Task LiveModeIsReachableOnlyThroughThePersistentSocketSession()
     {
         var fake = new FakeSessionTransport();
         var unsolicited = new RecordingUnsolicited();
-        await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool);
+        await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool, TimeProvider);
 
         Assert.IsFalse(session.IsLiveDeliveryEnabled);
         session.SetLiveDelivery(true);
         Assert.IsTrue(session.IsLiveDeliveryEnabled, "Live Mode is a member of the persistent DidCommSocketSession construct.");
 
-        foreach(Type oneShotHttpSurfaceType in new[] { typeof(DidCommExchangeResult), typeof(DidCommTransportExtensions) })
-        {
-            bool hasAnyLiveModeLookingMember = oneShotHttpSurfaceType
-                .GetMembers(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly)
-                .Any(member => member.Name.Contains("Live", StringComparison.OrdinalIgnoreCase));
+        string repositoryRoot = SourceHygieneScanner.FindRepositoryRoot();
+        string[] oneShotHttpSurfaceFiles =
+        [
+            "src/Verifiable.DidComm/Transport/DidCommExchangeResult.cs",
+            "src/Verifiable.DidComm/Transport/DidCommTransportExtensions.cs",
+        ];
 
-            Assert.IsFalse(hasAnyLiveModeLookingMember, $"{oneShotHttpSurfaceType.Name} — the one-shot HTTP exchange surface — MUST carry no live-mode member at all; nothing there has an equivalent to call.");
+        foreach(string relativePath in oneShotHttpSurfaceFiles)
+        {
+            string text = await File.ReadAllTextAsync(Path.Combine(repositoryRoot, relativePath), TestContext.CancellationToken).ConfigureAwait(false);
+            string[] liveLookingMembers = [.. PublicMemberDeclarationPattern.Matches(text)
+                .Select(static m => m.Groups[1].Value)
+                .Where(static name => name.Contains("Live", StringComparison.OrdinalIgnoreCase))];
+
+            Assert.IsEmpty(
+                liveLookingMembers,
+                $"{relativePath} — the one-shot HTTP exchange surface — MUST declare no live-mode member at all; nothing there has an equivalent to call.");
         }
     }
 
@@ -738,7 +768,7 @@ internal sealed class DidCommSocketSessionTests
     {
         var fake = new FakeSessionTransport();
         var unsolicited = new RecordingUnsolicited();
-        await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool);
+        await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool, TimeProvider);
 
         DidCommMessage deliveryRequest = MessagePickupExtensions.CreateDeliveryRequest("dr-mode2", 10);
         ValueTask<DidCommExchangeResult> deliveryPending = session.ExchangeAsync("{\"ciphertext\":\"dr\"}"u8.ToArray(), deliveryRequest, default);
@@ -799,7 +829,7 @@ internal sealed class DidCommSocketSessionTests
 
             return ValueTask.CompletedTask;
         };
-        await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited, Pool);
+        await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited, Pool, TimeProvider);
 
         //Activate Live Mode immediately upon connecting — BEFORE any retrieval (mode 3's defining trait).
         DidCommMessage activate = MessagePickupExtensions.CreateLiveDeliveryChange("ldc-mode3", liveDelivery: true);
@@ -836,7 +866,7 @@ internal sealed class DidCommSocketSessionTests
     {
         var fake = new FakeSessionTransport();
         var unsolicited = new RecordingUnsolicited();
-        await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool);
+        await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool, TimeProvider);
 
         DidCommMessage change = MessagePickupExtensions.CreateLiveDeliveryChange("ldc-1", liveDelivery: true);
         ValueTask<DidCommExchangeResult> pending = session.ExchangeAsync("{\"ciphertext\":\"change\"}"u8.ToArray(), change, default);
@@ -896,7 +926,7 @@ internal sealed class DidCommSocketSessionTests
         var fake = new FakeSessionTransport();
         var unsolicited = new RecordingUnsolicited();
         var options = new DidCommSocketSessionOptions { MaxReceiveBytes = 10 };
-        await using var session = new DidCommSocketSession(fake.SendAsync, options, unsolicited.HandleAsync, Pool);
+        await using var session = new DidCommSocketSession(fake.SendAsync, options, unsolicited.HandleAsync, Pool, TimeProvider);
 
         byte[] atCap = new byte[10];
         DidCommInboundFrameResult atCapResult = await session.AcceptInboundFrameAsync(atCap, null, default).ConfigureAwait(false);
@@ -920,7 +950,7 @@ internal sealed class DidCommSocketSessionTests
     {
         var fake = new FakeSessionTransport();
         var unsolicited = new RecordingUnsolicited();
-        await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool);
+        await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool, TimeProvider);
 
         DidCommMessage requestA = MessagePickupExtensions.CreateStatusRequest("interleave-a");
         DidCommMessage requestB = MessagePickupExtensions.CreateStatusRequest("interleave-b");
@@ -959,7 +989,7 @@ internal sealed class DidCommSocketSessionTests
     {
         var fake = new FakeSessionTransport();
         var unsolicited = new RecordingUnsolicited();
-        await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool);
+        await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool, TimeProvider);
 
         byte[] nullThidFrame = "{\"ciphertext\":\"a\"}"u8.ToArray();
         DidCommInboundFrameResult nullResult = await session.AcceptInboundFrameAsync(nullThidFrame, null, default).ConfigureAwait(false);
@@ -989,7 +1019,10 @@ internal sealed class DidCommSocketSessionTests
         var fake = new FakeSessionTransport();
         var unsolicited = new RecordingUnsolicited();
         var options = new DidCommSocketSessionOptions { ExchangeTimeout = TimeSpan.FromMilliseconds(30) };
-        await using var session = new DidCommSocketSession(fake.SendAsync, options, unsolicited.HandleAsync, Pool);
+
+        //This test proves the session's own timeout genuinely elapses in real time — System.TimeProvider.System
+        //is the deliberate choice here, not a hidden default, since a FakeTimeProvider never advances on its own.
+        await using var session = new DidCommSocketSession(fake.SendAsync, options, unsolicited.HandleAsync, Pool, System.TimeProvider.System);
 
         DidCommMessage request = MessagePickupExtensions.CreateStatusRequest("timeout-1");
         using DidCommExchangeResult result = await session.ExchangeAsync("{\"ciphertext\":\"x\"}"u8.ToArray(), request, default).ConfigureAwait(false);
@@ -1013,7 +1046,7 @@ internal sealed class DidCommSocketSessionTests
     {
         var fake = new FakeSessionTransport();
         var unsolicited = new RecordingUnsolicited();
-        var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool);
+        var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool, TimeProvider);
 
         DidCommMessage request = MessagePickupExtensions.CreateStatusRequest("dispose-1");
         ValueTask<DidCommExchangeResult> pending = session.ExchangeAsync("{\"ciphertext\":\"x\"}"u8.ToArray(), request, default);
@@ -1039,7 +1072,7 @@ internal sealed class DidCommSocketSessionTests
     {
         var fake = new FakeSessionTransport();
         var unsolicited = new RecordingUnsolicited();
-        await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool);
+        await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool, TimeProvider);
 
         DidCommMessage request = MessagePickupExtensions.CreateStatusRequest("cancel-1");
         using var cts = new CancellationTokenSource();
@@ -1067,10 +1100,10 @@ internal sealed class DidCommSocketSessionTests
         var fake = new FakeSessionTransport();
         var unsolicited = new RecordingUnsolicited();
         const string Subprotocol = "didcomm-messaging;v=2";
-        await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions { NegotiatedSubprotocol = Subprotocol }, unsolicited.HandleAsync, Pool);
+        await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions { NegotiatedSubprotocol = Subprotocol }, unsolicited.HandleAsync, Pool, TimeProvider);
         Assert.AreEqual(Subprotocol, session.NegotiatedSubprotocol, "Recorded verbatim.");
 
-        await using var sessionWithNoSubprotocol = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool);
+        await using var sessionWithNoSubprotocol = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool, TimeProvider);
         Assert.IsNull(sessionWithNoSubprotocol.NegotiatedSubprotocol);
 
         byte[] frame = "{\"ciphertext\":\"x\"}"u8.ToArray();
@@ -1092,7 +1125,7 @@ internal sealed class DidCommSocketSessionTests
     {
         var fake = new FakeSessionTransport();
         var unsolicited = new RecordingUnsolicited();
-        await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool);
+        await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool, TimeProvider);
 
         Assert.IsFalse(session.IsReturnRouteEstablished);
         session.MarkReturnRouteEstablished();
@@ -1116,7 +1149,7 @@ internal sealed class DidCommSocketSessionTests
     {
         var fake = new FakeSessionTransport();
         var unsolicited = new RecordingUnsolicited();
-        await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool);
+        await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool, TimeProvider);
 
         const int Concurrency = 16;
         var requests = new DidCommMessage[Concurrency];
@@ -1168,7 +1201,7 @@ internal sealed class DidCommSocketSessionTests
     {
         var fake = new FakeSessionTransport();
         var unsolicited = new RecordingUnsolicited();
-        await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool);
+        await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool, TimeProvider);
 
         DidCommMessage request = MessagePickupExtensions.CreateStatusRequest("copy-not-alias-1");
         ValueTask<DidCommExchangeResult> pending = session.ExchangeAsync("{\"ciphertext\":\"req\"}"u8.ToArray(), request, default);
@@ -1214,7 +1247,7 @@ internal sealed class DidCommSocketSessionTests
             //Disposed both by the racing disposeTask below AND by this scope's own await using — double
             //dispose is a guarded no-op on the session, so the second call is harmless and gives the
             //iteration a deterministic owner.
-            await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool);
+            await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool, TimeProvider);
 
             var exchanges = new Task<DidCommExchangeResult>[BurstSize];
             for(int i = 0; i < BurstSize; ++i)
@@ -1237,6 +1270,9 @@ internal sealed class DidCommSocketSessionTests
             }
             catch(ObjectDisposedException)
             {
+                //A valid terminal outcome named by the comment above WhenAll: an exchange that observed the
+                //dispose flag at entry faults the aggregate with this exception, and the per-task loop below
+                //is the real assertion over each exchange's own outcome.
             }
 
             foreach(Task<DidCommExchangeResult> exchange in exchanges)
@@ -1276,7 +1312,7 @@ internal sealed class DidCommSocketSessionTests
         byte[] replyFrame = Encoding.UTF8.GetBytes("{\"ciphertext\":\"reply-that-raced-the-failing-send\"}");
         DidCommInboundFrameResult? pumpDisposition = null;
 
-        await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool);
+        await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool, TimeProvider);
 
         fake.Respond = (_, _) =>
         {
@@ -1321,7 +1357,7 @@ internal sealed class DidCommSocketSessionTests
         DidCommMessage request = MessagePickupExtensions.CreateStatusRequest($"throwing-send-race-{isCancellationShape}");
         DidCommInboundFrameResult? pumpDisposition = null;
 
-        await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, metered.Pool);
+        await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, metered.Pool, TimeProvider);
 
         fake.Respond = (_, _) =>
         {
@@ -1370,7 +1406,10 @@ internal sealed class DidCommSocketSessionTests
             var fake = new FakeSessionTransport();
             var unsolicited = new RecordingUnsolicited();
             var options = new DidCommSocketSessionOptions { ExchangeTimeout = TimeSpan.FromMilliseconds(15) };
-            await using var session = new DidCommSocketSession(fake.SendAsync, options, unsolicited.HandleAsync, Pool);
+
+            //This test proves the session's own timeout genuinely elapses in real time — System.TimeProvider.System
+            //is the deliberate choice here, not a hidden default, since a FakeTimeProvider never advances on its own.
+            await using var session = new DidCommSocketSession(fake.SendAsync, options, unsolicited.HandleAsync, Pool, System.TimeProvider.System);
 
             DidCommMessage request = MessagePickupExtensions.CreateStatusRequest($"late-reply-{iteration}");
             Task<DidCommExchangeResult> exchange = session.ExchangeAsync(
@@ -1431,15 +1470,14 @@ internal sealed class DidCommSocketSessionTests
     /// <remarks>
     /// The window this races — the exchange settling its own timeout internally, versus removing its
     /// registration a moment later — is inherently narrow: the two happen adjacently in
-    /// <see cref="DidCommSocketSession.ExchangeAsync"/>'s own control flow. The spinner arms itself against
-    /// the EXCHANGE's own clock, captured on the test thread the instant the exchange starts, rather than
-    /// racing this task's own dispatch against <see cref="DidCommSocketSessionOptions.ExchangeTimeout"/>
-    /// separately — a delayed spinner dispatch would otherwise see <c>exchange.IsCompleted</c> already true
-    /// and skip arming altogether. The busy-wait uses <see cref="Thread.SpinWait(int)"/> rather than
-    /// <see cref="SpinWait.SpinOnce"/> so the spinner never yields the edge-detection loop back to the
-    /// scheduler under load. Measured at ~300 iterations under 16-way contention, the target path fires on
-    /// most but not all runs; the deterministic proof that an exceptional exit disposes a settled-but-raced
-    /// reply lives in <see cref="ReplyCorrelatingDuringAThrowingSendStillReturnsItsLeaseOnRethrow"/>.
+    /// <see cref="DidCommSocketSession.ExchangeAsync"/>'s own control flow. Arming is a unit test counting an
+    /// injected clock forward, never a wall-clock read: a per-iteration <see cref="FakeTimeProvider"/> drives
+    /// the session's own <see cref="System.Threading.CancellationTokenSource"/>-realized timeout, advanced
+    /// past <see cref="DidCommSocketSessionOptions.ExchangeTimeout"/> on its own task so the advance and the
+    /// hammering spinner below race each other for real through thread-pool scheduling rather than through
+    /// proximity to a real deadline. Measured at ~300 iterations under 16-way contention, the target path
+    /// fires on most but not all runs; the deterministic proof that an exceptional exit disposes a
+    /// settled-but-raced reply lives in <see cref="ReplyCorrelatingDuringAThrowingSendStillReturnsItsLeaseOnRethrow"/>.
     /// </remarks>
     [TestMethod]
     public async Task SettledThenCorrelatedFallThroughReturnsTheOrphansLease()
@@ -1454,32 +1492,24 @@ internal sealed class DidCommSocketSessionTests
             var fake = new FakeSessionTransport();
             var unsolicited = new RecordingUnsolicited();
             var options = new DidCommSocketSessionOptions { ExchangeTimeout = TimeSpan.FromMilliseconds(15) };
-            await using var session = new DidCommSocketSession(fake.SendAsync, options, unsolicited.HandleAsync, metered.Pool);
+            var fakeClock = new FakeTimeProvider(TestClock.CanonicalEpoch);
+            await using var session = new DidCommSocketSession(fake.SendAsync, options, unsolicited.HandleAsync, metered.Pool, fakeClock);
 
             DidCommMessage request = MessagePickupExtensions.CreateStatusRequest($"orphan-lease-{iteration}");
             Task<DidCommExchangeResult> exchange = session.ExchangeAsync(
                 Encoding.UTF8.GetBytes($"{{\"ciphertext\":\"req-{iteration}\"}}"), request, default).AsTask();
-            long exchangeStartTimestamp = Stopwatch.GetTimestamp();
 
             string? threadId = request.EffectiveThreadId;
             byte[] lateReply = Encoding.UTF8.GetBytes($"{{\"ciphertext\":\"late-{iteration}\"}}");
             int correlatedCount = 0;
 
-            TimeSpan armThreshold = options.ExchangeTimeout!.Value - TimeSpan.FromMilliseconds(3);
-            var spinnerReady = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            //Arms the session's internal timeout deterministically by advancing the injected clock past
+            //ExchangeTimeout, on its own task, so it races the hammering spinner below through real thread
+            //scheduling instead of through proximity to a wall-clock deadline.
+            Task armer = Task.Run(() => fakeClock.Advance(options.ExchangeTimeout!.Value), TestContext.CancellationToken);
+
             Task spinner = Task.Run(async () =>
             {
-                spinnerReady.SetResult();
-
-                //Armed against the EXCHANGE's own clock (captured on the test thread the instant the
-                //exchange started), not this task's own scheduling — no !exchange.IsCompleted check here, so
-                //a spinner whose own dispatch is delayed still arms all the way to the threshold instead of
-                //bailing out early because the exchange happened to finish first.
-                while(Stopwatch.GetElapsedTime(exchangeStartTimestamp) < armThreshold)
-                {
-                    Thread.SpinWait(64);
-                }
-
                 for(int attempt = 0; attempt < MaxHammerAttempts && !exchange.IsCompleted; ++attempt)
                 {
                     DidCommInboundFrameResult result = await session.AcceptInboundFrameAsync(lateReply, threadId, default).ConfigureAwait(false);
@@ -1490,8 +1520,7 @@ internal sealed class DidCommSocketSessionTests
                 }
             }, TestContext.CancellationToken);
 
-            await spinnerReady.Task.ConfigureAwait(false);
-            await Task.WhenAll(exchange, spinner).ConfigureAwait(false);
+            await Task.WhenAll(exchange, armer, spinner).ConfigureAwait(false);
             DidCommExchangeResult exchangeResult = await exchange.ConfigureAwait(false);
 
             //At most one rent of this exact size happens this iteration — TryRemove on the registration is
@@ -1553,7 +1582,7 @@ internal sealed class DidCommSocketSessionTests
             using var metered = new MeteredHousePool();
             var fake = new FakeSessionTransport();
             var unsolicited = new RecordingUnsolicited();
-            await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, metered.Pool);
+            await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, metered.Pool, TimeProvider);
 
             DidCommMessage request = MessagePickupExtensions.CreateStatusRequest($"cancel-lease-{iteration}");
             using var cts = new CancellationTokenSource();
@@ -1737,7 +1766,7 @@ internal sealed class DidCommSocketSessionTests
 
         var fake = new FakeSessionTransport();
         var unsolicited = new RecordingUnsolicited();
-        await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool);
+        await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool, TimeProvider);
 
         //The wallet's own outstanding request — its thid is the "secret" a hostile party must guess or learn.
         DidCommMessage request = MessagePickupExtensions.CreateStatusRequest("guessed-thid-1");
@@ -1805,6 +1834,8 @@ internal sealed class DidCommSocketSessionTests
         }
         catch
         {
+            //frame is untrusted wire input from the other side of the duplex pair; any failure to unpack
+            //it means no correlation thread id is recoverable, cancellation excepted above.
             return null;
         }
     }
@@ -1862,6 +1893,8 @@ internal sealed class DidCommSocketSessionTests
         }
         catch(OperationCanceledException)
         {
+            //The expected shutdown path: the caller cancels this token once it is done driving the
+            //connection, and ReceiveFrameAsync surfaces that as a cancellation the pump simply exits on.
         }
         catch(WebSocketException) when(cancellationToken.IsCancellationRequested)
         {
@@ -1889,7 +1922,7 @@ internal sealed class DidCommSocketSessionTests
             await DidCommDuplexWalletConnection.ConnectAsync(mediatorHost.Endpoint, mediatorHost.Certificate, TestContext.CancellationToken).ConfigureAwait(false);
 
         var unsolicited = new RecordingUnsolicited();
-        await using var mediatorSession = new DidCommSocketSession(mediatorHost.CreateSendDelegate(), new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool);
+        await using var mediatorSession = new DidCommSocketSession(mediatorHost.CreateSendDelegate(), new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool, TimeProvider);
 
         byte[] frame = "{\"ciphertext\":\"binary-tolerant\"}"u8.ToArray();
         await walletConnection.SendRawFrameAsync(frame, WebSocketMessageType.Binary, TestContext.CancellationToken).ConfigureAwait(false);
@@ -1930,11 +1963,11 @@ internal sealed class DidCommSocketSessionTests
 
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> walletKeys = MicrosoftKeyMaterialCreator.CreateP256ExchangeKeys(Pool);
         using PublicKeyMemory walletPublic = walletKeys.PublicKey;
-        PrivateKeyMemory walletPrivate = walletKeys.PrivateKey;
+        using PrivateKeyMemory walletPrivate = walletKeys.PrivateKey;
 
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> mediatorKeys = MicrosoftKeyMaterialCreator.CreateP256ExchangeKeys(Pool);
         using PublicKeyMemory mediatorPublic = mediatorKeys.PublicKey;
-        PrivateKeyMemory mediatorPrivate = mediatorKeys.PrivateKey;
+        using PrivateKeyMemory mediatorPrivate = mediatorKeys.PrivateKey;
 
         try
         {
@@ -2011,7 +2044,7 @@ internal sealed class DidCommSocketSessionTests
                 }
             };
 
-            mediatorSession = new DidCommSocketSession(mediatorHost.CreateSendDelegate(), new DidCommSocketSessionOptions(), mediatorUnsolicited, Pool);
+            mediatorSession = new DidCommSocketSession(mediatorHost.CreateSendDelegate(), new DidCommSocketSessionOptions(), mediatorUnsolicited, Pool, TimeProvider);
 
             //Unlike mediatorUnsolicited above, this handler's two checks are cheap to defer to the test
             //thread: rather than asserting here (which would fault this handler's pump task instead of
@@ -2043,7 +2076,7 @@ internal sealed class DidCommSocketSessionTests
                 liveDeliveredSignal.TrySetResult((unpacked.Message!, copy));
             };
 
-            var walletSession = new DidCommSocketSession(walletConnection.CreateSendDelegate(), new DidCommSocketSessionOptions(), walletUnsolicited, Pool);
+            var walletSession = new DidCommSocketSession(walletConnection.CreateSendDelegate(), new DidCommSocketSessionOptions(), walletUnsolicited, Pool, TimeProvider);
 
             var mediatorObservedFrameTypes = new List<WebSocketMessageType>();
             var walletObservedFrameTypes = new List<WebSocketMessageType>();

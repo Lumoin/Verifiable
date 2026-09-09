@@ -33,7 +33,7 @@ internal sealed class ResourceServerEndToEndTests
     private const string Kid = "test-kid";
     private const string Scope = "openid profile";
 
-    private static readonly DateTimeOffset NowInstant = TestClock.CanonicalEpoch.AddDays(-15);
+    private static DateTimeOffset NowInstant { get; } = TestClock.CanonicalEpoch.AddDays(-15);
 
 
     [TestMethod]
@@ -46,7 +46,7 @@ internal sealed class ResourceServerEndToEndTests
             trustedIssuer: new Uri(Issuer),
             expectedAudience: Audience,
             resolveVerificationKey: BuildResolver(keys.PublicKey),
-            verifySignature: MicrosoftCryptographicFunctions.VerifyP256Async,
+            verifySignature: MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             timeProvider: time);
         await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -88,7 +88,7 @@ internal sealed class ResourceServerEndToEndTests
             trustedIssuer: new Uri(Issuer),
             expectedAudience: Audience,
             resolveVerificationKey: BuildResolver(keys.PublicKey),
-            verifySignature: MicrosoftCryptographicFunctions.VerifyP256Async,
+            verifySignature: MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             timeProvider: time);
         await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -114,7 +114,7 @@ internal sealed class ResourceServerEndToEndTests
             trustedIssuer: new Uri(Issuer),
             expectedAudience: Audience,
             resolveVerificationKey: BuildResolver(keys.PublicKey),
-            verifySignature: MicrosoftCryptographicFunctions.VerifyP256Async,
+            verifySignature: MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             timeProvider: time);
         await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -150,7 +150,7 @@ internal sealed class ResourceServerEndToEndTests
             trustedIssuer: new Uri(Issuer),
             expectedAudience: Audience,
             resolveVerificationKey: BuildResolver(keys.PublicKey),
-            verifySignature: MicrosoftCryptographicFunctions.VerifyP256Async,
+            verifySignature: MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             timeProvider: time);
         await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -196,7 +196,7 @@ internal sealed class ResourceServerEndToEndTests
             trustedIssuer: new Uri(Issuer),
             expectedAudience: Audience,
             resolveVerificationKey: BuildResolver(asKeys.PublicKey),
-            verifySignature: MicrosoftCryptographicFunctions.VerifyP256Async,
+            verifySignature: MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             timeProvider: time);
         await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -238,7 +238,7 @@ internal sealed class ResourceServerEndToEndTests
             dpopKey,
             TestSetup.Base64UrlEncoder,
             DpopTestSupport.Serializer,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -274,7 +274,7 @@ internal sealed class ResourceServerEndToEndTests
             trustedIssuer: new Uri(Issuer),
             expectedAudience: Audience,
             resolveVerificationKey: BuildResolver(asKeys.PublicKey),
-            verifySignature: MicrosoftCryptographicFunctions.VerifyP256Async,
+            verifySignature: MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             timeProvider: time);
         await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -311,7 +311,7 @@ internal sealed class ResourceServerEndToEndTests
 
         string proof = await DpopProofConstruction.BuildAsync(
             proofClaims, dpopKey, TestSetup.Base64UrlEncoder,
-            DpopTestSupport.Serializer, MicrosoftCryptographicFunctions.SignP256Async,
+            DpopTestSupport.Serializer, MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
 
         using HttpClient client = LoopbackTls.CreatePinnedHttpClient(rs.HttpCertificate!, rs.HttpBaseAddress);

@@ -22,11 +22,14 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// </remarks>
 internal sealed class TestObserver<T>: IObserver<T>
 {
+    /// <summary>
+    /// A field, not a property: a lock target must be one instance that no accessor can re-mint.
+    /// </summary>
     private readonly Lock gate = new();
 
-    private readonly List<T> received = [];
+    private List<T> ReceivedValues { get; } = [];
 
-    private readonly Action<T>? onNext;
+    private Action<T>? OnNextCallback { get; }
 
 
     /// <summary>
@@ -35,7 +38,7 @@ internal sealed class TestObserver<T>: IObserver<T>
     /// </summary>
     public TestObserver(Action<T>? onNext = null)
     {
-        this.onNext = onNext;
+        this.OnNextCallback = onNext;
     }
 
 
@@ -50,7 +53,7 @@ internal sealed class TestObserver<T>: IObserver<T>
         {
             lock(gate)
             {
-                return received.ToArray();
+                return ReceivedValues.ToArray();
             }
         }
     }
@@ -61,10 +64,10 @@ internal sealed class TestObserver<T>: IObserver<T>
     {
         lock(gate)
         {
-            received.Add(value);
+            ReceivedValues.Add(value);
         }
 
-        onNext?.Invoke(value);
+        OnNextCallback?.Invoke(value);
     }
 
 

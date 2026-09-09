@@ -1,5 +1,6 @@
 using System.Linq;
 using System.Security.Cryptography;
+using Microsoft.Extensions.Time.Testing;
 using Verifiable.BouncyCastle;
 using Verifiable.Cbor;
 using Verifiable.Core;
@@ -32,7 +33,7 @@ internal sealed class DataIntegritySdPresentationFlowTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly DateTime ProofCreated = new(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+    private static DateTime ProofCreated { get; } = new(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
     private const string IssuerVerificationMethodId = "did:example:issuer#key-1";
 
@@ -56,7 +57,7 @@ internal sealed class DataIntegritySdPresentationFlowTests
 
     //Canonicalization/signing here is in-memory; a default context yields the
     //secure-default SSRF policy and satisfies the policy-carrying parameter.
-    private static readonly ExchangeContext EmptyContext = new();
+    private static ExchangeContext EmptyContext { get; } = new();
 
 
     /// <summary>
@@ -100,7 +101,7 @@ internal sealed class DataIntegritySdPresentationFlowTests
         //Holder verifies the issuer's base proof.
         var baseVerification = await signedCredential.VerifyBaseProofAsync(
             P256IssuerKeys.PublicKey,
-            BouncyCastleCryptographicFunctions.VerifyP256Async,
+            BouncyCastleCryptographicFunctionsAdapter.VerifyP256Async,
             EcdsaSd2023CborSerializer.ParseBaseProof,
             JsonLdSelection.PartitionStatements,
             RdfcCanonicalizer,
@@ -127,6 +128,7 @@ internal sealed class DataIntegritySdPresentationFlowTests
             requestedPaths,
             mandatoryPaths,
             SerializeCredential,
+            new FakeTimeProvider(TestClock.CanonicalEpoch),
             cancellationToken).ConfigureAwait(false);
 
         //Minimal disclosure: required + mandatory, with unrelated claims trimmed away.
@@ -161,7 +163,7 @@ internal sealed class DataIntegritySdPresentationFlowTests
 
         var derivedVerification = await received.VerifyDerivedProofAsync(
             P256IssuerKeys.PublicKey,
-            BouncyCastleCryptographicFunctions.VerifyP256Async,
+            BouncyCastleCryptographicFunctionsAdapter.VerifyP256Async,
             EcdsaSd2023CborSerializer.ParseDerivedProof,
             RdfcCanonicalizer,
             ContextResolver,

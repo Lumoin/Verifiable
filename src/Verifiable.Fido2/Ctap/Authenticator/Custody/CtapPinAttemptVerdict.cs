@@ -5,7 +5,7 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Custody;
 /// authoritative persistent-tier counter — the CTAP-side analogue of a
 /// <c>TPM_NT_PIN_FAIL</c> Index's own <c>TPMS_NV_PIN_COUNTER_PARAMETERS</c> read-back
 /// <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-/// Part 1, clause 37.2.6.6; Part 2, clause 13.3</see>.
+/// Part 1, clause 34.2.6.6; Part 2, clause 13.3</see>.
 /// </summary>
 /// <param name="IsMatch">
 /// Whether the candidate PIN hash matched the custody's own currently provisioned value — CTAP 2.3
@@ -22,7 +22,7 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Custody;
 /// Whether the persistent tier is exhausted — <see langword="true"/> exactly when
 /// <paramref name="RetriesRemaining"/> is zero, mirroring <c>TPM_NT_PIN_FAIL</c>'s own
 /// <c>TPM_RC_AUTH_UNAVAILABLE</c> refusal of even the correct value once <c>pinCount</c> reaches
-/// <c>pinLimit</c> (TPM 2.0 Library Part 1, clause 37.2.6.6). Carried as its own field, rather than
+/// <c>pinLimit</c> (TPM 2.0 Library Part 1, clause 34.2.6.6). Carried as its own field, rather than
 /// re-derived from <paramref name="RetriesRemaining"/> at every call site, so the priority
 /// rule (this field beats the boot-scoped <c>PIN_AUTH_BLOCKED</c> latch) reads directly off the
 /// verdict.
@@ -30,7 +30,7 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Custody;
 /// <param name="IsProvisioned">
 /// Whether the persistent tier is genuinely provisioned — <see langword="true"/> exactly when the
 /// <c>TPM_NT_PIN_FAIL</c> Index this verdict was read from or verified against actually exists
-/// (TPM 2.0 Library Part 1, clause 37.2.6.6), <see langword="false"/> when the tier answered its own
+/// (TPM 2.0 Library Part 1, clause 34.2.6.6), <see langword="false"/> when the tier answered its own
 /// "never defined" tolerance (<c>TPM_RC_HANDLE</c>) instead. Added because, before this member existed,
 /// <see cref="Automata.CtapAuthenticatorSimulator.CreateWithCustodyAsync"/>
 /// could not distinguish "a PIN is genuinely set on the durable tier" from "no PIN has ever been

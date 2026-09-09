@@ -32,7 +32,7 @@ internal sealed class Oid4VciDeferredAndNotificationTests
     private const string ClientId = "https://wallet.client.test";
 
     /// <summary>The base URI the registered client is reachable at.</summary>
-    private static readonly Uri ClientBaseUri = new("https://wallet.client.test");
+    private static Uri ClientBaseUri { get; } = new("https://wallet.client.test");
 
     /// <summary>The End-User the deferred Credential is about — the grant-bound subject.</summary>
     private const string OfferSubject = "urn:uuid:end-user-42";
@@ -51,7 +51,7 @@ internal sealed class Oid4VciDeferredAndNotificationTests
     /// The deferred/notification capabilities plus the grant + producer capabilities used to
     /// mint the access token the endpoints then validate.
     /// </summary>
-    private static readonly ImmutableHashSet<CapabilityIdentifier> EndpointCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> EndpointCapabilities { get; } =
         ImmutableHashSet.Create(
             WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
             WellKnownCapabilityIdentifiers.Oid4VciPreAuthorizedCodeGrant,

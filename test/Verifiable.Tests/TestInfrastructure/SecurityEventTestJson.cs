@@ -17,11 +17,11 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// </summary>
 internal static class SecurityEventTestJson
 {
-    internal static readonly JwtHeaderSerializer HeaderSerializer =
+    internal static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)header, TestSetup.DefaultSerializationOptions);
 
-    internal static readonly JwtPayloadSerializer PayloadSerializer =
+    internal static JwtPayloadSerializer PayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)payload, TestSetup.DefaultSerializationOptions);
 

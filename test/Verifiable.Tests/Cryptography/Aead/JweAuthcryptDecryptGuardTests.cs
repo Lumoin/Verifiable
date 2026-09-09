@@ -29,7 +29,7 @@ internal sealed class JweAuthcryptDecryptGuardTests
 
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
-    private static readonly JwtHeaderSerializer JwtHeaderSerializer =
+    private static JwtHeaderSerializer JwtHeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)header,
             TestSetup.DefaultSerializationOptions);
@@ -168,7 +168,7 @@ internal sealed class JweAuthcryptDecryptGuardTests
                 JwtHeaderSerializer,
                 TestSetup.Base64UrlEncoder,
                 CryptoFormatConversions.DefaultTagToEpkCrvConverter,
-                MicrosoftEntropyFunctions.GenerateNonce,
+                MicrosoftEntropyFunctionsAdapter.GenerateNonce,
                 BouncyCastleKeyAgreementFunctions.Ecdh1PuMultiRecipientAgreementEncryptX25519Async,
                 ConcatKdf.DefaultAuthenticatedKeyDerivationDelegate,
                 MicrosoftKeyAgreementFunctions.AesKeyWrapAsync,

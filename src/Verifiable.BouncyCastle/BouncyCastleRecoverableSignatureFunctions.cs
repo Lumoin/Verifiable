@@ -72,10 +72,12 @@ public static class BouncyCastleRecoverableSignatureFunctions
         ReadOnlyMemory<byte> privateKeyBytes,
         ReadOnlyMemory<byte> nonRecoverableMessage,
         BaseMemoryPool signaturePool,
+        TimeProvider timeProvider,
         FrozenDictionary<string, object>? context = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(signaturePool);
+        ArgumentNullException.ThrowIfNull(timeProvider);
 
         ProviderOperation operation = new(nameof(SignRsaIso9796d2Async));
         using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.Sign);
@@ -117,7 +119,7 @@ public static class BouncyCastleRecoverableSignatureFunctions
         //plus the caller-supplied non-recovered challenge — matching what SignatureProducedEvent means by
         //"the data that was signed" for every other signing backend.
         CryptoEvent evt = SignatureProducedEvent.Create(
-            CryptoAlgorithm.RsaIso9796d2, recoverableCapacity + nonRecoverableMessage.Length, signatureBytes.Length, CryptoLib.Name);
+            CryptoAlgorithm.RsaIso9796d2, recoverableCapacity + nonRecoverableMessage.Length, signatureBytes.Length, CryptoLib.Name, timeProvider: timeProvider);
 
         return ValueTask.FromResult<(Signature, CryptoEvent?)>((signatureResult, evt));
     }
@@ -142,9 +144,12 @@ public static class BouncyCastleRecoverableSignatureFunctions
         ReadOnlyMemory<byte> nonRecoverableMessage,
         ReadOnlyMemory<byte> signature,
         ReadOnlyMemory<byte> publicKeyMaterial,
+        TimeProvider timeProvider,
         FrozenDictionary<string, object>? context = null,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(timeProvider);
+
         ProviderOperation operation = new(nameof(VerifyRsaIso9796d2Async));
         using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.Verify);
         if(activity is not null)
@@ -210,14 +215,14 @@ public static class BouncyCastleRecoverableSignatureFunctions
                 //not recomputed.
                 int recoveredLength = verifier.GetRecoveredMessage().Length;
                 CryptoEvent verifiedEvt = VerificationCompletedEvent.Create(
-                    CryptoAlgorithm.RsaIso9796d2, VerificationOutcome.Valid, recoveredLength + nonRecoverableMessage.Length, CryptoLib.Name);
+                    CryptoAlgorithm.RsaIso9796d2, VerificationOutcome.Valid, recoveredLength + nonRecoverableMessage.Length, CryptoLib.Name, timeProvider: timeProvider);
 
                 return ValueTask.FromResult<(bool, CryptoEvent?)>((true, verifiedEvt));
             }
         }
 
         CryptoEvent invalidEvt = VerificationCompletedEvent.Create(
-            CryptoAlgorithm.RsaIso9796d2, VerificationOutcome.Invalid, nonRecoverableMessage.Length, CryptoLib.Name);
+            CryptoAlgorithm.RsaIso9796d2, VerificationOutcome.Invalid, nonRecoverableMessage.Length, CryptoLib.Name, timeProvider: timeProvider);
 
         return ValueTask.FromResult<(bool, CryptoEvent?)>((false, invalidEvt));
     }

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Cryptography;
+using Verifiable.Tpm.Spec.Attributes;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Structures;
 
@@ -81,6 +82,73 @@ public sealed record CounterTimerPolicyAssertion(ReadOnlyMemory<byte> OperandB, 
 public sealed record OrPolicyAssertion(IReadOnlyList<ReadOnlyMemory<byte>> BranchDigests): TpmPolicyAssertion;
 
 /// <summary>
+/// A TPM2_PolicyPassword assertion: require the authorized object's authorization value, presented as a
+/// cleartext password rather than an HMAC over it.
+/// </summary>
+public sealed record PasswordPolicyAssertion: TpmPolicyAssertion;
+
+/// <summary>
+/// A TPM2_PolicyCpHash assertion: restrict the session to the command whose parameters hash to
+/// <see cref="CpHashA"/>.
+/// </summary>
+/// <param name="CpHashA">The command parameter digest the policy binds to.</param>
+public sealed record CpHashPolicyAssertion(ReadOnlyMemory<byte> CpHashA): TpmPolicyAssertion;
+
+/// <summary>
+/// A TPM2_PolicyNameHash assertion: restrict the session to the command whose target entity's Name(s) hash to
+/// <see cref="NameHash"/>.
+/// </summary>
+/// <param name="NameHash">The digest of the concatenated target Names the policy binds to.</param>
+public sealed record NameHashPolicyAssertion(ReadOnlyMemory<byte> NameHash): TpmPolicyAssertion;
+
+/// <summary>
+/// A TPM2_PolicyDuplicationSelect assertion: qualify a duplication to the new parent named by
+/// <see cref="NewParentName"/> — and, with <see cref="IsObjectIncluded"/> SET, to the object named by
+/// <see cref="ObjectName"/> alone — restricting the session to <c>TPM_CC_Duplicate</c> of that pair.
+/// </summary>
+/// <param name="ObjectName">The Name of the object to be duplicated.</param>
+/// <param name="NewParentName">The Name of the new parent.</param>
+/// <param name="IsObjectIncluded">Whether the object Name is folded into the policyDigest.</param>
+public sealed record DuplicationSelectPolicyAssertion(ReadOnlyMemory<byte> ObjectName, ReadOnlyMemory<byte> NewParentName, bool IsObjectIncluded): TpmPolicyAssertion;
+
+/// <summary>
+/// A TPM2_PolicyParameters assertion: restrict the session to the command whose command code and parameters
+/// hash to <see cref="ParametersHash"/>, whatever objects it references.
+/// </summary>
+/// <param name="ParametersHash">The digest of the command code and parameters the policy binds to.</param>
+public sealed record ParametersPolicyAssertion(ReadOnlyMemory<byte> ParametersHash): TpmPolicyAssertion;
+
+/// <summary>
+/// A TPM2_PolicyTemplate assertion: restrict object creation to the template whose digest is
+/// <see cref="TemplateHash"/>.
+/// </summary>
+/// <param name="TemplateHash">The digest of the bound object template.</param>
+public sealed record TemplatePolicyAssertion(ReadOnlyMemory<byte> TemplateHash): TpmPolicyAssertion;
+
+/// <summary>
+/// A TPM2_PolicyLocality assertion: restrict the session to commands issued from one of the localities in
+/// <see cref="Locality"/>.
+/// </summary>
+/// <param name="Locality">The set of localities the policy admits (TPM 2.0 Library Part 2, clause 8.5, Table 39).</param>
+public sealed record LocalityPolicyAssertion(TpmaLocality Locality): TpmPolicyAssertion;
+
+/// <summary>
+/// A TPM2_PolicyNvWritten assertion: require the target NV Index's TPMA_NV_WRITTEN attribute to match
+/// <see cref="IsWrittenSet"/>.
+/// </summary>
+/// <param name="IsWrittenSet"><see langword="true"/> to require TPMA_NV_WRITTEN SET (YES); <see langword="false"/> to require it CLEAR (NO).</param>
+public sealed record NvWrittenPolicyAssertion(bool IsWrittenSet): TpmPolicyAssertion;
+
+/// <summary>
+/// A TPM2_PolicyAuthorizeNV assertion: replace the policyDigest with the fold over an NV Index's own Name (TPM
+/// 2.0 Part 3, clause 23.22, equation 9), letting the Index's held authPolicy stand in for the session's.
+/// </summary>
+/// <param name="AuthHandle">The authorization handle for reading the Index.</param>
+/// <param name="NvIndex">The NV Index whose held authPolicy authorizes the session.</param>
+/// <param name="NvName">The NV Index's Name (<c>nameAlg || H(TPMS_NV_PUBLIC)</c>), needed to fold the digest.</param>
+public sealed record AuthorizeNvPolicyAssertion(uint AuthHandle, uint NvIndex, ReadOnlyMemory<byte> NvName): TpmPolicyAssertion;
+
+/// <summary>
 /// A TPM2_PolicySigned assertion: bind the policy to a signature over <c>aHash</c> made by the key at
 /// <see cref="AuthObject"/>. Replay always uses an empty caller nonceTPM and an empty cpHashA (a
 /// session-unbound, command-unbound authorization) — the simplest form, mirroring how <see cref="WithSecret"/>'s
@@ -108,7 +176,7 @@ public sealed record SignedPolicyAssertion(
 
 /// <summary>
 /// A TPM2_PolicyAuthorize assertion: replace the policyDigest with a value that depends only on the authority's
-/// key and the policy qualifier (TPM 2.0 Library Part 3, Section 23.16), letting the session accept a policy the
+/// key and the policy qualifier (TPM 2.0 Library Part 3, clause 23.16), letting the session accept a policy the
 /// authority can revise at will.
 /// </summary>
 /// <param name="ApprovedPolicy">The policyDigest being approved; must equal the session's current policyDigest at replay time.</param>

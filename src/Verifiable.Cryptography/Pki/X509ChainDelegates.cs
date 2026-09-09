@@ -163,22 +163,40 @@ public delegate bool IsSelfSignedCertificateDelegate(
 
 
 /// <summary>
-/// Reads the certificate's AuthorityKeyIdentifier <c>KeyIdentifier</c> (RFC 5280 §4.2.1.1)
-/// and returns it base64url-encoded — the value a DCQL <c>trusted_authorities</c> entry of
-/// type <c>aki</c> matches per OID4VP 1.0 §6.1.1.1. Returns <see langword="null"/> when the
-/// certificate carries no AuthorityKeyIdentifier extension or that extension omits the
-/// KeyIdentifier (identifying the issuer by name + serial instead).
+/// Reads the certificate's AuthorityKeyIdentifier <c>KeyIdentifier</c> (RFC 5280 §4.2.1.1) — the value a DCQL
+/// <c>trusted_authorities</c> entry of type <c>aki</c> matches per OID4VP 1.0 §6.1.1.1. Returns
+/// <see langword="null"/> when the certificate carries no AuthorityKeyIdentifier extension or that extension
+/// omits the KeyIdentifier (identifying the issuer by name + serial instead).
 /// </summary>
 /// <param name="certificate">The certificate to read — typically the leaf of an mdoc IssuerAuth x5chain.</param>
-/// <param name="base64UrlEncoder">
-/// Encoder producing the base64url string form. The AuthorityKeyIdentifier is public
-/// certificate metadata, so it is returned as an encoded string rather than a sensitive
-/// carrier.
-/// </param>
-/// <returns>The base64url-encoded AuthorityKeyIdentifier KeyIdentifier, or <see langword="null"/>.</returns>
-public delegate string? ExtractAuthorityKeyIdentifierDelegate(
-    PkiCertificateMemory certificate,
-    EncodeDelegate base64UrlEncoder);
+/// <returns>The certificate's <see cref="AuthorityKeyIdentifier"/>, or <see langword="null"/>.</returns>
+public delegate AuthorityKeyIdentifier? ExtractAuthorityKeyIdentifierDelegate(
+    PkiCertificateMemory certificate);
+
+
+/// <summary>
+/// Reads the certificate's SubjectKeyIdentifier extension contents (RFC 5280 §4.2.1.2) — the bytes an ETSI TS
+/// 119 612 <c>X509SKI</c> service digital identity entry is compared against for OID4VP 1.0 §6.1.1.2
+/// <c>etsi_tl</c> matching.
+/// </summary>
+/// <param name="certificate">The certificate to read.</param>
+/// <returns>
+/// The SubjectKeyIdentifier extension's <c>keyIdentifier</c> OCTET STRING contents, or an empty
+/// <see cref="ReadOnlyMemory{T}"/> when the certificate carries no such extension.
+/// </returns>
+public delegate ReadOnlyMemory<byte> ReadCertificateSubjectKeyIdentifierDelegate(
+    PkiCertificateMemory certificate);
+
+
+/// <summary>
+/// Renders the certificate's Subject as an RFC 4514 distinguished name string — the form an ETSI TS 119 612
+/// <c>X509SubjectName</c> service digital identity entry is compared against for OID4VP 1.0 §6.1.1.2
+/// <c>etsi_tl</c> matching.
+/// </summary>
+/// <param name="certificate">The certificate to read.</param>
+/// <returns>The certificate Subject's <see href="https://www.rfc-editor.org/rfc/rfc4514">RFC 4514</see> string form.</returns>
+public delegate string ReadCertificateSubjectNameDelegate(
+    PkiCertificateMemory certificate);
 
 
 /// <summary>

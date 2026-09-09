@@ -17,7 +17,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// no authorization area at all (<c>TPM_ST_NO_SESSIONS</c>), exactly as TPM2_VerifySignature() does.
 /// </para>
 /// <para>
-/// Command structure (TPM 2.0 Part 3, Section 23.3, Table 124):
+/// Command structure (TPM 2.0 Library Part 3, clause 23.3, Table 144):
 /// </para>
 /// <list type="bullet">
 ///   <item><description>authObject (TPMI_DH_OBJECT): The key that validates the signature. Requires no authorization.</description></item>
@@ -44,6 +44,16 @@ public sealed class PolicySignedInput: ITpmCommandInput, IDisposable
 
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_PolicySigned;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <c>authObject</c> carries Auth Index None (Auth Index None for both <see cref="AuthObject"/> and
+    /// <see cref="PolicySession"/>, TPM 2.0 Library Part 3, clause 23.3.2, Table 144) — the first session in an
+    /// authorization area over this command is a companion, never an authorizer, so a decrypt or encrypt
+    /// session's own <c>nonceTPM</c> never folds into session 0's command HMAC (TPM 2.0 Library Part 1, clause
+    /// 16.6.5).
+    /// </remarks>
+    public bool IsFirstHandleAuthorized => false;
 
     /// <summary>
     /// Gets the handle of the key whose public part validates the signature.

@@ -46,16 +46,16 @@ internal sealed record DidCommWebSocketDelivery(string MediaType, byte[] Bytes);
 /// </remarks>
 internal sealed class DidCommWebSocketInbox: IAsyncDisposable
 {
-    private readonly WebApplication app;
-    private readonly X509Certificate2 certificate;
-    private readonly TaskCompletionSource<DidCommWebSocketDelivery> received =
+    private WebApplication App { get; }
+    private X509Certificate2 ListenerCertificate { get; }
+    private TaskCompletionSource<DidCommWebSocketDelivery> Received { get; } =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
 
 
     private DidCommWebSocketInbox(WebApplication app, X509Certificate2 certificate)
     {
-        this.app = app;
-        this.certificate = certificate;
+        this.App = app;
+        this.ListenerCertificate = certificate;
     }
 
 
@@ -63,7 +63,7 @@ internal sealed class DidCommWebSocketInbox: IAsyncDisposable
     public Uri Endpoint { get; private set; } = null!;
 
     /// <summary>The self-signed leaf certificate this inbox's WebSocket listener presents; <see cref="CreateSendDelegate"/> pins to this exact certificate rather than trusting a CA.</summary>
-    public X509Certificate2 Certificate => certificate;
+    public X509Certificate2 Certificate => ListenerCertificate;
 
 
     /// <summary>Starts a loopback WebSocket inbox on an ephemeral port.</summary>
@@ -85,7 +85,7 @@ internal sealed class DidCommWebSocketInbox: IAsyncDisposable
     /// <returns>The received envelope.</returns>
     public Task<DidCommWebSocketDelivery> ReceivedAsync(CancellationToken cancellationToken)
     {
-        return received.Task.WaitAsync(cancellationToken);
+        return Received.Task.WaitAsync(cancellationToken);
     }
 
 
@@ -128,6 +128,9 @@ internal sealed class DidCommWebSocketInbox: IAsyncDisposable
             }
             catch
             {
+                //A transport-level failure sending over this test harness's socket is fail-soft, matching
+                //the production transport's own contract: the caller treats it as TransportFailed rather
+                //than an escaping exception, cancellation excepted above.
                 return DidCommTransmitResult.TransportFailed();
             }
         };
@@ -136,9 +139,9 @@ internal sealed class DidCommWebSocketInbox: IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        await app.StopAsync(CancellationToken.None).ConfigureAwait(false);
-        await app.DisposeAsync().ConfigureAwait(false);
-        certificate.Dispose();
+        await App.StopAsync(CancellationToken.None).ConfigureAwait(false);
+        await App.DisposeAsync().ConfigureAwait(false);
+        ListenerCertificate.Dispose();
     }
 
 
@@ -171,13 +174,15 @@ internal sealed class DidCommWebSocketInbox: IAsyncDisposable
                 throw new InvalidOperationException($"The envelope MUST arrive as a binary frame, not {envelopeFrame}.");
             }
 
-            received.TrySetResult(new DidCommWebSocketDelivery(Encoding.UTF8.GetString(mediaTypeBytes), envelopeBytes));
+            Received.TrySetResult(new DidCommWebSocketDelivery(Encoding.UTF8.GetString(mediaTypeBytes), envelopeBytes));
 
             await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "received", context.RequestAborted).ConfigureAwait(false);
         }
         catch(Exception ex)
         {
-            received.TrySetException(ex);
+            //Forwarded to the awaiter through the TaskCompletionSource, never swallowed: whatever fault
+            //this receive loop hits becomes the observable outcome the test awaits on.
+            Received.TrySetException(ex);
         }
     }
 }

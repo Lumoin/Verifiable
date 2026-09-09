@@ -151,7 +151,7 @@ public static class VcalmStatusListService
         string statusListId, string statusPurpose, string encodedList, string issuerId) =>
         new()
         {
-            Context = new Context { Contexts = [Context.Credentials20] },
+            Context = Context.FromIris(Context.Credentials20),
             Id = statusListId,
             Type = [CredentialConstants.VerifiableCredentialType, BitstringStatusListConstants.CredentialType],
             Issuer = new Issuer { Id = issuerId },

@@ -78,6 +78,11 @@ public static class VcalmJsonExtensions
         integration.ParseVcalmInviteRequestAsync ??=
             VcalmJsonParsing.CreateInviteRequestParser();
 
+        //The step-level presentationSchema envelope ({type, jsonSchema?}) is a fixed-shape object
+        //read with JsonDocument; its parser carries no serializer-options dependency.
+        integration.ParseVcalmPresentationSchema ??=
+            VcalmJsonParsing.CreatePresentationSchemaParser();
+
         return integration;
     }
 }

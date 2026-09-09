@@ -67,6 +67,10 @@ public static class WebVhProofVerification
 
         (WebVhState? prior, string? deactivatedError) = currentState switch
         {
+            //The (WebVhState?)/(string?) casts are load-bearing: this switch expression's arms
+            //(active.Value, null) and (null, "...") already fix the branch types as
+            //(WebVhState, string?) and (WebVhState?, string), so the untyped (null, null) arm needs
+            //an explicit type on at least one element per branch or the switch has no common type.
             EmptyLogState<WebVhState> => ((WebVhState?)null, (string?)null),
             ActiveLogState<WebVhState> active => (active.Value, null),
             _ => (null, "The did:webvh DID is deactivated; no further log entries are permitted.")

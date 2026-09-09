@@ -195,19 +195,19 @@ internal sealed class PAdESDocTimeStampTests
     /// <summary>Bridges a <see cref="BinaryHttpHost"/> to a <see cref="FetchTimestampResponseAsyncDelegate"/>-shaped responder — the server side of the real-wire leg.</summary>
     private sealed class BinaryTsaHostAdapter
     {
-        private readonly FetchTimestampResponseAsyncDelegate responder;
+        private FetchTimestampResponseAsyncDelegate Responder { get; }
 
 
         internal BinaryTsaHostAdapter(FetchTimestampResponseAsyncDelegate responder)
         {
-            this.responder = responder;
+            this.Responder = responder;
         }
 
 
         internal async Task<BinaryHttpResponse> HandleAsync(BinaryHttpRequest request, CancellationToken cancellationToken)
         {
             using PkiCertificateMemory requestCarrier = ToCarrier(request.Body, PkiCertificateTags.TimestampRequest);
-            PkiCertificateMemory? response = await responder(
+            PkiCertificateMemory? response = await Responder(
                 new TimestampFetchContext { TsaUri = request.Path, Request = requestCarrier },
                 BaseMemoryPool.Shared, cancellationToken).ConfigureAwait(false);
 
@@ -232,12 +232,12 @@ internal sealed class PAdESDocTimeStampTests
     /// <summary>The client-side RFC 3161 §3.4 HTTP binding over a real <see cref="HttpClient"/> POST — the client side of the real-wire leg.</summary>
     private sealed class WireTimestampTransport
     {
-        private readonly HttpClient httpClient;
+        private HttpClient WireClient { get; }
 
 
         internal WireTimestampTransport(HttpClient httpClient)
         {
-            this.httpClient = httpClient;
+            this.WireClient = httpClient;
         }
 
 
@@ -249,7 +249,7 @@ internal sealed class PAdESDocTimeStampTests
             HttpResponseMessage httpResponse;
             try
             {
-                httpResponse = await httpClient.PostAsync(new Uri(context.TsaUri), content, cancellationToken).ConfigureAwait(false);
+                httpResponse = await WireClient.PostAsync(new Uri(context.TsaUri), content, cancellationToken).ConfigureAwait(false);
             }
             catch(HttpRequestException)
             {

@@ -179,9 +179,11 @@ public delegate ValueTask<PrivateKeyMemory?> ServerDecryptionKeyResolverDelegate
 /// </para>
 /// <para>
 /// The library writes its base fields first; contributed fields are merged
-/// afterwards in the order returned. The contribution is strictly additive —
-/// the library's base fields take precedence over any contributed field with a
-/// duplicate name.
+/// afterwards in the order returned. A contributed field naming a member the
+/// base emission already wrote — or that an earlier contributed field already
+/// named — is a composition defect: <c>MetadataEndpoints</c> refuses the
+/// document request with <see cref="InvalidOperationException"/> naming the
+/// duplicate member, rather than writing a document with the name twice.
 /// </para>
 /// <para>
 /// Return <see cref="DiscoveryDocumentContribution.Empty"/> when there is
@@ -262,7 +264,7 @@ public delegate ValueTask<Federation.FederationEntityConfigurationContribution> 
 /// when the subject is not a known subordinate.
 /// </returns>
 public delegate ValueTask<Federation.SubordinateStatementContribution?> ResolveSubordinateStatementDelegate(
-    Federation.EntityIdentifier subject,
+    EntityIdentifier subject,
     ClientRecord registration,
     ExchangeContext context,
     CancellationToken cancellationToken);
@@ -307,7 +309,7 @@ public delegate ValueTask<Federation.SubordinateStatementContribution?> ResolveS
 /// The immediate subordinates' Entity Identifiers, in the order they should
 /// appear in the §8.2 response array.
 /// </returns>
-public delegate ValueTask<IReadOnlyList<Federation.EntityIdentifier>> ResolveSubordinateListDelegate(
+public delegate ValueTask<IReadOnlyList<EntityIdentifier>> ResolveSubordinateListDelegate(
     IReadOnlyList<Federation.EntityTypeIdentifier> entityTypeFilters,
     ClientRecord registration,
     ExchangeContext context,
@@ -361,8 +363,8 @@ public delegate ValueTask<IReadOnlyList<Federation.EntityIdentifier>> ResolveSub
 /// <see langword="null"/> when the subject cannot be resolved.
 /// </returns>
 public delegate ValueTask<Federation.ResolveResponseContribution?> ResolveSubjectTrustChainDelegate(
-    Federation.EntityIdentifier subject,
-    Federation.EntityIdentifier? trustAnchor,
+    EntityIdentifier subject,
+    EntityIdentifier? trustAnchor,
     Federation.EntityTypeIdentifier? entityTypeFilter,
     ClientRecord registration,
     ExchangeContext context,

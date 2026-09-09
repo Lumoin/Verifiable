@@ -39,6 +39,7 @@ internal sealed class DidBuilderStandardFeatureTests
 
         DidDocument document = await new KeyDidBuilder().BuildAsync(
             StandardKeyInputs(signingPublic, exchangePublic),
+            BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertStandardFeatures(document);
@@ -56,7 +57,7 @@ internal sealed class DidBuilderStandardFeatureTests
         using PublicKeyMemory exchangePublic = exchange.PublicKey;
         using PrivateKeyMemory exchangePrivate = exchange.PrivateKey;
 
-        DidDocument document = await new WebDidBuilder().BuildAsync(
+        DidDocument document = await new WebDidBuilder(BaseMemoryPool.Shared).BuildAsync(
             StandardKeyInputs(signingPublic, exchangePublic),
             "example.com",
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);

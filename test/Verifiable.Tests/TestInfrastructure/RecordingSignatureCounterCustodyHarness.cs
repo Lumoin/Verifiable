@@ -31,10 +31,10 @@ namespace Verifiable.Tests.TestInfrastructure;
 internal sealed class RecordingSignatureCounterCustodyHarness
 {
     /// <summary>The wrapped bundle every non-injected call delegates to.</summary>
-    private readonly CtapSignatureCounterCustody inner;
+    private CtapSignatureCounterCustody Inner { get; }
 
     /// <summary>The backing store for <see cref="RetiredCreationSequences"/>.</summary>
-    private readonly List<ulong> retiredCreationSequences = [];
+    private List<ulong> RetiredCreationSequenceLog { get; } = [];
 
     /// <summary>The number of remaining <c>IncrementCounterAsync</c> calls this harness will fail before delegating again.</summary>
     private int remainingIncrementFailures;
@@ -49,7 +49,7 @@ internal sealed class RecordingSignatureCounterCustodyHarness
     {
         ArgumentNullException.ThrowIfNull(inner);
 
-        this.inner = inner;
+        this.Inner = inner;
     }
 
 
@@ -61,7 +61,7 @@ internal sealed class RecordingSignatureCounterCustodyHarness
 
 
     /// <summary>Every creation sequence <see cref="RetireCounterAsync"/> observed, in call order.</summary>
-    public IReadOnlyList<ulong> RetiredCreationSequences => retiredCreationSequences;
+    public IReadOnlyList<ulong> RetiredCreationSequences => RetiredCreationSequenceLog;
 
 
     /// <summary>
@@ -86,7 +86,7 @@ internal sealed class RecordingSignatureCounterCustodyHarness
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The counter's initial count.</returns>
     private ValueTask<ulong> EnsureCounterAsync(ulong creationSequence, CancellationToken cancellationToken) =>
-        inner.EnsureCounterAsync(creationSequence, cancellationToken);
+        Inner.EnsureCounterAsync(creationSequence, cancellationToken);
 
 
     /// <summary>
@@ -106,7 +106,7 @@ internal sealed class RecordingSignatureCounterCustodyHarness
             throw new InvalidOperationException($"Test-injected increment failure for creation sequence '{creationSequence}'.");
         }
 
-        return await inner.IncrementCounterAsync(creationSequence, cancellationToken).ConfigureAwait(false);
+        return await Inner.IncrementCounterAsync(creationSequence, cancellationToken).ConfigureAwait(false);
     }
 
 
@@ -119,8 +119,8 @@ internal sealed class RecordingSignatureCounterCustodyHarness
     /// <param name="cancellationToken">A cancellation token.</param>
     private async ValueTask RetireCounterAsync(ulong creationSequence, CancellationToken cancellationToken)
     {
-        retiredCreationSequences.Add(creationSequence);
+        RetiredCreationSequenceLog.Add(creationSequence);
 
-        await inner.RetireCounterAsync(creationSequence, cancellationToken).ConfigureAwait(false);
+        await Inner.RetireCounterAsync(creationSequence, cancellationToken).ConfigureAwait(false);
     }
 }

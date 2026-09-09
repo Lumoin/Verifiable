@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using Verifiable.BouncyCastle;
 using Verifiable.Core;
+using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
@@ -49,7 +50,7 @@ internal sealed class FullLifecycleTests
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private const string WalletClientId = "https://wallet.client.test";
-    private static readonly Uri WalletBaseUri = new("https://wallet.client.test");
+    private static Uri WalletBaseUri { get; } = new("https://wallet.client.test");
     private const string EndUserSubject = "urn:uuid:end-user-42";
     private const string ConfigurationId = "eu.europa.ec.eudi.pid.1";
     private const string PreAuthorizedCode = "SplxlOBeZQQYbYS6WxSbIA";
@@ -62,7 +63,7 @@ internal sealed class FullLifecycleTests
     private const string SdJwtIssuerId = "https://issuer.example.com";
     private const string SdJwtIssuerKeyId = "did:web:issuer.example.com#key-1";
 
-    private static readonly ImmutableHashSet<CapabilityIdentifier> AllIssuerCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> AllIssuerCapabilities { get; } =
         ImmutableHashSet.Create(
             WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
             WellKnownCapabilityIdentifiers.Oid4VciPreAuthorizedCodeGrant,
@@ -72,12 +73,12 @@ internal sealed class FullLifecycleTests
             WellKnownCapabilityIdentifiers.Oid4VciNotificationEndpoint,
             WellKnownCapabilityIdentifiers.OAuthTokenIntrospection);
 
-    private static readonly JwtHeaderSerializer HeaderSerializer =
+    private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)header,
             TestSetup.DefaultSerializationOptions);
 
-    private static readonly JwtPayloadSerializer PayloadSerializer =
+    private static JwtPayloadSerializer PayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)payload,
             TestSetup.DefaultSerializationOptions);
@@ -250,12 +251,12 @@ internal sealed class FullLifecycleTests
             string.Equals(iss, SdJwtIssuerId, StringComparison.Ordinal) ? sdJwtIssuerPublic : null;
 
         VpTokenParsed parsed = await SdJwtVpTokenVerification.VerifyAsync(
-            presentation, "pid",
+            presentation, new CredentialQueryId("pid"),
             static s => SdJwtSerializer.ParseToken(
-                s, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared, TestSalts.TestSaltTag),
+                s, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared, TestSalts.TestSaltTag),
             static t => SdJwtSerializer.GetSdJwtForHashing(t, TestSetup.Base64UrlEncoder),
             IssuerLookup,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool,
             saltReuseSeam: null,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -539,25 +540,11 @@ internal sealed class FullLifecycleTests
 
 
     /// <summary>The wallet-side presentation: KB-JWT over the issued SD-JWT bound to the verifier transaction.</summary>
-    private async ValueTask<string> PresentWithKeyBindingAsync(
-        string sdJwtWithoutKb, PrivateKeyMemory holderPrivate, string nonce, string audience)
-    {
-        using SdToken<string> token = SdJwtSerializer.ParseToken(
-            sdJwtWithoutKb, TestSetup.Base64UrlDecoder, Pool, TestSalts.TestSaltTag);
-
-        string hashInput = SdJwtSerializer.GetSdJwtForHashing(token, TestSetup.Base64UrlEncoder);
-
-        string compactKbJwt = await KbJwtIssuance.IssueAsync(
-            Encoding.UTF8.GetBytes(hashInput),
-            holderPrivate, nonce, audience,
-            TimeProvider.GetUtcNow(),
-            TestSetup.Base64UrlEncoder, HeaderSerializer, PayloadSerializer, Pool,
-            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
-
-        using SdToken<string> tokenWithKb = token.WithKeyBinding(compactKbJwt, Pool);
-
-        return SdJwtSerializer.SerializeToken(tokenWithKb, TestSetup.Base64UrlEncoder);
-    }
+    private ValueTask<string> PresentWithKeyBindingAsync(
+        string sdJwtWithoutKb, PrivateKeyMemory holderPrivate, string nonce, string audience) =>
+        SdJwtVpFixture.PresentWithKeyBindingAsync(
+            sdJwtWithoutKb, holderPrivate, nonce, audience,
+            TimeProvider, HeaderSerializer, PayloadSerializer, Pool, TestContext.CancellationToken);
 
 
     private async Task<string> EncryptToIssuerAsync(string requestBody, PublicKeyMemory issuerPublic)

@@ -47,19 +47,19 @@ public readonly struct LogEntryClassification
     /// cannot be replayed at all, regardless of how many subsequent entries are
     /// well-formed.
     /// </remarks>
-    public static readonly LogEntryClassification Genesis = new("genesis");
+    public static LogEntryClassification Genesis { get; } = new("genesis");
 
     /// <summary>
     /// An update entry — an entry that transitions the current state forward.
     /// </summary>
-    public static readonly LogEntryClassification Update = new("update");
+    public static LogEntryClassification Update { get; } = new("update");
 
     /// <summary>
     /// A deactivation entry — an entry that marks the subject of the log as
     /// permanently deactivated. No further state-mutating entries are valid
     /// after a deactivation entry.
     /// </summary>
-    public static readonly LogEntryClassification Deactivate = new("deactivate");
+    public static LogEntryClassification Deactivate { get; } = new("deactivate");
 
     /// <summary>
     /// A heartbeat entry — an entry that re-witnesses the current digest to
@@ -77,7 +77,7 @@ public readonly struct LogEntryClassification
     /// already achieved by prior entries rather than adding new reduction. It keeps
     /// the chain alive without advancing its content.
     /// </remarks>
-    public static readonly LogEntryClassification Heartbeat = new("heartbeat");
+    public static LogEntryClassification Heartbeat { get; } = new("heartbeat");
 
 
     private readonly string Value { get; }

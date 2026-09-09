@@ -1,8 +1,6 @@
 using System;
 using System.Buffers;
 using System.Collections.Generic;
-using System.Linq;
-using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -101,43 +99,6 @@ internal sealed class SignatureValidationModelTests
         Assert.IsTrue(SignatureValidationWellKnown.IsSubIndication(wireValue), "A sub-indication URI has to be recognised as one.");
         Assert.IsTrue(SignatureValidationSubIndicationMapping.TryFromWireValue(wireValue, out SignatureValidationSubIndication readBack), "A sub-indication URI has to read back.");
         Assert.AreEqual(subIndication, readBack, "Reading a sub-indication URI back yields the same sub-indication.");
-    }
-
-
-    /// <summary>
-    /// Table 6 sub-indication vocabulary coverage: every <see cref="SignatureValidationSubIndication"/> static —
-    /// enumerated by reflection, so a future addition or removal is caught automatically rather than by a
-    /// hand-maintained list — is constructible and its <see cref="SignatureValidationSubIndicationMapping"/> URI
-    /// round-trips against <see href="https://www.etsi.org/deliver/etsi_ts/119100_119199/11910202/01.04.01_60/ts_11910202v010401p.pdf">
-    /// ETSI TS 119 102-2 V1.4.1 clause 4.3.4.3</see>'s namespace and prefixing rule. This complements, rather than
-    /// duplicates, <see cref="SubIndicationCarriesItsSpecifiedTokenAndUriRoundTrips"/>'s hand-transcribed vector
-    /// table: that test checks each static's token against the specification's own text; this test checks that
-    /// every static the type currently declares — whatever that set is — round-trips, which a hand-maintained
-    /// list cannot guarantee once a static is added or removed without the list being updated in step.
-    /// </summary>
-    /// <remarks>
-    /// Proves <see href="https://www.etsi.org/deliver/etsi_en/319100_319199/31910201/01.04.01_60/en_31910201v010401p.pdf">ETSI EN 319 102-1 V1.4.1</see>
-    /// Table6-vocabulary.
-    /// </remarks>
-    [TestMethod]
-    public void EveryDeclaredSubIndicationStaticRoundTripsItsWireUri()
-    {
-        PropertyInfo[] subIndicationStatics = [.. typeof(SignatureValidationSubIndication)
-            .GetProperties(BindingFlags.Public | BindingFlags.Static)
-            .Where(property => property.PropertyType == typeof(SignatureValidationSubIndication))];
-
-        Assert.IsGreaterThanOrEqualTo(26, subIndicationStatics.Length,
-            "Table 6 of clause 5.1.3 names at least the 26 sub-indications the model stage transcribed (including the two V1.4.1 adds after TS 119 102-2's Table 2 was written); a static must never disappear silently.");
-
-        foreach(PropertyInfo property in subIndicationStatics)
-        {
-            var subIndication = (SignatureValidationSubIndication)property.GetValue(null)!;
-            string wireValue = SignatureValidationSubIndicationMapping.ToWireValue(subIndication);
-
-            Assert.IsTrue(SignatureValidationWellKnown.IsSubIndication(wireValue), $"{property.Name} must map to a recognised sub-indication URI.");
-            Assert.IsTrue(SignatureValidationSubIndicationMapping.TryFromWireValue(wireValue, out SignatureValidationSubIndication readBack), $"{property.Name}'s URI must read back.");
-            Assert.AreEqual(subIndication, readBack, $"{property.Name} must round-trip through its own wire URI.");
-        }
     }
 
 

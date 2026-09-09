@@ -1,10 +1,10 @@
-using System.Diagnostics.CodeAnalysis;
-
 namespace Verifiable.Cryptography
 {
     /// <summary>
     /// Multibase algorithm identifiers. See more at <see href="https://datatracker.ietf.org/doc/html/draft-multiformats-multibase">
-    /// The Multibase Data Format draft-multiformats-multibase-05</see>.
+    /// The Multibase Data Format draft-multiformats-multibase-05</see>. Each identifier is a compile-time
+    /// <c>const</c>: a single fixed code character the format assigns, nothing in the tree takes its address,
+    /// and no cross-assembly inlining concern is documented for it.
     /// </summary>
     public static class MultibaseAlgorithms
     {
@@ -12,32 +12,31 @@ namespace Verifiable.Cryptography
         /// Identity. 8-bit binary (encoder and decoder keeps data unmodified).
         /// </summary>
         /// <remarks>Status: active.</remarks>
-        [SuppressMessage("Performance", "CA1805:Do not initialize unnecessarily", Justification = "This initialization is done for clarity.")]
-        public static readonly char Identity = (char)0x00;
+        public const char Identity = (char)0x00;
 
         /// <summary>
         /// Base 2.
         /// </summary>
         /// <example>01010101.</example>
         /// <remarks>Status: active.</remarks>
-        public static readonly char Binary = '0';
+        public const char Binary = '0';
 
         /// <summary>
         /// Base58 Bitcoin.
         /// </summary>
         /// <remarks>Status: active.</remarks>
-        public static readonly char Base58Btc = 'z';
+        public const char Base58Btc = 'z';
 
         /// <summary>
         /// Base64. No padding.
         /// </summary>
         /// <remarks>Status: active.</remarks>
-        public static readonly char Base64 = 'm';
+        public const char Base64 = 'm';
 
         /// <summary>
         /// Base64Url. No padding.
         /// </summary>
         /// <remarks>Status: active.</remarks>
-        public static readonly char Base64Url = 'u';
+        public const char Base64Url = 'u';
     }
 }

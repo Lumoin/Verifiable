@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Verifiable.Core.Model.Common;
 
 namespace Verifiable.Core.Model.DataIntegrity;
 
@@ -104,7 +105,7 @@ public sealed class ProofOptionsDocument
     /// context so that the proof options document can be expanded and canonicalized.
     /// </para>
     /// </remarks>
-    public object? Context { get; init; }
+    public Context? Context { get; init; }
 
     /// <summary>
     /// The security domain binding for this proof, or <see langword="null"/> if not
@@ -167,7 +168,7 @@ public sealed class ProofOptionsDocument
     /// <exception cref="InvalidOperationException">
     /// Thrown when the proof does not contain a <see cref="DataIntegrityProof.Cryptosuite"/>.
     /// </exception>
-    public static ProofOptionsDocument FromProof(DataIntegrityProof proof, object? context)
+    public static ProofOptionsDocument FromProof(DataIntegrityProof proof, Context? context)
     {
         ArgumentNullException.ThrowIfNull(proof);
 

@@ -31,7 +31,7 @@ public static class WellKnownCredentialFormats
     /// W3C Verifiable Credential secured as a JWT (<c>jwt_vc_json</c>).
     /// Defined in OID4VP 1.0 Appendix B.1.
     /// </summary>
-    public static readonly string JwtVcJson = Utf8Constants.ToInternedString(JwtVcJsonUtf8);
+    public static string JwtVcJson { get; } = Utf8Constants.ToInternedString(JwtVcJsonUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="JwtVpJson"/>.</summary>
     public static ReadOnlySpan<byte> JwtVpJsonUtf8 => "jwt_vp_json"u8;
@@ -40,7 +40,7 @@ public static class WellKnownCredentialFormats
     /// W3C Verifiable Presentation secured as a JWT (<c>jwt_vp_json</c>).
     /// Defined in OID4VP 1.0 Appendix B.1.
     /// </summary>
-    public static readonly string JwtVpJson = Utf8Constants.ToInternedString(JwtVpJsonUtf8);
+    public static string JwtVpJson { get; } = Utf8Constants.ToInternedString(JwtVpJsonUtf8);
 
     //ISO mdoc format — defined in ISO/IEC 18013-5, referenced by OID4VP 1.0 Appendix B.2.
 
@@ -51,7 +51,7 @@ public static class WellKnownCredentialFormats
     /// ISO/IEC 18013-5 mobile document format identifier (<c>mso_mdoc</c>).
     /// Defined in ISO/IEC 18013-5 and referenced by OID4VP 1.0 Appendix B.2.
     /// </summary>
-    public static readonly string MsoMdoc = Utf8Constants.ToInternedString(MsoMdocUtf8);
+    public static string MsoMdoc { get; } = Utf8Constants.ToInternedString(MsoMdocUtf8);
 
 
     /// <summary>Returns <see langword="true"/> when <paramref name="value"/> is

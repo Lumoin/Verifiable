@@ -21,7 +21,7 @@ namespace Verifiable.Tests.Cryptography
             const string originalEncodedKey = "zQ3shtxV1FrJfhqE1dvxYRcCknWNjHc3c5X1y3ZSoPDi2aur2";
 
             //Decode the entire key including the codec header.
-            var decodedWithHeader = MultibaseSerializer.Decode(
+            using var decodedWithHeader = MultibaseSerializer.Decode(
                 originalEncodedKey,
                 codecHeaderLength: 0,  //Keep the codec header in the result.
                 Base58.Bitcoin.Decode,
@@ -29,7 +29,6 @@ namespace Verifiable.Tests.Cryptography
 
             //Extract just the key data by skipping the 2-byte codec header.
             byte[] keyDataOnly = decodedWithHeader.Memory.Span.Slice(2).ToArray();
-            decodedWithHeader.Dispose();
 
             //Re-encode the key data with the appropriate codec header.
             string reencodedKey = MultibaseSerializer.Encode(
@@ -60,7 +59,7 @@ namespace Verifiable.Tests.Cryptography
             Assert.AreEqual(CryptoAlgorithm.Secp256k1, detectedAlgorithm, "Should detect Secp256k1 from the encoded prefix.");
 
             //Re-encode using the detected algorithm.
-            string reencodedKey = MultibaseSerializer.EncodeKey(decodedKeyData.Memory.Span, detectedAlgorithm, Base58.Bitcoin.Encode);
+            string reencodedKey = MultibaseSerializer.EncodeKey(decodedKeyData.Memory.Span, detectedAlgorithm, Base58.Bitcoin.Encode, BaseMemoryPool.Shared);
 
             //Clean up the memory.
             decodedKeyData.Dispose();
@@ -86,13 +85,10 @@ namespace Verifiable.Tests.Cryptography
             Assert.DoesNotStartWith("u", jwkEncoded, "JWK encoding should not include multibase prefix.");
 
             //Decode the JWK data.
-            var decodedData = MultibaseSerializer.DecodeFromJwk(jwkEncoded, Base64Url.DecodeFromChars, BaseMemoryPool.Shared);
+            using var decodedData = MultibaseSerializer.DecodeFromJwk(jwkEncoded, Base64Url.DecodeFromChars, BaseMemoryPool.Shared);
 
             //Verify the decoded data matches the original.
             Assert.IsTrue(decodedData.Memory.Span.SequenceEqual(originalData), "JWK round-trip should preserve data integrity.");
-
-            //Clean up the memory.
-            decodedData.Dispose();
         }
 
 
@@ -141,7 +137,7 @@ namespace Verifiable.Tests.Cryptography
             decodedData.Dispose();
 
             //Re-encode using the convenience overload.
-            string reencodedKey = MultibaseSerializer.EncodeKey(keyData, detectedAlgorithm, Base58.Bitcoin.Encode);
+            string reencodedKey = MultibaseSerializer.EncodeKey(keyData, detectedAlgorithm, Base58.Bitcoin.Encode, BaseMemoryPool.Shared);
 
             //The re-encoded key should match the original.
             Assert.AreEqual(knownEncodedKey, reencodedKey, "Convenience overloads should produce identical results.");

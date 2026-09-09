@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography.Text;
 
 
@@ -28,7 +29,7 @@ public static class Oid4VpAuthorizationRequestParameterValues
     /// parameter, which triggers the OID4VP flow per
     /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-5.1">OID4VP 1.0 §5.1</see>.
     /// </summary>
-    public static readonly string ResponseTypeVpToken = Utf8Constants.ToInternedString(ResponseTypeVpTokenUtf8);
+    public static string ResponseTypeVpToken { get; } = Utf8Constants.ToInternedString(ResponseTypeVpTokenUtf8);
 
 
     /// <summary>
@@ -48,7 +49,9 @@ public static class Oid4VpAuthorizationRequestParameterValues
     /// The <c>get</c> value for the <c>request_uri_method</c> parameter — the
     /// default: the Wallet GETs the <c>request_uri</c> endpoint.
     /// </summary>
-    public static readonly string RequestUriMethodGet = Utf8Constants.ToInternedString(RequestUriMethodGetUtf8);
+    [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
+        Justification = "This member is the wire enumerated VALUE 'get' for the request_uri_method parameter (compared and serialised as a string), not a dereferenceable System.Uri.")]
+    public static string RequestUriMethodGet { get; } = Utf8Constants.ToInternedString(RequestUriMethodGetUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="RequestUriMethodPost"/>.</summary>
     public static ReadOnlySpan<byte> RequestUriMethodPostUtf8 => "post"u8;
@@ -58,7 +61,9 @@ public static class Oid4VpAuthorizationRequestParameterValues
     /// Wallet POSTs to the <c>request_uri</c> endpoint, carrying
     /// <c>wallet_nonce</c> and (optionally) <c>wallet_metadata</c>.
     /// </summary>
-    public static readonly string RequestUriMethodPost = Utf8Constants.ToInternedString(RequestUriMethodPostUtf8);
+    [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
+        Justification = "This member is the wire enumerated VALUE 'post' for the request_uri_method parameter (compared and serialised as a string), not a dereferenceable System.Uri.")]
+    public static string RequestUriMethodPost { get; } = Utf8Constants.ToInternedString(RequestUriMethodPostUtf8);
 
 
     /// <summary>Returns <see langword="true"/> when <paramref name="value"/> is

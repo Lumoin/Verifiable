@@ -16,7 +16,7 @@ public static class Oid4VciNotificationEvents
     /// The <c>credential_accepted</c> event — the Credentials were successfully stored in the
     /// Wallet, with or without user action.
     /// </summary>
-    public static readonly string CredentialAccepted = Utf8Constants.ToInternedString(CredentialAcceptedUtf8);
+    public static string CredentialAccepted { get; } = Utf8Constants.ToInternedString(CredentialAcceptedUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="CredentialFailure"/>.</summary>
     public static ReadOnlySpan<byte> CredentialFailureUtf8 => "credential_failure"u8;
@@ -26,7 +26,7 @@ public static class Oid4VciNotificationEvents
     /// than a user action; §11.1 directs partial batch failures to report as this overall
     /// failure too.
     /// </summary>
-    public static readonly string CredentialFailure = Utf8Constants.ToInternedString(CredentialFailureUtf8);
+    public static string CredentialFailure { get; } = Utf8Constants.ToInternedString(CredentialFailureUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="CredentialDeleted"/>.</summary>
     public static ReadOnlySpan<byte> CredentialDeletedUtf8 => "credential_deleted"u8;
@@ -35,7 +35,7 @@ public static class Oid4VciNotificationEvents
     /// The <c>credential_deleted</c> event — the unsuccessful issuance was caused by a user
     /// action.
     /// </summary>
-    public static readonly string CredentialDeleted = Utf8Constants.ToInternedString(CredentialDeletedUtf8);
+    public static string CredentialDeleted { get; } = Utf8Constants.ToInternedString(CredentialDeletedUtf8);
 
 
     /// <summary>

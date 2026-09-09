@@ -4,6 +4,7 @@ using Verifiable.OAuth;
 using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.AuthCode.States;
 using Verifiable.OAuth.Client;
+using Verifiable.OAuth.Server.Pipeline;
 using Verifiable.OAuth.Validation;
 using Verifiable.Tests.TestInfrastructure;
 using static Verifiable.Tests.TestInfrastructure.OAuthJsonResponseFixtures;
@@ -47,7 +48,7 @@ internal sealed class OAuthAttackMitigationTests
 
     private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
-    private static readonly Uri DefaultRedirectUri = new("https://client.example.com/callback");
+    private static Uri DefaultRedirectUri { get; } = new("https://client.example.com/callback");
 
 
     //RFC 9700 §4.4 — Mix-Up Attack
@@ -659,6 +660,8 @@ internal sealed class OAuthAttackMitigationTests
             RevocationEndpoint = resolvedRevocationEndpoint
         };
 
+        var fillEntropy = TestEntropy.NewCounterStream();
+
         OAuthClientInfrastructure infrastructure = OAuthClientInfrastructure.Create(
             sendFormPostAsync: async (endpoint, fields, _, _, _) =>
             {
@@ -715,7 +718,10 @@ internal sealed class OAuthAttackMitigationTests
             resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,
             isKnownAuthorizationServerIssuer: knownIssuerResolver,
             base64UrlEncoder: TestSetup.Base64UrlEncoder,
-            timeProvider: TimeProvider);
+            memoryPool: BaseMemoryPool.Shared,
+            timeProvider: TimeProvider,
+            fillEntropy: fillEntropy,
+            generateIdentifierAsync: DefaultIdentifierGenerator.For(TimeProvider, fillEntropy, BaseMemoryPool.Shared));
 
         ClientRegistration registration = new()
         {

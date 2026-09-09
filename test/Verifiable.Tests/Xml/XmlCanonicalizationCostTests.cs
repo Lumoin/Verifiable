@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using Verifiable.Tests.TestInfrastructure;
@@ -7,23 +6,18 @@ using Verifiable.Xml;
 namespace Verifiable.Tests.Xml;
 
 /// <summary>
-/// Canonicalization-side cost tests binding the "no quadratic behavior" obligation to wall-clock-bounded
-/// proof over <see cref="XmlCanonicalization.TryCanonicalize"/> and
+/// Canonicalization-side correctness proofs over <see cref="XmlCanonicalization.TryCanonicalize"/> and
 /// <see cref="XmlCanonicalization.TryCanonicalizeExclusive"/>: a wide-attribute document, a
-/// wide-namespace document and a sibling-spread document canonicalize under both entry points, and a
-/// declaration-heavy start-tag parses, each inside a deliberately loose wall-clock ceiling that only a
-/// superlinear blowup could breach, with every buffer rented from the caller's pool and returned on
-/// disposal, observed through <see cref="MeteredHousePool"/> accounting.
+/// wide-namespace document and a sibling-spread document canonicalize to non-empty correct output under
+/// both entry points, and a declaration-heavy start-tag parses to the correct shape, with every buffer
+/// rented from the caller's pool and returned on disposal, observed through <see cref="MeteredHousePool"/>
+/// accounting. The "no quadratic behavior" throughput obligation for these same shapes lives in
+/// <c>Verifiable.Benchmarks</c>'s <c>XmlCanonicalizationBenchmarks</c>, a unit test proving cost by
+/// counting rather than by timing itself against a wall-clock ceiling.
 /// </summary>
 [TestClass]
 internal sealed class XmlCanonicalizationCostTests
 {
-    /// <summary>
-    /// The wall-clock ceiling for the cost cases, deliberately loose so the assertion catches only
-    /// superlinear blowups, never scheduler jitter.
-    /// </summary>
-    private static readonly TimeSpan ResourceCaseCeiling = TimeSpan.FromSeconds(30);
-
     /// <summary>How many attributes the wide-attribute document carries on its one element.</summary>
     private const int WideAttributeCount = 40_000;
 
@@ -113,16 +107,14 @@ internal sealed class XmlCanonicalizationCostTests
 
     /// <summary>
     /// Parses a document and canonicalizes its whole-document node-set through the given entry point,
-    /// asserting success, non-empty canonical octets, the wall-clock ceiling over the combined
-    /// parse-and-canonicalize work, and that every pooled buffer returns after disposal.
+    /// asserting success, non-empty canonical octets, and that every pooled buffer returns after disposal.
     /// </summary>
     /// <param name="document">The document octets.</param>
     /// <param name="isExclusive">Whether <see cref="XmlCanonicalization.TryCanonicalizeExclusive"/> runs
     /// instead of <see cref="XmlCanonicalization.TryCanonicalize"/>.</param>
-    private static void AssertCanonicalizesWithinCeilingWithBalancedPool(byte[] document, bool isExclusive)
+    private static void AssertCanonicalizesWithBalancedPool(byte[] document, bool isExclusive)
     {
         using var metered = new MeteredHousePool();
-        var stopwatch = Stopwatch.StartNew();
         bool isParsed = XmlNodeTable.TryParse(document, metered.Pool, out XmlNodeTable? table, out XmlReadError readError);
         Assert.IsTrue(isParsed, $"The cost document must parse but was refused with {readError.Failure} at {readError.ByteOffset}.");
 
@@ -132,7 +124,6 @@ internal sealed class XmlCanonicalizationCostTests
         bool isCanonicalized = isExclusive
             ? XmlCanonicalization.TryCanonicalizeExclusive(table!, nodeSet, isWithComments: false, [], metered.Pool, out canonicalOctets, out error)
             : XmlCanonicalization.TryCanonicalize(table!, nodeSet, XmlCanonicalizationAlgorithm.CanonicalXml10, metered.Pool, out canonicalOctets, out error);
-        stopwatch.Stop();
 
         Assert.IsTrue(isCanonicalized, $"The cost document must canonicalize but was refused with {error.Failure}.");
         Assert.IsGreaterThan(0, canonicalOctets!.AsReadOnlySpan().Length, "The canonical form must be non-empty.");
@@ -140,101 +131,104 @@ internal sealed class XmlCanonicalizationCostTests
         table!.Dispose();
         Assert.IsGreaterThan(0L, metered.RentedCount, "The work must rent from the supplied pool.");
         Assert.AreEqual(0L, metered.OutstandingCount, "Every pooled buffer must be returned after disposal.");
-        Assert.IsLessThan(ResourceCaseCeiling, stopwatch.Elapsed, $"Parse and canonicalize took {stopwatch.Elapsed}, exceeding the loose ceiling {ResourceCaseCeiling}.");
     }
 
 
     /// <summary>
-    /// Proves the no-quadratic-behavior obligation for the attribute axis under
-    /// <see cref="XmlCanonicalization.TryCanonicalize"/>: forty thousand descending-named attributes on
-    /// one element sort into the (namespace URI, local name) order of
-    /// <see href="https://www.w3.org/TR/2001/REC-xml-c14n-20010315">Canonical XML 1.0</see> section 2.2
-    /// inside the loose wall-clock ceiling, with the pool balanced after disposal.
+    /// Proves the attribute axis under <see cref="XmlCanonicalization.TryCanonicalize"/>: forty thousand
+    /// descending-named attributes on one element sort into the (namespace URI, local name) order of
+    /// <see href="https://www.w3.org/TR/2001/REC-xml-c14n-20010315">Canonical XML 1.0</see> section 2.2,
+    /// with the pool balanced after disposal. The no-quadratic-behavior throughput obligation for this
+    /// shape lives in <c>Verifiable.Benchmarks</c>'s <c>XmlCanonicalizationBenchmarks</c>.
     /// </summary>
     [TestMethod]
-    public void WideAttributeDocumentCanonicalizesWithinTheCeiling()
+    public void WideAttributeDocumentCanonicalizesWithABalancedPool()
     {
-        AssertCanonicalizesWithinCeilingWithBalancedPool(BuildWideAttributeDocument(), isExclusive: false);
+        AssertCanonicalizesWithBalancedPool(BuildWideAttributeDocument(), isExclusive: false);
     }
 
 
     /// <summary>
-    /// Proves the no-quadratic-behavior obligation for the attribute axis under
-    /// <see cref="XmlCanonicalization.TryCanonicalizeExclusive"/>: forty thousand descending-named
-    /// attributes on one element sort into the (namespace URI, local name) order of
+    /// Proves the attribute axis under <see cref="XmlCanonicalization.TryCanonicalizeExclusive"/>: forty
+    /// thousand descending-named attributes on one element sort into the (namespace URI, local name)
+    /// order of <see href="https://www.w3.org/TR/2002/REC-xml-exc-c14n-20020718/">Exclusive XML
+    /// Canonicalization 1.0</see> section 3, with the pool balanced after disposal. The
+    /// no-quadratic-behavior throughput obligation for this shape lives in
+    /// <c>Verifiable.Benchmarks</c>'s <c>XmlCanonicalizationBenchmarks</c>.
+    /// </summary>
+    [TestMethod]
+    public void WideAttributeDocumentCanonicalizesExclusivelyWithABalancedPool()
+    {
+        AssertCanonicalizesWithBalancedPool(BuildWideAttributeDocument(), isExclusive: true);
+    }
+
+
+    /// <summary>
+    /// Proves the namespace axis under <see cref="XmlCanonicalization.TryCanonicalize"/>: a root with
+    /// four thousand namespace declarations and two hundred prefixed children renders every child's axis
+    /// with the superfluous-declaration suppression of
+    /// <see href="https://www.w3.org/TR/2001/REC-xml-c14n-20010315">Canonical XML 1.0</see> section 2.3 —
+    /// the in-scope axis is carried down the walk, not re-derived per element — with the pool balanced
+    /// after disposal. The no-quadratic-behavior throughput obligation for this shape lives in
+    /// <c>Verifiable.Benchmarks</c>'s <c>XmlCanonicalizationBenchmarks</c>.
+    /// </summary>
+    [TestMethod]
+    public void WideNamespaceDocumentCanonicalizesWithABalancedPool()
+    {
+        AssertCanonicalizesWithBalancedPool(BuildWideNamespaceDocument(), isExclusive: false);
+    }
+
+
+    /// <summary>
+    /// Proves the namespace axis under <see cref="XmlCanonicalization.TryCanonicalizeExclusive"/>: a root
+    /// with four thousand namespace declarations and two hundred prefixed children decides the
+    /// visibly-utilizes conditions of
     /// <see href="https://www.w3.org/TR/2002/REC-xml-exc-c14n-20020718/">Exclusive XML Canonicalization
-    /// 1.0</see> section 3 inside the loose wall-clock ceiling, with the pool balanced after disposal.
+    /// 1.0</see> section 3 for every binding of every child, with the pool balanced after disposal. The
+    /// no-quadratic-behavior throughput obligation for this shape lives in
+    /// <c>Verifiable.Benchmarks</c>'s <c>XmlCanonicalizationBenchmarks</c>.
     /// </summary>
     [TestMethod]
-    public void WideAttributeDocumentCanonicalizesExclusivelyWithinTheCeiling()
+    public void WideNamespaceDocumentCanonicalizesExclusivelyWithABalancedPool()
     {
-        AssertCanonicalizesWithinCeilingWithBalancedPool(BuildWideAttributeDocument(), isExclusive: true);
+        AssertCanonicalizesWithBalancedPool(BuildWideNamespaceDocument(), isExclusive: true);
     }
 
 
     /// <summary>
-    /// Proves the no-quadratic-behavior obligation for the namespace axis under
-    /// <see cref="XmlCanonicalization.TryCanonicalize"/>: a root with four thousand namespace
-    /// declarations and two hundred prefixed children renders every child's axis with the
-    /// superfluous-declaration suppression of
-    /// <see href="https://www.w3.org/TR/2001/REC-xml-c14n-20010315">Canonical XML 1.0</see> section 2.3
-    /// inside the loose wall-clock ceiling — the in-scope axis is carried down the walk, not re-derived
-    /// per element — with the pool balanced after disposal.
-    /// </summary>
-    [TestMethod]
-    public void WideNamespaceDocumentCanonicalizesWithinTheCeiling()
-    {
-        AssertCanonicalizesWithinCeilingWithBalancedPool(BuildWideNamespaceDocument(), isExclusive: false);
-    }
-
-
-    /// <summary>
-    /// Proves the no-quadratic-behavior obligation for the namespace axis under
-    /// <see cref="XmlCanonicalization.TryCanonicalizeExclusive"/>: a root with four thousand namespace
-    /// declarations and two hundred prefixed children decides the visibly-utilizes conditions of
-    /// <see href="https://www.w3.org/TR/2002/REC-xml-exc-c14n-20020718/">Exclusive XML Canonicalization
-    /// 1.0</see> section 3 for every binding of every child inside the loose wall-clock ceiling, with the
-    /// pool balanced after disposal.
-    /// </summary>
-    [TestMethod]
-    public void WideNamespaceDocumentCanonicalizesExclusivelyWithinTheCeiling()
-    {
-        AssertCanonicalizesWithinCeilingWithBalancedPool(BuildWideNamespaceDocument(), isExclusive: true);
-    }
-
-
-    /// <summary>
-    /// Proves the no-quadratic-behavior obligation for the namespace axis over the
-    /// sibling-spread shape under <see cref="XmlCanonicalization.TryCanonicalize"/> and
+    /// Proves the namespace axis over the sibling-spread shape under
+    /// <see cref="XmlCanonicalization.TryCanonicalize"/> and
     /// <see cref="XmlCanonicalization.TryCanonicalizeExclusive"/>: sixty-four thousand siblings, each
     /// declaring and using a distinct prefix, render the namespace axes of
     /// <see href="https://www.w3.org/TR/2001/REC-xml-c14n-20010315">Canonical XML 1.0</see> section 2.3
     /// and <see href="https://www.w3.org/TR/2002/REC-xml-exc-c14n-20020718/">Exclusive XML
-    /// Canonicalization 1.0</see> section 3 inside the loose wall-clock ceiling — a prefix slot retires
-    /// when the walk ascends past its declaring element, so an element's axis iteration covers only the
-    /// prefixes in scope at that element, never every prefix declared earlier in the document — with the
-    /// pool balanced after disposal.
+    /// Canonicalization 1.0</see> section 3 — a prefix slot retires when the walk ascends past its
+    /// declaring element, so an element's axis iteration covers only the prefixes in scope at that
+    /// element, never every prefix declared earlier in the document — with the pool balanced after
+    /// disposal. The no-quadratic-behavior throughput obligation for this shape lives in
+    /// <c>Verifiable.Benchmarks</c>'s <c>XmlCanonicalizationBenchmarks</c>.
     /// </summary>
     [TestMethod]
-    public void SiblingSpreadDocumentCanonicalizesWithinTheCeilingUnderBothEntryPoints()
+    public void SiblingSpreadDocumentCanonicalizesWithABalancedPoolUnderBothEntryPoints()
     {
         byte[] document = BuildSiblingSpreadDocument();
 
-        AssertCanonicalizesWithinCeilingWithBalancedPool(document, isExclusive: false);
-        AssertCanonicalizesWithinCeilingWithBalancedPool(document, isExclusive: true);
+        AssertCanonicalizesWithBalancedPool(document, isExclusive: false);
+        AssertCanonicalizesWithBalancedPool(document, isExclusive: true);
     }
 
 
     /// <summary>
-    /// Proves the no-quadratic-behavior obligation at the parse surface: one start-tag carrying
-    /// thirty-two thousand namespace declarations
-    /// and thirty-two thousand prefixed attributes resolves every name against the in-scope declarations
-    /// per <see href="https://www.w3.org/TR/2009/REC-xml-names-20091208/">Namespaces in XML 1.0 (Third
-    /// Edition)</see> section 5 inside the loose wall-clock ceiling — prefix resolution walks a hash
-    /// chain, not the whole scope stack — with the pool balanced after disposal.
+    /// Proves parsing at the parse surface: one start-tag carrying thirty-two thousand namespace
+    /// declarations and thirty-two thousand prefixed attributes resolves every name against the in-scope
+    /// declarations per <see href="https://www.w3.org/TR/2009/REC-xml-names-20091208/">Namespaces in XML
+    /// 1.0 (Third Edition)</see> section 5 — prefix resolution walks a hash chain, not the whole scope
+    /// stack — with the pool balanced after disposal. The no-quadratic-behavior throughput obligation for
+    /// this shape lives in <c>Verifiable.Benchmarks</c>'s
+    /// <c>XmlCanonicalizationBenchmarks.DeclarationHeavyStartTagParses</c>.
     /// </summary>
     [TestMethod]
-    public void DeclarationHeavyStartTagParsesWithinTheCeiling()
+    public void DeclarationHeavyStartTagParses()
     {
         var builder = new StringBuilder(ParseDeclarationCount * 48);
         builder.Append("<root");
@@ -252,9 +246,7 @@ internal sealed class XmlCanonicalizationCostTests
         byte[] document = Encoding.UTF8.GetBytes(builder.ToString());
 
         using var metered = new MeteredHousePool();
-        var stopwatch = Stopwatch.StartNew();
         bool isParsed = XmlNodeTable.TryParse(document, metered.Pool, out XmlNodeTable? table, out XmlReadError error);
-        stopwatch.Stop();
 
         Assert.IsTrue(isParsed, $"The declaration-heavy document must parse but was refused with {error.Failure} at {error.ByteOffset}.");
         Assert.AreEqual(ParseDeclarationCount, table!.NamespaceDeclarationCountOf(table.DocumentElementIndex));
@@ -262,6 +254,5 @@ internal sealed class XmlCanonicalizationCostTests
         Assert.IsGreaterThan(0L, metered.RentedCount, "Parsing must rent from the supplied pool.");
         table.Dispose();
         Assert.AreEqual(0L, metered.OutstandingCount, "Every pooled buffer must be returned after disposal.");
-        Assert.IsLessThan(ResourceCaseCeiling, stopwatch.Elapsed, $"Parsing took {stopwatch.Elapsed}, exceeding the loose ceiling {ResourceCaseCeiling}.");
     }
 }

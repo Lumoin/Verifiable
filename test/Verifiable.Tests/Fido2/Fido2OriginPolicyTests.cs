@@ -132,7 +132,8 @@ internal sealed class Fido2OriginPolicyTests
             ExpectedTopOrigins = expectedTopOrigins,
             UserVerification = UserVerificationRequirement.Discouraged,
             StoredSignCount = 0,
-            StoredUvInitialized = true
+            StoredUvInitialized = true,
+            ExtensionProcessingPool = BaseMemoryPool.Shared
         };
     }
 }

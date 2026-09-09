@@ -55,10 +55,10 @@ namespace Verifiable.Tpm;
 [SuppressMessage("Design", "CA1000:Do not declare static members on generic types", Justification = "This design is intentional to provide type-specific static members.")]
 public readonly struct TpmResult<T>: IEquatable<TpmResult<T>>
 {
-    private readonly T? value;
-    private readonly TpmRcConstants responseCode;
-    private readonly uint transportErrorCode;
-    private readonly ResultKind kind;
+    private T? SuccessValue { get; }
+    private TpmRcConstants TpmResponseCode { get; }
+    private uint RawTransportErrorCode { get; }
+    private ResultKind Kind { get; }
 
     private enum ResultKind: byte
     {
@@ -71,12 +71,12 @@ public readonly struct TpmResult<T>: IEquatable<TpmResult<T>>
     /// Gets a value indicating whether the operation succeeded.
     /// </summary>
     [MemberNotNullWhen(true, nameof(Value))]
-    public bool IsSuccess => kind == ResultKind.Success;
+    public bool IsSuccess => Kind == ResultKind.Success;
 
     /// <summary>
     /// Gets a value indicating whether the TPM returned an error response.
     /// </summary>
-    public bool IsTpmError => kind == ResultKind.TpmError;
+    public bool IsTpmError => Kind == ResultKind.TpmError;
 
     /// <summary>
     /// Gets a value indicating whether transport to the TPM failed.
@@ -86,14 +86,14 @@ public readonly struct TpmResult<T>: IEquatable<TpmResult<T>>
     /// receiving a valid response. This includes TBS errors on Windows and
     /// I/O errors on Linux.
     /// </remarks>
-    public bool IsTransportError => kind == ResultKind.TransportError;
+    public bool IsTransportError => Kind == ResultKind.TransportError;
 
     /// <summary>
     /// Gets the success value.
     /// </summary>
     /// <exception cref="InvalidOperationException">Thrown when accessing Value on a non-success result.</exception>
     public T Value => IsSuccess
-        ? value!
+        ? SuccessValue!
         : throw new InvalidOperationException(GetValueAccessErrorMessage());
 
     /// <summary>
@@ -101,7 +101,7 @@ public readonly struct TpmResult<T>: IEquatable<TpmResult<T>>
     /// </summary>
     /// <exception cref="InvalidOperationException">Thrown when accessing ResponseCode on a non-TPM-error result.</exception>
     public TpmRcConstants ResponseCode => IsTpmError
-        ? responseCode
+        ? TpmResponseCode
         : throw new InvalidOperationException("ResponseCode is only available for TPM errors.");
 
     /// <summary>
@@ -113,7 +113,7 @@ public readonly struct TpmResult<T>: IEquatable<TpmResult<T>>
     /// </remarks>
     /// <exception cref="InvalidOperationException">Thrown when accessing TransportErrorCode on a non-transport-error result.</exception>
     public uint TransportErrorCode => IsTransportError
-        ? transportErrorCode
+        ? RawTransportErrorCode
         : throw new InvalidOperationException("TransportErrorCode is only available for transport errors.");
 
     /// <summary>
@@ -123,7 +123,7 @@ public readonly struct TpmResult<T>: IEquatable<TpmResult<T>>
     /// Only meaningful when <see cref="IsTpmError"/> is true.
     /// Includes TPM_RC_RETRY and TPM_RC_YIELDED.
     /// </remarks>
-    public bool IsRetryable => IsTpmError && responseCode is TpmRcConstants.TPM_RC_RETRY or TpmRcConstants.TPM_RC_YIELDED;
+    public bool IsRetryable => IsTpmError && TpmResponseCode is TpmRcConstants.TPM_RC_RETRY or TpmRcConstants.TPM_RC_YIELDED;
 
     /// <summary>
     /// Gets a value indicating whether the TPM requires reboot/reinitialization.
@@ -131,7 +131,7 @@ public readonly struct TpmResult<T>: IEquatable<TpmResult<T>>
     /// <remarks>
     /// Only meaningful when <see cref="IsTpmError"/> is true.
     /// </remarks>
-    public bool RequiresReboot => IsTpmError && responseCode == TpmRcConstants.TPM_RC_REBOOT;
+    public bool RequiresReboot => IsTpmError && TpmResponseCode == TpmRcConstants.TPM_RC_REBOOT;
 
     /// <summary>
     /// Gets a value indicating whether NV memory rate limiting is active.
@@ -140,7 +140,7 @@ public readonly struct TpmResult<T>: IEquatable<TpmResult<T>>
     /// Only meaningful when <see cref="IsTpmError"/> is true.
     /// The TPM is protecting NV memory from wear. Wait before retrying NV operations.
     /// </remarks>
-    public bool IsRateLimited => IsTpmError && responseCode == TpmRcConstants.TPM_RC_NV_RATE;
+    public bool IsRateLimited => IsTpmError && TpmResponseCode == TpmRcConstants.TPM_RC_NV_RATE;
 
     /// <summary>
     /// Gets a value indicating whether dictionary attack lockout is active.
@@ -150,7 +150,7 @@ public readonly struct TpmResult<T>: IEquatable<TpmResult<T>>
     /// Authorization attempts are blocked. Use TPM2_DictionaryAttackLockReset
     /// or wait for the lockout period to expire.
     /// </remarks>
-    public bool IsInLockout => IsTpmError && responseCode == TpmRcConstants.TPM_RC_LOCKOUT;
+    public bool IsInLockout => IsTpmError && TpmResponseCode == TpmRcConstants.TPM_RC_LOCKOUT;
 
     /// <summary>
     /// Gets a value indicating whether the TPM is performing self-tests.
@@ -158,7 +158,7 @@ public readonly struct TpmResult<T>: IEquatable<TpmResult<T>>
     /// <remarks>
     /// Only meaningful when <see cref="IsTpmError"/> is true.
     /// </remarks>
-    public bool IsTesting => IsTpmError && responseCode == TpmRcConstants.TPM_RC_TESTING;
+    public bool IsTesting => IsTpmError && TpmResponseCode == TpmRcConstants.TPM_RC_TESTING;
 
     /// <summary>
     /// Gets a value indicating whether the command was canceled.
@@ -166,7 +166,7 @@ public readonly struct TpmResult<T>: IEquatable<TpmResult<T>>
     /// <remarks>
     /// Only meaningful when <see cref="IsTpmError"/> is true.
     /// </remarks>
-    public bool WasCanceled => IsTpmError && responseCode == TpmRcConstants.TPM_RC_CANCELED;
+    public bool WasCanceled => IsTpmError && TpmResponseCode == TpmRcConstants.TPM_RC_CANCELED;
 
     /// <summary>
     /// Gets a value indicating whether the response code is a warning rather than an error.
@@ -176,7 +176,7 @@ public readonly struct TpmResult<T>: IEquatable<TpmResult<T>>
     /// Warnings indicate that the TPM is busy or that resources need adjustment,
     /// but the command was not necessarily invalid.
     /// </remarks>
-    public bool IsWarning => IsTpmError && responseCode.IsWarning();
+    public bool IsWarning => IsTpmError && TpmResponseCode.IsWarning();
 
     /// <summary>
     /// Gets the parameter number if this is a parameter-related error.
@@ -185,7 +185,7 @@ public readonly struct TpmResult<T>: IEquatable<TpmResult<T>>
     /// Only meaningful when <see cref="IsTpmError"/> is true.
     /// Returns the 1-based parameter number (1-15), or 0 if not a parameter error.
     /// </remarks>
-    public int ParameterNumber => IsTpmError ? responseCode.GetParameterNumber() : 0;
+    public int ParameterNumber => IsTpmError ? TpmResponseCode.GetParameterNumber() : 0;
 
     /// <summary>
     /// Gets the handle number if this is a handle-related error.
@@ -194,7 +194,7 @@ public readonly struct TpmResult<T>: IEquatable<TpmResult<T>>
     /// Only meaningful when <see cref="IsTpmError"/> is true.
     /// Returns the 1-based handle number (1-7), or 0 if not a handle error.
     /// </remarks>
-    public int HandleNumber => IsTpmError ? responseCode.GetHandleNumber() : 0;
+    public int HandleNumber => IsTpmError ? TpmResponseCode.GetHandleNumber() : 0;
 
     /// <summary>
     /// Gets the session number if this is a session-related error.
@@ -203,7 +203,7 @@ public readonly struct TpmResult<T>: IEquatable<TpmResult<T>>
     /// Only meaningful when <see cref="IsTpmError"/> is true.
     /// Returns the 1-based session number (1-7), or 0 if not a session error.
     /// </remarks>
-    public int SessionNumber => IsTpmError ? responseCode.GetSessionNumber() : 0;
+    public int SessionNumber => IsTpmError ? TpmResponseCode.GetSessionNumber() : 0;
 
     /// <summary>
     /// Gets the base error code without parameter, handle, or session modifiers.
@@ -213,14 +213,14 @@ public readonly struct TpmResult<T>: IEquatable<TpmResult<T>>
     /// Useful for comparing against known <see cref="TpmRcConstants"/> values when
     /// the error includes position modifiers.
     /// </remarks>
-    public TpmRcConstants BaseError => IsTpmError ? responseCode.GetBaseError() : default;
+    public TpmRcConstants BaseError => IsTpmError ? TpmResponseCode.GetBaseError() : default;
 
     private TpmResult(T? value, TpmRcConstants responseCode, uint transportErrorCode, ResultKind kind)
     {
-        this.value = value;
-        this.responseCode = responseCode;
-        this.transportErrorCode = transportErrorCode;
-        this.kind = kind;
+        this.SuccessValue = value;
+        this.TpmResponseCode = responseCode;
+        this.RawTransportErrorCode = transportErrorCode;
+        this.Kind = kind;
     }
 
     /// <summary>
@@ -260,13 +260,13 @@ public readonly struct TpmResult<T>: IEquatable<TpmResult<T>>
     /// </summary>
     /// <param name="defaultValue">The value to return if the result is not successful.</param>
     /// <returns>The success value or the default.</returns>
-    public T GetValueOrDefault(T defaultValue) => IsSuccess ? value! : defaultValue;
+    public T GetValueOrDefault(T defaultValue) => IsSuccess ? SuccessValue! : defaultValue;
 
     /// <summary>
     /// Gets the value if successful, or the default value for the type otherwise.
     /// </summary>
     /// <returns>The success value or default.</returns>
-    public T? GetValueOrDefault() => IsSuccess ? value : default;
+    public T? GetValueOrDefault() => IsSuccess ? SuccessValue : default;
 
     /// <summary>
     /// Attempts to get the value.
@@ -277,7 +277,7 @@ public readonly struct TpmResult<T>: IEquatable<TpmResult<T>>
     {
         if(IsSuccess)
         {
-            value = this.value!;
+            value = this.SuccessValue!;
             return true;
         }
 
@@ -302,11 +302,11 @@ public readonly struct TpmResult<T>: IEquatable<TpmResult<T>>
         ArgumentNullException.ThrowIfNull(onTpmError);
         ArgumentNullException.ThrowIfNull(onTransportError);
 
-        return kind switch
+        return Kind switch
         {
-            ResultKind.Success => onSuccess(value!),
-            ResultKind.TpmError => onTpmError(responseCode),
-            ResultKind.TransportError => onTransportError(transportErrorCode),
+            ResultKind.Success => onSuccess(SuccessValue!),
+            ResultKind.TpmError => onTpmError(TpmResponseCode),
+            ResultKind.TransportError => onTransportError(RawTransportErrorCode),
             _ => throw new InvalidOperationException("Invalid result kind.")
         };
     }
@@ -326,16 +326,16 @@ public readonly struct TpmResult<T>: IEquatable<TpmResult<T>>
         ArgumentNullException.ThrowIfNull(onTpmError);
         ArgumentNullException.ThrowIfNull(onTransportError);
 
-        switch(kind)
+        switch(Kind)
         {
             case ResultKind.Success:
-                onSuccess(value!);
+                onSuccess(SuccessValue!);
                 break;
             case ResultKind.TpmError:
-                onTpmError(responseCode);
+                onTpmError(TpmResponseCode);
                 break;
             case ResultKind.TransportError:
-                onTransportError(transportErrorCode);
+                onTransportError(RawTransportErrorCode);
                 break;
         }
     }
@@ -350,11 +350,11 @@ public readonly struct TpmResult<T>: IEquatable<TpmResult<T>>
     {
         ArgumentNullException.ThrowIfNull(mapper);
 
-        return kind switch
+        return Kind switch
         {
-            ResultKind.Success => TpmResult<TNew>.Success(mapper(value!)),
-            ResultKind.TpmError => TpmResult<TNew>.TpmError(responseCode),
-            ResultKind.TransportError => TpmResult<TNew>.TransportError(transportErrorCode),
+            ResultKind.Success => TpmResult<TNew>.Success(mapper(SuccessValue!)),
+            ResultKind.TpmError => TpmResult<TNew>.TpmError(TpmResponseCode),
+            ResultKind.TransportError => TpmResult<TNew>.TransportError(RawTransportErrorCode),
             _ => throw new InvalidOperationException("Invalid result kind.")
         };
     }
@@ -369,11 +369,11 @@ public readonly struct TpmResult<T>: IEquatable<TpmResult<T>>
     {
         ArgumentNullException.ThrowIfNull(binder);
 
-        return kind switch
+        return Kind switch
         {
-            ResultKind.Success => binder(value!),
-            ResultKind.TpmError => TpmResult<TNew>.TpmError(responseCode),
-            ResultKind.TransportError => TpmResult<TNew>.TransportError(transportErrorCode),
+            ResultKind.Success => binder(SuccessValue!),
+            ResultKind.TpmError => TpmResult<TNew>.TpmError(TpmResponseCode),
+            ResultKind.TransportError => TpmResult<TNew>.TransportError(RawTransportErrorCode),
             _ => throw new InvalidOperationException("Invalid result kind.")
         };
     }
@@ -381,16 +381,16 @@ public readonly struct TpmResult<T>: IEquatable<TpmResult<T>>
     /// <inheritdoc/>
     public bool Equals(TpmResult<T> other)
     {
-        if(kind != other.kind)
+        if(Kind != other.Kind)
         {
             return false;
         }
 
-        return kind switch
+        return Kind switch
         {
-            ResultKind.Success => EqualityComparer<T>.Default.Equals(value, other.value),
-            ResultKind.TpmError => responseCode == other.responseCode,
-            ResultKind.TransportError => transportErrorCode == other.transportErrorCode,
+            ResultKind.Success => EqualityComparer<T>.Default.Equals(SuccessValue, other.SuccessValue),
+            ResultKind.TpmError => TpmResponseCode == other.TpmResponseCode,
+            ResultKind.TransportError => RawTransportErrorCode == other.RawTransportErrorCode,
             _ => false
         };
     }
@@ -399,11 +399,11 @@ public readonly struct TpmResult<T>: IEquatable<TpmResult<T>>
     public override bool Equals(object? obj) => obj is TpmResult<T> other && Equals(other);
 
     /// <inheritdoc/>
-    public override int GetHashCode() => kind switch
+    public override int GetHashCode() => Kind switch
     {
-        ResultKind.Success => HashCode.Combine(kind, value),
-        ResultKind.TpmError => HashCode.Combine(kind, responseCode),
-        ResultKind.TransportError => HashCode.Combine(kind, transportErrorCode),
+        ResultKind.Success => HashCode.Combine(Kind, SuccessValue),
+        ResultKind.TpmError => HashCode.Combine(Kind, TpmResponseCode),
+        ResultKind.TransportError => HashCode.Combine(Kind, RawTransportErrorCode),
         _ => 0
     };
 
@@ -424,18 +424,18 @@ public readonly struct TpmResult<T>: IEquatable<TpmResult<T>>
     public static implicit operator TpmResult<T>(T value) => Success(value);
 
     /// <inheritdoc/>
-    public override string ToString() => kind switch
+    public override string ToString() => Kind switch
     {
-        ResultKind.Success => $"Success({value})",
-        ResultKind.TpmError => $"TpmError({responseCode.GetDescription()})",
-        ResultKind.TransportError => $"TransportError(0x{transportErrorCode:X8})",
+        ResultKind.Success => $"Success({SuccessValue})",
+        ResultKind.TpmError => $"TpmError({TpmResponseCode.GetDescription()})",
+        ResultKind.TransportError => $"TransportError(0x{RawTransportErrorCode:X8})",
         _ => "Invalid"
     };
 
-    private string GetValueAccessErrorMessage() => kind switch
+    private string GetValueAccessErrorMessage() => Kind switch
     {
-        ResultKind.TpmError => $"Cannot access Value on TpmError result. Response code: {responseCode.GetDescription()}",
-        ResultKind.TransportError => $"Cannot access Value on TransportError result. Error code: 0x{transportErrorCode:X8}",
+        ResultKind.TpmError => $"Cannot access Value on TpmError result. Response code: {TpmResponseCode.GetDescription()}",
+        ResultKind.TransportError => $"Cannot access Value on TransportError result. Error code: 0x{RawTransportErrorCode:X8}",
         _ => "Cannot access Value on non-success result."
     };
 
@@ -445,16 +445,16 @@ public readonly struct TpmResult<T>: IEquatable<TpmResult<T>>
         {
             if(IsSuccess)
             {
-                return $"Success: {value}";
+                return $"Success: {SuccessValue}";
             }
 
             if(IsTransportError)
             {
-                return $"Transport Error: 0x{transportErrorCode:X8}";
+                return $"Transport Error: 0x{RawTransportErrorCode:X8}";
             }
 
             //TPM error.
-            string baseInfo = $"TPM Error: {responseCode.GetDescription()}";
+            string baseInfo = $"TPM Error: {TpmResponseCode.GetDescription()}";
 
             //Add classification hints for quick debugging.
             var hints = new List<string>();

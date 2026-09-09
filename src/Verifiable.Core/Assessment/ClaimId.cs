@@ -173,12 +173,6 @@ namespace Verifiable.Core.Assessment
         /// </summary>
         public static ClaimId OkpAlgOptionalOrNotPresent { get; } = new ClaimId(204, "OkpAlgOptionalOrNotPresent");
 
-        // For DID Core Validation
-        /// <summary>
-        /// Represents a claim for JSON-LD URI appearing first in DID Core validation.
-        /// </summary>
-        public static ClaimId DidCoreJsonLdUriAsFirst { get; } = new ClaimId(300, "DidCoreJsonLdUriAsFirst");
-
         // For DID Document Validation Rules
         /// <summary>
         /// Represents a claim for DID document prefix.
@@ -246,6 +240,63 @@ namespace Verifiable.Core.Assessment
         /// Represents a claim for <c>did:web</c> format.
         /// </summary>
         public static ClaimId WebDidKeyFormat { get; } = new ClaimId(602, "WebDidKeyFormat");
+
+        /// <summary>
+        /// Represents the claims <see cref="Validation.ContextValidationRules"/> issues, allocated in the
+        /// 1300 block (the next free block above the OAuth/Federation/Fido2 allocations at 700-1247).
+        /// </summary>
+        public static ClaimId ContextFirstEntry { get; } = new ClaimId(1300, "ContextFirstEntry");
+
+        /// <summary>
+        /// Represents a claim that every IRI entry in a <c>@context</c> value is an absolute IRI
+        /// with an allowed scheme, and every other entry is an inline definition object.
+        /// </summary>
+        public static ClaimId ContextEntriesAreUrlsOrDefinitions { get; } = new ClaimId(1301, "ContextEntriesAreUrlsOrDefinitions");
+
+        /// <summary>
+        /// Represents a claim that every IRI entry in a <c>@context</c> value is on the caller's
+        /// allowlist, and inline definitions appear only when the caller permits them.
+        /// </summary>
+        public static ClaimId ContextKnownContexts { get; } = new ClaimId(1302, "ContextKnownContexts");
+
+        /// <summary>
+        /// Represents a claim that a <c>@context</c> value contains no duplicate entries.
+        /// </summary>
+        public static ClaimId ContextNoDuplicateEntries { get; } = new ClaimId(1303, "ContextNoDuplicateEntries");
+
+        /// <summary>
+        /// Represents a claim that a document required to carry <c>@context</c> actually carries one.
+        /// </summary>
+        public static ClaimId ContextPresent { get; } = new ClaimId(1304, "ContextPresent");
+
+        /// <summary>
+        /// Represents a claim that a <c>@context</c> value is serialized as a JSON array (an
+        /// <see href="https://infra.spec.whatwg.org/#ordered-set">ordered set</see>), not a bare scalar.
+        /// </summary>
+        public static ClaimId ContextFormIsOrderedSet { get; } = new ClaimId(1305, "ContextFormIsOrderedSet");
+
+        /// <summary>
+        /// Represents a claim that <c>https://www.w3.org/ns/credentials/undefined-terms/v2</c>, when
+        /// present, is the last entry in a <c>@context</c> value.
+        /// </summary>
+        public static ClaimId ContextUndefinedTermsLast { get; } = new ClaimId(1306, "ContextUndefinedTermsLast");
+
+        /// <summary>
+        /// Represents a claim that no inline <c>@context</c> definition declares the <c>@vocab</c> keyword.
+        /// </summary>
+        public static ClaimId ContextNoVocabInDefinition { get; } = new ClaimId(1307, "ContextNoVocabInDefinition");
+
+        /// <summary>
+        /// Represents a claim that the Data Integrity v2 context is present when the document carries a
+        /// Data Integrity proof.
+        /// </summary>
+        public static ClaimId ContextDataIntegrityPresentWhenProofPresent { get; } = new ClaimId(1308, "ContextDataIntegrityPresentWhenProofPresent");
+
+        /// <summary>
+        /// Represents a claim that an enveloped credential's or presentation's <c>@context</c> is present
+        /// and includes the base VC Data Model 2.0 context.
+        /// </summary>
+        public static ClaimId ContextEnvelopedPresentAndIncludesBaseContext { get; } = new ClaimId(1309, "ContextEnvelopedPresentAndIncludesBaseContext");
 
         /// <summary>
         /// Creates a new claim identifier.
@@ -329,7 +380,8 @@ namespace Verifiable.Core.Assessment
             /// <summary>
             /// Guards <see cref="Descriptions"/> so the duplicate check and the insertion it guards in
             /// <see cref="AddDescription"/> happen as one atomic step, and so <see cref="GetDescription"/> never
-            /// reads the dictionary while another thread is writing it.
+            /// reads the dictionary while another thread is writing it. A field, not a property: a lock
+            /// target must be one instance that no accessor can re-mint.
             /// </summary>
             private static readonly Lock descriptionsLock = new();
 

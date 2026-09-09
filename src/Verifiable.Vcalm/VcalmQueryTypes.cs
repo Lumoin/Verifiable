@@ -23,13 +23,13 @@ public static class VcalmQueryTypes
     public static ReadOnlySpan<byte> QueryByExampleUtf8 => "QueryByExample"u8;
 
     /// <summary>The §3.4.2 query type carrying a single <c>credentialQuery</c> (example, accepted issuers / cryptosuites / envelopes).</summary>
-    public static readonly string QueryByExample = Utf8Constants.ToInternedString(QueryByExampleUtf8);
+    public static string QueryByExample { get; } = Utf8Constants.ToInternedString(QueryByExampleUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="DidAuthentication"/>.</summary>
     public static ReadOnlySpan<byte> DidAuthenticationUtf8 => "DIDAuthentication"u8;
 
     /// <summary>The §3.4.3 query type requesting DID-based authentication (<c>acceptedMethods</c>, <c>acceptedCryptosuites</c>).</summary>
-    public static readonly string DidAuthentication = Utf8Constants.ToInternedString(DidAuthenticationUtf8);
+    public static string DidAuthentication { get; } = Utf8Constants.ToInternedString(DidAuthenticationUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="DigitalCredentialQueryLanguage"/>.</summary>
     public static ReadOnlySpan<byte> DigitalCredentialQueryLanguageUtf8 => "DigitalCredentialQueryLanguage"u8;
@@ -38,7 +38,7 @@ public static class VcalmQueryTypes
     /// The §3.4 / §3.4.5 co-equal query type carrying a DCQL query — the existing
     /// <see cref="Verifiable.Core.Model.Dcql.DcqlQuery"/> model, adapted rather than reimplemented.
     /// </summary>
-    public static readonly string DigitalCredentialQueryLanguage = Utf8Constants.ToInternedString(DigitalCredentialQueryLanguageUtf8);
+    public static string DigitalCredentialQueryLanguage { get; } = Utf8Constants.ToInternedString(DigitalCredentialQueryLanguageUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="AuthorizationCapabilityQuery"/>.</summary>
     public static ReadOnlySpan<byte> AuthorizationCapabilityQueryUtf8 => "AuthorizationCapabilityQuery"u8;
@@ -47,5 +47,5 @@ public static class VcalmQueryTypes
     /// The §3.4.4 query type asking for authorization capabilities ("zcaps"). Editor-flagged as
     /// possibly-not-standardized: modeled defensively, never a conformance gate.
     /// </summary>
-    public static readonly string AuthorizationCapabilityQuery = Utf8Constants.ToInternedString(AuthorizationCapabilityQueryUtf8);
+    public static string AuthorizationCapabilityQuery { get; } = Utf8Constants.ToInternedString(AuthorizationCapabilityQueryUtf8);
 }

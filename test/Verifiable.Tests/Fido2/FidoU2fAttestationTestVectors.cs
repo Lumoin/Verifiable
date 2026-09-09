@@ -1,4 +1,6 @@
-using System.Formats.Cbor;
+using System.Buffers;
+using Lumoin.Veritas.Cbor;
+using Verifiable.Cbor;
 using Verifiable.Cryptography;
 using Verifiable.Fido2;
 using Verifiable.JCose;
@@ -130,7 +132,9 @@ internal static class FidoU2fAttestationTestVectors
     /// <returns>The encoded <c>attStmt</c> bytes.</returns>
     internal static byte[] EncodeFidoU2fAttStmtRaw(byte[] sig, params byte[][] x5cEntries)
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(2);
         writer.WriteTextString("sig");
         writer.WriteByteString(sig);
@@ -144,6 +148,6 @@ internal static class FidoU2fAttestationTestVectors
         writer.WriteEndArray();
         writer.WriteEndMap();
 
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 }

@@ -1,10 +1,12 @@
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using Verifiable.Core.Dcql;
+using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Core.Model.SelectiveDisclosure;
-using Verifiable.JsonPointer;
+using Lumoin.Veritas.JsonPointer;
+using JsonPointerType = Lumoin.Veritas.JsonPointer.JsonPointer;
 
 namespace Verifiable.Vcalm;
 
@@ -327,7 +329,7 @@ public static class VprEvaluator
         ImmutableArray<CredentialPath>.Builder paths = ImmutableArray.CreateBuilder<CredentialPath>();
         foreach(KeyValuePair<string, string> field in example.SubjectFields)
         {
-            JsonPointer.JsonPointer pointer = JsonPointer.JsonPointer.Root
+            JsonPointerType pointer = JsonPointerType.Root
                 .Append(VcalmParameterNames.CredentialSubject)
                 .Append(field.Key);
             paths.Add(new CredentialPath(pointer));
@@ -452,16 +454,16 @@ public static class VprEvaluator
     private static HashSet<string> CollectContexts(VerifiableCredential credential)
     {
         HashSet<string> contexts = new(StringComparer.Ordinal);
-        if(credential.Context?.Contexts is null)
+        if(credential.Context is null)
         {
             return contexts;
         }
 
-        foreach(object context in credential.Context.Contexts)
+        foreach(ContextEntry entry in credential.Context.Entries)
         {
-            if(context is string text)
+            if(entry.IsIri)
             {
-                contexts.Add(text);
+                contexts.Add(entry.Iri!);
             }
         }
 

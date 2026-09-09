@@ -225,17 +225,11 @@ internal sealed class MetadataBlobReaderGuardTests
         string payloadJson = MetadataBlobTestVectors.BuildPayloadJson(1, "2030-01-01", [entryJson]);
         byte[] blobBytes = MetadataBlobTestVectors.BuildBlobBytes(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256(signingKey, data));
 
-        UnverifiedMetadataBlob blob = MetadataBlobReader.Read(blobBytes, BaseMemoryPool.Shared);
-        try
-        {
-            Assert.AreEqual("1234#5678", blob.Payload.Entries[0].Aaid);
-            Assert.IsNull(blob.Payload.Entries[0].Aaguid);
-            Assert.IsNull(blob.Payload.Entries[0].AttestationCertificateKeyIdentifiers);
-        }
-        finally
-        {
-            blob.Dispose();
-        }
+        using UnverifiedMetadataBlob blob = MetadataBlobReader.Read(blobBytes, BaseMemoryPool.Shared);
+
+        Assert.AreEqual("1234#5678", blob.Payload.Entries[0].Aaid);
+        Assert.IsNull(blob.Payload.Entries[0].Aaguid);
+        Assert.IsNull(blob.Payload.Entries[0].AttestationCertificateKeyIdentifiers);
     }
 
 
@@ -355,15 +349,9 @@ internal sealed class MetadataBlobReaderGuardTests
         string payloadJson = MetadataBlobTestVectors.BuildPayloadJson(1, "2030-01-01", [entryJson], legalHeader: null);
         byte[] blobBytes = MetadataBlobTestVectors.BuildBlobBytes(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256(signingKey, data));
 
-        UnverifiedMetadataBlob blob = MetadataBlobReader.Read(blobBytes, BaseMemoryPool.Shared);
-        try
-        {
-            Assert.IsNull(blob.Payload.LegalHeader);
-        }
-        finally
-        {
-            blob.Dispose();
-        }
+        using UnverifiedMetadataBlob blob = MetadataBlobReader.Read(blobBytes, BaseMemoryPool.Shared);
+
+        Assert.IsNull(blob.Payload.LegalHeader);
     }
 
 
@@ -409,15 +397,9 @@ internal sealed class MetadataBlobReaderGuardTests
         const string payloadJson = """{"no":1,"nextUpdate":"2030-01-01","entries":[]}""";
         byte[] blobBytes = MetadataBlobTestVectors.BuildBlobBytes(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256(signingKey, data));
 
-        UnverifiedMetadataBlob blob = MetadataBlobReader.Read(blobBytes, BaseMemoryPool.Shared);
-        try
-        {
-            Assert.IsEmpty(blob.Payload.Entries);
-        }
-        finally
-        {
-            blob.Dispose();
-        }
+        using UnverifiedMetadataBlob blob = MetadataBlobReader.Read(blobBytes, BaseMemoryPool.Shared);
+
+        Assert.IsEmpty(blob.Payload.Entries);
     }
 
 

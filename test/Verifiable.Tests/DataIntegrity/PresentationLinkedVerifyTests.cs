@@ -40,7 +40,7 @@ internal sealed class PresentationLinkedVerifyTests
     private static CanonicalizationDelegate JcsCanonicalizer { get; } = (json, contextResolver, _, cancellationToken) =>
         ValueTask.FromResult(new CanonicalizationResult { CanonicalForm = Jcs.Canonicalize(json) });
 
-    private static readonly ExchangeContext EmptyContext = new();
+    private static ExchangeContext EmptyContext { get; } = new();
 
     private static ProofValueEncoderDelegate ProofValueEncoder { get; } = ProofValueCodecs.EncodeBase58Btc;
     private static ProofValueDecoderDelegate ProofValueDecoder { get; } = ProofValueCodecs.DecodeBase58Btc;
@@ -68,7 +68,7 @@ internal sealed class PresentationLinkedVerifyTests
         using var privateKey = keyPair.PrivateKey;
 
         var holderDidDocument = await KeyDidBuilder.BuildAsync(
-            publicKey, testData.VerificationMethodTypeInfo, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            publicKey, testData.VerificationMethodTypeInfo, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         DataIntegritySecuredPresentation signed = await SignStaticPresentationAsync(
             holderDidDocument, privateKey, challenge: null, domain: null).ConfigureAwait(false);
@@ -81,7 +81,7 @@ internal sealed class PresentationLinkedVerifyTests
             SerializePresentation,
             SerializeProofOptions,
             TestSetup.Base58Decoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -104,7 +104,7 @@ internal sealed class PresentationLinkedVerifyTests
         using var privateKey = keyPair.PrivateKey;
 
         var holderDidDocument = await KeyDidBuilder.BuildAsync(
-            publicKey, testData.VerificationMethodTypeInfo, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            publicKey, testData.VerificationMethodTypeInfo, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //A challenge with no domain isolates the challenge half of the binding rejection.
         DataIntegritySecuredPresentation signed = await SignStaticPresentationAsync(
@@ -118,7 +118,7 @@ internal sealed class PresentationLinkedVerifyTests
             SerializePresentation,
             SerializeProofOptions,
             TestSetup.Base58Decoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -142,7 +142,7 @@ internal sealed class PresentationLinkedVerifyTests
         using var privateKey = keyPair.PrivateKey;
 
         var holderDidDocument = await KeyDidBuilder.BuildAsync(
-            publicKey, testData.VerificationMethodTypeInfo, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            publicKey, testData.VerificationMethodTypeInfo, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //A domain with no challenge isolates the domain half of the binding rejection.
         DataIntegritySecuredPresentation signed = await SignStaticPresentationAsync(
@@ -156,7 +156,7 @@ internal sealed class PresentationLinkedVerifyTests
             SerializePresentation,
             SerializeProofOptions,
             TestSetup.Base58Decoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -180,7 +180,7 @@ internal sealed class PresentationLinkedVerifyTests
         using var privateKey = keyPair.PrivateKey;
 
         var holderDidDocument = await KeyDidBuilder.BuildAsync(
-            publicKey, testData.VerificationMethodTypeInfo, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            publicKey, testData.VerificationMethodTypeInfo, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         DataIntegritySecuredPresentation signed = await SignStaticPresentationAsync(
             holderDidDocument, privateKey, challenge: null, domain: null).ConfigureAwait(false);
@@ -210,7 +210,7 @@ internal sealed class PresentationLinkedVerifyTests
         using var privateKey = keyPair.PrivateKey;
 
         var holderDidDocument = await KeyDidBuilder.BuildAsync(
-            publicKey, testData.VerificationMethodTypeInfo, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            publicKey, testData.VerificationMethodTypeInfo, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         DataIntegritySecuredPresentation signed = await SignStaticPresentationAsync(
             holderDidDocument, privateKey, challenge: null, domain: null).ConfigureAwait(false);
@@ -240,7 +240,7 @@ internal sealed class PresentationLinkedVerifyTests
         using var privateKey = keyPair.PrivateKey;
 
         var holderDidDocument = await KeyDidBuilder.BuildAsync(
-            publicKey, testData.VerificationMethodTypeInfo, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            publicKey, testData.VerificationMethodTypeInfo, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         DataIntegritySecuredPresentation signed = await SignStaticPresentationAsync(
             holderDidDocument, privateKey, challenge: null, domain: null).ConfigureAwait(false);
@@ -269,7 +269,7 @@ internal sealed class PresentationLinkedVerifyTests
         using var privateKey = keyPair.PrivateKey;
 
         var holderDidDocument = await KeyDidBuilder.BuildAsync(
-            publicKey, testData.VerificationMethodTypeInfo, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            publicKey, testData.VerificationMethodTypeInfo, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //Bind the presentation with a challenge, take it to the wire, and DELETE the challenge member from the
         //proof — an attacker trying to route a replay-bound presentation through the static verify.
@@ -302,7 +302,7 @@ internal sealed class PresentationLinkedVerifyTests
             SerializePresentation,
             SerializeProofOptions,
             TestSetup.Base58Decoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken);
@@ -328,7 +328,7 @@ internal sealed class PresentationLinkedVerifyTests
 
         VerifiablePresentation unsigned = new()
         {
-            Context = new Context { Contexts = [Context.Credentials20] },
+            Context = Context.FromIris(Context.Credentials20),
             Type = ["VerifiablePresentation"],
             Holder = holderDid
         };

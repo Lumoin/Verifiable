@@ -17,7 +17,7 @@ namespace Verifiable.Tpm.Spec.Attributes;
 /// This structure is input to the TPM as a DER-encoded structure and is not present on the TPM interface in canonical TPM format.
 /// </para>
 /// <para>
-/// Specification: <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2: Structures, section 8.11 (TPMA_X509_KEY_USAGE).
+/// Specification: <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2: Structures, clause 8.11 (TPMA_X509_KEY_USAGE).
 /// </para>
 /// </remarks>
 [Flags]

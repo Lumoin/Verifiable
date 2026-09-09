@@ -4,7 +4,7 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using Verifiable.Core.Model.SelectiveDisclosure;
-using JsonPointerType = Verifiable.JsonPointer.JsonPointer;
+using JsonPointerType = Lumoin.Veritas.JsonPointer.JsonPointer;
 
 namespace Verifiable.Core.Model.Dcql;
 
@@ -190,19 +190,13 @@ public sealed class DcqlClaimPattern: IEquatable<DcqlClaimPattern>
                 continue;
             }
 
-            if(pattern.IsKey)
+            if(pattern.IsKey && !string.Equals(pattern.KeyValue, actual.Value, StringComparison.Ordinal))
             {
-                if(!string.Equals(pattern.KeyValue, actual.Value, StringComparison.Ordinal))
-                {
-                    return false;
-                }
+                return false;
             }
-            else if(pattern.IsIndex)
+            else if(pattern.IsIndex && (!actual.TryGetArrayIndex(out int actualIndex) || actualIndex != pattern.IndexValue!.Value))
             {
-                if(!actual.TryGetArrayIndex(out int actualIndex) || actualIndex != pattern.IndexValue!.Value)
-                {
-                    return false;
-                }
+                return false;
             }
         }
 

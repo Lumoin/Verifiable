@@ -295,6 +295,8 @@ public static class RoutingForwardExtensions
                 //Resolve the routing key to its keyAgreement recipients (each absolute kid + public key) and
                 //anoncrypt the forward for all of them (multiplexed so any device can decrypt). A fresh
                 //ephemeral key pair is used per hop and disposed; every resolved key is disposed after the pack.
+                //recipientKeys is a per-recipient list, not one disposable value, so it is disposed in the
+                //finally below rather than through a using declaration.
                 IReadOnlyList<(string Kid, PublicKeyMemory Key)> recipientKeys = await ResolveRoutingKeyRecipientsAsync(
                     encryptFor, didResolver, exchangeContext, memoryPool, cancellationToken).ConfigureAwait(false);
 

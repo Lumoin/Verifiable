@@ -7,7 +7,11 @@ namespace Verifiable.Cbor.StatusList;
 /// <para>
 /// These constants correspond to the CBOR representations defined in Sections 4.3,
 /// 5.2, and 6.3 of draft-ietf-oauth-status-list. CWT claims use registered integer
-/// keys from the IANA CBOR Web Token Claims registry.
+/// keys from the IANA CBOR Web Token Claims registry — those have no JOSE-side
+/// counterpart and stay their own literals here. The text string map keys
+/// (<see cref="Bits"/>, <see cref="List"/>, <see cref="AggregationUri"/>, <see cref="Index"/>,
+/// <see cref="Uri"/>) alias <see cref="Verifiable.Core.StatusList.StatusListMemberNames"/>, the same
+/// member names the JOSE side reads — this leaf carries no second copy of those literals.
 /// </para>
 /// </remarks>
 public static class StatusListCborConstants
@@ -46,25 +50,25 @@ public static class StatusListCborConstants
     /// <summary>
     /// CBOR text string map key for <c>bits</c> within the Status List CBOR map.
     /// </summary>
-    public const string Bits = "bits";
+    public const string Bits = Verifiable.Core.StatusList.StatusListMemberNames.Bits;
 
     /// <summary>
     /// CBOR text string map key for <c>lst</c> within the Status List CBOR map.
     /// </summary>
-    public const string List = "lst";
+    public const string List = Verifiable.Core.StatusList.StatusListMemberNames.List;
 
     /// <summary>
     /// CBOR text string map key for <c>aggregation_uri</c> within the Status List CBOR map.
     /// </summary>
-    public const string AggregationUri = "aggregation_uri";
+    public const string AggregationUri = Verifiable.Core.StatusList.StatusListMemberNames.AggregationUri;
 
     /// <summary>
     /// CBOR text string map key for <c>idx</c> within the Status List reference CBOR map.
     /// </summary>
-    public const string Index = "idx";
+    public const string Index = Verifiable.Core.StatusList.StatusListMemberNames.Index;
 
     /// <summary>
     /// CBOR text string map key for <c>uri</c> within the Status List reference CBOR map.
     /// </summary>
-    public const string Uri = "uri";
+    public const string Uri = Verifiable.Core.StatusList.StatusListMemberNames.Uri;
 }

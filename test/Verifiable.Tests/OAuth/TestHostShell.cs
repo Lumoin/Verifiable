@@ -51,6 +51,7 @@ using Verifiable.OAuth.Server.Registration;
 using Verifiable.Server;
 using Verifiable.Server.Pipeline;
 using Verifiable.Vcalm;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.OAuth;
 
@@ -85,6 +86,13 @@ namespace Verifiable.Tests.OAuth;
 /// The host does NOT contain client actions. Browser redirect simulation lives
 /// in <see cref="TestBrowser"/>. OAuth client logic lives in
 /// <see cref="AuthCodeClient"/>. Wallet logic lives in <see cref="TestWallet"/>.
+/// </para>
+/// <para>
+/// Registration and rotation methods read <c>ImmutableDictionary&lt;,&gt;.Empty</c>,
+/// <c>ImmutableHashSet&lt;&gt;.Empty</c>, <see cref="RequestHeaders.Empty"/>, and
+/// <see cref="RouteValues.Empty"/> without a lock: each is a get-only singleton
+/// assigned once at type initialization with no method that mutates it afterward,
+/// so concurrent reads need no synchronization.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("TestHostShell Clients={Default.Registrations.Count} Flows={Default.FlowStates.Count}")]
@@ -169,13 +177,14 @@ internal sealed class TestHostShell: IAsyncDisposable
 
     /// <summary>
     /// The shared self-signed leaf certificate an HTTPS host this shell starts presents unless the
-    /// host was added with its own distinct certificate (<see cref="AddHost(string, bool)"/>) — minted
-    /// lazily on first use via <see cref="LoopbackTls.CreateServerCertificate"/> and shared
-    /// thereafter, since its SAN covers both <c>127.0.0.1</c> and <c>localhost</c> and every host
-    /// binds loopback. Wire-level tests that build their own <see cref="System.Net.Http.HttpClient"/>
-    /// pin to this exact certificate via <see cref="LoopbackTls.CreatePinnedHandler"/> rather than
-    /// trusting a CA. <see cref="HostCertificate"/> answers which certificate a NAMED host actually
-    /// presents, covering both the shared and the distinct-certificate cases.
+    /// host was added with its own distinct certificate (<see cref="AddHost(string, bool)"/>) — loaded
+    /// from the process-wide shared leaf via <see cref="LoopbackTls.CreateServerCertificate"/> and
+    /// cached on this instance thereafter, since its SAN covers both <c>127.0.0.1</c> and <c>localhost</c>
+    /// and every host binds loopback. Wire-level tests that build their own
+    /// <see cref="System.Net.Http.HttpClient"/> pin to this exact certificate via
+    /// <see cref="LoopbackTls.CreatePinnedHandler"/> rather than trusting a CA. <see cref="HostCertificate"/>
+    /// answers which certificate a NAMED host actually presents, covering both the shared and the
+    /// distinct-certificate cases.
     /// </summary>
     internal X509Certificate2 ServerCertificate => serverCertificate ??= LoopbackTls.CreateServerCertificate("oauth-loopback-test-host");
 
@@ -221,6 +230,14 @@ internal sealed class TestHostShell: IAsyncDisposable
 
     /// <summary>The memory pool used by the host for sensitive allocations.</summary>
     public static BaseMemoryPool MemoryPool => BaseMemoryPool.Shared;
+
+    /// <summary>
+    /// The entropy source every OAuth client this shell constructs draws its state/nonce/PKCE bytes from —
+    /// ONE continuously-advancing counter stream per shell instance, so two clients built on the SAME shell
+    /// within one test draw different byte sequences (each call advances the shared counter), while two
+    /// different tests (each with its own shell) draw the same deterministic sequence from the start.
+    /// </summary>
+    private FillEntropyDelegate ClientEntropy { get; } = TestEntropy.NewCounterStream();
 
     /// <summary>
     /// Constant tenant segment used by dynamic-registration tests. The
@@ -425,6 +442,35 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// <param name="vpValidator">
     /// VP token validator. When <see langword="null"/>, HAIP 1.0 SD-JWT rules are used.
     /// </param>
+    /// <param name="parseX5c">Optional <c>dc+sd-jwt</c> issuer JWS <c>x5c</c> header parser, feeding <paramref name="resolveTrustedAuthorityEvidence"/>'s <c>aki</c> arm.</param>
+    /// <param name="resolveTrustedAuthorityEvidence">
+    /// Optional OID4VP 1.0 §6.1.1 trust-evidence resolver for <c>dc+sd-jwt</c> credentials.
+    /// <see langword="null"/> surfaces no evidence, failing a <c>trusted_authorities</c> constraint closed.
+    /// </param>
+    /// <param name="credentialStatusPolicy">
+    /// Optional relying-party verdict over a presentation's surfaced credential-status outcomes. When
+    /// <see langword="null"/>, <see cref="Verifiable.Core.StatusList.CredentialStatusPolicies.Surface"/> is
+    /// used (the shipped default — never refuses).
+    /// </param>
+    /// <param name="statusListFreshnessPolicy">
+    /// Optional Section 8.3 step 4.b freshness policy, threaded to both seats. <see langword="null"/> skips
+    /// the check (the shipped default).
+    /// </param>
+    /// <param name="statusListCachingBounds">
+    /// Optional Section 11.5 refresh-interval bounds, threaded to both seats. <see langword="null"/> leaves
+    /// the resolved token's <c>ttl</c> unclamped (the shipped default).
+    /// </param>
+    /// <param name="unsupportedStatusMechanisms">
+    /// What both seats do with a credential whose <c>status</c> claim names only status mechanisms the
+    /// library does not evaluate. Defaults to
+    /// <see cref="Verifiable.Core.StatusList.UnsupportedStatusMechanismDisposition.Refuse"/>, the shipped
+    /// default.
+    /// </param>
+    /// <param name="vpTokenCredentialQueryId">
+    /// The <see cref="CredentialQueryId"/> the SIOPv2 §12 combined-response seat publishes its
+    /// <c>vp_token</c> under. <see langword="null"/> leaves
+    /// <see cref="SiopVerifierExecutor.SiopCombinedResponseCredentialQueryId"/> as the default.
+    /// </param>
     public TestHostShell(
         TimeProvider timeProvider,
         ResolveIssuerKeyDelegate? resolveIssuerKey = null,
@@ -432,7 +478,15 @@ internal sealed class TestHostShell: IAsyncDisposable
         MdocVpVerificationSeams? mdocSeams = null,
         SdCwtVpVerificationSeams? sdCwtSeams = null,
         CommitmentReuseDetectionSeam? saltReuseSeam = null,
-        Verifiable.Core.StatusList.ResolveVerifiedStatusListTokenDelegate? resolveVerifiedStatusListToken = null)
+        Verifiable.Core.StatusList.ResolveVerifiedStatusListTokenDelegate? resolveVerifiedStatusListToken = null,
+        Verifiable.Cryptography.Pki.ParseX5cDelegate? parseX5c = null,
+        ResolveTrustedAuthorityEvidenceDelegate? resolveTrustedAuthorityEvidence = null,
+        Verifiable.Core.StatusList.CredentialStatusPolicy? credentialStatusPolicy = null,
+        Verifiable.Core.StatusList.StatusListFreshnessPolicy? statusListFreshnessPolicy = null,
+        Verifiable.Core.StatusList.StatusListCachingBounds? statusListCachingBounds = null,
+        Verifiable.Core.StatusList.UnsupportedStatusMechanismDisposition unsupportedStatusMechanisms =
+            Verifiable.Core.StatusList.UnsupportedStatusMechanismDisposition.Refuse,
+        CredentialQueryId? vpTokenCredentialQueryId = null)
     {
         ArgumentNullException.ThrowIfNull(timeProvider);
 
@@ -450,6 +504,13 @@ internal sealed class TestHostShell: IAsyncDisposable
         SdCwtSeamsShared = sdCwtSeams;
         SaltReuseSeamShared = saltReuseSeam;
         StatusListResolverShared = resolveVerifiedStatusListToken;
+        ParseX5cShared = parseX5c;
+        ResolveTrustedAuthorityEvidenceShared = resolveTrustedAuthorityEvidence;
+        CredentialStatusPolicyShared = credentialStatusPolicy;
+        StatusListFreshnessPolicyShared = statusListFreshnessPolicy;
+        StatusListCachingBoundsShared = statusListCachingBounds;
+        UnsupportedStatusMechanismsShared = unsupportedStatusMechanisms;
+        VpTokenCredentialQueryIdShared = vpTokenCredentialQueryId;
 
         Default = HostedAuthorizationServer.Build(
             name: "default",
@@ -461,7 +522,14 @@ internal sealed class TestHostShell: IAsyncDisposable
             sdCwtSeams: SdCwtSeamsShared,
             saltReuseSeam: SaltReuseSeamShared,
             resolveDidVerificationKey: ResolveSiopDidKey,
-            resolveVerifiedStatusListToken: StatusListResolverShared);
+            resolveVerifiedStatusListToken: StatusListResolverShared,
+            parseX5c: ParseX5cShared,
+            resolveTrustedAuthorityEvidence: ResolveTrustedAuthorityEvidenceShared,
+            credentialStatusPolicy: CredentialStatusPolicyShared,
+            statusListFreshnessPolicy: StatusListFreshnessPolicyShared,
+            statusListCachingBounds: StatusListCachingBoundsShared,
+            unsupportedStatusMechanisms: UnsupportedStatusMechanismsShared,
+            vpTokenCredentialQueryId: VpTokenCredentialQueryIdShared);
         HostsByName["default"] = Default;
     }
 
@@ -486,6 +554,37 @@ internal sealed class TestHostShell: IAsyncDisposable
 
     /// <summary>Shell-level status-list token resolver, or <see langword="null"/> when status-list resolution is not wired.</summary>
     private Verifiable.Core.StatusList.ResolveVerifiedStatusListTokenDelegate? StatusListResolverShared { get; }
+
+    /// <summary>Shell-level <c>dc+sd-jwt</c> issuer JWS <c>x5c</c> header parser, or <see langword="null"/> when not wired.</summary>
+    private Verifiable.Cryptography.Pki.ParseX5cDelegate? ParseX5cShared { get; }
+
+    /// <summary>Shell-level OID4VP 1.0 §6.1.1 trust-evidence resolver, or <see langword="null"/> when not wired.</summary>
+    private ResolveTrustedAuthorityEvidenceDelegate? ResolveTrustedAuthorityEvidenceShared { get; }
+
+    /// <summary>
+    /// Shell-level credential-status policy, or <see langword="null"/> when the shell uses the shipped
+    /// <see cref="Verifiable.Core.StatusList.CredentialStatusPolicies.Surface"/> default.
+    /// </summary>
+    private Verifiable.Core.StatusList.CredentialStatusPolicy? CredentialStatusPolicyShared { get; }
+
+    /// <summary>Shell-level Section 8.3 step 4.b freshness policy, or <see langword="null"/> when the check is skipped.</summary>
+    private Verifiable.Core.StatusList.StatusListFreshnessPolicy? StatusListFreshnessPolicyShared { get; }
+
+    /// <summary>Shell-level Section 11.5 refresh-interval bounds, or <see langword="null"/> when unclamped.</summary>
+    private Verifiable.Core.StatusList.StatusListCachingBounds? StatusListCachingBoundsShared { get; }
+
+    /// <summary>
+    /// Shell-level disposition for a status claim naming only mechanisms the library does not evaluate,
+    /// threaded to every host the shell builds.
+    /// </summary>
+    private Verifiable.Core.StatusList.UnsupportedStatusMechanismDisposition UnsupportedStatusMechanismsShared { get; }
+
+    /// <summary>
+    /// Shell-level <see cref="CredentialQueryId"/> the SIOPv2 §12 combined-response seat publishes its
+    /// <c>vp_token</c> under, threaded to every host the shell builds. <see langword="null"/> leaves the
+    /// executor's own default.
+    /// </summary>
+    private CredentialQueryId? VpTokenCredentialQueryIdShared { get; }
 
     /// <summary>
     /// Multi-host orchestration store, keyed by role name. The <c>"default"</c> entry is added by the
@@ -528,7 +627,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// <param name="name">The host's role name (e.g. "anchor", "as2").</param>
     /// <param name="useDistinctCertificate">
     /// When <see langword="true"/>, mints the host its own leaf certificate via
-    /// <see cref="LoopbackTls.CreateServerCertificate"/> so the host is a distinct TLS identity —
+    /// <see cref="LoopbackTls.CreateDistinctServerCertificate"/> so the host is a distinct TLS identity —
     /// distinct trust domains in a multi-party topology present distinct certificates. When
     /// <see langword="false"/>, the host presents the shared <see cref="ServerCertificate"/>.
     /// <see cref="HostCertificate"/> answers the effective certificate either way.
@@ -545,7 +644,7 @@ internal sealed class TestHostShell: IAsyncDisposable
 
         if(useDistinctCertificate)
         {
-            DistinctHostCertificates[name] = LoopbackTls.CreateServerCertificate($"oauth-loopback-{name}");
+            DistinctHostCertificates[name] = LoopbackTls.CreateDistinctServerCertificate($"oauth-loopback-{name}");
         }
 
         HostedAuthorizationServer host = HostedAuthorizationServer.Build(
@@ -557,7 +656,14 @@ internal sealed class TestHostShell: IAsyncDisposable
             mdocSeams: MdocSeamsShared,
             sdCwtSeams: SdCwtSeamsShared,
             resolveDidVerificationKey: ResolveSiopDidKey,
-            resolveVerifiedStatusListToken: StatusListResolverShared);
+            resolveVerifiedStatusListToken: StatusListResolverShared,
+            parseX5c: ParseX5cShared,
+            resolveTrustedAuthorityEvidence: ResolveTrustedAuthorityEvidenceShared,
+            credentialStatusPolicy: CredentialStatusPolicyShared,
+            statusListFreshnessPolicy: StatusListFreshnessPolicyShared,
+            statusListCachingBounds: StatusListCachingBoundsShared,
+            unsupportedStatusMechanisms: UnsupportedStatusMechanismsShared,
+            vpTokenCredentialQueryId: VpTokenCredentialQueryIdShared);
         HostsByName[name] = host;
 
         return host;
@@ -1043,12 +1149,21 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// <param name="record">The server-side registration record.</param>
     /// <param name="redirectUri">The client's redirect URI.</param>
     /// <param name="issuerUri">The expected issuer URI for callback validation.</param>
+    /// <param name="profile">The client registration's policy profile. Defaults to <see cref="PolicyProfile.Haip10"/>.</param>
+    /// <param name="decorateSendFormPostAsync">
+    /// Optional wrapper around the in-process <see cref="SendFormPostDelegate"/> — the seam a test
+    /// composes over to answer one specific endpoint (e.g. the OID4VP Response URI) with a canned
+    /// <see cref="HttpResponseData"/> while every other call still reaches
+    /// <see cref="InProcessTransport"/>, the way a production deployment's own transport middleware
+    /// would intercept one call. <see langword="null"/> leaves the in-process transport untouched.
+    /// </param>
     public (OAuthClient Client, ClientRegistration Registration, Dictionary<string, FlowState> ClientFlowStore)
         CreateInProcessOAuthClientAndRegistration(
             ClientRecord record,
             string redirectUri,
             string issuerUri,
-            PolicyProfile? profile = null)
+            PolicyProfile? profile = null,
+            Func<SendFormPostDelegate, SendFormPostDelegate>? decorateSendFormPostAsync = null)
     {
         ArgumentNullException.ThrowIfNull(record);
         ArgumentException.ThrowIfNullOrWhiteSpace(redirectUri);
@@ -1075,9 +1190,11 @@ internal sealed class TestHostShell: IAsyncDisposable
             TokenEndpoint = tokenEndpoint
         };
 
+        SendFormPostDelegate baseSendFormPostAsync = (endpoint, fields, headers, _, ct) =>
+            transport.SendAsync(endpoint, fields, headers, ct);
+
         OAuthClientInfrastructure infrastructure = OAuthClientInfrastructure.Create(
-            sendFormPostAsync: (endpoint, fields, headers, _, ct) =>
-                transport.SendAsync(endpoint, fields, headers, ct),
+            sendFormPostAsync: decorateSendFormPostAsync?.Invoke(baseSendFormPostAsync) ?? baseSendFormPostAsync,
             saveStateAsync: (state, _, ct) =>
             {
                 clientFlowStore[state.FlowId] = state;
@@ -1109,7 +1226,10 @@ internal sealed class TestHostShell: IAsyncDisposable
                 ValueTask.FromResult(metadata),
             resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,
             base64UrlEncoder: TestSetup.Base64UrlEncoder,
-            timeProvider: Time);
+            memoryPool: BaseMemoryPool.Shared,
+            timeProvider: Time,
+            fillEntropy: ClientEntropy,
+            generateIdentifierAsync: DefaultIdentifierGenerator.For(Time, ClientEntropy, BaseMemoryPool.Shared));
 
         ClientRegistration registration = new()
         {
@@ -1206,7 +1326,10 @@ internal sealed class TestHostShell: IAsyncDisposable
                 ValueTask.FromResult(metadata),
             resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,
             base64UrlEncoder: TestSetup.Base64UrlEncoder,
-            timeProvider: Time);
+            memoryPool: BaseMemoryPool.Shared,
+            timeProvider: Time,
+            fillEntropy: ClientEntropy,
+            generateIdentifierAsync: DefaultIdentifierGenerator.For(Time, ClientEntropy, BaseMemoryPool.Shared));
 
         ClientRegistration registration = new()
         {
@@ -1371,6 +1494,40 @@ internal sealed class TestHostShell: IAsyncDisposable
         };
 
 
+    /// <summary>The redirect-hop bound <see cref="LoopbackRedirectFollowingOutboundFetchPolicy"/> allows.</summary>
+    public const int RedirectHopLimit = 3;
+
+
+    /// <summary>
+    /// <see cref="LoopbackOutboundFetchPolicy"/>, additionally following same-origin redirects up to
+    /// <see cref="RedirectHopLimit"/> hops — the policy a real-wire fetch test exercising Section 11.4's
+    /// ("HTTP clients MUST follow the guidance provided in Section 15.4 of [RFC9110] for handling
+    /// redirects") redirect-following uses instead of the no-redirect loopback default.
+    /// </summary>
+    public static Verifiable.Core.OutboundFetch.OutboundFetchPolicy LoopbackRedirectFollowingOutboundFetchPolicy { get; } =
+        LoopbackOutboundFetchPolicy with
+        {
+            Redirects = Verifiable.Core.OutboundFetch.RedirectMode.SameOrigin,
+            MaxRedirects = RedirectHopLimit
+        };
+
+
+    /// <summary>
+    /// Builds a fresh <see cref="Verifiable.Core.ExchangeContext"/> carrying <paramref name="policy"/> —
+    /// the per-call context a guarded outbound fetch (<see cref="Verifiable.Core.OutboundFetch.OutboundFetch"/>)
+    /// reads its policy from.
+    /// </summary>
+    /// <param name="policy">The outbound-fetch policy to set on the context.</param>
+    /// <returns>A new context carrying <paramref name="policy"/>.</returns>
+    public static Verifiable.Core.ExchangeContext ExchangeContextWith(Verifiable.Core.OutboundFetch.OutboundFetchPolicy policy)
+    {
+        Verifiable.Core.ExchangeContext context = new();
+        context.SetOutboundFetchPolicy(policy);
+
+        return context;
+    }
+
+
     /// <summary>
     /// A trivial <see cref="ResolveClientIdSigningKeyAsyncDelegate"/> that returns
     /// the supplied pre-registered/known verifier signing key regardless of the
@@ -1529,42 +1686,29 @@ internal sealed class TestHostShell: IAsyncDisposable
                     ?? throw new InvalidOperationException("DCQL credential query is missing the 'id' field.");
 
                 using SdToken<string> token = SdJwtSerializer.ParseToken(
-                    resolveStoredSdJwt(queryId), TestSetup.Base64UrlDecoder, MemoryPool, TestSalts.TestSaltTag);
+                    resolveStoredSdJwt(queryId), TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, MemoryPool, TestSalts.TestSaltTag);
 
-                HashSet<string> selectedClaimNames;
+                IReadOnlySet<CredentialPath>? selectedPaths = null;
                 if(minimalDisclosure)
                 {
                     //The one engine path every flow runs: DcqlDisclosure drives
                     //DcqlEvaluator.Evaluate -> ToDisclosureMatch -> ComputeAsync over the
                     //parsed token via SdTokenDcqlAdapter. iss/vct are the always-visible
                     //mandatory paths (lattice bottom); the engine's SelectedPaths is the
-                    //minimal disclosure set.
-                    DisclosureStrategyGraph<SdToken<string>> graph = (await DcqlDisclosure.ComputeStrategyAsync(
-                        query,
-                        token,
-                        SdTokenDcqlAdapter.CreateMetadataExtractor<string>(DcqlCredentialFormats.SdJwt),
-                        SdTokenDcqlAdapter.ClaimExtractor<string>,
-                        mandatoryPaths: new HashSet<CredentialPath> { SdJwtIssPath, SdJwtVctPath },
-                        cancellationToken: cancellationToken).ConfigureAwait(false)).Graph;
+                    //minimal disclosure set — the real path road, never a leaf name
+                    //synthesised back from one.
+                    DisclosureStrategyGraph<SdToken<string>> graph = (await DcqlDisclosure.ComputeStrategyAsync(query, token, SdTokenDcqlAdapter.CreateMetadataExtractor<string>(DcqlCredentialFormats.SdJwt), SdTokenDcqlAdapter.ClaimExtractor<string>, new FakeTimeProvider(TestClock.CanonicalEpoch), mandatoryPaths: new HashSet<CredentialPath> { SdJwtIssPath, SdJwtVctPath }, cancellationToken: cancellationToken).ConfigureAwait(false)).Graph;
 
-                    selectedClaimNames = graph.Decisions[0].SelectedPaths
-                        .Select(path => path.ToString().TrimStart('/'))
-                        .ToHashSet(StringComparer.Ordinal);
-                }
-                else
-                {
-                    //Over-disclosing wallet: reveal every object-property disclosure
-                    //the credential carries, ignoring the query.
-                    selectedClaimNames = token.Disclosures
-                        .Where(disclosure => disclosure.ClaimName is not null)
-                        .Select(disclosure => disclosure.ClaimName!)
-                        .ToHashSet(StringComparer.Ordinal);
+                    selectedPaths = graph.Decisions.Count > 0
+                        ? graph.Decisions[0].SelectedPaths
+                        : new HashSet<CredentialPath>();
                 }
 
-                using SdToken<string> selected = token.SelectDisclosures(
-                    disclosure => disclosure.ClaimName is not null
-                        && selectedClaimNames.Contains(disclosure.ClaimName),
-                    MemoryPool);
+                //Over-disclosing wallet (minimalDisclosure == false): reveal every disclosure
+                //the credential carries, ignoring the query.
+                using SdToken<string> selected = selectedPaths is null
+                    ? token.SelectDisclosures(static _ => true, MemoryPool)
+                    : token.SelectDisclosures(selectedPaths, MemoryPool).Token;
 
                 //Format build: KB-JWT bound to client_id / nonce / transaction_data.
                 string sdJwtForHashing = SdJwtSerializer.GetSdJwtForHashing(selected, TestSetup.Base64UrlEncoder);
@@ -1742,7 +1886,10 @@ internal sealed class TestHostShell: IAsyncDisposable
                 ValueTask.FromResult(metadata),
             resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,
             base64UrlEncoder: TestSetup.Base64UrlEncoder,
+            memoryPool: BaseMemoryPool.Shared,
             timeProvider: Time,
+            fillEntropy: ClientEntropy,
+            generateIdentifierAsync: DefaultIdentifierGenerator.For(Time, ClientEntropy, BaseMemoryPool.Shared),
             sendJsonPostAsync: async (endpoint, jsonBody, headers, context, cancellationToken) =>
             {
                 //Headers and exchange context are unused for the global registration
@@ -2463,6 +2610,56 @@ internal sealed class TestHostShell: IAsyncDisposable
         }
 
         return (PresentationVerifiedState)GetFlowState(externalToken).State;
+    }
+
+
+    /// <summary>
+    /// POSTs an arbitrary <c>application/x-www-form-urlencoded</c> body to the named host's OID4VP
+    /// <c>direct_post</c> Response URI over that host's in-process HTTPS listener and answers what the
+    /// Response URI actually wrote: the HTTP status code, the body, and the <c>Content-Type</c> field
+    /// value. A non-200 answer is returned, never thrown. The listener is started on first use.
+    /// </summary>
+    /// <param name="segment">The tenant segment whose Response URI receives the POST.</param>
+    /// <param name="formFields">The form fields sent verbatim; the caller composes the wire shape.</param>
+    /// <param name="cancellationToken">Cancels the POST.</param>
+    /// <param name="hostName">The host whose Response URI receives the POST.</param>
+    /// <returns>The status code, the body, and the response's <c>Content-Type</c> field value when it carries one.</returns>
+    /// <remarks>
+    /// <see cref="Oid4VpWalletClient"/> raises an <see cref="InvalidOperationException"/> whenever the
+    /// Response URI answers anything but 200, which leaves a test asserting on an exception message
+    /// rather than on the wire. This is the raw seam beside it: a test drives the Response URI itself
+    /// and reads the object the Verifier composed, whether that is the success answer of
+    /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html">OpenID for Verifiable Presentations 1.0, Section 8.2</see>
+    /// or an error answer.
+    /// </remarks>
+    public async ValueTask<(int StatusCode, string Body, string? ContentType)> PostDirectPostFormAsync(
+        string segment,
+        IReadOnlyCollection<KeyValuePair<string, string>> formFields,
+        CancellationToken cancellationToken,
+        string hostName = "default")
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(segment);
+        ArgumentNullException.ThrowIfNull(formFields);
+        ArgumentException.ThrowIfNullOrWhiteSpace(hostName);
+
+        await StartHttpHostAsync(hostName, cancellationToken).ConfigureAwait(false);
+
+        HostedAuthorizationServer host = Host(hostName);
+        Uri responseUri = new(
+            host.HttpBaseAddress!,
+            TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.Oid4VpDirectPost, segment));
+
+        HttpResponseData response = await HttpClientTransport.SendFormPostAsync(
+            host.SharedHttpClient!,
+            responseUri,
+            formFields,
+            OutgoingHeaders.Empty,
+            cancellationToken).ConfigureAwait(false);
+
+        return (
+            response.StatusCode,
+            response.Body,
+            response.Headers.TryGetSingle(WellKnownHttpHeaderNames.ContentType));
     }
 
 
@@ -3469,7 +3666,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         Server.OAuth().ValidateDpopProofAsync = (request, ct) =>
             DpopProofValidator.ValidateAsync(
                 request,
-                MicrosoftCryptographicFunctions.VerifyP256Async,
+                MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
                 DpopTestSupport.Parser,
                 Base64UrlEncoder,
                 Base64UrlDecoder,
@@ -3601,8 +3798,8 @@ internal sealed class TestHostShell: IAsyncDisposable
         SymmetricKey key = new(
             material,
             id,
-            MicrosoftHmacFunctions.ComputeHmacAsync,
-            MicrosoftHmacFunctions.VerifyHmacAsync);
+            MicrosoftHmacFunctionsAdapter.ComputeHmacAsync,
+            MicrosoftHmacFunctionsAdapter.VerifyHmacAsync);
         DpopOwnedDisposables.Add(key);
         return key;
     }
@@ -3685,13 +3882,16 @@ internal sealed class TestHostShell: IAsyncDisposable
                 ValueTask.FromResult(metadata),
             resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,
             base64UrlEncoder: Base64UrlEncoder,
+            memoryPool: BaseMemoryPool.Shared,
             timeProvider: Time,
+            fillEntropy: ClientEntropy,
+            generateIdentifierAsync: DefaultIdentifierGenerator.For(Time, ClientEntropy, BaseMemoryPool.Shared),
             constructDpopProofAsync: (claims, key, ct) => DpopProofConstruction.BuildAsync(
                 claims,
                 key,
                 Base64UrlEncoder,
                 DpopTestSupport.Serializer,
-                MicrosoftCryptographicFunctions.SignP256Async,
+                MicrosoftCryptographicFunctionsAdapter.SignP256Async,
                 MemoryPool,
                 ct),
             dpopKey: dpopKey,
@@ -3796,13 +3996,16 @@ internal sealed class TestHostShell: IAsyncDisposable
                 ValueTask.FromResult(metadata),
             resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,
             base64UrlEncoder: Base64UrlEncoder,
+            memoryPool: BaseMemoryPool.Shared,
             timeProvider: Time,
+            fillEntropy: ClientEntropy,
+            generateIdentifierAsync: DefaultIdentifierGenerator.For(Time, ClientEntropy, BaseMemoryPool.Shared),
             constructDpopProofAsync: (claims, key, ct) => DpopProofConstruction.BuildAsync(
                 claims,
                 key,
                 Base64UrlEncoder,
                 DpopTestSupport.Serializer,
-                MicrosoftCryptographicFunctions.SignP256Async,
+                MicrosoftCryptographicFunctionsAdapter.SignP256Async,
                 MemoryPool,
                 ct),
             dpopKey: dpopKey,
@@ -3890,7 +4093,7 @@ internal sealed class TestHostShell: IAsyncDisposable
 
         global::Microsoft.AspNetCore.Builder.WebApplicationBuilder builder =
             global::Microsoft.AspNetCore.Builder.WebApplication.CreateSlimBuilder();
-        builder.Logging.ClearProviders();
+        LoopbackKestrel.ConfigureLoopbackLogging(builder.Logging);
 
         //Kestrel's ListenLocalhost(0) rejects dynamic port (it binds both IPv4 + IPv6 loopback and
         //can't reconcile a single OS-assigned port across two sockets). Listen on IPv4 loopback with
@@ -3899,8 +4102,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         //127.0.0.1 explicitly. A single explicit HTTPS Listen call — no UseUrls — so there is no
         //plaintext fallback on this host at all.
         builder.WebHost.ConfigureKestrel(options =>
-            options.Listen(System.Net.IPAddress.Loopback, port: 0,
-                listenOptions => listenOptions.UseHttps(hostCertificate)));
+            LoopbackKestrel.ConfigureLoopbackListener(options, hostCertificate));
 
         global::Microsoft.AspNetCore.Builder.WebApplication app = builder.Build();
 
@@ -3951,11 +4153,10 @@ internal sealed class TestHostShell: IAsyncDisposable
 
         global::Microsoft.AspNetCore.Builder.WebApplicationBuilder builder =
             global::Microsoft.AspNetCore.Builder.WebApplication.CreateSlimBuilder();
-        builder.Logging.ClearProviders();
+        LoopbackKestrel.ConfigureLoopbackLogging(builder.Logging);
 
         builder.WebHost.ConfigureKestrel(options =>
-            options.Listen(System.Net.IPAddress.Loopback, port: 0,
-                listenOptions => listenOptions.UseHttps(hostCertificate)));
+            LoopbackKestrel.ConfigureLoopbackListener(options, hostCertificate));
 
         global::Microsoft.AspNetCore.Builder.WebApplication app = builder.Build();
 
@@ -4370,7 +4571,9 @@ internal sealed class TestHostShell: IAsyncDisposable
             return ResponseHeaders.Empty;
         }
 
-        return new ResponseHeaders { Values = headers };
+        IEnumerable<(string Name, string Value)> fieldLines = headers.Select(static pair => (pair.Key, pair.Value));
+
+        return new ResponseHeaders { Headers = HttpHeaderSet.FromReceived(fieldLines) };
     }
 
 

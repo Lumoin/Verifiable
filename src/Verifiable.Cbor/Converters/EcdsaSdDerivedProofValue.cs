@@ -2,7 +2,7 @@ using System;
 using System.Linq;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 
 namespace Verifiable.Cbor.Converters;
 
@@ -162,16 +162,9 @@ public sealed class EcdsaSdDerivedProofValueConverter: CborConverter<EcdsaSdDeri
     private const int ExpectedArrayLength = 6;
 
     /// <inheritdoc/>
-    public override EcdsaSdDerivedProofValue? Read(
-        ref CborReader reader,
-        Type typeToConvert,
-        CborSerializerOptions options)
+    public override EcdsaSdDerivedProofValue Read(CborReader reader)
     {
-        if(reader.PeekState() == CborReaderState.Null)
-        {
-            reader.ReadNull();
-            return null;
-        }
+        ArgumentNullException.ThrowIfNull(reader);
 
         //Validate array structure.
         int? length = reader.ReadStartArray();
@@ -208,23 +201,21 @@ public sealed class EcdsaSdDerivedProofValueConverter: CborConverter<EcdsaSdDeri
 
 
     /// <inheritdoc/>
-    public override void Write(
-        CborWriter writer,
-        EcdsaSdDerivedProofValue value,
-        CborSerializerOptions options)
+    public override void Write(CborWriter writer, EcdsaSdDerivedProofValue value)
     {
+        ArgumentNullException.ThrowIfNull(writer);
         ArgumentNullException.ThrowIfNull(value);
 
         writer.WriteStartArray(ExpectedArrayLength);
 
         writer.WriteByteString(value.BaseSignature);
         writer.WriteByteString(value.PublicKey);
-        writer.WriteByteStringArray((IReadOnlyList<byte[]>)value.Signatures);
+        writer.WriteByteStringArray(value.Signatures);
         writer.WriteStringKeyedMap(
-            (IReadOnlyDictionary<string, string>)value.LabelMap,
+            value.LabelMap,
             (w, v) => w.WriteTextString(v));
-        writer.WriteInt32Array((IReadOnlyList<int>)value.MandatoryIndexes);
-        writer.WriteInt32Array((IReadOnlyList<int>)value.SelectiveIndexes);
+        writer.WriteInt32Array(value.MandatoryIndexes);
+        writer.WriteInt32Array(value.SelectiveIndexes);
 
         writer.WriteEndArray();
     }

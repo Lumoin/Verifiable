@@ -43,6 +43,10 @@ public static class CesrBase64Text
         ArgumentNullException.ThrowIfNull(text);
 
         int wad = (4 - (text.Length % 4)) % 4;
+
+        //A leading character that would itself be misread as a CESR code selector (the escape character,
+        //or a pad character where the un-escaped whole-adjustment leaves it looking like one) forces the
+        //escape byte; the condition mirrors that decision's two cases directly.
         bool escape = text.Length > 0 && (text[0] == EscapeCharacter || (text[0] == PadCharacter && (wad == 0 || wad == 1)));
         int escapedLength = escape ? text.Length + 1 : text.Length;
         int escapedWad = (4 - (escapedLength % 4)) % 4;

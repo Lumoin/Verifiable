@@ -1,6 +1,7 @@
 using System;
+using System.Buffers;
 using System.Collections.Generic;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Cbor;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Foundation;
@@ -208,13 +209,14 @@ internal sealed class CBAdESSharedSyntaxTests
     [TestMethod]
     public void ParseObjectIdentifierFailsClosedOnWrongMajorTypeForId()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(1);
         writer.WriteInt32(42);
         writer.WriteEndMap();
 
-        bool parsed = CBAdESSerialization.TryParseObjectIdentifier(writer.Encode(), out AdESObjectIdentifier? result);
+        bool parsed = CBAdESSerialization.TryParseObjectIdentifier(writerBuffer.WrittenSpan.ToArray(), out AdESObjectIdentifier? result);
 
         Assert.IsFalse(parsed, "A non-tagged integer in place of the tag-32 URI 'id' member must fail closed.");
         Assert.IsNull(result);
@@ -225,7 +227,8 @@ internal sealed class CBAdESSharedSyntaxTests
     [TestMethod]
     public void ParseObjectIdentifierFailsClosedOnWrongMajorTypeForDocRefsEntry()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(2);
         writer.WriteInt32(1);
         WriteUriTag(writer, new Uri("https://example.org/cbades/oid/1"));
@@ -235,7 +238,7 @@ internal sealed class CBAdESSharedSyntaxTests
         writer.WriteEndArray();
         writer.WriteEndMap();
 
-        bool parsed = CBAdESSerialization.TryParseObjectIdentifier(writer.Encode(), out AdESObjectIdentifier? result);
+        bool parsed = CBAdESSerialization.TryParseObjectIdentifier(writerBuffer.WrittenSpan.ToArray(), out AdESObjectIdentifier? result);
 
         Assert.IsFalse(parsed, "A non-tagged integer in place of a docRefs URI entry must fail closed.");
         Assert.IsNull(result);
@@ -246,13 +249,14 @@ internal sealed class CBAdESSharedSyntaxTests
     [TestMethod]
     public void ParseObjectIdentifierFailsClosedOnIndefiniteLengthMap()
     {
-        var writer = new CborWriter(CborConformanceMode.Lax);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Lax);
         writer.WriteStartMap(null);
         writer.WriteInt32(1);
         WriteUriTag(writer, new Uri("https://example.org/cbades/oid/1"));
         writer.WriteEndMap();
 
-        bool parsed = CBAdESSerialization.TryParseObjectIdentifier(writer.Encode(), out AdESObjectIdentifier? result);
+        bool parsed = CBAdESSerialization.TryParseObjectIdentifier(writerBuffer.WrittenSpan.ToArray(), out AdESObjectIdentifier? result);
 
         Assert.IsFalse(parsed, "An indefinite-length oId map must be rejected under canonical-mode parsing.");
         Assert.IsNull(result);
@@ -263,13 +267,14 @@ internal sealed class CBAdESSharedSyntaxTests
     [TestMethod]
     public void ParseObjectIdentifierFailsClosedOnNonIntegerMapKey()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteTextString("id");
         WriteUriTag(writer, new Uri("https://example.org/cbades/oid/1"));
         writer.WriteEndMap();
 
-        bool parsed = CBAdESSerialization.TryParseObjectIdentifier(writer.Encode(), out AdESObjectIdentifier? result);
+        bool parsed = CBAdESSerialization.TryParseObjectIdentifier(writerBuffer.WrittenSpan.ToArray(), out AdESObjectIdentifier? result);
 
         Assert.IsFalse(parsed, "A text-string map key must fail closed; oId map keys are integers only.");
         Assert.IsNull(result);
@@ -280,13 +285,14 @@ internal sealed class CBAdESSharedSyntaxTests
     [TestMethod]
     public void ParseObjectIdentifierFailsClosedOnMissingRequiredId()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(2);
         writer.WriteTextString("description only, no id");
         writer.WriteEndMap();
 
-        bool parsed = CBAdESSerialization.TryParseObjectIdentifier(writer.Encode(), out AdESObjectIdentifier? result);
+        bool parsed = CBAdESSerialization.TryParseObjectIdentifier(writerBuffer.WrittenSpan.ToArray(), out AdESObjectIdentifier? result);
 
         Assert.IsFalse(parsed, "A map missing the required 'id' member must fail closed.");
         Assert.IsNull(result);
@@ -420,13 +426,14 @@ internal sealed class CBAdESSharedSyntaxTests
     [TestMethod]
     public void ParsePkiObjectFailsClosedOnWrongMajorTypeForVal()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(1);
         writer.WriteTextString("not a byte string");
         writer.WriteEndMap();
 
-        bool parsed = CBAdESSerialization.TryParsePkiObject(writer.Encode(), out AdESPkiObject? result);
+        bool parsed = CBAdESSerialization.TryParsePkiObject(writerBuffer.WrittenSpan.ToArray(), out AdESPkiObject? result);
 
         Assert.IsFalse(parsed, "A text string in place of the byte-string 'val' member must fail closed.");
         Assert.IsNull(result);
@@ -437,7 +444,8 @@ internal sealed class CBAdESSharedSyntaxTests
     [TestMethod]
     public void ParsePkiObjectFailsClosedOnWrongMajorTypeForEncoding()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(2);
         writer.WriteInt32(1);
         writer.WriteByteString([0x01]);
@@ -445,7 +453,7 @@ internal sealed class CBAdESSharedSyntaxTests
         writer.WriteTextString("http://uri.etsi.org/01903/v1.2.2#DER"); // Missing the mandatory tag 32 wrapper.
         writer.WriteEndMap();
 
-        bool parsed = CBAdESSerialization.TryParsePkiObject(writer.Encode(), out AdESPkiObject? result);
+        bool parsed = CBAdESSerialization.TryParsePkiObject(writerBuffer.WrittenSpan.ToArray(), out AdESPkiObject? result);
 
         Assert.IsFalse(parsed, "An untagged text string in place of the tag-32 URI 'encoding' member must fail closed.");
         Assert.IsNull(result);
@@ -456,13 +464,14 @@ internal sealed class CBAdESSharedSyntaxTests
     [TestMethod]
     public void ParsePkiObjectFailsClosedOnIndefiniteLengthMap()
     {
-        var writer = new CborWriter(CborConformanceMode.Lax);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Lax);
         writer.WriteStartMap(null);
         writer.WriteInt32(1);
         writer.WriteByteString([0x01, 0x02]);
         writer.WriteEndMap();
 
-        bool parsed = CBAdESSerialization.TryParsePkiObject(writer.Encode(), out AdESPkiObject? result);
+        bool parsed = CBAdESSerialization.TryParsePkiObject(writerBuffer.WrittenSpan.ToArray(), out AdESPkiObject? result);
 
         Assert.IsFalse(parsed, "An indefinite-length pkiOb map must be rejected under canonical-mode parsing.");
         Assert.IsNull(result);
@@ -473,13 +482,14 @@ internal sealed class CBAdESSharedSyntaxTests
     [TestMethod]
     public void ParsePkiObjectFailsClosedOnNonIntegerMapKey()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteTextString("val");
         writer.WriteByteString([0x01]);
         writer.WriteEndMap();
 
-        bool parsed = CBAdESSerialization.TryParsePkiObject(writer.Encode(), out AdESPkiObject? result);
+        bool parsed = CBAdESSerialization.TryParsePkiObject(writerBuffer.WrittenSpan.ToArray(), out AdESPkiObject? result);
 
         Assert.IsFalse(parsed, "A text-string map key must fail closed; pkiOb map keys are integers only.");
         Assert.IsNull(result);
@@ -490,13 +500,14 @@ internal sealed class CBAdESSharedSyntaxTests
     [TestMethod]
     public void ParsePkiObjectFailsClosedOnMissingRequiredVal()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(2);
         WriteUriTag(writer, new Uri("http://uri.etsi.org/01903/v1.2.2#DER"));
         writer.WriteEndMap();
 
-        bool parsed = CBAdESSerialization.TryParsePkiObject(writer.Encode(), out AdESPkiObject? result);
+        bool parsed = CBAdESSerialization.TryParsePkiObject(writerBuffer.WrittenSpan.ToArray(), out AdESPkiObject? result);
 
         Assert.IsFalse(parsed, "A map missing the required 'val' member must fail closed.");
         Assert.IsNull(result);
@@ -712,7 +723,8 @@ internal sealed class CBAdESSharedSyntaxTests
     [TestMethod]
     public void ParseTimestampContainerFailsClosedOnWrongMajorTypeForTokenVal()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(1);
         writer.WriteStartArray(1);
@@ -723,7 +735,7 @@ internal sealed class CBAdESSharedSyntaxTests
         writer.WriteEndArray();
         writer.WriteEndMap();
 
-        bool parsed = CBAdESSerialization.TryParseTimestampContainer(writer.Encode(), out AdESTimestampContainer? result);
+        bool parsed = CBAdESSerialization.TryParseTimestampContainer(writerBuffer.WrittenSpan.ToArray(), out AdESTimestampContainer? result);
 
         Assert.IsFalse(parsed, "A text string in place of a token's byte-string 'val' member must fail closed.");
         Assert.IsNull(result);
@@ -735,7 +747,8 @@ internal sealed class CBAdESSharedSyntaxTests
     [TestMethod]
     public void ParseTimestampContainerFailsClosedOnIndefiniteLengthContainer()
     {
-        var writer = new CborWriter(CborConformanceMode.Lax);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Lax);
         writer.WriteStartMap(null);
         writer.WriteInt32(1);
         writer.WriteStartArray(1);
@@ -746,7 +759,7 @@ internal sealed class CBAdESSharedSyntaxTests
         writer.WriteEndArray();
         writer.WriteEndMap();
 
-        bool parsed = CBAdESSerialization.TryParseTimestampContainer(writer.Encode(), out AdESTimestampContainer? result);
+        bool parsed = CBAdESSerialization.TryParseTimestampContainer(writerBuffer.WrittenSpan.ToArray(), out AdESTimestampContainer? result);
 
         Assert.IsFalse(parsed, "An indefinite-length tstContainer map must be rejected under canonical-mode parsing.");
         Assert.IsNull(result);
@@ -758,7 +771,8 @@ internal sealed class CBAdESSharedSyntaxTests
     [TestMethod]
     public void ParseTimestampContainerFailsClosedOnNonIntegerMapKey()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteTextString("tstTokens");
         writer.WriteStartArray(1);
@@ -769,7 +783,7 @@ internal sealed class CBAdESSharedSyntaxTests
         writer.WriteEndArray();
         writer.WriteEndMap();
 
-        bool parsed = CBAdESSerialization.TryParseTimestampContainer(writer.Encode(), out AdESTimestampContainer? result);
+        bool parsed = CBAdESSerialization.TryParseTimestampContainer(writerBuffer.WrittenSpan.ToArray(), out AdESTimestampContainer? result);
 
         Assert.IsFalse(parsed, "A text-string map key must fail closed; tstContainer map keys are integers only.");
         Assert.IsNull(result);
@@ -785,14 +799,15 @@ internal sealed class CBAdESSharedSyntaxTests
     [TestMethod]
     public void ParseTimestampContainerFailsClosedOnEmptyTokensArray()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(1);
         writer.WriteStartArray(0);
         writer.WriteEndArray();
         writer.WriteEndMap();
 
-        bool parsed = CBAdESSerialization.TryParseTimestampContainer(writer.Encode(), out AdESTimestampContainer? result);
+        bool parsed = CBAdESSerialization.TryParseTimestampContainer(writerBuffer.WrittenSpan.ToArray(), out AdESTimestampContainer? result);
 
         Assert.IsFalse(parsed, "An empty tstTokens array violates the '+TstToken' cardinality and must fail closed.");
         Assert.IsNull(result);
@@ -804,7 +819,8 @@ internal sealed class CBAdESSharedSyntaxTests
     [TestMethod]
     public void ParseTimestampContainerFailsClosedOnMissingRequiredVal()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(1);
         writer.WriteStartArray(1);
@@ -815,7 +831,7 @@ internal sealed class CBAdESSharedSyntaxTests
         writer.WriteEndArray();
         writer.WriteEndMap();
 
-        bool parsed = CBAdESSerialization.TryParseTimestampContainer(writer.Encode(), out AdESTimestampContainer? result);
+        bool parsed = CBAdESSerialization.TryParseTimestampContainer(writerBuffer.WrittenSpan.ToArray(), out AdESTimestampContainer? result);
 
         Assert.IsFalse(parsed, "A token map missing the required 'val' member must fail closed.");
         Assert.IsNull(result);
@@ -868,7 +884,8 @@ internal sealed class CBAdESSharedSyntaxTests
     {
         int memberCount = 1 + (desc is not null ? 1 : 0) + (docRefs is not null ? 1 : 0);
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(memberCount);
 
         writer.WriteInt32(1);
@@ -893,7 +910,7 @@ internal sealed class CBAdESSharedSyntaxTests
         }
 
         writer.WriteEndMap();
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -936,7 +953,8 @@ internal sealed class CBAdESSharedSyntaxTests
     {
         int memberCount = 1 + (encoding is not null ? 1 : 0) + (specRef is not null ? 1 : 0);
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(memberCount);
 
         writer.WriteInt32(1);
@@ -955,7 +973,7 @@ internal sealed class CBAdESSharedSyntaxTests
         }
 
         writer.WriteEndMap();
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -1004,7 +1022,8 @@ internal sealed class CBAdESSharedSyntaxTests
     /// <returns>The expected canonical CBOR bytes.</returns>
     private static byte[] BuildExpectedTimestampContainerBytes(IReadOnlyList<TokenFixture> tokens)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(1);
         writer.WriteStartArray(tokens.Count);
@@ -1043,7 +1062,7 @@ internal sealed class CBAdESSharedSyntaxTests
 
         writer.WriteEndArray();
         writer.WriteEndMap();
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -1076,7 +1095,8 @@ internal sealed class CBAdESSharedSyntaxTests
     /// <returns>The encoded bytes.</returns>
     private static byte[] BuildDeeplyNestedArrayBytes(int depth)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         for(int i = 0; i < depth; i++)
         {
             writer.WriteStartArray(1);
@@ -1089,6 +1109,6 @@ internal sealed class CBAdESSharedSyntaxTests
             writer.WriteEndArray();
         }
 
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 }

@@ -25,7 +25,7 @@ public static class ServerActivitySource
     /// The source name registered with the .NET diagnostics infrastructure.
     /// Pass this to <c>AddSource</c> in the application's OTel configuration.
     /// </summary>
-    public static readonly string SourceName = Utf8Constants.ToInternedString(SourceNameUtf8);
+    public static string SourceName { get; } = Utf8Constants.ToInternedString(SourceNameUtf8);
 
     /// <summary>
     /// The shared <see cref="ActivitySource"/> instance.

@@ -23,7 +23,6 @@ namespace Verifiable.OAuth.Server.Pipeline;
 /// </remarks>
 public static class ClientIdMetadataDocuments
 {
-    private const string ContentTypeHeaderName = "Content-Type";
     private const string JsonMediaType = "application/json";
     private const string JsonStructuredSuffix = "+json";
 
@@ -151,7 +150,7 @@ public static class ClientIdMetadataDocuments
             }
 
             //Step 4 (CIMD-019): application/json or an application/<AS-defined>+json suffix.
-            response.TryGetHeader(ContentTypeHeaderName, out string? contentType);
+            response.Headers.TryGetValue(WellKnownHttpHeaderNames.ContentType, out string? contentType);
             if(!IsAcceptableContentType(contentType))
             {
                 return new ClientIdMetadataResolution
@@ -304,6 +303,8 @@ public static class ClientIdMetadataDocuments
         }
         catch
         {
+            //A transport-level failure prefetching the logo is fail-soft: the caller treats a null result
+            //as "logo unavailable", cancellation excepted above; recorded via the observability seam.
             Activity.Current?.AddEvent(new ActivityEvent(LogoPrefetchFailedEventName));
 
             return (null, null);
@@ -317,7 +318,7 @@ public static class ClientIdMetadataDocuments
             return (null, null);
         }
 
-        fetch.Response.TryGetHeader(ContentTypeHeaderName, out string? contentType);
+        fetch.Response.Headers.TryGetValue(WellKnownHttpHeaderNames.ContentType, out string? contentType);
 
         return (fetch.Response.Body.Memory, contentType);
     }
@@ -354,6 +355,8 @@ public static class ClientIdMetadataDocuments
         }
         catch
         {
+            //A transport-level failure discovering the JWKS is fail-soft: the caller treats a null result
+            //as "keys unavailable", cancellation excepted above; recorded via the observability seam.
             Activity.Current?.AddEvent(new ActivityEvent(JwksDiscoveryFailedEventName));
 
             return null;
@@ -368,7 +371,7 @@ public static class ClientIdMetadataDocuments
         }
 
         OutboundResponse jwksResponse = fetch.Response;
-        jwksResponse.TryGetHeader(ContentTypeHeaderName, out string? contentType);
+        jwksResponse.Headers.TryGetValue(WellKnownHttpHeaderNames.ContentType, out string? contentType);
         if(!IsAcceptableContentType(contentType)
             || JwkJsonReader.IndexOfKey(jwksResponse.Body.Span, WellKnownJwkMemberNames.KeysUtf8) < 0)
         {

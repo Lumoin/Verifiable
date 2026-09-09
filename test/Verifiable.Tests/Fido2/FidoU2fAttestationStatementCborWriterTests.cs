@@ -67,6 +67,9 @@ internal sealed class FidoU2fAttestationStatementCborWriterTests
 
         TaggedMemory<byte> written = FidoU2fAttestationStatementCborWriter.Write(signature, [certificate]);
 
+        //statement.X5c is a collection of disposables, not one disposable value: a using declaration
+        //disposes one variable's own value, not a collection's elements, so the foreach below in the
+        //finally block is the release point.
         FidoU2fAttestationStatement statement = FidoU2fAttestationStatementCborReader.Parse(written.Memory, BaseMemoryPool.Shared);
         try
         {

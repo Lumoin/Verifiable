@@ -48,6 +48,10 @@ namespace Verifiable.Core.Validation;
 /// <item><description>
 /// <see cref="ValidateKeyFormatAsync"/>: Validates the key format (JWK or Multibase).
 /// </description></item>
+/// <item><description>
+/// <see cref="ContextValidationRules.ValidateDidDocumentContextAsync"/>: Validates the DidCore
+/// profile of the document's <c>@context</c>.
+/// </description></item>
 /// </list>
 /// <para>
 /// <strong>Cancellation Support:</strong>
@@ -77,6 +81,7 @@ public static class KeyDidValidationRules
         new(ValidateSingleVerificationMethodAsync, [ClaimId.KeyDidSingleVerificationMethod]),
         new(ValidateIdPrefixMatchAsync, [ClaimId.KeyDidIdPrefixMatch]),
         new(ValidateFragmentIdentifierRepetitionAsync, [ClaimId.KeyDidFragmentIdentifierRepetition]),
+        new(ContextValidationRules.ValidateDidDocumentContextAsync, [ClaimId.ContextFirstEntry, ClaimId.ContextEntriesAreUrlsOrDefinitions, ClaimId.ContextNoDuplicateEntries]),
     ];
 
 
@@ -172,7 +177,7 @@ public static class KeyDidValidationRules
         if(document.Id != null)
         {
             Regex regex = KeyDidRegex.DidKeyIdentifier();
-            isFormatValid = regex.IsMatch(document.Id.Id) == true ? ClaimOutcome.Success : ClaimOutcome.Failure;
+            isFormatValid = regex.IsMatch(document.Id.Id) ? ClaimOutcome.Success : ClaimOutcome.Failure;
         }
 
         claims.Add(new(ClaimId.KeyDidIdFormat, isFormatValid));
@@ -231,7 +236,8 @@ public static class KeyDidValidationRules
         cancellationToken.ThrowIfCancellationRequested();
 
         List<Claim> claims = new List<Claim>(1);
-        bool isSuccess = document.VerificationMethod?[0].Id?.StartsWith(document?.Id?.Id ?? string.Empty,StringComparison.InvariantCulture) ?? false;
+        //document is already proven non-null by the ArgumentNullException.ThrowIfNull guard above.
+        bool isSuccess = document.VerificationMethod?[0].Id?.StartsWith(document.Id?.Id ?? string.Empty, StringComparison.Ordinal) ?? false;
         claims.Add(new Claim(ClaimId.KeyDidIdPrefixMatch, isSuccess ? ClaimOutcome.Success : ClaimOutcome.Failure));
 
         return ValueTask.FromResult(claims);
@@ -320,7 +326,7 @@ public static class KeyDidValidationRules
             var headers = keyFormat.Header;
             resultClaims = JwtKeyTypeHeaderValidationUtilities.ValidateHeader(headers);
         }
-        else if(document.VerificationMethod?[0]?.KeyFormat is PublicKeyMultibase multiKeyFormat)
+        else if(document.VerificationMethod?[0]?.KeyFormat is PublicKeyMultibase)
         {
             //TODO: This will be refactored to validate the multibase format.
             resultClaims.Add(new Claim(ClaimId.KeyDidKeyFormat, ClaimOutcome.Success));

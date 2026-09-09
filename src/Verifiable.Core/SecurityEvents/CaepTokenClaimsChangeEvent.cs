@@ -13,7 +13,7 @@ public static class CaepTokenClaimsChangeClaimNames
     public static ReadOnlySpan<byte> ClaimsUtf8 => "claims"u8;
 
     /// <summary><c>claims</c> — REQUIRED; one or more claims with their new value(s).</summary>
-    public static readonly string Claims = Utf8Constants.ToInternedString(ClaimsUtf8);
+    public static string Claims { get; } = Utf8Constants.ToInternedString(ClaimsUtf8);
 }
 
 

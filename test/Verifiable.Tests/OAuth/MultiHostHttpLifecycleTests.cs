@@ -6,6 +6,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using Verifiable.Core;
+using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -47,7 +48,7 @@ internal sealed class MultiHostHttpLifecycleTests
 
     private const string IssuerHostName = "issuer";
     private const string IssuerClientId = "https://wallet.client.test";
-    private static readonly Uri IssuerClientBaseUri = new("https://wallet.client.test");
+    private static Uri IssuerClientBaseUri { get; } = new("https://wallet.client.test");
     private const string ConfigurationId = "eu.europa.ec.eudi.pid.1";
     private const string PreAuthorizedCode = "SplxlOBeZQQYbYS6WxSbIA";
     private const string EndUserSubject = "urn:uuid:end-user-42";
@@ -56,27 +57,27 @@ internal sealed class MultiHostHttpLifecycleTests
     private const string SdJwtIssuerKeyId = "did:web:issuer.example.com#key-1";
 
     private const string VerifierClientId = "https://verifier.example.com";
-    private static readonly Uri VerifierBaseUri = new("https://verifier.example.com");
+    private static Uri VerifierBaseUri { get; } = new("https://verifier.example.com");
 
-    private static readonly ImmutableHashSet<CapabilityIdentifier> IssuerCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> IssuerCapabilities { get; } =
         ImmutableHashSet.Create(
             WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
             WellKnownCapabilityIdentifiers.Oid4VciPreAuthorizedCodeGrant,
             WellKnownCapabilityIdentifiers.Oid4VciNonceEndpoint,
             WellKnownCapabilityIdentifiers.Oid4VciCredentialEndpoint);
 
-    private static readonly ImmutableHashSet<CapabilityIdentifier> VerifierCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> VerifierCapabilities { get; } =
         ImmutableHashSet.Create(
             WellKnownCapabilityIdentifiers.VcVerifiablePresentation,
             WellKnownCapabilityIdentifiers.OAuthJwksEndpoint,
             WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint);
 
-    private static readonly JwtHeaderSerializer HeaderSerializer =
+    private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)header,
             TestSetup.DefaultSerializationOptions);
 
-    private static readonly JwtPayloadSerializer PayloadSerializer =
+    private static JwtPayloadSerializer PayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)payload,
             TestSetup.DefaultSerializationOptions);
@@ -229,7 +230,7 @@ internal sealed class MultiHostHttpLifecycleTests
             "The wallet must reach ResponseSent after the HTTP direct_post.");
         PresentationVerifiedState verified =
             (PresentationVerifiedState)app.GetFlowState(parHandle).State;
-        Assert.IsTrue(verified.Claims.ContainsKey("pid"),
+        Assert.IsTrue(verified.Credentials.ContainsKey(new CredentialQueryId("pid")),
             "The Verifier must verify the credential the Issuer host minted over the wire.");
     }
 

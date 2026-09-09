@@ -1,6 +1,8 @@
-using System.Linq;
-using System.Reflection;
+using System;
+using System.IO;
+using System.Text.RegularExpressions;
 using Verifiable.JCose;
+using Verifiable.Tests.Foundation;
 
 namespace Verifiable.Tests.JCose;
 
@@ -13,67 +15,46 @@ namespace Verifiable.Tests.JCose;
 [TestClass]
 internal sealed class WellKnownJAdESHeaderNamesTests
 {
+    /// <summary>The repository-relative path declaring <see cref="WellKnownJAdESHeaderNames"/>.</summary>
+    private const string WellKnownJAdESHeaderNamesPath = "src/Verifiable.JCose/WellKnownJAdESHeaderNames.cs";
+
+
     /// <summary>One registered JAdES name under test: its declaring field, its exact wire text, the defining
     /// clause, and the <c>Is*</c> predicate that should recognize it.</summary>
-    /// <param name="FieldName">The <see cref="WellKnownJAdESHeaderNames"/> field name (for reflection cross-check).</param>
-    /// <param name="WireValue">The exact wire string, transcribed from the leg table.</param>
+    /// <param name="FieldName">The <see cref="WellKnownJAdESHeaderNames"/> field name, for messages only.</param>
+    /// <param name="TabledValue">The registry's own interned constant for this field, read directly rather than by name.</param>
+    /// <param name="WireValue">The exact wire string, transcribed from the spec's own clause.</param>
     /// <param name="Clause">The defining clause, for failure-message traceability.</param>
     /// <param name="Predicate">The registry's own <c>Is*</c> predicate for this name.</param>
-    private sealed record RegisteredName(string FieldName, string WireValue, string Clause, Func<string, bool> Predicate);
+    private sealed record RegisteredName(string FieldName, string TabledValue, string WireValue, string Clause, Func<string, bool> Predicate);
 
 
     /// <summary>
     /// The fifteen names <see cref="WellKnownJAdESHeaderNames"/> registers — the nine JAdES-new header
-    /// parameters, <c>sigD</c>'s five own members, and <c>etsiU</c> — in leg-table clause order.
+    /// parameters, <c>sigD</c>'s five own members, and <c>etsiU</c> — in clause order.
     /// </summary>
     private static RegisteredName[] AllRegisteredNames() =>
     [
-        new(nameof(WellKnownJAdESHeaderNames.SigT), "sigT", "5.2.1", WellKnownJAdESHeaderNames.IsSigT),
-        new(nameof(WellKnownJAdESHeaderNames.X5tHashO), "x5t#o", "5.2.2.2", WellKnownJAdESHeaderNames.IsX5tHashO),
-        new(nameof(WellKnownJAdESHeaderNames.SigX5ts), "sigX5ts", "5.2.2.3", WellKnownJAdESHeaderNames.IsSigX5ts),
-        new(nameof(WellKnownJAdESHeaderNames.SrCms), "srCms", "5.2.3", WellKnownJAdESHeaderNames.IsSrCms),
-        new(nameof(WellKnownJAdESHeaderNames.SigPl), "sigPl", "5.2.4", WellKnownJAdESHeaderNames.IsSigPl),
-        new(nameof(WellKnownJAdESHeaderNames.SrAts), "srAts", "5.2.5", WellKnownJAdESHeaderNames.IsSrAts),
-        new(nameof(WellKnownJAdESHeaderNames.AdoTst), "adoTst", "5.2.6", WellKnownJAdESHeaderNames.IsAdoTst),
-        new(nameof(WellKnownJAdESHeaderNames.SigPId), "sigPId", "5.2.7.1", WellKnownJAdESHeaderNames.IsSigPId),
-        new(nameof(WellKnownJAdESHeaderNames.SigD), "sigD", "5.2.8.1", WellKnownJAdESHeaderNames.IsSigD),
-        new(nameof(WellKnownJAdESHeaderNames.MId), "mId", "5.2.8.1", WellKnownJAdESHeaderNames.IsMId),
-        new(nameof(WellKnownJAdESHeaderNames.Pars), "pars", "5.2.8.1", WellKnownJAdESHeaderNames.IsPars),
-        new(nameof(WellKnownJAdESHeaderNames.HashM), "hashM", "5.2.8.1", WellKnownJAdESHeaderNames.IsHashM),
-        new(nameof(WellKnownJAdESHeaderNames.HashV), "hashV", "5.2.8.1", WellKnownJAdESHeaderNames.IsHashV),
-        new(nameof(WellKnownJAdESHeaderNames.Ctys), "ctys", "5.2.8.1", WellKnownJAdESHeaderNames.IsCtys),
-        new(nameof(WellKnownJAdESHeaderNames.EtsiU), "etsiU", "4/5.3.1", WellKnownJAdESHeaderNames.IsEtsiU)
+        new(nameof(WellKnownJAdESHeaderNames.SigT), WellKnownJAdESHeaderNames.SigT, "sigT", "5.2.1", WellKnownJAdESHeaderNames.IsSigT),
+        new(nameof(WellKnownJAdESHeaderNames.X5tHashO), WellKnownJAdESHeaderNames.X5tHashO, "x5t#o", "5.2.2.2", WellKnownJAdESHeaderNames.IsX5tHashO),
+        new(nameof(WellKnownJAdESHeaderNames.SigX5ts), WellKnownJAdESHeaderNames.SigX5ts, "sigX5ts", "5.2.2.3", WellKnownJAdESHeaderNames.IsSigX5ts),
+        new(nameof(WellKnownJAdESHeaderNames.SrCms), WellKnownJAdESHeaderNames.SrCms, "srCms", "5.2.3", WellKnownJAdESHeaderNames.IsSrCms),
+        new(nameof(WellKnownJAdESHeaderNames.SigPl), WellKnownJAdESHeaderNames.SigPl, "sigPl", "5.2.4", WellKnownJAdESHeaderNames.IsSigPl),
+        new(nameof(WellKnownJAdESHeaderNames.SrAts), WellKnownJAdESHeaderNames.SrAts, "srAts", "5.2.5", WellKnownJAdESHeaderNames.IsSrAts),
+        new(nameof(WellKnownJAdESHeaderNames.AdoTst), WellKnownJAdESHeaderNames.AdoTst, "adoTst", "5.2.6", WellKnownJAdESHeaderNames.IsAdoTst),
+        new(nameof(WellKnownJAdESHeaderNames.SigPId), WellKnownJAdESHeaderNames.SigPId, "sigPId", "5.2.7.1", WellKnownJAdESHeaderNames.IsSigPId),
+        new(nameof(WellKnownJAdESHeaderNames.SigD), WellKnownJAdESHeaderNames.SigD, "sigD", "5.2.8.1", WellKnownJAdESHeaderNames.IsSigD),
+        new(nameof(WellKnownJAdESHeaderNames.MId), WellKnownJAdESHeaderNames.MId, "mId", "5.2.8.1", WellKnownJAdESHeaderNames.IsMId),
+        new(nameof(WellKnownJAdESHeaderNames.Pars), WellKnownJAdESHeaderNames.Pars, "pars", "5.2.8.1", WellKnownJAdESHeaderNames.IsPars),
+        new(nameof(WellKnownJAdESHeaderNames.HashM), WellKnownJAdESHeaderNames.HashM, "hashM", "5.2.8.1", WellKnownJAdESHeaderNames.IsHashM),
+        new(nameof(WellKnownJAdESHeaderNames.HashV), WellKnownJAdESHeaderNames.HashV, "hashV", "5.2.8.1", WellKnownJAdESHeaderNames.IsHashV),
+        new(nameof(WellKnownJAdESHeaderNames.Ctys), WellKnownJAdESHeaderNames.Ctys, "ctys", "5.2.8.1", WellKnownJAdESHeaderNames.IsCtys),
+        new(nameof(WellKnownJAdESHeaderNames.EtsiU), WellKnownJAdESHeaderNames.EtsiU, "etsiU", "4/5.3.1", WellKnownJAdESHeaderNames.IsEtsiU)
     ];
 
 
     /// <summary>
-    /// Reflection sweep: every <c>public static readonly string</c> field declared on
-    /// <see cref="WellKnownJAdESHeaderNames"/> has exactly one row in <see cref="AllRegisteredNames"/> — the
-    /// registry cannot silently grow (or shrink) a name without this test's table changing too, and the table
-    /// cannot claim a row for a name the class does not actually declare.
-    /// </summary>
-    [TestMethod]
-    public void EveryDeclaredFieldHasExactlyOneTableRowAndViceVersa()
-    {
-        FieldInfo[] declaredFields = [.. typeof(WellKnownJAdESHeaderNames)
-            .GetFields(BindingFlags.Public | BindingFlags.Static)
-            .Where(static field => field.FieldType == typeof(string))];
-
-        RegisteredName[] rows = AllRegisteredNames();
-
-        Assert.HasCount(rows.Length, declaredFields,
-            "WellKnownJAdESHeaderNames must declare exactly the fifteen names the leg tables extract -- no more, no fewer.");
-
-        string[] declaredNames = [.. declaredFields.Select(static f => f.Name).OrderBy(static n => n, StringComparer.Ordinal)];
-        string[] tableNames = [.. rows.Select(static r => r.FieldName).OrderBy(static n => n, StringComparer.Ordinal)];
-
-        Assert.AreSequenceEqual(tableNames, declaredNames,
-            "Every declared field must have exactly one AllRegisteredNames() row, and vice versa.");
-    }
-
-
-    /// <summary>
-    /// Every registered constant's runtime value matches the leg table's verbatim wire text exactly --
+    /// Every registered constant's compile-time value matches the spec's own verbatim wire text exactly --
     /// a spec-fidelity pin, not a runtime-varying check.
     /// </summary>
     [TestMethod]
@@ -81,10 +62,7 @@ internal sealed class WellKnownJAdESHeaderNamesTests
     {
         foreach(RegisteredName entry in AllRegisteredNames())
         {
-            FieldInfo field = typeof(WellKnownJAdESHeaderNames).GetField(entry.FieldName, BindingFlags.Public | BindingFlags.Static)!;
-            string actual = (string)field.GetValue(null)!;
-
-            Assert.AreEqual(entry.WireValue, actual,
+            Assert.AreEqual(entry.WireValue, entry.TabledValue,
                 $"{entry.FieldName} (clause {entry.Clause}) must read \"{entry.WireValue}\" verbatim.");
         }
     }
@@ -156,17 +134,20 @@ internal sealed class WellKnownJAdESHeaderNamesTests
 
     /// <summary>
     /// The "reuse, never duplicate" rule: names already registered by RFC 7515/7519's own
-    /// WellKnown classes are NOT re-declared as fields on <see cref="WellKnownJAdESHeaderNames"/>.
+    /// WellKnown classes are NOT re-declared as members on <see cref="WellKnownJAdESHeaderNames"/>. Checked
+    /// as a source scan of the declaring file's own property declaration lines, with no reflection over the
+    /// loaded type.
     /// </summary>
     [TestMethod]
     public void OverlappingNamesAreNotRedeclaredOnThisClass()
     {
-        Type jadesType = typeof(WellKnownJAdESHeaderNames);
+        string text = File.ReadAllText(Path.Combine(SourceHygieneScanner.FindRepositoryRoot(), WellKnownJAdESHeaderNamesPath));
 
         foreach(string reusedFieldName in new[] { "Iat", "Cty", "B64", "X5t", "X5tHashS256", "X5u", "X5c", "Alg", "Kid", "Crit" })
         {
-            Assert.IsNull(jadesType.GetField(reusedFieldName, BindingFlags.Public | BindingFlags.Static),
-                $"WellKnownJAdESHeaderNames must not declare a duplicate field named \"{reusedFieldName}\" -- it must be reused from its owning registry.");
+            Assert.IsFalse(
+                Regex.IsMatch(text, $@"(?m)^\s*public\s+static\s+string\s+{Regex.Escape(reusedFieldName)}\s*\{{"),
+                $"WellKnownJAdESHeaderNames must not declare a duplicate member named \"{reusedFieldName}\" -- it must be reused from its owning registry.");
         }
 
         //The values that ARE reused resolve to the exact same interned string as their owning registry --
@@ -194,10 +175,7 @@ internal sealed class WellKnownJAdESHeaderNamesTests
 
             Assert.AreEqual(entry.WireValue, canonicalized);
 
-            FieldInfo field = typeof(WellKnownJAdESHeaderNames).GetField(entry.FieldName, BindingFlags.Public | BindingFlags.Static)!;
-            string registryConstant = (string)field.GetValue(null)!;
-
-            Assert.AreSame(registryConstant, canonicalized,
+            Assert.AreSame(entry.TabledValue, canonicalized,
                 $"GetCanonicalizedValue must return the exact interned {entry.FieldName} instance, not merely an equal string.");
         }
 

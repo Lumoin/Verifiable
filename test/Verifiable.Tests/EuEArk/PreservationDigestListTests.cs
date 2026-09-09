@@ -143,7 +143,9 @@ internal sealed class PreservationDigestListTests
     /// <summary>A digest list owns its digest values and the evidence riding with them.</summary>
     /// <remarks>
     /// Proves <see href="https://www.etsi.org/deliver/etsi_ts/119500_119599/119512/01.02.01_60/ts_119512v010201p.pdf">
-    /// ETSI TS 119 512 V1.2.1</see> 512-5.6.1.1-intro.
+    /// ETSI TS 119 512 V1.2.1</see> 512-5.6.1.1-intro. <c>digestList</c> is disposed explicitly, not via a
+    /// <c>using</c> declaration, because the <see cref="MeteredHousePool.OutstandingCount"/> assertion right
+    /// after it must see the carriers already returned.
     /// </remarks>
     [TestMethod]
     public async Task ADigestListOwnsWhatItCarries()

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core.Did.Methods.Key;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Model.Common;
@@ -10,6 +11,7 @@ using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
 using Verifiable.Foundation.Automata;
 using Verifiable.Tests.TestDataProviders;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Resolver;
 
@@ -140,8 +142,8 @@ internal sealed class DidRegistrationBuilderJoinTests
         Assert.IsTrue(pda.IsAccepted);
         var completed = (RegistrationCompleted)pda.CurrentState;
         Assert.IsNotNull(completed.Document!.Context);
-        Assert.AreEqual(Context.DidCore11, completed.Document!.Context!.Contexts![0]);
-        Assert.AreEqual("https://example.com/custom", completed.Document!.Context!.Contexts![1]);
+        Assert.AreEqual(Context.DidCore11, completed.Document!.Context!.Entries[0].Iri);
+        Assert.AreEqual("https://example.com/custom", completed.Document!.Context!.Entries[1].Iri);
     }
 
 
@@ -467,7 +469,8 @@ internal sealed class DidRegistrationBuilderJoinTests
     {
         return DidRegistrationTransitions.CreateAutomaton(
             "builder-join",
-            DidRegistrationBuilders.CreateDefault().CreateMethodHandler());
+            DidRegistrationBuilders.CreateDefault().CreateMethodHandler(BaseMemoryPool.Shared),
+            new FakeTimeProvider(TestClock.CanonicalEpoch));
     }
 
 

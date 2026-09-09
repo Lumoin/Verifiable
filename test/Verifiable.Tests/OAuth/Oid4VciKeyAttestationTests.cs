@@ -31,14 +31,14 @@ internal sealed class Oid4VciKeyAttestationTests
     private FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch);
 
     private const string ClientId = "https://wallet.client.test";
-    private static readonly Uri ClientBaseUri = new("https://wallet.client.test");
+    private static Uri ClientBaseUri { get; } = new("https://wallet.client.test");
     private const string OfferSubject = "urn:uuid:end-user-42";
     private const string ConfigurationId = "UniversityDegree_dc_sd_jwt";
     private const string IssuedCredential = "eyJhbGciOiJFUzI1NiJ9.body.sig";
 
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
-    private static readonly ImmutableHashSet<CapabilityIdentifier> IssuanceCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> IssuanceCapabilities { get; } =
         ImmutableHashSet.Create(
             WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
             WellKnownCapabilityIdentifiers.Oid4VciPreAuthorizedCodeGrant,

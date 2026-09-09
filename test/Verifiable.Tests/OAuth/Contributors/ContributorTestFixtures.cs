@@ -17,9 +17,9 @@ namespace Verifiable.Tests.OAuth.Contributors;
 /// </summary>
 internal static class ContributorTestFixtures
 {
-    public static readonly DateTimeOffset FixedIssuedAt = new(2026, 5, 17, 12, 0, 0, TimeSpan.Zero);
+    public static DateTimeOffset FixedIssuedAt { get; } = new(2026, 5, 17, 12, 0, 0, TimeSpan.Zero);
 
-    public static readonly DateTimeOffset FixedAuthTime = new(2026, 5, 17, 11, 30, 0, TimeSpan.Zero);
+    public static DateTimeOffset FixedAuthTime { get; } = new(2026, 5, 17, 11, 30, 0, TimeSpan.Zero);
 
 
     public static ClientRecord BuildRegistration() => new()

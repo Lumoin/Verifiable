@@ -18,11 +18,11 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// <c>decrypt</c> attribute set and the ECDH scheme (TPM_ALG_ECDH).
 /// </para>
 /// <para>
-/// Command structure (TPM 2.0 Part 3, Section 14.5):
+/// Command structure (TPM 2.0 Library Part 3, clause 14.5):
 /// </para>
 /// <list type="bullet">
 ///   <item><description>keyHandle (TPMI_DH_OBJECT): Handle of the ECC key. Requires authorization.</description></item>
-///   <item><description>inPoint (TPM2B_ECC_POINT): The input public key point as a sized buffer containing two TPM2B_ECC_PARAMETER values (x, y).</description></item>
+///   <item><description>inPoint (TPM2B_ECC_POINT, TPM 2.0 Library Part 2, clause 11.2.5.3, Table 199): the input public key point, framed through <see cref="Tpm2bEccPoint"/>.</description></item>
 /// </list>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -30,9 +30,8 @@ public sealed class EcdhZGenInput: ITpmCommandInput, IDisposable
 {
     private bool Disposed { get; set; }
 
-    private Tpm2bEccParameter X { get; }
-
-    private Tpm2bEccParameter Y { get; }
+    /// <summary>The framed <c>inPoint</c> (TPM2B_ECC_POINT) this command carries.</summary>
+    private Tpm2bEccPoint InPoint { get; }
 
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_ECDH_ZGen;
@@ -58,7 +57,7 @@ public sealed class EcdhZGenInput: ITpmCommandInput, IDisposable
     {
         ArgumentNullException.ThrowIfNull(pool);
 
-        return new EcdhZGenInput(keyHandle, Tpm2bEccParameter.Create(xCoord, pool), Tpm2bEccParameter.Create(yCoord, pool));
+        return new EcdhZGenInput(keyHandle, Tpm2bEccPoint.Create(xCoord, yCoord, pool));
     }
 
 
@@ -83,14 +82,12 @@ public sealed class EcdhZGenInput: ITpmCommandInput, IDisposable
             pool);
     }
 
-        
+
     /// <inheritdoc/>
     public int GetSerializedSize()
     {
         return sizeof(uint) +       //keyHandle (TPMI_DH_OBJECT)
-               sizeof(ushort) +     //TPM2B_ECC_POINT outer size field
-               X.SerializedSize +   //TPM2B_ECC_PARAMETER x
-               Y.SerializedSize;    //TPM2B_ECC_PARAMETER y
+               InPoint.SerializedSize;   //TPM2B_ECC_POINT inPoint (outer size ‖ TPMS_ECC_POINT)
     }
 
 
@@ -104,10 +101,7 @@ public sealed class EcdhZGenInput: ITpmCommandInput, IDisposable
     /// <inheritdoc/>
     public void WriteParameters(ref TpmWriter writer)
     {
-        //TPM2B_ECC_POINT outer size: the total byte count of the TPMS_ECC_POINT that follows.
-        writer.WriteUInt16((ushort)(X.SerializedSize + Y.SerializedSize));
-        X.WriteTo(ref writer);
-        Y.WriteTo(ref writer);
+        InPoint.WriteTo(ref writer);
     }
 
 
@@ -116,20 +110,18 @@ public sealed class EcdhZGenInput: ITpmCommandInput, IDisposable
     {
         if(!Disposed)
         {
-            X.Dispose();
-            Y.Dispose();
+            InPoint.Dispose();
             Disposed = true;
         }
     }
 
 
-    private EcdhZGenInput(TpmiDhObject keyHandle, Tpm2bEccParameter x, Tpm2bEccParameter y)
+    private EcdhZGenInput(TpmiDhObject keyHandle, Tpm2bEccPoint inPoint)
     {
         KeyHandle = keyHandle;
-        X = x;
-        Y = y;
+        InPoint = inPoint;
     }
 
 
-    private string DebuggerDisplay => $"EcdhZGenInput(Key={KeyHandle}, X={X.Length} bytes, Y={Y.Length} bytes)";
+    private string DebuggerDisplay => $"EcdhZGenInput(Key={KeyHandle}, X={InPoint.Point.X.Length} bytes, Y={InPoint.Point.Y.Length} bytes)";
 }

@@ -52,7 +52,11 @@ namespace Verifiable.Apdu;
 /// </remarks>
 public sealed class ApduDevice : IDisposable, IObservable<ApduExchange>
 {
+    /// <summary>
+    /// A field, not a property: a lock target must be one instance that no accessor can re-mint.
+    /// </summary>
     private readonly Lock observerLock = new();
+
     private TransceiveDelegate Handler { get; }
     private Action? DisposeAction { get; }
     private IObserver<ApduExchange>[] observers = [];

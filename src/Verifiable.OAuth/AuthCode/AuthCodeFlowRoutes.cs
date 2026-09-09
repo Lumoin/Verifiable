@@ -34,7 +34,7 @@ public static class AuthCodeFlowRoutes
     /// <summary>
     /// Base path for the Authorization Code flow route group.
     /// </summary>
-    public static readonly string Base = Utf8Constants.ToInternedString(BaseUtf8);
+    public static string Base { get; } = Utf8Constants.ToInternedString(BaseUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Par"/>.</summary>
     public static ReadOnlySpan<byte> ParUtf8 => "par"u8;
@@ -44,7 +44,7 @@ public static class AuthCodeFlowRoutes
     /// Receives the initial PAR POST and returns a <c>request_uri</c> per
     /// <see href="https://www.rfc-editor.org/rfc/rfc9126">RFC 9126</see>.
     /// </summary>
-    public static readonly string Par = Utf8Constants.ToInternedString(ParUtf8);
+    public static string Par { get; } = Utf8Constants.ToInternedString(ParUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Callback"/>.</summary>
     public static ReadOnlySpan<byte> CallbackUtf8 => "callback"u8;
@@ -54,7 +54,7 @@ public static class AuthCodeFlowRoutes
     /// Receives the authorization code and <c>state</c> from the authorization server
     /// per <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2">RFC 6749 §4.1.2</see>.
     /// </summary>
-    public static readonly string Callback = Utf8Constants.ToInternedString(CallbackUtf8);
+    public static string Callback { get; } = Utf8Constants.ToInternedString(CallbackUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Token"/>.</summary>
     public static ReadOnlySpan<byte> TokenUtf8 => "token"u8;
@@ -64,7 +64,7 @@ public static class AuthCodeFlowRoutes
     /// Receives authorization code exchange and token refresh requests per
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.3">RFC 6749 §4.1.3</see>.
     /// </summary>
-    public static readonly string Token = Utf8Constants.ToInternedString(TokenUtf8);
+    public static string Token { get; } = Utf8Constants.ToInternedString(TokenUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Revocation"/>.</summary>
     public static ReadOnlySpan<byte> RevocationUtf8 => "revoke"u8;
@@ -73,7 +73,7 @@ public static class AuthCodeFlowRoutes
     /// Relative path for the token revocation endpoint per
     /// <see href="https://www.rfc-editor.org/rfc/rfc7009">RFC 7009</see>.
     /// </summary>
-    public static readonly string Revocation = Utf8Constants.ToInternedString(RevocationUtf8);
+    public static string Revocation { get; } = Utf8Constants.ToInternedString(RevocationUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="FlowIdField"/>.</summary>
     public static ReadOnlySpan<byte> FlowIdFieldUtf8 => "flow_id"u8;
@@ -83,5 +83,5 @@ public static class AuthCodeFlowRoutes
     /// response into the subsequent token exchange request. This is a library
     /// convention, not an RFC-defined parameter name.
     /// </summary>
-    public static readonly string FlowIdField = Utf8Constants.ToInternedString(FlowIdFieldUtf8);
+    public static string FlowIdField { get; } = Utf8Constants.ToInternedString(FlowIdFieldUtf8);
 }

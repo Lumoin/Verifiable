@@ -3,6 +3,8 @@ using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Tests.TestDataProviders;
+using Microsoft.Extensions.Time.Testing;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Cryptography;
 
@@ -21,7 +23,7 @@ namespace Verifiable.Tests.Cryptography;
 [TestClass]
 internal sealed class BrainpoolSignVerifyTests
 {
-    private static readonly byte[] SampleData =
+    private static byte[] SampleData { get; } =
         Encoding.UTF8.GetBytes("oid4vp brainpool round-trip test vector");
 
 
@@ -33,8 +35,8 @@ internal sealed class BrainpoolSignVerifyTests
     {
         await AssertBcRoundTrip(
             TestKeyMaterialProvider.CreateBrainpoolP224r1KeyMaterial(),
-            BouncyCastleCryptographicFunctions.SignBrainpoolP224r1Async,
-            BouncyCastleCryptographicFunctions.VerifyBrainpoolP224r1Async,
+            BouncyCastleCryptographicFunctionsAdapter.SignBrainpoolP224r1Async,
+            BouncyCastleCryptographicFunctionsAdapter.VerifyBrainpoolP224r1Async,
             expectedSignatureLength: 56,
             TestContext.CancellationToken).ConfigureAwait(false);
     }
@@ -45,8 +47,8 @@ internal sealed class BrainpoolSignVerifyTests
     {
         await AssertBcRoundTrip(
             TestKeyMaterialProvider.CreateBrainpoolP256r1KeyMaterial(),
-            BouncyCastleCryptographicFunctions.SignBrainpoolP256r1Async,
-            BouncyCastleCryptographicFunctions.VerifyBrainpoolP256r1Async,
+            BouncyCastleCryptographicFunctionsAdapter.SignBrainpoolP256r1Async,
+            BouncyCastleCryptographicFunctionsAdapter.VerifyBrainpoolP256r1Async,
             expectedSignatureLength: 64,
             TestContext.CancellationToken).ConfigureAwait(false);
     }
@@ -57,8 +59,8 @@ internal sealed class BrainpoolSignVerifyTests
     {
         await AssertBcRoundTrip(
             TestKeyMaterialProvider.CreateBrainpoolP320r1KeyMaterial(),
-            BouncyCastleCryptographicFunctions.SignBrainpoolP320r1Async,
-            BouncyCastleCryptographicFunctions.VerifyBrainpoolP320r1Async,
+            BouncyCastleCryptographicFunctionsAdapter.SignBrainpoolP320r1Async,
+            BouncyCastleCryptographicFunctionsAdapter.VerifyBrainpoolP320r1Async,
             expectedSignatureLength: 80,
             TestContext.CancellationToken).ConfigureAwait(false);
     }
@@ -69,8 +71,8 @@ internal sealed class BrainpoolSignVerifyTests
     {
         await AssertBcRoundTrip(
             TestKeyMaterialProvider.CreateBrainpoolP384r1KeyMaterial(),
-            BouncyCastleCryptographicFunctions.SignBrainpoolP384r1Async,
-            BouncyCastleCryptographicFunctions.VerifyBrainpoolP384r1Async,
+            BouncyCastleCryptographicFunctionsAdapter.SignBrainpoolP384r1Async,
+            BouncyCastleCryptographicFunctionsAdapter.VerifyBrainpoolP384r1Async,
             expectedSignatureLength: 96,
             TestContext.CancellationToken).ConfigureAwait(false);
     }
@@ -81,36 +83,30 @@ internal sealed class BrainpoolSignVerifyTests
     {
         await AssertBcRoundTrip(
             TestKeyMaterialProvider.CreateBrainpoolP512r1KeyMaterial(),
-            BouncyCastleCryptographicFunctions.SignBrainpoolP512r1Async,
-            BouncyCastleCryptographicFunctions.VerifyBrainpoolP512r1Async,
+            BouncyCastleCryptographicFunctionsAdapter.SignBrainpoolP512r1Async,
+            BouncyCastleCryptographicFunctionsAdapter.VerifyBrainpoolP512r1Async,
             expectedSignatureLength: 128,
             TestContext.CancellationToken).ConfigureAwait(false);
     }
 
 
+    /// <summary><c>keyMaterial</c> is a <see cref="PublicPrivateKeyMaterial{TPublicKeyMemory,TPrivateKeyMemory}"/>
+    /// record, not itself <see cref="IDisposable"/> — only its two properties are — so a
+    /// <see langword="using"/> declaration cannot target it; <c>signature</c> is a tuple-deconstruction
+    /// target, disposed in its own <see langword="finally"/> block for the same reason.</summary>
     [TestMethod]
     public async Task BrainpoolSignatureFailsOnTamperedPayload()
     {
         var keyMaterial = TestKeyMaterialProvider.CreateBrainpoolP256r1KeyMaterial();
         try
         {
-            (Signature signature, CryptoEvent? _) = await BouncyCastleCryptographicFunctions.SignBrainpoolP256r1Async(
-                keyMaterial.PrivateKey.AsReadOnlyMemory(),
-                SampleData,
-                BaseMemoryPool.Shared,
-                null,
-                TestContext.CancellationToken).ConfigureAwait(false);
+            (Signature signature, CryptoEvent? _) = await BouncyCastleCryptographicFunctions.SignBrainpoolP256r1Async(keyMaterial.PrivateKey.AsReadOnlyMemory(), SampleData, BaseMemoryPool.Shared, new FakeTimeProvider(TestClock.CanonicalEpoch), null, TestContext.CancellationToken).ConfigureAwait(false);
             try
             {
                 byte[] tampered = (byte[])SampleData.Clone();
                 tampered[0] ^= 0x01;
 
-                (bool valid, CryptoEvent? _) = await BouncyCastleCryptographicFunctions.VerifyBrainpoolP256r1Async(
-                    tampered,
-                    signature.AsReadOnlyMemory(),
-                    keyMaterial.PublicKey.AsReadOnlyMemory(),
-                    null,
-                    TestContext.CancellationToken).ConfigureAwait(false);
+                (bool valid, CryptoEvent? _) = await BouncyCastleCryptographicFunctions.VerifyBrainpoolP256r1Async(tampered, signature.AsReadOnlyMemory(), keyMaterial.PublicKey.AsReadOnlyMemory(), new FakeTimeProvider(TestClock.CanonicalEpoch), null, TestContext.CancellationToken).ConfigureAwait(false);
 
                 Assert.IsFalse(valid,
                     "Verification must reject the signature after the payload's first byte is flipped.");
@@ -128,6 +124,10 @@ internal sealed class BrainpoolSignVerifyTests
     }
 
 
+    /// <summary><c>keyMaterial</c>'s own properties are disposed by the caller-owned components (a
+    /// <see cref="PublicPrivateKeyMaterial{TPublicKeyMemory,TPrivateKeyMemory}"/> record is not itself
+    /// <see cref="IDisposable"/>); <c>signature</c> is a tuple-deconstruction target, disposed in its own
+    /// <see langword="finally"/> block because a <see langword="using"/> declaration cannot target one.</summary>
     private static async Task AssertBcRoundTrip(
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyMaterial,
         Func<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>, BaseMemoryPool, System.Collections.Frozen.FrozenDictionary<string, object>?, CancellationToken, ValueTask<(Signature Signature, CryptoEvent? Event)>> signAsync,

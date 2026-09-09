@@ -18,13 +18,13 @@ namespace Verifiable.Tests.OAuth;
 [TestClass]
 internal sealed class AuthorizationRequestStateParameterPolicyTests
 {
-    private static readonly DateTimeOffset Now = TestClock.CanonicalEpoch;
-    private static readonly TimeSpan Lifetime = TimeSpan.FromMinutes(5);
+    private static DateTimeOffset Now { get; } = TestClock.CanonicalEpoch;
+    private static TimeSpan Lifetime { get; } = TimeSpan.FromMinutes(5);
 
-    private static readonly JarClaimDeserializer<DcqlQuery> DcqlDeserializer =
+    private static JarClaimDeserializer<DcqlQuery> DcqlDeserializer { get; } =
         json => JsonSerializer.Deserialize<DcqlQuery>(json, TestSetup.DefaultSerializationOptions)!;
 
-    private static readonly JarClaimDeserializer<VerifierClientMetadata> ClientMetadataDeserializer =
+    private static JarClaimDeserializer<VerifierClientMetadata> ClientMetadataDeserializer { get; } =
         json => JsonSerializer.Deserialize<VerifierClientMetadata>(json, TestSetup.DefaultSerializationOptions)!;
 
 

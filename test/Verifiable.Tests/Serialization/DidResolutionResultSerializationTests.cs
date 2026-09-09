@@ -216,7 +216,7 @@ internal sealed class DidResolutionResultSerializationTests
     {
         return new DidDocument
         {
-            Context = new Context { Contexts = [Context.DidCore10] },
+            Context = Context.FromIris(Context.DidCore10),
             Id = new GenericDidMethod(id)
         };
     }

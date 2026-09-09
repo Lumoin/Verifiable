@@ -40,26 +40,26 @@ internal sealed class SiopRequestUriFlowTests
     private const string RelyingPartyClientId = "https://rp.example.com";
     private const string SiopNonce = "n-siop-request-uri-01";
 
-    private static readonly Uri RelyingPartyBaseUri = new("https://rp.example.com");
+    private static Uri RelyingPartyBaseUri { get; } = new("https://rp.example.com");
 
-    private static readonly ImmutableHashSet<CapabilityIdentifier> SiopCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> SiopCapabilities { get; } =
         ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.SiopSelfIssuedOp);
 
-    private static readonly string[] AllowedSiopAlgorithms = [WellKnownJwaValues.Es256];
+    private static string[] AllowedSiopAlgorithms { get; } = [WellKnownJwaValues.Es256];
 
-    private static readonly JwtHeaderSerializer HeaderSerializer =
+    private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)header,
             TestSetup.DefaultSerializationOptions);
 
-    private static readonly JwtPayloadSerializer PayloadSerializer =
+    private static JwtPayloadSerializer PayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)payload,
             TestSetup.DefaultSerializationOptions);
 
     //The §9 Request Object payload is read back as a generic claim dictionary so the test asserts on
     //the wire-observable values rather than a typed projection.
-    private static readonly JwtPartDecoder PartDecoder = JwtPartJson.Default;
+    private static JwtPartDecoder PartDecoder { get; } = JwtPartJson.Default;
 
 
     [TestMethod]

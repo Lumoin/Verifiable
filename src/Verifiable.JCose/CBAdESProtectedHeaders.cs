@@ -358,8 +358,10 @@ public sealed class CBAdESProtectedHeaders: IDisposable
 /// <see cref="CwtPayload"/> bag here would let a caller build a CB-AdES signature with no <c>iat</c> at all, or
 /// with the wrong CBOR type, and only fail at the CBOR codec layer instead of at the point of construction.
 /// The RFC 8392 <c>iat</c> claim key (<see cref="WellKnownCwtClaimNames.Iat"/>, <c>6</c>) and its
-/// <c>NumericDate</c> wire encoding remain the CBOR codec's concern, not this model's — mirroring every other
-/// S1/S2 component's decoded-model/wire-codec split.
+/// <c>NumericDate</c> wire encoding remain the CBOR codec's concern, not this model's — the same
+/// decoded-model/wire-codec split every other CB-AdES component in this library uses: a strongly-typed model
+/// type in <see cref="Verifiable.JCose"/> owns the required-member and validation contract, and a separate
+/// CBOR codec in <c>Verifiable.Cbor</c> owns the wire encoding.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("CBAdESCwtClaims: IssuedAt={IssuedAt}")]
@@ -470,7 +472,8 @@ public sealed class CBAdESX5ChainSingleCertificate : CBAdESX5Chain, IEquatable<C
     /// <summary>Initializes a new <see cref="CBAdESX5ChainSingleCertificate"/>.</summary>
     /// <param name="certificate">
     /// The DER-encoded certificate bytes. <strong>Borrowed</strong> view — the caller (creation path) or the
-    /// wire-bytes source (parse path) owns the underlying memory (the S1 opaque-bytes convention).
+    /// wire-bytes source (parse path) owns the underlying memory, the convention this library uses for every
+    /// opaque byte payload it carries rather than copies.
     /// </param>
     public CBAdESX5ChainSingleCertificate(ReadOnlyMemory<byte> certificate)
     {
@@ -479,7 +482,8 @@ public sealed class CBAdESX5ChainSingleCertificate : CBAdESX5Chain, IEquatable<C
 
     /// <summary>
     /// The DER-encoded certificate bytes. <strong>Borrowed</strong> view — the caller (creation path) or the
-    /// wire-bytes source (parse path) owns the underlying memory (the S1 opaque-bytes convention).
+    /// wire-bytes source (parse path) owns the underlying memory, the convention this library uses for every
+    /// opaque byte payload it carries rather than copies.
     /// </summary>
     public ReadOnlyMemory<byte> Certificate { get; }
 

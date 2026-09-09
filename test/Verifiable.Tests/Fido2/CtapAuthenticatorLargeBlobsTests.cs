@@ -37,7 +37,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
     [TestMethod]
     public async Task FreshStateGetReturnsInitialSeventeenByteConstant()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-fresh-get");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-fresh-get",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var request = new CtapLargeBlobsRequest(Get: 17, Offset: 0);
@@ -57,7 +57,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
     [TestMethod]
     public async Task GetRequestingMoreThanStoredReturnsShortRead()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-short-read");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-short-read",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var request = new CtapLargeBlobsRequest(Get: CtapAuthenticatorState.MaxFragmentLength, Offset: 0);
@@ -76,7 +76,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
     [TestMethod]
     public async Task GetZeroBytesReturnsEmptySuccess()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-get-zero");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-get-zero",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var request = new CtapLargeBlobsRequest(Get: 0, Offset: 0);
@@ -96,7 +96,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
     [TestMethod]
     public async Task GetAtOffsetEqualToStoredLengthReturnsEmptySuccess()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-offset-equals-length");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-offset-equals-length",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var request = new CtapLargeBlobsRequest(Get: 10, Offset: CtapAuthenticatorState.InitialSerializedLargeBlobArray.Length);
@@ -112,7 +112,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
     [TestMethod]
     public async Task GetOffsetPastStoredLengthReturnsInvalidParameter()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-offset-past-length");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-offset-past-length",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var request = new CtapLargeBlobsRequest(Get: 10, Offset: CtapAuthenticatorState.InitialSerializedLargeBlobArray.Length + 1);
@@ -126,7 +126,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
     [TestMethod]
     public async Task GetExceedingMaxFragmentLengthReturnsInvalidLength()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-get-exceeds-fragment");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-get-exceeds-fragment",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var request = new CtapLargeBlobsRequest(Get: CtapAuthenticatorState.MaxFragmentLength + 1, Offset: 0);
@@ -140,7 +140,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
     [TestMethod]
     public async Task GetWithLengthPresentReturnsInvalidParameter()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-get-with-length");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-get-with-length",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var request = new CtapLargeBlobsRequest(Get: 10, Offset: 0, Length: 17);
@@ -157,7 +157,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
     [TestMethod]
     public async Task GetWithPinUvAuthParamPresentReturnsInvalidParameter()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-get-with-param");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-get-with-param",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using IMemoryOwner<byte> pinUvAuthParamOwner = pool.Rent(2);
@@ -174,7 +174,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
     [TestMethod]
     public async Task GetWithPinUvAuthProtocolPresentReturnsInvalidParameter()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-get-with-protocol");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-get-with-protocol",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var request = new CtapLargeBlobsRequest(Get: 10, Offset: 0, PinUvAuthProtocol: 2);
@@ -188,7 +188,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
     [TestMethod]
     public async Task OffsetAbsentReturnsInvalidParameter()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-offset-absent");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-offset-absent",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var request = new CtapLargeBlobsRequest(Get: 10);
@@ -202,7 +202,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
     [TestMethod]
     public async Task NeitherGetNorSetReturnsInvalidParameter()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-neither");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-neither",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var request = new CtapLargeBlobsRequest(Offset: 0);
@@ -216,7 +216,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
     [TestMethod]
     public async Task BothGetAndSetReturnsInvalidParameter()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-both");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-both",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using IMemoryOwner<byte> setOwner = pool.Rent(1);
@@ -237,7 +237,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
     [TestMethod]
     public async Task OffsetAbsentCheckFiresBeforeGetBranchChecks()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-order-offset-first");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-order-offset-first",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var request = new CtapLargeBlobsRequest(Get: CtapAuthenticatorState.MaxFragmentLength + 1);
@@ -257,7 +257,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
     [TestMethod]
     public async Task BothPresentCheckFiresBeforeGetBranchChecks()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-order-both-first");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-order-both-first",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using IMemoryOwner<byte> setOwner = pool.Rent(1);
@@ -277,7 +277,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
     [TestMethod]
     public async Task GetLengthPresentCheckFiresBeforeFragmentLengthCheck()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-order-length-first");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-order-length-first",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var request = new CtapLargeBlobsRequest(Get: CtapAuthenticatorState.MaxFragmentLength + 1, Offset: 0, Length: 17);
@@ -295,7 +295,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
     [TestMethod]
     public async Task GetAuthMaterialCheckFiresBeforeFragmentLengthCheck()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-order-auth-first");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-order-auth-first",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using IMemoryOwner<byte> pinUvAuthParamOwner = pool.Rent(1);
@@ -315,7 +315,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
     [TestMethod]
     public async Task FragmentLengthCheckFiresBeforeOffsetPastLengthCheck()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-order-fragment-first");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-order-fragment-first",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var request = new CtapLargeBlobsRequest(
@@ -334,7 +334,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
     [TestMethod]
     public async Task SetFragmentExceedingMaxFragmentLengthReturnsInvalidLength()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-set-fragment-too-long");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-set-fragment-too-long",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         int oversizedFragmentLength = CtapAuthenticatorState.MaxFragmentLength + 1;
@@ -352,7 +352,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
     [TestMethod]
     public async Task SetOffsetZeroMissingLengthReturnsInvalidParameter()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-set-offset-zero-no-length");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-set-offset-zero-no-length",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using IMemoryOwner<byte> setOwner = pool.Rent(1);
@@ -368,7 +368,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
     [TestMethod]
     public async Task SetOffsetZeroLengthExceedingCapacityReturnsLargeBlobStorageFull()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-set-length-exceeds-capacity");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-set-length-exceeds-capacity",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using IMemoryOwner<byte> setOwner = pool.Rent(1);
@@ -385,7 +385,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
     [TestMethod]
     public async Task SetOffsetZeroLengthBelowSeventeenReturnsInvalidParameter()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-set-length-too-short");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-set-length-too-short",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using IMemoryOwner<byte> setOwner = pool.Rent(1);
@@ -401,7 +401,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
     [TestMethod]
     public async Task SetOffsetNonZeroWithLengthReturnsInvalidParameter()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-set-offset-nonzero-with-length");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-set-offset-nonzero-with-length",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using IMemoryOwner<byte> setOwner = pool.Rent(1);
@@ -417,7 +417,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
     [TestMethod]
     public async Task SetOffsetMismatchWithNoPriorSequenceReturnsInvalidSeq()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-set-offset-mismatch-no-sequence");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-set-offset-mismatch-no-sequence",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using IMemoryOwner<byte> setOwner = pool.Rent(1);
@@ -438,7 +438,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
     [TestMethod]
     public async Task SetOffsetMismatchAgainstLiveSequenceReturnsInvalidSeq()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-set-offset-mismatch-live-sequence");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-set-offset-mismatch-live-sequence",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using IMemoryOwner<byte> firstFragmentOwner = pool.Rent(1);
@@ -464,7 +464,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
     [TestMethod]
     public async Task SetLengthCheckFiresBeforePuatRequiredWhenGateArmed()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-order-length-before-puat");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-order-length-before-puat",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         await CtapConfigFixtures.EstablishPinAsync(simulator, pool, CtapPinUvAuthProtocolId.Two, CtapLargeBlobsFixtures.DefaultPin, TestContext.CancellationToken);
 
@@ -481,7 +481,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
     [TestMethod]
     public async Task SetOffsetMismatchFiresBeforePuatRequiredWhenGateArmed()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-order-seq-before-puat");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-order-seq-before-puat",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         await CtapConfigFixtures.EstablishPinAsync(simulator, pool, CtapPinUvAuthProtocolId.Two, CtapLargeBlobsFixtures.DefaultPin, TestContext.CancellationToken);
 
@@ -502,7 +502,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
     [TestMethod]
     public async Task SumCheckRunsAfterVerificationFailure()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-order-sum-after-verify");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-order-sum-after-verify",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] token = await CtapLargeBlobsFixtures.EstablishPinAndIssueTokenAsync(
             simulator, pool, CtapPinUvAuthProtocolId.Two, WellKnownCtapPinUvAuthTokenPermissions.Lbw, TestContext.CancellationToken);
@@ -533,7 +533,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
     [TestMethod]
     public async Task SetGateArmedParamAbsentReturnsPuatRequired()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-armed-param-absent");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-armed-param-absent",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         await CtapConfigFixtures.EstablishPinAsync(simulator, pool, CtapPinUvAuthProtocolId.Two, CtapLargeBlobsFixtures.DefaultPin, TestContext.CancellationToken);
 
@@ -550,7 +550,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
     [TestMethod]
     public async Task SetGateArmedProtocolAbsentReturnsMissingParameter()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-armed-protocol-absent");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-armed-protocol-absent",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         await CtapConfigFixtures.EstablishPinAsync(simulator, pool, CtapPinUvAuthProtocolId.Two, CtapLargeBlobsFixtures.DefaultPin, TestContext.CancellationToken);
 
@@ -569,7 +569,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
     [TestMethod]
     public async Task SetGateArmedUnsupportedProtocolReturnsInvalidParameter()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-armed-unsupported-protocol");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-armed-unsupported-protocol",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         await CtapConfigFixtures.EstablishPinAsync(simulator, pool, CtapPinUvAuthProtocolId.Two, CtapLargeBlobsFixtures.DefaultPin, TestContext.CancellationToken);
 
@@ -588,7 +588,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
     [TestMethod]
     public async Task SetGateArmedBadSignatureReturnsPinAuthInvalid()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-armed-bad-signature");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-armed-bad-signature",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         _ = await CtapLargeBlobsFixtures.EstablishPinAndIssueTokenAsync(
             simulator, pool, CtapPinUvAuthProtocolId.Two, WellKnownCtapPinUvAuthTokenPermissions.Lbw, TestContext.CancellationToken);
@@ -613,7 +613,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
     [TestMethod]
     public async Task SetTokenLackingLbwReturnsPinAuthInvalid()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-no-lbw-permission");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-no-lbw-permission",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] mcOnlyToken = await CtapLargeBlobsFixtures.EstablishPinAndIssueTokenAsync(
             simulator, pool, CtapPinUvAuthProtocolId.Two, WellKnownCtapPinUvAuthTokenPermissions.Mc, TestContext.CancellationToken, rpId: DefaultRpId);
@@ -639,7 +639,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
     [TestMethod]
     public async Task TokenlessWriteSucceedsOnFreshUnprotectedDevice()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-tokenless-multi-fragment");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-tokenless-multi-fragment",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         byte[] fullArray = BuildValidSerializedLargeBlobArray(pool, payloadLength: 20);
@@ -666,7 +666,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
     [TestMethod]
     public async Task IntegrityFailureLeavesStoredArrayUnchanged()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-integrity-failure");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-integrity-failure",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         byte[] corrupted = BuildValidSerializedLargeBlobArray(pool, payloadLength: 20);
@@ -694,7 +694,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
     [TestMethod]
     public async Task FactoryResetDiscardsPendingWrite()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-factory-reset-discards-pending");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-factory-reset-discards-pending",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using IMemoryOwner<byte> pendingFragmentOwner = pool.Rent(1);
@@ -732,7 +732,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
     [TestMethod]
     public async Task InterleavedGetInfoBetweenFragmentsCausesNextFragmentInvalidSeq()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-interleaved-getinfo");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-interleaved-getinfo",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using IMemoryOwner<byte> firstFragmentOwner = pool.Rent(1);
@@ -764,7 +764,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
     [TestMethod]
     public async Task PowerCycleDiscardsPendingWriteButPreservesCommittedArray()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-power-cycle");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-power-cycle",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         byte[] committed = BuildValidSerializedLargeBlobArray(pool, payloadLength: 20);
@@ -778,7 +778,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
         byte pendingStatus = await SendLargeBlobsExpectingStatusAsync(simulator, pendingFragment, pool, TestContext.CancellationToken);
         Assert.AreEqual(WellKnownCtapStatusCodes.Ok, pendingStatus);
 
-        simulator.PowerCycle();
+        simulator.PowerCycle(BaseMemoryPool.Shared);
 
         using IMemoryOwner<byte> continuationAfterCycleOwner = pool.Rent(1);
         continuationAfterCycleOwner.Memory.Span[0] = 0x76;
@@ -805,7 +805,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
     public async Task TokenExpiryDiscardsArmedPendingWrite()
     {
         var timeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch);
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-token-expiry-discard", timeProvider: timeProvider);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-token-expiry-discard", BaseMemoryPool.Shared, timeProvider: timeProvider);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] token = await CtapLargeBlobsFixtures.EstablishPinAndIssueTokenAsync(
             simulator, pool, CtapPinUvAuthProtocolId.Two, WellKnownCtapPinUvAuthTokenPermissions.Lbw, TestContext.CancellationToken);
@@ -835,7 +835,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
     [TestMethod]
     public async Task GateArmsViaSetPin()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-arms-via-setpin");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-arms-via-setpin",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         await CtapConfigFixtures.EstablishPinAsync(simulator, pool, CtapPinUvAuthProtocolId.Two, CtapLargeBlobsFixtures.DefaultPin, TestContext.CancellationToken);
 
@@ -860,7 +860,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
     [TestMethod]
     public async Task GateArmsViaBioEnrollmentCompletion()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-arms-via-enrollment");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-arms-via-enrollment",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         await CtapLargeBlobsFixtures.CompleteBootstrapEnrollmentAsync(simulator, pool, CtapPinUvAuthProtocolId.Two, TestContext.CancellationToken);
 
@@ -886,7 +886,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
     [TestMethod]
     public async Task GateArmsViaToggleAlwaysUvWithNoMintPathAvailable()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-arms-via-alwaysuv-corner");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-arms-via-alwaysuv-corner",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         byte toggleStatus = await CtapLargeBlobsFixtures.ToggleAlwaysUvAsync(simulator, pool, TestContext.CancellationToken);
@@ -909,7 +909,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
     [TestMethod]
     public async Task LbwCarveOutSurvivesMakeCredentialAndDrivesSet()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-lbw-carveout");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-lbw-carveout",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         int lbwAndMc = WellKnownCtapPinUvAuthTokenPermissions.Lbw | WellKnownCtapPinUvAuthTokenPermissions.Mc;
         byte[] token = await CtapLargeBlobsFixtures.EstablishPinAndIssueTokenAsync(
@@ -961,7 +961,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
             Assert.AreSequenceEqual(expectedSha256OfAbc, actualDigest.AsReadOnlySpan().ToArray(), "SHA-256(\"abc\") must match the well-known NIST test vector, hand-verified independently of this KAT's own offset encoding.");
         }
 
-        using CtapAuthenticatorSimulator correctSimulator = CreateSimulator("largeblobs-kat-correct");
+        using CtapAuthenticatorSimulator correctSimulator = CreateSimulator("largeblobs-kat-correct",BaseMemoryPool.Shared);
         byte[] correctToken = await CtapLargeBlobsFixtures.EstablishPinAndIssueTokenAsync(
             correctSimulator, pool, CtapPinUvAuthProtocolId.Two, WellKnownCtapPinUvAuthTokenPermissions.Lbw, TestContext.CancellationToken);
         using IMemoryOwner<byte> firstFragmentCorrectOwner = pool.Rent(1);
@@ -982,7 +982,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
         byte correctStatus = await SendLargeBlobsExpectingStatusAsync(correctSimulator, correctSecondRequest, pool, TestContext.CancellationToken);
         Assert.AreEqual(WellKnownCtapStatusCodes.Ok, correctStatus, "the spec-correct LITTLE-endian offset encoding must verify.");
 
-        using CtapAuthenticatorSimulator wrongSimulator = CreateSimulator("largeblobs-kat-wrong");
+        using CtapAuthenticatorSimulator wrongSimulator = CreateSimulator("largeblobs-kat-wrong",BaseMemoryPool.Shared);
         byte[] wrongToken = await CtapLargeBlobsFixtures.EstablishPinAndIssueTokenAsync(
             wrongSimulator, pool, CtapPinUvAuthProtocolId.Two, WellKnownCtapPinUvAuthTokenPermissions.Lbw, TestContext.CancellationToken);
         using IMemoryOwner<byte> firstFragmentWrongOwner = pool.Rent(1);
@@ -1042,7 +1042,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
     [TestMethod]
     public async Task GetInfoAdvertisesLargeBlobsSupport()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-getinfo");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-getinfo",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using IMemoryOwner<byte> request = RentSingleByteCommandEnvelope(WellKnownCtapCommands.GetInfo, pool);
@@ -1070,7 +1070,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
     public async Task DisposeMidSetSequenceReturnsPendingFragmentBufferToPool()
     {
         using var trackingPool = new MeteredHousePool();
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-dispose-pending");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-dispose-pending",BaseMemoryPool.Shared);
 
         var request = new CtapLargeBlobsRequest(Set: new byte[] { 0x01, 0x02 }, Offset: 0, Length: 50);
         using(PooledMemory response = await SendLargeBlobsAsync(simulator, request, trackingPool.Pool, TestContext.CancellationToken))

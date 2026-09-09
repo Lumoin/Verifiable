@@ -9,6 +9,8 @@ using Verifiable.Cryptography.Cbom;
 using Verifiable.Cryptography;
 using Verifiable.Microsoft;
 using Verifiable.Tests.TestDataProviders;
+using Microsoft.Extensions.Time.Testing;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Cbom;
 
@@ -223,7 +225,7 @@ internal sealed class ObservedCbomTests
         //Draw entropy OUTSIDE the observed run. Its spans land in the same process-wide
         //listener but must be excluded because they carry a different trace id.
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        using(Salt outsideSalt = CryptographicKeyEvents.GenerateSalt(32, CryptoTags.MdocIssuerSignedItemRandom, pool))
+        using(CryptographicKeyEvents.GenerateSalt(32, CryptoTags.MdocIssuerSignedItemRandom, pool))
         {
             CbomDocument document = await observer.ObserveAsync(
                 () =>
@@ -269,12 +271,10 @@ internal sealed class ObservedCbomTests
         using PublicKeyMemory publicKey = signingKeys.PublicKey;
         using PrivateKeyMemory privateKey = signingKeys.PrivateKey;
 
-        (Signature signature, CryptoEvent? _) = await MicrosoftCryptographicFunctions.SignP256Async(
-            privateKey.AsReadOnlyMemory(), payload, pool).ConfigureAwait(false);
+        (Signature signature, CryptoEvent? _) = await MicrosoftCryptographicFunctions.SignP256Async(privateKey.AsReadOnlyMemory(), payload, pool, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch)).ConfigureAwait(false);
         using var disposableSignature = signature;
 
-        (bool isValid, CryptoEvent? _) = await MicrosoftCryptographicFunctions.VerifyP256Async(
-            payload, signature.AsReadOnlyMemory(), publicKey.AsReadOnlyMemory()).ConfigureAwait(false);
+        (bool isValid, CryptoEvent? _) = await MicrosoftCryptographicFunctions.VerifyP256Async(payload, signature.AsReadOnlyMemory(), publicKey.AsReadOnlyMemory(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch)).ConfigureAwait(false);
         Assert.IsTrue(isValid, "The observed signing-workload signature must verify.");
 
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> generatedKeys =
@@ -324,12 +324,10 @@ internal sealed class ObservedCbomTests
         using PublicKeyMemory publicKey = keys.PublicKey;
         using PrivateKeyMemory privateKey = keys.PrivateKey;
 
-        (Signature signature, CryptoEvent? _) = await MicrosoftCryptographicFunctions.SignP256Async(
-            privateKey.AsReadOnlyMemory(), payload, pool).ConfigureAwait(false);
+        (Signature signature, CryptoEvent? _) = await MicrosoftCryptographicFunctions.SignP256Async(privateKey.AsReadOnlyMemory(), payload, pool, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch)).ConfigureAwait(false);
         using var disposableSignature = signature;
 
-        (bool isValid, CryptoEvent? _) = await MicrosoftCryptographicFunctions.VerifyP256Async(
-            payload, signature.AsReadOnlyMemory(), publicKey.AsReadOnlyMemory()).ConfigureAwait(false);
+        (bool isValid, CryptoEvent? _) = await MicrosoftCryptographicFunctions.VerifyP256Async(payload, signature.AsReadOnlyMemory(), publicKey.AsReadOnlyMemory(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch)).ConfigureAwait(false);
         Assert.IsTrue(isValid, "The observed-workload signature must verify.");
 
         using DigestValue digest = await CryptographicKeyEvents.ComputeDigestAsync(

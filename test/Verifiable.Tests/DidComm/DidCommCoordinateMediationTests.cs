@@ -47,7 +47,7 @@ internal sealed class DidCommCoordinateMediationTests
     /// <summary>The test framework's per-test context, including the cooperative cancellation token.</summary>
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly BaseMemoryPool Pool = BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool { get; } = BaseMemoryPool.Shared;
 
 
     private static DidCommMessage MediateRequest(string id = "mr-1", string? from = null) =>
@@ -102,7 +102,7 @@ internal sealed class DidCommCoordinateMediationTests
             HeaderSerializer,
             TestSetup.Base64UrlEncoder,
             CryptoFormatConversions.DefaultTagToEpkCrvConverter,
-            MicrosoftEntropyFunctions.GenerateNonce,
+            MicrosoftEntropyFunctionsAdapter.GenerateNonce,
             Pool,
             cancellationToken).ConfigureAwait(false);
     }
@@ -132,16 +132,21 @@ internal sealed class DidCommCoordinateMediationTests
 
             byte[] responseBytes = await httpResponse.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
 
-            var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            //FromReceived (not the composing-side Builder) takes RFC 9110 §5.5's recipient arm on a
+            //hostile line rather than throwing.
+            List<(string Name, string Value)> responsePairs = [];
             foreach(KeyValuePair<string, IEnumerable<string>> header in httpResponse.Content.Headers)
             {
-                headers[header.Key] = string.Join(", ", header.Value);
+                foreach(string value in header.Value)
+                {
+                    responsePairs.Add((header.Key, value));
+                }
             }
 
             return new OutboundResponse
             {
                 StatusCode = (int)httpResponse.StatusCode,
-                Headers = headers,
+                Headers = HttpHeaderSet.FromReceived(responsePairs),
                 Body = responseBytes.Length == 0 ? TaggedMemory<byte>.Empty : new TaggedMemory<byte>(responseBytes, BufferTags.Json)
             };
         };
@@ -515,26 +520,20 @@ internal sealed class DidCommCoordinateMediationTests
 
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> mediatorKeys = MicrosoftKeyMaterialCreator.CreateP256ExchangeKeys(Pool);
         using PublicKeyMemory mediatorPublic = mediatorKeys.PublicKey;
-        PrivateKeyMemory mediatorPrivate = mediatorKeys.PrivateKey;
-        try
-        {
-            using DidCommEncryptedMessage packed = await PackAnoncryptAsync(
-                mediateRequest, "did:example:cm-mediator#key-1", mediatorPublic, TestContext.CancellationToken).ConfigureAwait(false);
+        using PrivateKeyMemory mediatorPrivate = mediatorKeys.PrivateKey;
 
-            DidCommEncryptedUnpackResult unpacked = await packed.UnpackAnoncryptAsync(
-                "did:example:cm-mediator#key-1", mediatorPrivate, NestedSignerResolver, UnpackContext, DidCommMessageJson.Parser, DidCommSignedMessageJson.Parser,
-                TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        using DidCommEncryptedMessage packed = await PackAnoncryptAsync(
+            mediateRequest, "did:example:cm-mediator#key-1", mediatorPublic, TestContext.CancellationToken).ConfigureAwait(false);
 
-            Assert.IsTrue(unpacked.IsUnpacked, "Coordinate Mediation carries no transport of its own — the standard anoncrypt pack/unpack pipeline is what makes a request 'encrypted during transmission'.");
-            Assert.AreEqual(WellKnownCoordinateMediationNames.MediateRequestType, unpacked.Message!.Type);
+        DidCommEncryptedUnpackResult unpacked = await packed.UnpackAnoncryptAsync(
+            "did:example:cm-mediator#key-1", mediatorPrivate, NestedSignerResolver, UnpackContext, DidCommMessageJson.Parser, DidCommSignedMessageJson.Parser,
+            TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-            Assert.AreEqual(ClaimedSender, unpacked.Message.From, "The plaintext from claim still travels with the message — anoncrypt hides nothing about the header, it just proves nothing about it.");
-            Assert.IsFalse(unpacked.IsSenderAuthenticated, "Anoncrypt performs no sender key agreement — the unpack pipeline's own verdict MUST report the sender as unauthenticated; that verdict is what makes the message repudiable.");
-        }
-        finally
-        {
-            mediatorPrivate.Dispose();
-        }
+        Assert.IsTrue(unpacked.IsUnpacked, "Coordinate Mediation carries no transport of its own — the standard anoncrypt pack/unpack pipeline is what makes a request 'encrypted during transmission'.");
+        Assert.AreEqual(WellKnownCoordinateMediationNames.MediateRequestType, unpacked.Message!.Type);
+
+        Assert.AreEqual(ClaimedSender, unpacked.Message.From, "The plaintext from claim still travels with the message — anoncrypt hides nothing about the header, it just proves nothing about it.");
+        Assert.IsFalse(unpacked.IsSenderAuthenticated, "Anoncrypt performs no sender key agreement — the unpack pipeline's own verdict MUST report the sender as unauthenticated; that verdict is what makes the message repudiable.");
     }
 
 
@@ -1722,7 +1721,7 @@ internal sealed class DidCommCoordinateMediationTests
 
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> recipientKeys = MicrosoftKeyMaterialCreator.CreateP256ExchangeKeys(Pool);
         using PublicKeyMemory recipientPublic = recipientKeys.PublicKey;
-        PrivateKeyMemory recipientPrivate = recipientKeys.PrivateKey;
+        using PrivateKeyMemory recipientPrivate = recipientKeys.PrivateKey;
 
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> mediatorKeys = MicrosoftKeyMaterialCreator.CreateP256ExchangeKeys(Pool);
         using PublicKeyMemory mediatorPublic = mediatorKeys.PublicKey;
@@ -1730,51 +1729,44 @@ internal sealed class DidCommCoordinateMediationTests
         //decrypts the inbound mediate-request, so the mediator's private key is not needed.
         using PrivateKeyMemory unusedMediatorPrivate = mediatorKeys.PrivateKey;
 
-        try
-        {
-            DidCommMessage mediateRequest = MediateRequest("mediate-request-e2e-1", from: E2ERecipientDid);
-            DidCommMessage mediateGrantMessage = mediateRequest.CreateMediateGrant("mediate-grant-e2e-1", ExpectedRoutingDid, from: E2EMediatorDid);
-            using DidCommEncryptedMessage packedGrantReply = await PackAnoncryptAsync(
-                mediateGrantMessage, E2ERecipientKid, recipientPublic, TestContext.CancellationToken).ConfigureAwait(false);
-            string grantReplyJson = Encoding.UTF8.GetString(packedGrantReply.AsReadOnlySpan());
+        DidCommMessage mediateRequest = MediateRequest("mediate-request-e2e-1", from: E2ERecipientDid);
+        DidCommMessage mediateGrantMessage = mediateRequest.CreateMediateGrant("mediate-grant-e2e-1", ExpectedRoutingDid, from: E2EMediatorDid);
+        using DidCommEncryptedMessage packedGrantReply = await PackAnoncryptAsync(
+            mediateGrantMessage, E2ERecipientKid, recipientPublic, TestContext.CancellationToken).ConfigureAwait(false);
+        string grantReplyJson = Encoding.UTF8.GetString(packedGrantReply.AsReadOnlySpan());
 
-            await using MinimalHttpHost mediatorHost = await MinimalHttpHost.StartAsync(
-                (request, cancellationToken) => Task.FromResult(new MinimalHttpResponse
-                {
-                    StatusCode = 200,
-                    ContentType = DidCommEncryptedMessage.MediaType,
-                    Body = grantReplyJson
-                }),
-                TestContext.CancellationToken).ConfigureAwait(false);
+        await using MinimalHttpHost mediatorHost = await MinimalHttpHost.StartAsync(
+            (request, cancellationToken) => Task.FromResult(new MinimalHttpResponse
+            {
+                StatusCode = 200,
+                ContentType = DidCommEncryptedMessage.MediaType,
+                Body = grantReplyJson
+            }),
+            TestContext.CancellationToken).ConfigureAwait(false);
 
-            using DidCommEncryptedMessage packedRequest = await PackAnoncryptAsync(
-                mediateRequest, E2EMediatorKid, mediatorPublic, TestContext.CancellationToken).ConfigureAwait(false);
+        using DidCommEncryptedMessage packedRequest = await PackAnoncryptAsync(
+            mediateRequest, E2EMediatorKid, mediatorPublic, TestContext.CancellationToken).ConfigureAwait(false);
 
-            using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(mediatorHost.Certificate);
-            DidCommExchangeDelegate exchange = DidCommHttpTransport.CreateExchangeDelegate(BuildExchangeTransport(httpClient), Pool);
+        using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(mediatorHost.Certificate);
+        DidCommExchangeDelegate exchange = DidCommHttpTransport.CreateExchangeDelegate(BuildExchangeTransport(httpClient), Pool);
 
-            using DidCommExchangeResult exchangeResult = await packedRequest.ExchangeAsync(
-                mediateRequest, mediatorHost.BaseAddress, NewLoopbackExchangeContext(), exchange, TestContext.CancellationToken).ConfigureAwait(false);
+        using DidCommExchangeResult exchangeResult = await packedRequest.ExchangeAsync(
+            mediateRequest, mediatorHost.BaseAddress, NewLoopbackExchangeContext(), exchange, TestContext.CancellationToken).ConfigureAwait(false);
 
-            Assert.IsTrue(exchangeResult.IsAccepted, $"The mediator MUST accept the mediate-request. Status: {exchangeResult.TransportStatusCode}, error: {exchangeResult.Error}.");
-            Assert.IsTrue(exchangeResult.HasReply, "The reply MUST arrive on the same HTTP response (return_route: all).");
+        Assert.IsTrue(exchangeResult.IsAccepted, $"The mediator MUST accept the mediate-request. Status: {exchangeResult.TransportStatusCode}, error: {exchangeResult.Error}.");
+        Assert.IsTrue(exchangeResult.HasReply, "The reply MUST arrive on the same HTTP response (return_route: all).");
 
-            DidCommMessageClass replyClass = DidCommInbound.Classify(exchangeResult.ReplyMediaType, exchangeResult.ReplyBody.AsReadOnlySpan(), TestSetup.Base64UrlDecoder, Pool);
-            Assert.AreEqual(DidCommMessageClass.Anoncrypt, replyClass, "The reply's Content-Type and protected-header alg MUST classify as anoncrypt.");
+        DidCommMessageClass replyClass = DidCommInbound.Classify(exchangeResult.ReplyMediaType, exchangeResult.ReplyBody.AsReadOnlySpan(), TestSetup.Base64UrlDecoder, Pool);
+        Assert.AreEqual(DidCommMessageClass.Anoncrypt, replyClass, "The reply's Content-Type and protected-header alg MUST classify as anoncrypt.");
 
-            using DidCommEncryptedMessage receivedReply = DidCommEncryptedMessage.Create(exchangeResult.ReplyBody.AsReadOnlySpan(), BufferTags.Json, Pool);
-            DidCommEncryptedUnpackResult unpacked = await receivedReply.UnpackAnoncryptAsync(
-                E2ERecipientKid, recipientPrivate, NestedSignerResolver, UnpackContext, DidCommMessageJson.Parser, DidCommSignedMessageJson.Parser,
-                TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        using DidCommEncryptedMessage receivedReply = DidCommEncryptedMessage.Create(exchangeResult.ReplyBody.AsReadOnlySpan(), BufferTags.Json, Pool);
+        DidCommEncryptedUnpackResult unpacked = await receivedReply.UnpackAnoncryptAsync(
+            E2ERecipientKid, recipientPrivate, NestedSignerResolver, UnpackContext, DidCommMessageJson.Parser, DidCommSignedMessageJson.Parser,
+            TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-            Assert.IsTrue(unpacked.IsUnpacked, $"The recipient MUST decrypt the mediate-grant that crossed the wire. Error: {unpacked.Error}.");
-            Assert.IsNotNull(unpacked.Message);
-            Assert.IsTrue(unpacked.Message!.TryReadMediateGrantRoutingDid(out string? routingDid), "TryReadMediateGrantRoutingDid MUST succeed on the decrypted grant.");
-            Assert.AreEqual(ExpectedRoutingDid, routingDid);
-        }
-        finally
-        {
-            recipientPrivate.Dispose();
-        }
+        Assert.IsTrue(unpacked.IsUnpacked, $"The recipient MUST decrypt the mediate-grant that crossed the wire. Error: {unpacked.Error}.");
+        Assert.IsNotNull(unpacked.Message);
+        Assert.IsTrue(unpacked.Message!.TryReadMediateGrantRoutingDid(out string? routingDid), "TryReadMediateGrantRoutingDid MUST succeed on the decrypted grant.");
+        Assert.AreEqual(ExpectedRoutingDid, routingDid);
     }
 }

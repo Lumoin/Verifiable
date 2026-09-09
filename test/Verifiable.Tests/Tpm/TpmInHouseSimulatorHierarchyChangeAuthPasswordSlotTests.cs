@@ -14,19 +14,20 @@ using Verifiable.Tpm.Spec.Attributes;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
 /// <summary>
 /// Drives the one authorization-area shape of <c>TPM2_HierarchyChangeAuth()</c> that mixes credential kinds: a
 /// <c>TPM_RS_PW</c> slot authorizing the hierarchy at index 0 beside a separate <c>decrypt</c> session at index
-/// 1 protecting <c>newAuth</c> (TPM 2.0 Library Part 3, clause 24.8; Part 1, clauses 16.6.1 and 19.1), against
+/// 1 protecting <c>newAuth</c> (TPM 2.0 Library Part 3, clause 24.8; Part 1, clauses 15.6.1 and 18.1), against
 /// the in-house behavioural <see cref="TpmSimulator"/> through the production command path.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The area is legal wire. Part 1, clause 16.6.1's Table 9 admits a password authorization at position 1 and a
-/// decryption session at position 2, and clause 16.6.4, Table 12 forbids the AUTHORIZING slot nothing except the
+/// The area is legal wire. Part 1, clause 15.6.1's Table 12 admits a password authorization at position 1 and a
+/// decryption session at position 2, and clause 15.6.4, Table 15 forbids the AUTHORIZING slot nothing except the
 /// attributes it could not key — which is precisely why the confidentiality of <c>newAuth</c> has to ride a
 /// separate session here. What makes the shape load-bearing rather than decorative is that <c>newAuth</c>
 /// arrives ENCRYPTED: a TPM that read the area as a lone password authorization would install the ciphertext as
@@ -44,7 +45,7 @@ namespace Verifiable.Tests.Tpm;
 /// <para>
 /// The decrypt companion is SALTED against an RSA <c>tpmKey</c> rather than bound to the hierarchy, so its
 /// session key is a secret the transcript does not carry even while the hierarchy's own authorization value is
-/// still being established (Part 1, clause 17.6.12, equation 25).
+/// still being established (Part 1, clause 16.6.12, equation 25).
 /// </para>
 /// </remarks>
 [TestClass]
@@ -56,7 +57,7 @@ internal sealed class TpmInHouseSimulatorHierarchyChangeAuthPasswordSlotTests
     /// <summary>The RSA endorsement-key template this simulator builds fixes nameAlg to SHA-256.</summary>
     private const TpmAlgIdConstants TpmKeyNameAlg = TpmAlgIdConstants.TPM_ALG_SHA256;
 
-    /// <summary>The RSA public exponent the framework key generator uses (the wire template's "0" encodes this default, TPM 2.0 Library Part 2, Table 215).</summary>
+    /// <summary>The RSA public exponent the framework key generator uses (the wire template's "0" encodes this default, TPM 2.0 Library Part 2, Table 228).</summary>
     private const uint DefaultRsaExponent = 65537;
 
     /// <summary>The authorization value the owner hierarchy is provisioned with before each case runs.</summary>
@@ -90,7 +91,7 @@ internal sealed class TpmInHouseSimulatorHierarchyChangeAuthPasswordSlotTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         //The salting key is created while the owner hierarchy still carries the Empty Buffer, so the empty
@@ -114,7 +115,7 @@ internal sealed class TpmInHouseSimulatorHierarchyChangeAuthPasswordSlotTests
                         device, registry, pool, companion, OwnerAuth, ReplacementAuth).ConfigureAwait(false);
                     Assert.AreEqual(
                         TpmRcConstants.TPM_RC_SUCCESS, rotation,
-                        "A password slot beside a decrypt companion is a legal authorization area (TPM 2.0 Library Part 1, clause 16.6.1, Table 9).");
+                        "A password slot beside a decrypt companion is a legal authorization area (TPM 2.0 Library Part 1, clause 15.6.1, Table 12).");
                 }
                 finally
                 {
@@ -124,7 +125,7 @@ internal sealed class TpmInHouseSimulatorHierarchyChangeAuthPasswordSlotTests
 
             TpmRcConstants stale = await RotateWithPasswordAsync(device, registry, pool, OwnerAuth, ProbeAuth).ConfigureAwait(false);
             Assert.AreEqual(
-                TpmRcConstants.TPM_RC_BAD_AUTH, stale,
+                HmacKeyHarness.SessionEncodedRc(TpmRcConstants.TPM_RC_BAD_AUTH, 0), stale,
                 "The replaced authorization value must stop authorizing the hierarchy once the rotation has committed.");
 
             TpmRcConstants withPlaintext = await RotateWithPasswordAsync(device, registry, pool, ReplacementAuth, ProbeAuth).ConfigureAwait(false);
@@ -145,7 +146,7 @@ internal sealed class TpmInHouseSimulatorHierarchyChangeAuthPasswordSlotTests
     /// </summary>
     /// <remarks>
     /// <c>TPM_RC_BAD_AUTH</c> rather than <c>TPM_RC_AUTH_FAIL</c> because the owner hierarchy is dictionary-attack
-    /// exempt — only <c>lockoutAuth</c> among the permanent handles is protected (Part 1, clause 17.8.1) — so the
+    /// exempt — only <c>lockoutAuth</c> among the permanent handles is protected (Part 1, clause 16.8.1) — so the
     /// failure counter must not move either, which the lockout-counter probe reads back rather than assumes. The
     /// encoding is what tells a caller WHICH slot it got wrong in an area holding two credentials.
     /// </remarks>
@@ -154,7 +155,7 @@ internal sealed class TpmInHouseSimulatorHierarchyChangeAuthPasswordSlotTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse tpmKey = await CreateRsaDecryptKeyAsync(device, registry, pool).ConfigureAwait(false);
@@ -190,7 +191,7 @@ internal sealed class TpmInHouseSimulatorHierarchyChangeAuthPasswordSlotTests
             }
 
             uint counterAfter = await ReadLockoutCounterAsync(device, registry, pool).ConfigureAwait(false);
-            Assert.AreEqual(counterBefore, counterAfter, "A dictionary-attack-exempt hierarchy's failed compare must move no counter (Part 1, clause 17.8.1).");
+            Assert.AreEqual(counterBefore, counterAfter, "A dictionary-attack-exempt hierarchy's failed compare must move no counter (Part 1, clause 16.8.1).");
 
             TpmRcConstants stillValid = await RotateWithPasswordAsync(device, registry, pool, OwnerAuth, ProbeAuth).ConfigureAwait(false);
             Assert.AreEqual(
@@ -221,7 +222,7 @@ internal sealed class TpmInHouseSimulatorHierarchyChangeAuthPasswordSlotTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse tpmKey = await CreateRsaDecryptKeyAsync(device, registry, pool).ConfigureAwait(false);
@@ -287,7 +288,7 @@ internal sealed class TpmInHouseSimulatorHierarchyChangeAuthPasswordSlotTests
         using var trackingPool = new MeteredHousePool();
         BaseMemoryPool pool = trackingPool.Pool;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse tpmKey = await CreateRsaDecryptKeyAsync(device, registry, pool).ConfigureAwait(false);
@@ -311,7 +312,7 @@ internal sealed class TpmInHouseSimulatorHierarchyChangeAuthPasswordSlotTests
 
                     TpmRcConstants wrongPassword = await RotateOverPasswordSlotAsync(
                         device, registry, pool, companion, WrongAuth, ReplacementAuth).ConfigureAwait(false);
-                    Assert.AreEqual(SessionEncodedRc(TpmRcConstants.TPM_RC_BAD_AUTH, sessionIndex: 0), wrongPassword);
+                    Assert.AreEqual(SessionEncodedRc(TpmRcConstants.TPM_RC_BAD_AUTH, sessionIndex: 0), wrongPassword, "The wrong-password refusal names slot 0, the [TPM_RS_PW] authorization slot (TPM 2.0 Library Part 2, clause 6.6.2).");
 
                     Assert.AreEqual(
                         wrongPasswordBaseline, trackingPool.OutstandingCount,
@@ -324,7 +325,7 @@ internal sealed class TpmInHouseSimulatorHierarchyChangeAuthPasswordSlotTests
 
                     TpmRcConstants corruptedCompanion = await RotateOverPasswordSlotAsync(
                         tamperingDevice, registry, pool, companion, OwnerAuth, ReplacementAuth).ConfigureAwait(false);
-                    Assert.AreEqual(SessionEncodedRc(TpmRcConstants.TPM_RC_BAD_AUTH, sessionIndex: 1), corruptedCompanion);
+                    Assert.AreEqual(SessionEncodedRc(TpmRcConstants.TPM_RC_BAD_AUTH, sessionIndex: 1), corruptedCompanion, "The corrupted-companion refusal names slot 1, the companion session's own slot (TPM 2.0 Library Part 2, clause 6.6.2).");
 
                     Assert.AreEqual(
                         companionBaseline, trackingPool.OutstandingCount,
@@ -365,7 +366,7 @@ internal sealed class TpmInHouseSimulatorHierarchyChangeAuthPasswordSlotTests
         using var trackingPool = new MeteredHousePool();
         BaseMemoryPool pool = trackingPool.Pool;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse tpmKey = await CreateRsaDecryptKeyAsync(device, registry, pool).ConfigureAwait(false);
@@ -389,7 +390,7 @@ internal sealed class TpmInHouseSimulatorHierarchyChangeAuthPasswordSlotTests
                     device, registry, pool, companion, OwnerAuth, ReplacementAuth).ConfigureAwait(false);
                 Assert.AreEqual(
                     TpmRcConstants.TPM_RC_SUCCESS, rotation,
-                    "A password slot beside a decrypt companion is a legal authorization area (TPM 2.0 Library Part 1, clause 16.6.1, Table 9).");
+                    "A password slot beside a decrypt companion is a legal authorization area (TPM 2.0 Library Part 1, clause 15.6.1, Table 12).");
 
                 Assert.AreEqual(
                     beforeRotation, trackingPool.OutstandingCount,
@@ -469,13 +470,13 @@ internal sealed class TpmInHouseSimulatorHierarchyChangeAuthPasswordSlotTests
 
     /// <summary>
     /// Starts an unbound, SALTED HMAC session negotiating XOR obfuscation and marks it as the area's
-    /// <c>decrypt</c> companion (TPM 2.0 Library Part 1, clause 19.2).
+    /// <c>decrypt</c> companion (TPM 2.0 Library Part 1, clause 18.2).
     /// </summary>
     /// <remarks>
     /// Salting rather than binding is what keeps the companion's session key out of the transcript: a session
     /// bound to the hierarchy being rotated derives its key from the very authorization value in play, so a
-    /// captured exchange plus a guess at that value would reproduce the keystream (clause 17.6.10, equation 20).
-    /// The salt travels back to the caller so the host can derive the identical key (clause 17.6.12, equation 25).
+    /// captured exchange plus a guess at that value would reproduce the keystream (clause 16.6.10, equation 20).
+    /// The salt travels back to the caller so the host can derive the identical key (clause 16.6.12, equation 25).
     /// </remarks>
     /// <param name="device">The device the session is started through.</param>
     /// <param name="registry">The response codec registry.</param>
@@ -489,7 +490,7 @@ internal sealed class TpmInHouseSimulatorHierarchyChangeAuthPasswordSlotTests
         TpmRsaSigningBackend rsaBackend = MicrosoftTpmRsaSigningBackend.Create();
 
         (StartAuthSessionInput startInput, IMemoryOwner<byte> salt, int saltLength) = await StartAuthSessionInputExtensions.CreateSaltedHmacSession(
-            tpmKey.ObjectHandle.Value, modulus, DefaultRsaExponent, TpmKeyNameAlg, SessionAlg, rsaBackend.EncryptOaep, pool,
+            tpmKey.ObjectHandle.Value, modulus, DefaultRsaExponent, TpmKeyNameAlg, SessionAlg, rsaBackend.EncryptOaep, TestEntropy.NewCounterStream(), pool,
             TestContext.CancellationToken, symmetric: TpmtSymDef.Xor(SessionAlg)).ConfigureAwait(false);
 
         try
@@ -501,7 +502,7 @@ internal sealed class TpmInHouseSimulatorHierarchyChangeAuthPasswordSlotTests
             StartAuthSessionResponse started = startResult.Value;
             TpmSession companion = await TpmSession.CreateBoundAsync(
                 new TpmHandle(started.SessionHandle.Value), ReadOnlyMemory<byte>.Empty, startInput.NonceCaller, started.NonceTPM,
-                SessionAlg, pool, symmetric: TpmtSymDef.Xor(SessionAlg), salt: salt.Memory[..saltLength],
+                SessionAlg, TestEntropy.NewCounterStream(), pool, symmetric: TpmtSymDef.Xor(SessionAlg), salt: salt.Memory[..saltLength],
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
             //The companion authorizes no entity, so it must claim at least one of decrypt/encrypt/audit to be
@@ -573,7 +574,7 @@ internal sealed class TpmInHouseSimulatorHierarchyChangeAuthPasswordSlotTests
     /// </summary>
     /// <remarks>
     /// The area's extent is read from the frame itself: <c>authorizationSize</c> sits after the header and this
-    /// command's single handle, and the area follows it (TPM 2.0 Library Part 1, clause 16.5). Corrupting the
+    /// command's single handle, and the area follows it (TPM 2.0 Library Part 1, clause 15.5). Corrupting the
     /// LAST octet reaches the trailing <c>hmac</c> without needing to walk the slots.
     /// </remarks>
     /// <param name="command">The framed command to tamper with.</param>
@@ -611,10 +612,10 @@ internal sealed class TpmInHouseSimulatorHierarchyChangeAuthPasswordSlotTests
             }
 
             return await simulator.SubmitAsync(bytes, commandPool, cancellationToken).ConfigureAwait(false);
-        });
+        }, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
     }
 
-    /// <summary>Reads a framed command's <c>commandCode</c> field (TPM 2.0 Library Part 1, clause 18.2's command header).</summary>
+    /// <summary>Reads a framed command's <c>commandCode</c> field (TPM 2.0 Library Part 1, clause 15.2.3's commandCode header field).</summary>
     /// <param name="command">The framed command.</param>
     /// <returns>The command code.</returns>
     private static TpmCcConstants ReadCommandCode(ReadOnlySpan<byte> command)
@@ -657,7 +658,7 @@ internal sealed class TpmInHouseSimulatorHierarchyChangeAuthPasswordSlotTests
         var simulator = new TpmSimulator(
             "tpm-in-house-hierarchy-change-auth-password-slot",
             signingBackend: BouncyCastleTpmEccSigningBackend.Create(),
-            rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create());
+            rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await IssueStartupClearAsync(simulator, pool).ConfigureAwait(false);
 

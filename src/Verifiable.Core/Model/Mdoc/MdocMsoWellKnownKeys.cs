@@ -46,6 +46,24 @@ public static class MdocMsoWellKnownKeys
     /// <summary>The <c>validityInfo</c> key in the MSO; the temporal bounds the issuer commits to.</summary>
     public const string ValidityInfo = "validityInfo";
 
+    /// <summary>
+    /// The <c>status</c> key in the MSO; the Token Status List Status CBOR
+    /// structure (Section 6.3) carrying the credential's revocation
+    /// mechanism(s) — see <see cref="Verifiable.Core.StatusList.StatusMechanismNames"/>
+    /// for the mechanism keys it carries.
+    /// </summary>
+    /// <remarks>
+    /// Placement inside the MSO is specified by the second edition of
+    /// ISO/IEC 18013-5, under ballot as a DIS (ISO/IEC DIS 18013-5; expected
+    /// publication 2026-11-30); ISO/IEC 18013-5:2021 — the edition the other
+    /// members here are drawn from — carries no <c>status</c> member. The
+    /// placement is witnessed by the draft EU implementing act amending the
+    /// EAA implementing regulations: "its MobileSecurityObject (MSO) shall
+    /// contain the status structure ... which contains MSO revocation
+    /// information."
+    /// </remarks>
+    public const string Status = "status";
+
 
     //DeviceKeyInfo map keys (ISO/IEC 18013-5 §9.1.2.4).
 

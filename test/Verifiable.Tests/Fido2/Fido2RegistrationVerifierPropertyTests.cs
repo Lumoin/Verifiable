@@ -7,6 +7,7 @@ using Verifiable.Json;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 using static Verifiable.Tests.Fido2.Fido2RegistrationVerifierTests;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Fido2;
 
@@ -66,19 +67,7 @@ internal sealed class Fido2RegistrationVerifierPropertyTests
             SelectAttestationVerifierDelegate selectVerifier = Fido2AttestationSelectors.FromFormats(
                 (WellKnownWebAuthnAttestationFormats.None, NoneAttestation.Build()));
 
-            Fido2RegistrationOutcome outcome = Fido2RegistrationVerifier.VerifyAsync(
-                WellKnownWebAuthnAttestationFormats.None,
-                attestationStatement: new byte[] { CanonicalEmptyMap },
-                authDataBytes,
-                clientDataJson,
-                ceremonyInput,
-                selectVerifier,
-                AlwaysUnique,
-                trustAnchors: [],
-                validationTime: TestClock.CanonicalEpoch,
-                CorrelationId,
-                BaseMemoryPool.Shared,
-                cancellationToken: TestContext.CancellationToken)
+            Fido2RegistrationOutcome outcome = Fido2RegistrationVerifier.VerifyAsync(WellKnownWebAuthnAttestationFormats.None, attestationStatement: new byte[] { CanonicalEmptyMap }, authDataBytes, clientDataJson, ceremonyInput, selectVerifier, AlwaysUnique, trustAnchors: [], validationTime: TestClock.CanonicalEpoch, CorrelationId, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch))
                 .AsTask().GetAwaiter().GetResult();
 
             using Fido2CredentialRecord? record = outcome.CredentialRecord;

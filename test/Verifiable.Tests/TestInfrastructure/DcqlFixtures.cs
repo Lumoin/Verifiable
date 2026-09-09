@@ -35,6 +35,14 @@ internal static class DcqlFixtures
     /// <summary>Secondary credential identifier for the two-credential PID fixture.</summary>
     public const string PidSecondaryCredentialId = "pid_secondary";
 
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-6.1.1.1">OpenID
+    /// for Verifiable Presentations 1.0, Section 6.1.1.1</see>'s non-normative <c>aki</c> example entry value —
+    /// the Base64url-encoded Authority Key Identifier the <c>trusted_authorities</c> DCQL evaluation, wire and
+    /// verifier-seat test corpus reuses as a fixed, spec-faithful <c>aki</c> value.
+    /// </summary>
+    public const string AkiExampleValue = "s9tIpPmhxdiuNkHMEWNpYim8S8Y";
+
 
     /// <summary>
     /// Single PID credential query against the <c>family_name</c> claim
@@ -135,13 +143,14 @@ internal static class DcqlFixtures
 
 
     /// <summary>
-    /// <see cref="PidFamilyName"/> carrying a DCQL <c>trusted_authorities</c> constraint
-    /// (OID4VP 1.0 §6.1.1): the credential matches only when its verified issuer is one of
-    /// <paramref name="trustedIssuers"/>. Used to drive the verifier's fail-closed
-    /// <c>trusted_authorities</c> enforcement end-to-end — pass the issuing entity for the
-    /// accept case and a stranger for the reject case.
+    /// <see cref="PidFamilyName"/> carrying a DCQL <c>openid_federation</c> <c>trusted_authorities</c>
+    /// constraint (OID4VP 1.0 §6.1.1.3): the credential matches only when one of
+    /// <paramref name="trustedIssuers"/> is a subject on a validated federation trust path from the
+    /// credential's issuer. Used to drive the verifier's fail-closed <c>trusted_authorities</c>
+    /// enforcement end-to-end — pass the issuing entity's own identifier for the accept case (it is
+    /// itself a subject on its own trust path) and a stranger identifier for the reject case.
     /// </summary>
-    /// <param name="trustedIssuers">The issuer entity identifiers the verifier accepts.</param>
+    /// <param name="trustedIssuers">The Entity Identifiers the verifier accepts.</param>
     public static DcqlQuery PidFamilyNameTrustedAuthorities(params string[] trustedIssuers) => new()
     {
         Credentials =
@@ -151,9 +160,10 @@ internal static class DcqlFixtures
                 Id = PidCredentialId,
                 Format = WellKnownMediaTypes.Jwt.DcSdJwt,
                 Meta = new CredentialQueryMeta { VctValues = [EudiPid.SdJwtVct] },
-                //openid_federation: the authority is identified by its entity
-                //identifier (the credential's iss) per OID4VP 1.0 §6.1.1.3.
-                //DcqlEvaluator matches the verified issuer against Values.
+                //openid_federation (OID4VP 1.0 §6.1.1.3): each value is an Entity Identifier;
+                //DcqlEvaluator matches it against the credential's TrustedAuthorityEvidence
+                //.FederationTrustPathEntities — every statement subject on a validated
+                //federation trust chain from the credential's issuer to a familiar anchor.
                 TrustedAuthorities =
                 [
                     new TrustedAuthoritiesQuery
@@ -256,6 +266,7 @@ internal static class DcqlFixtures
             {
                 Id = PidCredentialId,
                 Format = WellKnownMediaTypes.Jwt.DcSdJwt,
+                Meta = new CredentialQueryMeta { VctValues = [EudiPid.SdJwtVct] },
                 Claims =
                 [
                     ClaimsQuery.ForPath(["given_name"]),

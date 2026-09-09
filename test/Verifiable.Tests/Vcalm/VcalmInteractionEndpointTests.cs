@@ -35,14 +35,14 @@ internal sealed class VcalmInteractionEndpointTests
     private FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch);
 
     private const string ClientId = "https://coordinator.client.test";
-    private static readonly Uri ClientBaseUri = new("https://coordinator.client.test");
+    private static Uri ClientBaseUri { get; } = new("https://coordinator.client.test");
 
-    private static readonly ImmutableHashSet<CapabilityIdentifier> CoordinatorCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> CoordinatorCapabilities { get; } =
         ImmutableHashSet.Create(WellKnownVcalmCapabilities.VcalmCoordinator);
 
     //The §3.7.6 test co-hosts the coordinator role with the §3.6 exchange role so the vcapi URL the
     //§3.7.4 map advertises addresses a real exchange the same host can participate in.
-    private static readonly ImmutableHashSet<CapabilityIdentifier> CoordinatorAndExchangeCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> CoordinatorAndExchangeCapabilities { get; } =
         ImmutableHashSet.Create(
             WellKnownVcalmCapabilities.VcalmCoordinator, WellKnownVcalmCapabilities.VcalmExchange);
 

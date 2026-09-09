@@ -1,13 +1,14 @@
 using System;
 using Verifiable.Tpm.Spec.Constants;
+using static Verifiable.Tpm.Spec.TpmRcExtensions;
 
 namespace Verifiable.Tpm.Infrastructure;
 
 /// <summary>
-/// Evaluates a <c>TPM_EO</c> comparison (TPM 2.0 Library Part 2, Section 6.8, Table 22) between two equal-length,
+/// Evaluates a <c>TPM_EO</c> comparison (TPM 2.0 Library Part 2, clause 6.8, Table 20) between two equal-length,
 /// big-endian operand spans, shared by every enhanced-authorization assertion that compares a live or stored value
-/// against a caller-supplied operand (<c>TPM2_PolicyCounterTimer</c>, Part 3, Section 23.10; <c>TPM2_PolicyNV</c>,
-/// Part 3, Section 23.9).
+/// against a caller-supplied operand (<c>TPM2_PolicyCounterTimer</c>, Part 3, clause 23.10; <c>TPM2_PolicyNV</c>,
+/// Part 3, clause 23.9).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -44,7 +45,11 @@ public static class TpmEoComparator
         if(operandB.IsEmpty)
         {
             comparisonResult = false;
-            rejectionCode = TpmRcConstants.TPM_RC_SIZE;
+
+            //Both callers (TPM2_PolicyCounterTimer, Part 3, clause 23.10; TPM2_PolicyNV, clause 23.9) carry
+            //operandB as their own first parameter, so the index is fixed for every caller of this shared
+            //helper (TPM 2.0 Library Part 2, clause 6.6.2 for the encoding).
+            rejectionCode = ParameterEncodedRc(TpmRcConstants.TPM_RC_SIZE, parameterIndex: 0);
 
             return false;
         }
@@ -75,7 +80,7 @@ public static class TpmEoComparator
         return true;
 
         //Unsigned magnitude compare over equal-length, big-endian operands: octet 0 is the most significant
-        //(Part 3, Section 23.10 prose). Returns -1/0/1, mirroring the conventional three-way compare.
+        //(Part 3, clause 23.10 prose). Returns -1/0/1, mirroring the conventional three-way compare.
         static int CompareUnsigned(ReadOnlySpan<byte> a, ReadOnlySpan<byte> b)
         {
             for(int i = 0; i < a.Length; i++)

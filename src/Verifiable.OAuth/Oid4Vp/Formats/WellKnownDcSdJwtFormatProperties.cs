@@ -18,7 +18,7 @@ public static class WellKnownDcSdJwtFormatProperties
     /// <c>alg</c> JOSE header MUST match one of these values when present.
     /// Per OID4VP 1.0 Appendix B.3.
     /// </summary>
-    public static readonly string SdJwtAlgValues = Utf8Constants.ToInternedString(SdJwtAlgValuesUtf8);
+    public static string SdJwtAlgValues { get; } = Utf8Constants.ToInternedString(SdJwtAlgValuesUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="KbJwtAlgValues"/>.</summary>
     public static ReadOnlySpan<byte> KbJwtAlgValuesUtf8 => "kb-jwt_alg_values"u8;
@@ -29,7 +29,7 @@ public static class WellKnownDcSdJwtFormatProperties
     /// KB-JWT's <c>alg</c> JOSE header MUST match one of these values when present.
     /// Per OID4VP 1.0 Appendix B.3.
     /// </summary>
-    public static readonly string KbJwtAlgValues = Utf8Constants.ToInternedString(KbJwtAlgValuesUtf8);
+    public static string KbJwtAlgValues { get; } = Utf8Constants.ToInternedString(KbJwtAlgValuesUtf8);
 
 
     /// <summary>Returns <see langword="true"/> when <paramref name="value"/> is

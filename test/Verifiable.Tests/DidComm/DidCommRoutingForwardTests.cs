@@ -42,11 +42,11 @@ internal sealed class DidCommRoutingForwardTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly BaseMemoryPool Pool = BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool { get; } = BaseMemoryPool.Shared;
 
-    private static readonly ExchangeContext Context = new();
+    private static ExchangeContext Context { get; } = new();
 
-    private static readonly JwtHeaderSerializer HeaderSerializer =
+    private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)header,
             TestSetup.DefaultSerializationOptions);
@@ -82,7 +82,7 @@ internal sealed class DidCommRoutingForwardTests
             HeaderSerializer,
             TestSetup.Base64UrlEncoder,
             CryptoFormatConversions.DefaultTagToEpkCrvConverter,
-            MicrosoftEntropyFunctions.GenerateNonce,
+            MicrosoftEntropyFunctionsAdapter.GenerateNonce,
             Pool,
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -139,7 +139,7 @@ internal sealed class DidCommRoutingForwardTests
         using DidCommEncryptedMessage? outer = await inner.WrapInForwardAsync(
             bob.Did, [m1.Did], resolver, Context,
             BouncyCastleKeyMaterialCreator.CreateX25519Keys, ForwardId, DidCommMessageJson.Serializer, HeaderSerializer,
-            TestSetup.Base64UrlEncoder, CryptoFormatConversions.DefaultTagToEpkCrvConverter, MicrosoftEntropyFunctions.GenerateNonce,
+            TestSetup.Base64UrlEncoder, CryptoFormatConversions.DefaultTagToEpkCrvConverter, MicrosoftEntropyFunctionsAdapter.GenerateNonce,
             Pool, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(outer);
@@ -171,7 +171,7 @@ internal sealed class DidCommRoutingForwardTests
         DidCommEncryptedMessage? outer = await inner.WrapInForwardAsync(
             bob.Did, [], resolver, Context,
             BouncyCastleKeyMaterialCreator.CreateX25519Keys, ForwardId, DidCommMessageJson.Serializer, HeaderSerializer,
-            TestSetup.Base64UrlEncoder, CryptoFormatConversions.DefaultTagToEpkCrvConverter, MicrosoftEntropyFunctions.GenerateNonce,
+            TestSetup.Base64UrlEncoder, CryptoFormatConversions.DefaultTagToEpkCrvConverter, MicrosoftEntropyFunctionsAdapter.GenerateNonce,
             Pool, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNull(outer, "Empty routingKeys MUST yield null — the forward protocol is not needed.");
@@ -192,7 +192,7 @@ internal sealed class DidCommRoutingForwardTests
         using DidCommEncryptedMessage? outer = await inner.WrapInForwardAsync(
             bob.Did, [m1.Did, m2.Did], resolver, Context,
             BouncyCastleKeyMaterialCreator.CreateX25519Keys, ForwardId, DidCommMessageJson.Serializer, HeaderSerializer,
-            TestSetup.Base64UrlEncoder, CryptoFormatConversions.DefaultTagToEpkCrvConverter, MicrosoftEntropyFunctions.GenerateNonce,
+            TestSetup.Base64UrlEncoder, CryptoFormatConversions.DefaultTagToEpkCrvConverter, MicrosoftEntropyFunctionsAdapter.GenerateNonce,
             Pool, TestContext.CancellationToken).ConfigureAwait(false);
 
         //Decrypt the outer to a forward plaintext and read its next via the message accessor: it MUST be m2.
@@ -274,7 +274,7 @@ internal sealed class DidCommRoutingForwardTests
         using DidCommEncryptedMessage? outer = await inner.WrapInForwardAsync(
             bob.Did, resolver, Context, BouncyCastleKeyMaterialCreator.CreateX25519Keys,
             ForwardId, DidCommMessageJson.Serializer, HeaderSerializer, TestSetup.Base64UrlEncoder,
-            CryptoFormatConversions.DefaultTagToEpkCrvConverter, MicrosoftEntropyFunctions.GenerateNonce,
+            CryptoFormatConversions.DefaultTagToEpkCrvConverter, MicrosoftEntropyFunctionsAdapter.GenerateNonce,
             Pool, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(outer, "The recipient advertises routing keys, so a forward MUST be produced.");
@@ -299,7 +299,7 @@ internal sealed class DidCommRoutingForwardTests
         using DidCommEncryptedMessage? outer = await inner.WrapInForwardAsync(
             bob.Did, [m1.Did], resolver, Context,
             BouncyCastleKeyMaterialCreator.CreateX25519Keys, ForwardId, DidCommMessageJson.Serializer, HeaderSerializer,
-            TestSetup.Base64UrlEncoder, CryptoFormatConversions.DefaultTagToEpkCrvConverter, MicrosoftEntropyFunctions.GenerateNonce,
+            TestSetup.Base64UrlEncoder, CryptoFormatConversions.DefaultTagToEpkCrvConverter, MicrosoftEntropyFunctionsAdapter.GenerateNonce,
             Pool, TestContext.CancellationToken).ConfigureAwait(false);
 
         //m2's key cannot decrypt a forward encrypted for m1.
@@ -534,13 +534,13 @@ internal sealed class DidCommRoutingForwardTests
     //A fake single-hop transport routing inner-JWE bodies by absolute URL for the forward-over-links E2E.
     private sealed class ForwardTransport
     {
-        private readonly Dictionary<string, (int Status, byte[] Body)> routes;
+        private Dictionary<string, (int Status, byte[] Body)> Routes { get; }
 
         public ForwardTransport() : this(new Dictionary<string, (int, byte[])>(StringComparer.Ordinal)) { }
 
         public ForwardTransport(Dictionary<string, (int Status, byte[] Body)> routes)
         {
-            this.routes = routes;
+            this.Routes = routes;
         }
 
         public List<OutboundRequest> Calls { get; } = [];
@@ -549,7 +549,7 @@ internal sealed class DidCommRoutingForwardTests
         {
             Calls.Add(request);
 
-            if(!routes.TryGetValue(request.Target.AbsoluteUri, out (int Status, byte[] Body) route))
+            if(!Routes.TryGetValue(request.Target.AbsoluteUri, out (int Status, byte[] Body) route))
             {
                 route = (404, []);
             }
@@ -719,7 +719,7 @@ internal sealed class DidCommRoutingForwardTests
             HeaderSerializer,
             TestSetup.Base64UrlEncoder,
             CryptoFormatConversions.DefaultTagToEpkCrvConverter,
-            MicrosoftEntropyFunctions.GenerateNonce,
+            MicrosoftEntropyFunctionsAdapter.GenerateNonce,
             Pool,
             TestContext.CancellationToken).ConfigureAwait(false);
     }
@@ -743,7 +743,7 @@ internal sealed class DidCommRoutingForwardTests
             HeaderSerializer,
             TestSetup.Base64UrlEncoder,
             CryptoFormatConversions.DefaultTagToEpkCrvConverter,
-            MicrosoftEntropyFunctions.GenerateNonce,
+            MicrosoftEntropyFunctionsAdapter.GenerateNonce,
             Pool,
             TestContext.CancellationToken).ConfigureAwait(false);
     }

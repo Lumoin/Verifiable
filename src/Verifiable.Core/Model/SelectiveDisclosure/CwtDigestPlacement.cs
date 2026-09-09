@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Verifiable.JCose;
-using Verifiable.JsonPointer;
+using Lumoin.Veritas.JsonPointer;
 
 namespace Verifiable.Core.Model.SelectiveDisclosure;
 

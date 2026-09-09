@@ -47,10 +47,10 @@ internal sealed class ContributorChainRegressionTests
     //Marker ClaimIds for the ordering test. Codes 90000+ are outside the
     //library's reservation ranges (1-602 crypto/DID, 700-999 Validation,
     //1000-1099 Phase A, 1100+ reserved for future tracks).
-    private static readonly ClaimId FirstMarkerId =
+    private static ClaimId FirstMarkerId { get; } =
         ClaimId.Create(90001, "ContributorChainTestFirstMarker");
 
-    private static readonly ClaimId SecondMarkerId =
+    private static ClaimId SecondMarkerId { get; } =
         ClaimId.Create(90002, "ContributorChainTestSecondMarker");
 
 

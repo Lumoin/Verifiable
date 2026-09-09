@@ -10,6 +10,7 @@ using Verifiable.Tpm.Spec.Attributes;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -42,8 +43,8 @@ internal sealed class TpmInHouseSimulatorInterfaceTypeSlotTests
     /// A <c>TPM2_Quote()</c> whose <c>signHandle</c> names the permanent handle <c>TPM_RH_OWNER</c> — a value
     /// <c>TPMI_DH_OBJECT</c> does not admit, since that type is constrained to transient and persistent object
     /// handles (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0
-    /// Library Specification</see>, Part 2, Section 9.3, Table 50) — is answered with <c>TPM_RC_HANDLE</c>, the
-    /// code Part 3, Section 18.4's handle resolution names, and never with an exception leaving the command
+    /// Library Specification</see>, Part 2, clause 9.3, Table 49) — is answered with <c>TPM_RC_HANDLE</c>, the
+    /// code Part 3, clause 18.4's handle resolution names, and never with an exception leaving the command
     /// path.
     /// </summary>
     [TestMethod]
@@ -51,7 +52,7 @@ internal sealed class TpmInHouseSimulatorInterfaceTypeSlotTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-interface-slot-quote").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using TpmlPcrSelection pcrSelection = TpmlPcrSelection.Create(TpmAlgIdConstants.TPM_ALG_SHA256, PcrIndices, trackingPool.Pool);
@@ -68,15 +69,15 @@ internal sealed class TpmInHouseSimulatorInterfaceTypeSlotTests
 
         Assert.IsTrue(result.IsTpmError, "A permanent handle in the signHandle slot must be refused with a response code.");
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_HANDLE, result.ResponseCode,
-            "A signHandle that resolves to no loaded object is a bare TPM_RC_HANDLE (TPM 2.0 Library Part 3, clause 18.4).");
+            HmacKeyHarness.HandleEncodedRc(TpmRcConstants.TPM_RC_HANDLE, 0), result.ResponseCode,
+            "A signHandle that resolves to no loaded object designates signHandle, handle 1 of Table 101 (TPM 2.0 Library Part 3, clause 18.4).");
     }
 
     /// <summary>
     /// A <c>TPM2_NV_DefineSpace()</c> whose <c>publicInfo.nvIndex</c> carries a handle whose most-significant
     /// octet is not <c>TPM_HT_NV_INDEX</c> — a value <c>TPMI_RH_NV_INDEX</c> does not admit (<see
     /// href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 2, Section 9.25, Table 72, over the handle ranges of Section 7.2) — is answered
+    /// Specification</see>, Part 2, clause 9.25, Table 71, over the handle ranges of clause 7.2) — is answered
     /// with <c>TPM_RC_HANDLE</c> rather than an exception leaving the command path.
     /// </summary>
     [TestMethod]
@@ -86,7 +87,7 @@ internal sealed class TpmInHouseSimulatorInterfaceTypeSlotTests
 
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-interface-slot-nvdefine").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using Tpm2bAuth indexAuth = Tpm2bAuth.Create("index-auth"u8, trackingPool.Pool);
@@ -105,15 +106,15 @@ internal sealed class TpmInHouseSimulatorInterfaceTypeSlotTests
 
         Assert.IsTrue(result.IsTpmError, "An nvIndex outside the NV Index range must be refused with a response code.");
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_HANDLE, result.ResponseCode,
-            "A handle whose most-significant octet is not TPM_HT_NV_INDEX is TPM_RC_HANDLE (TPM 2.0 Library Part 2, clause 7.2).");
+            HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_HANDLE, 1), result.ResponseCode,
+            "publicInfo, parameter 2 of Table 245, carrying a handle whose most-significant octet is not TPM_HT_NV_INDEX is parameter-encoded TPM_RC_HANDLE (TPM 2.0 Library Part 2, clause 7.2).");
     }
 
     /// <summary>
     /// A <c>TPM2_StartAuthSession()</c> whose <c>authHash</c> names <c>TPM_ALG_RSA</c> — an asymmetric algorithm
     /// that <c>TPMI_ALG_HASH</c> does not admit, since that type is constrained to the hash algorithms the TPM
     /// implements (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0
-    /// Library Specification</see>, Part 2, Section 9.31, Table 78) — is answered with <c>TPM_RC_HASH</c>, the
+    /// Library Specification</see>, Part 2, clause 9.31, Table 77) — is answered with <c>TPM_RC_HASH</c>, the
     /// code that table names, rather than an exception leaving the command path.
     /// </summary>
     [TestMethod]
@@ -121,7 +122,7 @@ internal sealed class TpmInHouseSimulatorInterfaceTypeSlotTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-interface-slot-startauthsession").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         var sessionInput = new StartAuthSessionInput
@@ -141,8 +142,8 @@ internal sealed class TpmInHouseSimulatorInterfaceTypeSlotTests
 
         Assert.IsTrue(result.IsTpmError, "A non-hash authHash must be refused with a response code.");
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_HASH, result.ResponseCode,
-            "An algorithm outside TPMI_ALG_HASH's admitted set is TPM_RC_HASH (TPM 2.0 Library Part 2, clause 9.31, Table 78).");
+            HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_HASH, 4), result.ResponseCode,
+            "authHash, parameter 5 of Table 14, naming an algorithm outside TPMI_ALG_HASH's admitted set is parameter-encoded TPM_RC_HASH (TPM 2.0 Library Part 2, clause 9.31, Table 77).");
     }
 
     /// <summary>
@@ -157,7 +158,7 @@ internal sealed class TpmInHouseSimulatorInterfaceTypeSlotTests
         var simulator = new TpmSimulator(
             tpmId,
             signingBackend: BouncyCastleTpmEccSigningBackend.Create(),
-            rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create());
+            rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await BringOperationalAsync(simulator, pool).ConfigureAwait(false);
 

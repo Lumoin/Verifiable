@@ -98,7 +98,7 @@ public readonly struct XAdESSignedSignaturePropertyEntry: IEquatable<XAdESSigned
 /// </remarks>
 public readonly struct XAdESSignedSignatureProperties: IEquatable<XAdESSignedSignatureProperties>
 {
-    private static readonly (byte[] LocalName, bool IsDeprecated, XAdESSignedSignaturePropertyName Name)[] Slots =
+    private static (byte[] LocalName, bool IsDeprecated, XAdESSignedSignaturePropertyName Name)[] Slots { get; } =
     [
         ("SigningTime"u8.ToArray(), false, XAdESSignedSignaturePropertyName.SigningTime),
         ("SigningCertificate"u8.ToArray(), true, default),

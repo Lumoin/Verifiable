@@ -17,8 +17,8 @@ namespace Verifiable.Tests.Keri;
 [TestClass]
 internal sealed class KeriCountCodeSemanticsTests
 {
-    private static readonly byte[] DigestRaw = Convert.FromHexString("0ff9dafee5024209554babba1e341af32c637fcaec9e3e65d568ecda03db1ce6");
-    private static readonly byte[] SignatureRaw = [.. Enumerable.Range(0, 64).Select(i => (byte)i)];
+    private static byte[] DigestRaw { get; } = Convert.FromHexString("0ff9dafee5024209554babba1e341af32c637fcaec9e3e65d568ecda03db1ce6");
+    private static byte[] SignatureRaw { get; } = [.. Enumerable.Range(0, 64).Select(i => (byte)i)];
 
 
     /// <summary>

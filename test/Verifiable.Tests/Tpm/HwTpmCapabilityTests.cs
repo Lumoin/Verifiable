@@ -41,7 +41,7 @@ internal class HwTpmCapabilityTests
         if(TpmDevice.IsAvailable)
         {
             HasTpm = true;
-            Tpm = TpmDevice.Open();
+            Tpm = TpmDevice.Open(BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         }
     }
 
@@ -132,7 +132,7 @@ internal class HwTpmCapabilityTests
     [TestMethod]
     public async Task DumpSupportedEccCurves()
     {
-        using TpmDevice device = TpmDevice.Open();
+        using TpmDevice device = TpmDevice.Open(BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
 
@@ -191,7 +191,7 @@ internal class HwTpmCapabilityTests
     [TestMethod]
     public async Task DumpPcrValues()
     {
-        using TpmDevice device = TpmDevice.Open();
+        using TpmDevice device = TpmDevice.Open(BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
 
@@ -263,7 +263,7 @@ internal class HwTpmCapabilityTests
         {
             TestContext.WriteLine($"--- {selection.HashAlgorithm} Bank ---");
 
-            var allResults = await ReadAllPcrs(Tpm, pool, registry, (TpmAlgIdConstants)selection.HashAlgorithm, 24).ConfigureAwait(false);
+            var allResults = await ReadAllPcrs(Tpm, pool, registry, selection.HashAlgorithm, 24).ConfigureAwait(false);
 
             if(allResults.Count > 0)
             {

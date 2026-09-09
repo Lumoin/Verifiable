@@ -12,6 +12,8 @@ using Verifiable.Tpm.Spec.Attributes;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
+using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -27,10 +29,10 @@ namespace Verifiable.Tests.Tpm;
 /// <para>
 /// A secret is sealed into a <c>TPM_ALG_KEYEDHASH</c> object whose authPolicy is a <c>TPM2_PolicyPCR()</c> digest,
 /// so the unseal is authorized only when a policy session reproduces that digest over the live PCR values (TPM 2.0
-/// Library Part 3, clause 12.7; Part 1, clause 17.7). Recovery uses two sessions: a satisfied
+/// Library Part 3, clause 12.7; Part 1, clause 16.7). Recovery uses two sessions: a satisfied
 /// <see cref="TpmPolicySession"/> (the authorizing session, supplied first, which carries an empty HMAC because the
-/// policy itself is the authorization, Part 1, clause 17.6) plus a bound HMAC session with AES-CFB parameter
-/// encryption and the <c>encrypt</c> attribute (Part 1, clauses 16.7 and 19), so the recovered secret is decrypted
+/// policy itself is the authorization, Part 1, clause 16.6) plus a bound HMAC session with AES-CFB parameter
+/// encryption and the <c>encrypt</c> attribute (Part 1, clauses 15.7 and 18), so the recovered secret is decrypted
 /// only after the response HMAC verifies.
 /// </para>
 /// <para>
@@ -43,7 +45,7 @@ namespace Verifiable.Tests.Tpm;
 /// </para>
 /// <para>
 /// The simulator advances each session's policyDigest and frames the two-session response through the SAME seams
-/// the host <see cref="TpmSession"/> verifies with (Part 1, clauses 17.6, 16.7, and 19), so the on-device
+/// the host <see cref="TpmSession"/> verifies with (Part 1, clauses 16.6, 15.7, and 18), so the on-device
 /// derivation and the host's verification cannot diverge by construction: a session key, nonce, keystream, or
 /// response-framing byte that the simulator produced off by one would make the executor reject the response and
 /// fail the positive test's byte-exact equality assertion.
@@ -60,7 +62,8 @@ internal sealed class TpmInHouseSimulatorPcrSealTests
 
     /// <summary>
     /// The PCR(s) the seal is bound to. PCR 23 is the application/debug register, reset to the all-zero image
-    /// (TPM 2.0 Library Part 1, clause 17.5.3), so binding to it keeps the test off the boot-measured registers.
+    /// (TPM 2.0 Library Part 1, clause 14.1 (Initializing PCR)), so binding to it keeps the test off the
+    /// boot-measured registers.
     /// </summary>
     private static int[] PcrIndices { get; } = [23];
 
@@ -75,7 +78,7 @@ internal sealed class TpmInHouseSimulatorPcrSealTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
         TpmtSymDef symmetric = TpmtSymDef.Aes(128, TpmAlgIdConstants.TPM_ALG_CFB);
 
@@ -141,7 +144,7 @@ internal sealed class TpmInHouseSimulatorPcrSealTests
             ReadOnlyMemory<byte>[] handleNames = [loaded.Name.Span.ToArray()];
 
             //4. Start a bound AES-CFB encrypt session (bound to the parent) for the confidential outData.
-            StartAuthSessionInput encryptStartInput = StartAuthSessionInput.CreateBoundUnsaltedHmacSession(parentHandle, SessionAlg, symmetric);
+            StartAuthSessionInput encryptStartInput = StartAuthSessionInput.CreateBoundUnsaltedHmacSession(parentHandle, SessionAlg, TestEntropy.NewCounterStream(), pool, symmetric);
             TpmResult<StartAuthSessionResponse> encryptStartResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
                 tpm, encryptStartInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
             Assert.IsTrue(encryptStartResult.IsSuccess, $"StartAuthSession (encrypt) failed: '{encryptStartResult.ResponseCode}'.");
@@ -156,14 +159,14 @@ internal sealed class TpmInHouseSimulatorPcrSealTests
                 encryptBindAuth.AsReadOnlyMemory(),
                 encryptStartInput.NonceCaller,
                 encryptStart.NonceTPM,
-                SessionAlg,
+                SessionAlg, TestEntropy.NewCounterStream(),
                 pool,
                 symmetric: symmetric,
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
             encryptSession.SessionAttributes = TpmaSession.CONTINUE_SESSION | TpmaSession.ENCRYPT;
 
             //5. Unseal under [policy session (authorizes the object), encrypt session (protects outData)].
-            using TpmPolicySession policySession = TpmPolicySession.ForSession(policyHandle, SessionAlg, pool);
+            using TpmPolicySession policySession = TpmPolicySession.ForSession(policyHandle, SessionAlg, TestEntropy.NewCounterStream(), pool);
             UnsealInput unsealInput = UnsealInput.ForItem(loaded.ObjectHandle);
 
             TpmResult<UnsealResponse> unsealResult = await TpmCommandExecutor.ExecuteAsync<UnsealResponse>(
@@ -189,7 +192,7 @@ internal sealed class TpmInHouseSimulatorPcrSealTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -267,7 +270,7 @@ internal sealed class TpmInHouseSimulatorPcrSealTests
             Assert.IsTrue(pcrResult.IsSuccess, $"PolicyPCR failed: '{pcrResult.ResponseCode}'.");
 
             //4. The unseal must be rejected: the session's live-PCR policyDigest does not match the sealed authPolicy.
-            using TpmPolicySession policySession = TpmPolicySession.ForSession(policyHandle, SessionAlg, pool);
+            using TpmPolicySession policySession = TpmPolicySession.ForSession(policyHandle, SessionAlg, TestEntropy.NewCounterStream(), pool);
             UnsealInput unsealInput = UnsealInput.ForItem(loaded.ObjectHandle);
 
             TpmResult<UnsealResponse> unsealResult = await TpmCommandExecutor.ExecuteAsync<UnsealResponse>(
@@ -278,7 +281,7 @@ internal sealed class TpmInHouseSimulatorPcrSealTests
 
             //TPM_RC_POLICY_FAIL is a format-one code; the TPM annotates it with the offending session
             //(TPM_RC_S | the session number in TPM_RC_N_MASK), so strip those modifier bits to compare the base
-            //error (TPM 2.0 Library Part 2, Section 6.6.3).
+            //error (TPM 2.0 Library Part 2, clause 6.6.3).
             const uint FormatOneModifierMask = (uint)(TpmRcConstants.TPM_RC_P | TpmRcConstants.TPM_RC_S | TpmRcConstants.TPM_RC_N_MASK);
             var baseError = (TpmRcConstants)((uint)unsealResult.ResponseCode & ~FormatOneModifierMask);
             Assert.AreEqual(TpmRcConstants.TPM_RC_POLICY_FAIL, baseError,
@@ -298,7 +301,7 @@ internal sealed class TpmInHouseSimulatorPcrSealTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -361,10 +364,10 @@ internal sealed class TpmInHouseSimulatorPcrSealTests
             ReadOnlyMemory<byte>[] handleNames = [loaded.Name.Span.ToArray()];
 
             //4. Attempt the unseal authorized by the TRIAL session, whose digest is byte-identical to the sealed
-            //authPolicy. A trial session accumulates a digest but authorizes nothing (Part 1, clause 19.3), so the
+            //authPolicy. A trial session accumulates a digest but authorizes nothing (Part 1, clause 18.3), so the
             //unseal must still be rejected with TPM_RC_POLICY_FAIL — otherwise the trial-session lever above would
             //defeat PCR sealing entirely.
-            using TpmPolicySession trialPolicySession = TpmPolicySession.ForSession(trialHandle, SessionAlg, pool);
+            using TpmPolicySession trialPolicySession = TpmPolicySession.ForSession(trialHandle, SessionAlg, TestEntropy.NewCounterStream(), pool);
             UnsealInput unsealInput = UnsealInput.ForItem(loaded.ObjectHandle);
 
             TpmResult<UnsealResponse> unsealResult = await TpmCommandExecutor.ExecuteAsync<UnsealResponse>(
@@ -374,7 +377,7 @@ internal sealed class TpmInHouseSimulatorPcrSealTests
                 "A trial policy session must not authorize an unseal even when its digest equals the sealed authPolicy.");
 
             //TPM_RC_POLICY_FAIL is a format-one code annotated with the offending session; strip the modifier bits
-            //to compare the base error (Part 2, Section 6.6.3).
+            //to compare the base error (Part 2, clause 6.6.3).
             const uint FormatOneModifierMask = (uint)(TpmRcConstants.TPM_RC_P | TpmRcConstants.TPM_RC_S | TpmRcConstants.TPM_RC_N_MASK);
             var baseError = (TpmRcConstants)((uint)unsealResult.ResponseCode & ~FormatOneModifierMask);
             Assert.AreEqual(TpmRcConstants.TPM_RC_POLICY_FAIL, baseError,
@@ -469,7 +472,7 @@ internal sealed class TpmInHouseSimulatorPcrSealTests
     /// <returns>The operational simulator.</returns>
     private async Task<TpmSimulator> CreateOperationalAsync(BaseMemoryPool pool)
     {
-        var simulator = new TpmSimulator("tpm-in-house-pcrseal", signingBackend: BouncyCastleTpmEccSigningBackend.Create());
+        var simulator = new TpmSimulator("tpm-in-house-pcrseal", signingBackend: BouncyCastleTpmEccSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await BringOperationalAsync(simulator, pool).ConfigureAwait(false);
 

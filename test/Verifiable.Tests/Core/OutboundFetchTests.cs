@@ -1,10 +1,10 @@
 using System;
-using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Core;
 using Verifiable.Core.OutboundFetch;
 using Verifiable.Cryptography;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Core;
 
@@ -24,7 +24,7 @@ internal sealed class OutboundFetchTests
     [TestMethod]
     public async Task DeniedTargetIsNotContacted()
     {
-        FakeTransport transport = new();
+        ScriptedOutboundTransport transport = new();
         ExchangeContext context = Context(OutboundFetchPolicy.SecureDefault);
 
         OutboundFetchResult result = await OutboundFetch.FetchAsync(
@@ -40,7 +40,7 @@ internal sealed class OutboundFetchTests
     [TestMethod]
     public async Task TerminalResponseIsFetched()
     {
-        FakeTransport transport = new(); //default route: 200.
+        ScriptedOutboundTransport transport = new(); //default route: 200.
         ExchangeContext context = Context(OutboundFetchPolicy.SecureDefault);
 
         OutboundFetchResult result = await OutboundFetch.FetchAsync(
@@ -57,9 +57,9 @@ internal sealed class OutboundFetchTests
     [TestMethod]
     public async Task RedirectIsNotFollowedUnderNoneMode()
     {
-        FakeTransport transport = new(new()
+        ScriptedOutboundTransport transport = new(new()
         {
-            ["https://a.example/"] = (302, "https://b.example/"),
+            ["https://a.example/"] = ScriptedOutboundResponse.RedirectTo(302, "https://b.example/"),
         });
         ExchangeContext context = Context(OutboundFetchPolicy.SecureDefault); //Redirects = None.
 
@@ -75,10 +75,10 @@ internal sealed class OutboundFetchTests
     [TestMethod]
     public async Task RedirectIsFollowedUnderPolicyCheckedMode()
     {
-        FakeTransport transport = new(new()
+        ScriptedOutboundTransport transport = new(new()
         {
-            ["https://a.example/"] = (302, "https://b.example/"),
-            ["https://b.example/"] = (200, null),
+            ["https://a.example/"] = ScriptedOutboundResponse.RedirectTo(302, "https://b.example/"),
+            ["https://b.example/"] = ScriptedOutboundResponse.WithStatus(200),
         });
         ExchangeContext context = Context(OutboundFetchPolicy.SecureDefault with
         {
@@ -101,9 +101,9 @@ internal sealed class OutboundFetchTests
     {
         //The key proof: even with redirects enabled, a hop to an internal/
         //metadata address is re-validated and denied.
-        FakeTransport transport = new(new()
+        ScriptedOutboundTransport transport = new(new()
         {
-            ["https://ok.example/"] = (302, "https://169.254.169.254/latest/meta-data/"),
+            ["https://ok.example/"] = ScriptedOutboundResponse.RedirectTo(302, "https://169.254.169.254/latest/meta-data/"),
         });
         ExchangeContext context = Context(OutboundFetchPolicy.SecureDefault with
         {
@@ -125,10 +125,10 @@ internal sealed class OutboundFetchTests
     [TestMethod]
     public async Task ExceedingMaxRedirectsStops()
     {
-        FakeTransport transport = new(new()
+        ScriptedOutboundTransport transport = new(new()
         {
-            ["https://a.example/"] = (302, "https://b.example/"),
-            ["https://b.example/"] = (302, "https://c.example/"),
+            ["https://a.example/"] = ScriptedOutboundResponse.RedirectTo(302, "https://b.example/"),
+            ["https://b.example/"] = ScriptedOutboundResponse.RedirectTo(302, "https://c.example/"),
         });
         ExchangeContext context = Context(OutboundFetchPolicy.SecureDefault with
         {
@@ -147,10 +147,10 @@ internal sealed class OutboundFetchTests
     [TestMethod]
     public async Task SameOriginModeAllowsSameOriginAndBlocksCrossOrigin()
     {
-        FakeTransport sameOrigin = new(new()
+        ScriptedOutboundTransport sameOrigin = new(new()
         {
-            ["https://a.example/x"] = (302, "https://a.example/y"),
-            ["https://a.example/y"] = (200, null),
+            ["https://a.example/x"] = ScriptedOutboundResponse.RedirectTo(302, "https://a.example/y"),
+            ["https://a.example/y"] = ScriptedOutboundResponse.WithStatus(200),
         });
         ExchangeContext context = Context(OutboundFetchPolicy.SecureDefault with
         {
@@ -163,9 +163,9 @@ internal sealed class OutboundFetchTests
             .ConfigureAwait(false);
         Assert.AreEqual(OutboundFetchOutcome.Fetched, allowed.Outcome, "Same-origin redirect is followed.");
 
-        FakeTransport crossOrigin = new(new()
+        ScriptedOutboundTransport crossOrigin = new(new()
         {
-            ["https://a.example/"] = (302, "https://b.example/"),
+            ["https://a.example/"] = ScriptedOutboundResponse.RedirectTo(302, "https://b.example/"),
         });
         OutboundFetchResult blocked = await OutboundFetch.FetchAsync(
             Get("https://a.example/"), context, crossOrigin.Delegate, TestContext.CancellationToken)
@@ -184,10 +184,10 @@ internal sealed class OutboundFetchTests
             MaxRedirects = 3,
         });
 
-        FakeTransport preserve = new(new()
+        ScriptedOutboundTransport preserve = new(new()
         {
-            ["https://a.example/"] = (308, "https://b.example/"),
-            ["https://b.example/"] = (200, null),
+            ["https://a.example/"] = ScriptedOutboundResponse.RedirectTo(308, "https://b.example/"),
+            ["https://b.example/"] = ScriptedOutboundResponse.WithStatus(200),
         });
         _ = await OutboundFetch.FetchAsync(
             Post("https://a.example/"), context, preserve.Delegate, TestContext.CancellationToken)
@@ -199,10 +199,10 @@ internal sealed class OutboundFetchTests
         //while still reporting success — a one-way POST would deliver nothing. That is now REJECTED rather than
         //body-dropped: only a body-preserving redirect (307/308) may follow a request that carries a body, so
         //the redirect is not taken (only the original call is made) and the caller must re-resolve explicitly.
-        FakeTransport rejectBodyDrop = new(new()
+        ScriptedOutboundTransport rejectBodyDrop = new(new()
         {
-            ["https://a.example/"] = (303, "https://b.example/"),
-            ["https://b.example/"] = (200, null),
+            ["https://a.example/"] = ScriptedOutboundResponse.RedirectTo(303, "https://b.example/"),
+            ["https://b.example/"] = ScriptedOutboundResponse.WithStatus(200),
         });
         OutboundFetchResult result = await OutboundFetch.FetchAsync(
             Post("https://a.example/"), context, rejectBodyDrop.Delegate, TestContext.CancellationToken)
@@ -231,42 +231,4 @@ internal sealed class OutboundFetchTests
             Method = "POST",
             Body = new TaggedMemory<byte>(new byte[] { 1, 2, 3 }, Tag.Empty),
         };
-
-
-    private sealed class FakeTransport
-    {
-        private readonly Dictionary<string, (int Status, string? Location)> routes;
-
-        public FakeTransport() : this(new Dictionary<string, (int, string?)>(StringComparer.Ordinal)) { }
-
-        public FakeTransport(Dictionary<string, (int Status, string? Location)> routes)
-        {
-            this.routes = routes;
-        }
-
-        public List<OutboundRequest> Calls { get; } = [];
-
-        public OutboundTransportDelegate Delegate => (request, context, cancellationToken) =>
-        {
-            Calls.Add(request);
-
-            if(!routes.TryGetValue(request.Target.AbsoluteUri, out (int Status, string? Location) route))
-            {
-                route = (200, null);
-            }
-
-            Dictionary<string, string> headers = new(StringComparer.OrdinalIgnoreCase);
-            if(route.Location is not null)
-            {
-                headers["Location"] = route.Location;
-            }
-
-            return ValueTask.FromResult(new OutboundResponse
-            {
-                StatusCode = route.Status,
-                Headers = headers,
-                Body = new TaggedMemory<byte>(new byte[] { 9 }, Tag.Empty),
-            });
-        };
-    }
 }

@@ -228,7 +228,20 @@ public static class GeneralJweDecryptionExtensions
 
         int maxLength = System.Buffers.Text.Base64Url.GetMaxDecodedLength(encoded.Length);
         IMemoryOwner<byte> owner = pool.Rent(maxLength);
-        if(!System.Buffers.Text.Base64Url.TryDecodeFromChars(encoded, owner.Memory.Span, out int written))
+        bool isDecoded;
+        int written;
+        try
+        {
+            isDecoded = System.Buffers.Text.Base64Url.TryDecodeFromChars(encoded, owner.Memory.Span, out written);
+        }
+        catch
+        {
+            owner.Dispose();
+
+            throw;
+        }
+
+        if(!isDecoded)
         {
             owner.Dispose();
             throw new FormatException($"Header parameter '{parameterName}' is not valid base64url.");

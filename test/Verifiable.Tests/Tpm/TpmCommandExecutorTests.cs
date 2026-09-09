@@ -11,6 +11,7 @@ using Verifiable.Tpm.Infrastructure.Sessions;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -43,24 +44,44 @@ internal sealed class TpmCommandExecutorTests
         return TpmResult<TpmResponse>.Success(new TpmResponse(owner, bytes.Length));
     }
 
-    private static byte[] BuildNoSessionsFrame(uint responseCode, ReadOnlySpan<byte> parameters)
+    /// <summary>
+    /// A response whose authorization area declares more octets than it carries is a size fault the executor
+    /// answers inside the <see cref="TpmResult{T}"/> contract as <c>TPM_RC_SIZE</c> — never an exception escaping
+    /// <see cref="TpmCommandExecutor.ExecuteAsync"/> — the posture the parameter parse takes.
+    /// <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Part 2, clause 6.6.3, Table 18; Part 1, clause 15.5</see>.
+    /// </summary>
+    [TestMethod]
+    public async Task ExecutorAnswersATruncatedResponseAuthorizationAreaWithSize()
     {
-        int total = HeaderSize + parameters.Length;
-        byte[] frame = new byte[total];
+        const int RequestedBytes = 16;
 
-        frame[0] = (byte)(TpmStNoSessions >> 8);
-        frame[1] = (byte)(TpmStNoSessions & 0xFF);
-        frame[2] = (byte)(total >> 24);
-        frame[3] = (byte)(total >> 16);
-        frame[4] = (byte)(total >> 8);
-        frame[5] = (byte)(total & 0xFF);
-        frame[6] = (byte)(responseCode >> 24);
-        frame[7] = (byte)(responseCode >> 16);
-        frame[8] = (byte)(responseCode >> 8);
-        frame[9] = (byte)(responseCode & 0xFF);
-        parameters.CopyTo(frame.AsSpan(HeaderSize));
+        ValueTask<TpmResult<TpmResponse>> Handler(
+            ReadOnlyMemory<byte> command,
+            BaseMemoryPool pool,
+            CancellationToken cancellationToken)
+        {
+            //A well-formed TPM2B_DIGEST of the requested width, then a TPMS_AUTH_RESPONSE whose nonceTPM declares
+            //64 octets but carries two, with nothing after.
+            byte[] parameters = new byte[sizeof(ushort) + RequestedBytes];
+            parameters[1] = RequestedBytes;
+            byte[] authArea = [0x00, 0x40, 0xAA, 0xBB];
+            byte[] frame = TpmCommandFrameHarness.BuildSessionsResponseFrame(0u, parameters, authArea);
 
-        return frame;
+            return ValueTask.FromResult(SuccessFrame(frame, pool));
+        }
+
+        using var device = TpmDevice.Create(Handler, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        var registry = new TpmResponseRegistry();
+        _ = registry.Register(TpmCcConstants.TPM_CC_GetRandom, TpmResponseCodec.GetRandom);
+        using TpmPasswordSession session = TpmPasswordSession.CreateEmpty(pool);
+        var input = new GetRandomInput(RequestedBytes);
+
+        TpmResult<GetRandomResponse> result = await TpmCommandExecutor.ExecuteAsync<GetRandomResponse>(
+            device, input, [session], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsTpmError, "A truncated response authorization area must surface as a TPM error result.");
+        Assert.AreEqual(TpmRcConstants.TPM_RC_SIZE, result.ResponseCode, "A truncated response authorization area is a size fault.");
     }
 
     [TestMethod]
@@ -88,12 +109,12 @@ internal sealed class TpmCommandExecutorTests
                 parameters[sizeof(ushort) + i] = (byte)i;
             }
 
-            byte[] frame = BuildNoSessionsFrame(0u, parameters);
+            byte[] frame = TpmCommandFrameHarness.BuildNoSessionsFrame(0u, parameters);
 
             return ValueTask.FromResult(SuccessFrame(frame, pool));
         }
 
-        using var device = TpmDevice.Create(Handler);
+        using var device = TpmDevice.Create(Handler, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_GetRandom, TpmResponseCodec.GetRandom);
@@ -129,12 +150,12 @@ internal sealed class TpmCommandExecutorTests
             CancellationToken cancellationToken)
         {
             //A header-only error response (no parameters) carrying a non-success response code.
-            byte[] frame = BuildNoSessionsFrame((uint)TpmRcConstants.TPM_RC_VALUE, ReadOnlySpan<byte>.Empty);
+            byte[] frame = TpmCommandFrameHarness.BuildNoSessionsFrame((uint)TpmRcConstants.TPM_RC_VALUE, ReadOnlySpan<byte>.Empty);
 
             return ValueTask.FromResult(SuccessFrame(frame, pool));
         }
 
-        using var device = TpmDevice.Create(Handler);
+        using var device = TpmDevice.Create(Handler, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_GetRandom, TpmResponseCodec.GetRandom);
@@ -159,7 +180,7 @@ internal sealed class TpmCommandExecutorTests
             return ValueTask.FromResult(TpmResult<TpmResponse>.TransportError(0x1234u));
         }
 
-        using var device = TpmDevice.Create(Handler);
+        using var device = TpmDevice.Create(Handler, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_GetRandom, TpmResponseCodec.GetRandom);
@@ -185,7 +206,7 @@ internal sealed class TpmCommandExecutorTests
             return ValueTask.FromResult(TpmResult<TpmResponse>.TransportError(0u));
         }
 
-        using var device = TpmDevice.Create(Handler);
+        using var device = TpmDevice.Create(Handler, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_GetRandom, TpmResponseCodec.GetRandom);
@@ -219,7 +240,7 @@ internal sealed class TpmCommandExecutorTests
             return ValueTask.FromResult(TpmResult<TpmResponse>.TransportError(0u));
         }
 
-        using var device = TpmDevice.Create(Handler);
+        using var device = TpmDevice.Create(Handler, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_Create, TpmResponseCodec.CreateObject);
@@ -230,7 +251,7 @@ internal sealed class TpmCommandExecutorTests
             TpmtEccScheme.Ecdsa(TpmAlgIdConstants.TPM_ALG_SHA256), pool);
 
         Tpm2bNonce nonceTpm = Tpm2bNonce.Create(new byte[32], pool);
-        using var session = new TpmSession(new TpmHandle(0x02000000u), nonceTpm, TpmAlgIdConstants.TPM_ALG_SHA256, pool);
+        using var session = new TpmSession(new TpmHandle(0x02000000u), nonceTpm, TpmAlgIdConstants.TPM_ALG_SHA256, TestEntropy.NewCounterStream(), pool);
 
         await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
             await TpmCommandExecutor.ExecuteAsync<CreateResponse>(
@@ -323,15 +344,15 @@ internal sealed class TpmCommandExecutorTests
             observed = command.ToArray();
 
             //A header-only error so the executor surfaces it right after the send; no response auth is needed.
-            byte[] frame = BuildNoSessionsFrame((uint)TpmRcConstants.TPM_RC_VALUE, ReadOnlySpan<byte>.Empty);
+            byte[] frame = TpmCommandFrameHarness.BuildNoSessionsFrame((uint)TpmRcConstants.TPM_RC_VALUE, ReadOnlySpan<byte>.Empty);
 
             return ValueTask.FromResult(SuccessFrame(frame, handlerPool));
         }
 
-        using var device = TpmDevice.Create(Handler);
+        using var device = TpmDevice.Create(Handler, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         Tpm2bNonce nonceTpm = Tpm2bNonce.Create(nonceTpmValue, pool);
-        using var session = new TpmSession(new TpmHandle(0x02000000u), nonceTpm, TpmAlgIdConstants.TPM_ALG_SHA256, pool);
+        using var session = new TpmSession(new TpmHandle(0x02000000u), nonceTpm, TpmAlgIdConstants.TPM_ALG_SHA256, TestEntropy.NewCounterStream(), pool);
         session.SetAuthValue(authValue, pool);
 
         TpmResult<NvReadResponse> result = await TpmCommandExecutor.ExecuteAsync<NvReadResponse>(

@@ -17,7 +17,7 @@ public static class OAuthMeterSource
     /// The meter name registered with the .NET metrics infrastructure.
     /// Pass this to <c>AddMeter</c> in the application's OTel configuration.
     /// </summary>
-    public static readonly string MeterName = Utf8Constants.ToInternedString(MeterNameUtf8);
+    public static string MeterName { get; } = Utf8Constants.ToInternedString(MeterNameUtf8);
 
     /// <summary>
     /// The shared <see cref="Meter"/> instance.

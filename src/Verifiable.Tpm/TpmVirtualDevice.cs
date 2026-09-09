@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using System.Threading.Tasks;
+using Verifiable.Cryptography;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Spec.Constants;
 
@@ -17,12 +18,12 @@ namespace Verifiable.Tpm;
 /// The device is loaded with command/response exchanges captured from a real device via
 /// <see cref="TpmRecorder"/> (or registered directly), then exposed through
 /// <see cref="SubmitAsync"/>, which has the <see cref="TpmSubmitHandler"/> shape so it plugs
-/// straight into <see cref="TpmDevice.Create(TpmSubmitHandler, Action?)"/>:
+/// straight into <see cref="TpmDevice.Create(TpmSubmitHandler, BaseMemoryPool, FillEntropyDelegate, Action?)"/>:
 /// </para>
 /// <code>
 /// var virtualDevice = new TpmVirtualDevice();
 /// virtualDevice.Load(recording);
-/// using TpmDevice device = TpmDevice.Create(virtualDevice.SubmitAsync);
+/// using TpmDevice device = TpmDevice.Create(virtualDevice.SubmitAsync, BaseMemoryPool.Shared, RandomNumberGenerator.Fill);
 /// </code>
 /// <para>
 /// <strong>Replay scope:</strong> a recorded response is keyed on the exact command bytes, so
@@ -45,6 +46,10 @@ namespace Verifiable.Tpm;
 public sealed class TpmVirtualDevice
 {
     private Dictionary<int, byte[]> Responses { get; } = [];
+
+    /// <summary>
+    /// A field, not a property: a lock target must be one instance that no accessor can re-mint.
+    /// </summary>
     private readonly Lock gate = new();
 
     /// <summary>
@@ -132,7 +137,7 @@ public sealed class TpmVirtualDevice
 
     /// <summary>
     /// Replays the recorded response for a command. Has the <see cref="TpmSubmitHandler"/> shape so
-    /// it can be passed to <see cref="TpmDevice.Create(TpmSubmitHandler, Action?)"/>.
+    /// it can be passed to <see cref="TpmDevice.Create(TpmSubmitHandler, BaseMemoryPool, FillEntropyDelegate, Action?)"/>.
     /// </summary>
     /// <param name="command">The command bytes.</param>
     /// <param name="pool">The memory pool for the response buffer.</param>

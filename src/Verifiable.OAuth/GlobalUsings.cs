@@ -1,4 +1,6 @@
 global using Lumoin.Base;
+global using Verifiable.Core.Model.Federation;
+global using Verifiable.Core.Transport;
 global using Verifiable.OAuth.Diagnostics;
 global using Verifiable.OAuth.WellKnown;
 global using Verifiable.Server;

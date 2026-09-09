@@ -26,7 +26,7 @@ internal sealed class AttachmentDataResolutionTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly BaseMemoryPool Pool = BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool { get; } = BaseMemoryPool.Shared;
 
 
     /// <summary>An inline base64url attachment resolves by value — the transport is never touched.</summary>
@@ -557,8 +557,8 @@ internal sealed class AttachmentDataResolutionTests
     //test can assert the transport was (or was NOT) reached.
     private sealed class FakeTransport
     {
-        private readonly Dictionary<string, (int Status, byte[] Body)> routes;
-        private readonly bool throwsOnContact;
+        private Dictionary<string, (int Status, byte[] Body)> Routes { get; }
+        private bool ThrowsOnContact { get; }
 
         public FakeTransport() : this(new Dictionary<string, (int, byte[])>(StringComparer.Ordinal)) { }
 
@@ -566,8 +566,8 @@ internal sealed class AttachmentDataResolutionTests
 
         private FakeTransport(Dictionary<string, (int Status, byte[] Body)> routes, bool throwsOnContact)
         {
-            this.routes = routes;
-            this.throwsOnContact = throwsOnContact;
+            this.Routes = routes;
+            this.ThrowsOnContact = throwsOnContact;
         }
 
         //A transport whose every contacted request throws — a socket failure the resolver must catch and
@@ -580,12 +580,12 @@ internal sealed class AttachmentDataResolutionTests
         {
             Calls.Add(request);
 
-            if(throwsOnContact)
+            if(ThrowsOnContact)
             {
                 throw new System.Net.Sockets.SocketException();
             }
 
-            if(!routes.TryGetValue(request.Target.AbsoluteUri, out (int Status, byte[] Body) route))
+            if(!Routes.TryGetValue(request.Target.AbsoluteUri, out (int Status, byte[] Body) route))
             {
                 route = (404, []);
             }

@@ -208,13 +208,13 @@ public readonly struct MaterialSemantics: IEquatable<MaterialSemantics>
     /// <summary>
     /// All registered material semantics values, including any added via <see cref="Create"/>.
     /// </summary>
-    private static List<MaterialSemantics> semantics { get; } = [Direct, TpmHandle];
+    private static List<MaterialSemantics> RegisteredSemantics { get; } = [Direct, TpmHandle];
 
 
     /// <summary>
     /// Gets all registered material semantics values.
     /// </summary>
-    public static IReadOnlyList<MaterialSemantics> Semantics => semantics.AsReadOnly();
+    public static IReadOnlyList<MaterialSemantics> Semantics => RegisteredSemantics.AsReadOnly();
 
 
     /// <summary>
@@ -232,16 +232,16 @@ public readonly struct MaterialSemantics: IEquatable<MaterialSemantics>
     /// </remarks>
     public static MaterialSemantics Create(int code)
     {
-        for(int i = 0; i < semantics.Count; ++i)
+        for(int i = 0; i < RegisteredSemantics.Count; ++i)
         {
-            if(semantics[i].Code == code)
+            if(RegisteredSemantics[i].Code == code)
             {
                 throw new ArgumentException("Code already exists.");
             }
         }
 
         var newSemantics = new MaterialSemantics(code);
-        semantics.Add(newSemantics);
+        RegisteredSemantics.Add(newSemantics);
 
         return newSemantics;
     }

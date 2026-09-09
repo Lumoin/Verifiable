@@ -65,6 +65,8 @@ public static class DpopProofValidator
         }
         catch
         {
+            //The proof is client-supplied wire input, structurally unverified at this point; any
+            //decode/parse failure is a malformed proof rather than an internal fault.
             return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.Malformed);
         }
 
@@ -110,6 +112,8 @@ public static class DpopProofValidator
         }
         catch
         {
+            //header.Jwk is client-supplied wire input; any failure to materialize a key from it is an
+            //invalid JWK rather than an internal fault.
             return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.InvalidJwk);
         }
 
@@ -118,7 +122,7 @@ public static class DpopProofValidator
         //signing-input construction and RFC 8725 §3.11 length bound) instead
         //of duplicating those mechanics here.
         bool signatureValid;
-        try
+        using(publicKey)
         {
             signatureValid = await Jws.VerifyAsync(
                 request.Proof,
@@ -127,10 +131,6 @@ public static class DpopProofValidator
                 publicKey,
                 verificationDelegate,
                 cancellationToken).ConfigureAwait(false);
-        }
-        finally
-        {
-            publicKey.Dispose();
         }
 
         if(!signatureValid)

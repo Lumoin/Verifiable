@@ -25,7 +25,7 @@ namespace Verifiable.Tests.Apdu;
 [TestClass]
 internal sealed class PassiveAuthenticationTests
 {
-    private static readonly DateTimeOffset ValidationTime = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+    private static DateTimeOffset ValidationTime { get; } = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
 
     public required TestContext TestContext { get; set; }

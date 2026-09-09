@@ -380,7 +380,7 @@ public static class PrivateKeyJwtClientAuthentication
                     clientAssertion,
                     oauth.Codecs.Decoder,
                     bytes => oauth.Codecs.JwtHeaderDeserializer(bytes),
-                    BaseMemoryPool.Shared);
+                    oauth.MemoryPool!);
             }
             catch(Exception ex) when(ex is FormatException or InvalidOperationException)
             {
@@ -422,7 +422,7 @@ public static class PrivateKeyJwtClientAuthentication
                 try
                 {
                     publicKey = DpopJwkUtilities.PublicKeyFromJwk(
-                        jwkMembers, alg, oauth.Codecs.Decoder, BaseMemoryPool.Shared);
+                        jwkMembers, alg, oauth.Codecs.Decoder, oauth.MemoryPool!);
                 }
                 catch(Exception ex) when(ex is FormatException or InvalidOperationException or ArgumentException or NotSupportedException)
                 {
@@ -436,10 +436,10 @@ public static class PrivateKeyJwtClientAuthentication
                     {
                         signatureValid = verificationDelegate is not null
                             ? await Jws.VerifyAsync(
-                                clientAssertion, oauth.Codecs.Decoder, BaseMemoryPool.Shared,
+                                clientAssertion, oauth.Codecs.Decoder, oauth.MemoryPool!,
                                 publicKey, verificationDelegate, cancellationToken).ConfigureAwait(false)
                             : await Jws.VerifyAsync(
-                                clientAssertion, oauth.Codecs.Decoder, BaseMemoryPool.Shared,
+                                clientAssertion, oauth.Codecs.Decoder, oauth.MemoryPool!,
                                 publicKey, cancellationToken).ConfigureAwait(false);
                     }
                     catch(Exception ex) when(ex is FormatException or InvalidOperationException)
@@ -497,6 +497,10 @@ public static class PrivateKeyJwtClientAuthentication
                             server, context, registration.TenantId, result.ClientId!, result.Jti!,
                             result.Expiration!.Value, cancellationToken).ConfigureAwait(false);
 
+                        //Any outcome other than FirstUse refuses the assertion: Replayed is the
+                        //defense doing its job, StoreUnavailable is a policy that cannot prove
+                        //itself, and Unacceptable is an oversized jti the guard will not track —
+                        //none of the three authenticates the client.
                         if(outcome != JtiReplayOutcome.FirstUse)
                         {
                             return false;
@@ -532,7 +536,9 @@ public static class PrivateKeyJwtClientAuthentication
     /// <summary>
     /// Reads an epoch-seconds temporal claim. Returns <see langword="false"/> when the claim is
     /// present but not a numeric timestamp; sets <paramref name="present"/> to whether the claim was
-    /// there at all.
+    /// there at all. The <c>== Math.Floor(…)</c> checks test whether a directly-deserialized
+    /// <see cref="double"/>/<see cref="float"/> already holds an exact integer value — no arithmetic
+    /// is performed on the claim, so the exact comparison carries no floating-point rounding risk.
     /// </summary>
     private static bool TryReadEpochSeconds(
         JwtPayload payload, string claimName, out bool present, out DateTimeOffset value)

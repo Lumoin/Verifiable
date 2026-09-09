@@ -7,11 +7,11 @@ using Verifiable.Core.Diagnostics;
 namespace Verifiable.Core.Assessment
 {
     /// <summary>
-    /// Signature to generate archive identifiers.
+    /// Signature to generate the identifier for a single archiving operation.
     /// </summary>
     /// <param name="cancellationToken">Token to monitor for cancellation.</param>
-    /// <returns>A generated archive identifier.</returns>
-    public delegate ValueTask<string> GenerateArchiveIdAsync(CancellationToken cancellationToken = default);
+    /// <returns>The identifier minted for this archiving operation.</returns>
+    public delegate ValueTask<string> GenerateArchivingIdAsync(CancellationToken cancellationToken = default);
 
 
     /// <summary>
@@ -81,9 +81,11 @@ namespace Verifiable.Core.Assessment
     public class AssessmentArchiver
     {
         /// <summary>
-        /// Default archive ID generator using GUIDs.
+        /// Default archiving ID generator, minting a new <see cref="Guid"/> per call.
         /// </summary>
-        public static ValueTask<string> DefaultArchiveIdGenerator(CancellationToken cancellationToken = default)
+        /// <param name="cancellationToken">Token to monitor for cancellation.</param>
+        /// <returns>A newly minted, GUID-based archiving identifier.</returns>
+        public static ValueTask<string> DefaultArchivingIdGenerator(CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             return ValueTask.FromResult(Guid.NewGuid().ToString());
@@ -105,9 +107,11 @@ namespace Verifiable.Core.Assessment
         private TimeProvider TimeProvider { get; }
 
         /// <summary>
-        /// Generator for archive identifiers.
+        /// Mints the identifier ("<c>ArchivingId</c>") the archiver assigns to each archiving
+        /// operation it performs, distinct from <see cref="ArchivingResult.ArchiveId"/>, which the
+        /// archiving delegate itself assigns to identify the stored data.
         /// </summary>
-        private GenerateArchiveIdAsync ArchiveIdGenerator { get; }
+        private GenerateArchivingIdAsync ArchivingIdGenerator { get; }
 
 
         /// <summary>
@@ -115,14 +119,14 @@ namespace Verifiable.Core.Assessment
         /// </summary>
         /// <param name="archiver">The delegate that performs the actual archiving.</param>
         /// <param name="archiverId">Unique identifier for this archiver.</param>
-        /// <param name="timeProvider">
-        /// Time provider for timestamps. If <see langword="null"/>, uses <see cref="TimeProvider.System"/>.
-        /// </param>
-        /// <param name="archiveIdGenerator">
-        /// Generator for archive identifiers. If <see langword="null"/>, uses <see cref="DefaultArchiveIdGenerator"/>.
+        /// <param name="timeProvider">Time provider for timestamps.</param>
+        /// <param name="archivingIdGenerator">
+        /// Mints the identifier for each archiving operation this archiver performs. Callers that
+        /// want GUID-based identifiers pass <see cref="DefaultArchivingIdGenerator"/> explicitly.
         /// </param>
         /// <exception cref="ArgumentNullException">
-        /// Thrown when <paramref name="archiver"/> is null.
+        /// Thrown when <paramref name="archiver"/>, <paramref name="timeProvider"/>, or
+        /// <paramref name="archivingIdGenerator"/> is null.
         /// </exception>
         /// <exception cref="ArgumentException">
         /// Thrown when <paramref name="archiverId"/> is null or empty.
@@ -130,16 +134,18 @@ namespace Verifiable.Core.Assessment
         public AssessmentArchiver(
             ArchiveDelegateAsync archiver,
             string archiverId,
-            TimeProvider? timeProvider = null,
-            GenerateArchiveIdAsync? archiveIdGenerator = null)
+            TimeProvider timeProvider,
+            GenerateArchivingIdAsync archivingIdGenerator)
         {
             ArgumentNullException.ThrowIfNull(archiver, nameof(archiver));
             ArgumentException.ThrowIfNullOrEmpty(archiverId, nameof(archiverId));
+            ArgumentNullException.ThrowIfNull(timeProvider, nameof(timeProvider));
+            ArgumentNullException.ThrowIfNull(archivingIdGenerator, nameof(archivingIdGenerator));
 
             Archiver = archiver;
             ArchiverId = archiverId;
-            TimeProvider = timeProvider ?? TimeProvider.System;
-            ArchiveIdGenerator = archiveIdGenerator ?? DefaultArchiveIdGenerator;
+            TimeProvider = timeProvider;
+            ArchivingIdGenerator = archivingIdGenerator;
         }
 
 
@@ -149,26 +155,39 @@ namespace Verifiable.Core.Assessment
         /// <param name="assessmentResult">The assessment result to archive.</param>
         /// <param name="cancellationToken">Token to monitor for cancellation.</param>
         /// <returns>The archiving result indicating success or failure.</returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the archiving delegate returns a result whose <see cref="ArchivingResult.ArchivingId"/>
+        /// differs from the identifier this archiver minted for the operation via <see cref="ArchivingIdGenerator"/>.
+        /// </exception>
         public async ValueTask<ArchivingResult> ArchiveAsync(
             AssessmentResult assessmentResult,
             CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(assessmentResult, nameof(assessmentResult));
 
-            var archiveId = await ArchiveIdGenerator(cancellationToken).ConfigureAwait(false);
+            string archivingId = await ArchivingIdGenerator(cancellationToken).ConfigureAwait(false);
             var creationTimestamp = TimeProvider.GetUtcNow().UtcDateTime;
             var traceId = TracingUtilities.GetOrCreateTraceId();
             var spanId = TracingUtilities.GetOrCreateSpanId();
             var baggage = TracingUtilities.GetOrCreateBaggage();
 
-            return await Archiver(
+            ArchivingResult result = await Archiver(
                 assessmentResult,
                 ArchiverId,
+                archivingId,
                 creationTimestamp,
                 traceId,
                 spanId,
                 baggage,
                 cancellationToken).ConfigureAwait(false);
+
+            if(result.ArchivingId != archivingId)
+            {
+                throw new InvalidOperationException(
+                    $"The archiving delegate returned ArchivingId '{result.ArchivingId}', but the archiver minted '{archivingId}' for this operation.");
+            }
+
+            return result;
         }
 
 
@@ -186,6 +205,11 @@ namespace Verifiable.Core.Assessment
         /// fine-grained retrieval and independent lifecycle management.
         /// </para>
         /// </remarks>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the archiving delegate returns a result whose <see cref="ArchivingResult.ArchivingId"/>
+        /// differs from the identifier minted for that individual result via <see cref="ArchivingIdGenerator"/>:
+        /// <see cref="ArchiveAsync"/> enforces the archiving-identifier contract on every individual result.
+        /// </exception>
         public async ValueTask<IReadOnlyList<ArchivingResult>> ArchiveAggregatedAsync(
             AggregatedAssessmentResult aggregatedResult,
             CancellationToken cancellationToken = default)

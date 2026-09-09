@@ -36,13 +36,13 @@ internal sealed class BitstringStatusListCredentialDataIntegrityTests
     private const string IssuerDomain = "issuer.example";
     private const string IssuerDidWeb = "did:web:issuer.example";
 
-    private static readonly DateTimeOffset Now = StatusListTestConstants.BitstringDataIntegrityReferenceTime;
-    private static readonly ExchangeContext EmptyContext = new();
+    private static DateTimeOffset Now { get; } = StatusListTestConstants.BitstringDataIntegrityReferenceTime;
+    private static ExchangeContext EmptyContext { get; } = new();
 
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
     private static JsonSerializerOptions JsonOptions { get; } = TestSetup.DefaultSerializationOptions;
     private static CredentialBuilder CredentialBuilder { get; } = new CredentialBuilder();
-    private static WebDidBuilder WebDidBuilder { get; } = new WebDidBuilder();
+    private static WebDidBuilder WebDidBuilder { get; } = new WebDidBuilder(BaseMemoryPool.Shared);
 
     public TestContext TestContext { get; set; } = null!;
 
@@ -112,7 +112,7 @@ internal sealed class BitstringStatusListCredentialDataIntegrityTests
             DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             Pool,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -131,7 +131,7 @@ internal sealed class BitstringStatusListCredentialDataIntegrityTests
             SerializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Decoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             Pool,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);

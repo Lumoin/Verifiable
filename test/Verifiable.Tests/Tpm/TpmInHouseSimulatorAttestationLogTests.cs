@@ -68,7 +68,7 @@ internal sealed record TpmAttestationTrustContext(byte[] EnrolledAttestationKey)
 /// <para>
 /// The enrollment case proves AK↔EK co-residence by credential activation — <c>TPM2_MakeCredential()</c> wraps a
 /// challenge to the endorsement key's public area bound to the AK's Name, and <c>TPM2_ActivateCredential()</c>
-/// recovers it only in a device holding both keys (TPM 2.0 Library Part 1, clause 24; Part 3, clauses 12.6 and
+/// recovers it only in a device holding both keys (TPM 2.0 Library Part 1, clause 21; Part 3, clauses 12.6 and
 /// 12.5). Every command runs through the same production command path the production code uses
 /// (<see cref="TpmCommandExecutor"/> with the real inputs and response codecs); the signing backend is injected so
 /// the production <c>Verifiable.Tpm</c> assembly stays provider-agnostic, and the simulator runs both sides, so the
@@ -108,7 +108,7 @@ internal sealed class TpmInHouseSimulatorAttestationLogTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse ak = await CreateSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
@@ -152,7 +152,7 @@ internal sealed class TpmInHouseSimulatorAttestationLogTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         //The enrolled AK (owner hierarchy) and a different, unenrolled key (endorsement hierarchy).
@@ -210,7 +210,7 @@ internal sealed class TpmInHouseSimulatorAttestationLogTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         //The endorsement (credential) key and the attestation key.
@@ -359,6 +359,9 @@ internal sealed class TpmInHouseSimulatorAttestationLogTests
                     : "The quote was not signed by the enrolled attestation key.";
             },
             ValidationContext = new TpmAttestationTrustContext(enrolledAttestationKey),
+            //The (string?) casts throughout this Apply delegate are load-bearing: ValueTask.FromResult
+            //infers its type argument from the tuple literal alone, and a bare null has no natural
+            //type to make that tuple (LogState, string?) rather than fail to compile.
             Apply = LogReplayDefaults.CreateApplyDelegate<TpmAttestationState, TpmQuoteOperation, CryptoProof>(
                 genesis: static (_, entry, _) =>
                 {
@@ -561,7 +564,7 @@ internal sealed class TpmInHouseSimulatorAttestationLogTests
     /// <returns>The operational simulator.</returns>
     private async Task<TpmSimulator> CreateOperationalAsync(BaseMemoryPool pool)
     {
-        var simulator = new TpmSimulator("tpm-in-house-attestationlog", signingBackend: BouncyCastleTpmEccSigningBackend.Create());
+        var simulator = new TpmSimulator("tpm-in-house-attestationlog", signingBackend: BouncyCastleTpmEccSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await BringOperationalAsync(simulator, pool).ConfigureAwait(false);
 

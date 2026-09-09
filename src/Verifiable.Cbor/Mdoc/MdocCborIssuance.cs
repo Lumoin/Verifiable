@@ -1,6 +1,8 @@
 using System.Buffers;
 using System.Security.Cryptography;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Core.Model.Mdoc;
+using Verifiable.Core.StatusList;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 
@@ -68,6 +70,19 @@ public sealed class MdocIssuerSigningConfig
     /// </para>
     /// </remarks>
     public IReadOnlyList<ReadOnlyMemory<byte>>? X5Chain { get; init; }
+
+    /// <summary>
+    /// Optional Token Status List status claim to commit into the MSO's optional
+    /// <c>status</c> member (the second edition of ISO/IEC 18013-5, under ballot as
+    /// a DIS), or <see langword="null"/> to issue a credential with no status entry
+    /// (the six-member ISO/IEC 18013-5:2021 MSO). An issuer publishing the Token
+    /// Status List mechanism alone states
+    /// <see cref="StatusClaim.FromStatusList(int, string)"/>; the writer refuses any
+    /// mechanism it cannot encode, per
+    /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-status-list-21.html#section-6.3">
+    /// Token Status List, Section 6.3</see>.
+    /// </summary>
+    public StatusClaim? Status { get; init; }
 }
 
 
@@ -216,7 +231,7 @@ public static class MdocCborIssuance
             foreach(MdocLogicalIssuerSignedItem oldItem in nsEntry.Value)
             {
                 ReadOnlyMemory<byte> wireBytes = MdocCborIssuerSignedItemEncoder.Encode(oldItem);
-                byte[] digest = ComputeDigest(config.DigestAlgorithm, wireBytes.Span);
+                byte[] digest = ComputeDigest(config.DigestAlgorithm, wireBytes.Span, signaturePool);
 
                 //Build the signed item with the wire bytes filled; the salt
                 //transfers from the logical item to the signed item without
@@ -237,14 +252,17 @@ public static class MdocCborIssuance
         }
 
         //Phase 2: build the MSO, encode it, wrap in Tag 24, build the
-        //protected header, sign as COSE_Sign1.
+        //protected header, sign as COSE_Sign1. The config's optional status
+        //claim becomes the MSO's Status structure (Token Status List Section
+        //6.3) when the issuer supplies one.
         MdocMobileSecurityObject mso = new(
             version: MdocMsoWellKnownKeys.Version10,
             digestAlgorithm: config.DigestAlgorithm,
             valueDigests: valueDigests,
             deviceKeyInfo: new MdocDeviceKeyInfo(config.DeviceKey),
             docType: logical.DocType,
-            validityInfo: config.Validity);
+            validityInfo: config.Validity,
+            status: config.Status);
 
         ReadOnlyMemory<byte> msoBytes = MdocCborMsoWriter.Write(mso);
         EncodedCborItem msoWrapped = EncodedCborItem.Wrap(msoBytes.Span);
@@ -289,7 +307,8 @@ public static class MdocCborIssuance
     /// </summary>
     private static EncodedCoseProtectedHeader BuildProtectedHeader(int coseAlgorithm, string? kid, BaseMemoryPool pool)
     {
-        var writer = new System.Formats.Cbor.CborWriter(System.Formats.Cbor.CborConformanceMode.Canonical);
+        using var buffer = new SlabBufferWriter(pool);
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
 
         writer.WriteStartMap(kid is null ? 1 : 2);
 
@@ -304,15 +323,7 @@ public static class MdocCborIssuance
 
         writer.WriteEndMap();
 
-        int size = writer.BytesWritten;
-        IMemoryOwner<byte> owner = pool.Rent(size);
-        int written = writer.Encode(owner.Memory.Span);
-        if(written != size)
-        {
-            owner.Dispose();
-            throw new InvalidOperationException(
-                $"CborWriter.Encode wrote {written} bytes, expected {size}.");
-        }
+        IMemoryOwner<byte> owner = buffer.Detach();
 
         return new EncodedCoseProtectedHeader(owner, CryptoTags.CoseEncodedProtectedHeader);
     }
@@ -371,11 +382,11 @@ public static class MdocCborIssuance
     /// rather than a direct framework hash call, so the library never
     /// picks a hash implementation the consumer did not wire.
     /// </summary>
-    private static byte[] ComputeDigest(string digestAlgorithm, ReadOnlySpan<byte> input)
+    private static byte[] ComputeDigest(string digestAlgorithm, ReadOnlySpan<byte> input, BaseMemoryPool pool)
     {
         (Tag tag, int length, string? qualifier) = digestAlgorithm switch
         {
-            MdocMsoWellKnownKeys.DigestAlgorithmSha256 => (CryptoTags.Sha256Digest, WellKnownHashAlgorithms.Sha256SizeBytes, (string?)null),
+            MdocMsoWellKnownKeys.DigestAlgorithmSha256 => (CryptoTags.Sha256Digest, WellKnownHashAlgorithms.Sha256SizeBytes, null),
             MdocMsoWellKnownKeys.DigestAlgorithmSha384 => (CryptoTags.Sha384Digest, WellKnownHashAlgorithms.Sha384SizeBytes, nameof(HashAlgorithmName.SHA384)),
             MdocMsoWellKnownKeys.DigestAlgorithmSha512 => (CryptoTags.Sha512Digest, WellKnownHashAlgorithms.Sha512SizeBytes, nameof(HashAlgorithmName.SHA512)),
             _ => throw new NotSupportedException(
@@ -383,7 +394,7 @@ public static class MdocCborIssuance
                 $"permitted by ISO/IEC 18013-5 §9.1.2.5.")
         };
 
-        using DigestValue digest = CryptographicKeyEvents.ComputeDigest(input, length, tag, BaseMemoryPool.Shared, qualifier);
+        using DigestValue digest = CryptographicKeyEvents.ComputeDigest(input, length, tag, pool, qualifier);
 
         //The pooled digest buffer may be larger than the requested length (pool implementations are free to
         //over-allocate); slice to the algorithm's exact output size before copying out.

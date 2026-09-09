@@ -217,6 +217,8 @@ public static class KeyAttestationVerifier
         }
         catch
         {
+            //The attestation header is client-supplied wire input, structurally unverified at this point;
+            //any decode/read failure is a malformed attestation rather than an internal fault.
             return KeyAttestationVerificationResult.Failure(KeyAttestationVerificationFailureReason.Malformed);
         }
 
@@ -257,7 +259,7 @@ public static class KeyAttestationVerifier
         //registry overload resolves the verifier from the key's algorithm, the explicit overload uses
         //the supplied delegate.
         bool isSignatureValid;
-        try
+        using(walletProviderKey)
         {
             isSignatureValid = verificationDelegate is null
                 ? await Jws.VerifyAsync(
@@ -273,10 +275,6 @@ public static class KeyAttestationVerifier
                     walletProviderKey,
                     verificationDelegate,
                     cancellationToken).ConfigureAwait(false);
-        }
-        finally
-        {
-            walletProviderKey.Dispose();
         }
 
         if(!isSignatureValid)

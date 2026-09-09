@@ -9,7 +9,7 @@ namespace Verifiable.Tpm.Spec.Constants;
 /// security levels with different key and signature sizes.
 /// </para>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 12.2.3.7 (v1.85).
+/// Specification reference: TPM 2.0 Library Part 2, clause 12.2.3.7 (v1.85).
 /// </para>
 /// </remarks>
 public static class TpmMlDsaParmsConstants

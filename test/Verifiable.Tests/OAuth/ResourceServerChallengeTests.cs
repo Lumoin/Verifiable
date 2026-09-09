@@ -42,7 +42,7 @@ internal sealed class ResourceServerChallengeTests
     private const string Kid = "test-kid";
     private const string RequiredScope = "mcp:tools";
 
-    private static readonly DateTimeOffset NowInstant = TestClock.CanonicalEpoch.AddDays(-15);
+    private static DateTimeOffset NowInstant { get; } = TestClock.CanonicalEpoch.AddDays(-15);
 
 
     [TestMethod]
@@ -55,7 +55,7 @@ internal sealed class ResourceServerChallengeTests
             trustedIssuer: new Uri(Issuer),
             expectedAudience: Audience,
             resolveVerificationKey: BuildResolver(keys.PublicKey),
-            verifySignature: MicrosoftCryptographicFunctions.VerifyP256Async,
+            verifySignature: MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             timeProvider: time,
             requiredScope: RequiredScope);
         await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -103,7 +103,7 @@ internal sealed class ResourceServerChallengeTests
             trustedIssuer: new Uri(Issuer),
             expectedAudience: Audience,
             resolveVerificationKey: BuildResolver(keys.PublicKey),
-            verifySignature: MicrosoftCryptographicFunctions.VerifyP256Async,
+            verifySignature: MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             timeProvider: time);
         await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -156,7 +156,7 @@ internal sealed class ResourceServerChallengeTests
             trustedIssuer: new Uri(Issuer),
             expectedAudience: Audience,
             resolveVerificationKey: BuildResolver(keys.PublicKey),
-            verifySignature: MicrosoftCryptographicFunctions.VerifyP256Async,
+            verifySignature: MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             timeProvider: time);
         await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -202,7 +202,7 @@ internal sealed class ResourceServerChallengeTests
             trustedIssuer: new Uri(Issuer),
             expectedAudience: Audience,
             resolveVerificationKey: BuildResolver(keys.PublicKey),
-            verifySignature: MicrosoftCryptographicFunctions.VerifyP256Async,
+            verifySignature: MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             timeProvider: time,
             requiredScope: RequiredScope);
         await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -248,7 +248,7 @@ internal sealed class ResourceServerChallengeTests
             trustedIssuer: new Uri(Issuer),
             expectedAudience: Audience,
             resolveVerificationKey: BuildResolver(keys.PublicKey),
-            verifySignature: MicrosoftCryptographicFunctions.VerifyP256Async,
+            verifySignature: MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             timeProvider: time,
             requiredScope: RequiredScope);
         await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -292,7 +292,7 @@ internal sealed class ResourceServerChallengeTests
             trustedIssuer: new Uri(Issuer),
             expectedAudience: Audience,
             resolveVerificationKey: BuildResolver(keys.PublicKey),
-            verifySignature: MicrosoftCryptographicFunctions.VerifyP256Async,
+            verifySignature: MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             timeProvider: time,
             requiredScope: null,
             advertisedAuthorizationServers: ["https://other-as.example.com"]));

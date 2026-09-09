@@ -133,6 +133,14 @@ public static class TpmAttestation
     /// Implements the section 8.3 verification procedure, in the order the specification's own
     /// prose lists its steps.
     /// </summary>
+    /// <remarks>
+    /// <strong>Manual disposal, not <see langword="using"/> declarations.</strong> <c>pubArea</c> and
+    /// <c>certInfo</c> are each declared ahead of their own narrow parse-only <see langword="try"/> so that
+    /// try's <see langword="catch"/> can translate a malformed TPM wire exception into a rejected result — a
+    /// <see langword="using"/> declaration's initializer runs outside any enclosing try and could not be
+    /// caught there — and each is disposed unconditionally in the enclosing step's own
+    /// <see langword="finally"/> once every later step has finished reading it.
+    /// </remarks>
     private static async ValueTask<AttestationResult> VerifyAsync(
         AttestationVerificationRequest request,
         ParseTpmAttestationStatementDelegate parseStatement,
@@ -398,6 +406,9 @@ public static class TpmAttestation
         PublicKeyMemory? pubAreaKeyMemory = null;
         try
         {
+            //TryBuildPublicAreaKeyMemory's out parameter is [NotNullWhen(true)]; the negated
+            //if-return below is the compiler-recognized pattern that proves pubAreaKeyMemory
+            //non-null below it, with no null-forgiving operator needed.
             if(!TryBuildPublicAreaKeyMemory(pubArea, pool, out pubAreaKeyMemory, out CryptoAlgorithm pubAreaAlgorithm))
             {
                 return false;

@@ -38,7 +38,7 @@ internal sealed class JwkMicrosoftInteropTests
 
     private FakeTimeProvider TimeProvider { get; } = new(DateTimeOffset.Parse("2026-01-01T00:00:00Z", System.Globalization.CultureInfo.InvariantCulture));
 
-    private static readonly ImmutableHashSet<CapabilityIdentifier> JwksCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> JwksCapabilities { get; } =
         ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.OAuthJwksEndpoint);
 
 

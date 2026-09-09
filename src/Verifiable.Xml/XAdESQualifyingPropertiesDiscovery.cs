@@ -182,14 +182,11 @@ public static class XAdESQualifyingPropertiesDiscovery
         }
 
         XAdESQualifyingProperties qualifyingProperties = default;
-        if(hasQualifyingProperties)
+        if(hasQualifyingProperties && !XAdESQualifyingProperties.TryRead(table, qualifyingPropertiesElementIndex, out qualifyingProperties, out XAdESReadError readError))
         {
-            if(!XAdESQualifyingProperties.TryRead(table, qualifyingPropertiesElementIndex, out qualifyingProperties, out XAdESReadError readError))
-            {
-                error = new XAdESProcessingError(XAdESProcessingFailure.MalformedQualifyingProperties, 0, readError);
+            error = new XAdESProcessingError(XAdESProcessingFailure.MalformedQualifyingProperties, 0, readError);
 
-                return false;
-            }
+            return false;
         }
 
         var references = new List<XAdESQualifyingPropertiesReference>(qualifyingPropertiesReferenceIndices.Count);

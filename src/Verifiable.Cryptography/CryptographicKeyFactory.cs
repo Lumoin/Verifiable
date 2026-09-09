@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Collections.Frozen;
 using Verifiable.Cryptography.Context;
 
@@ -71,9 +72,15 @@ namespace Verifiable.Cryptography;
 public static class CryptographicKeyFactory
 {
     /// <summary>
-    /// Storage for custom function mappings that don't fit the standard signing/verification pattern.
+    /// Storage for custom function mappings that don't fit the standard signing/verification pattern. A
+    /// <see cref="ConcurrentDictionary{TKey, TValue}"/> because, unlike <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/>'s
+    /// write-once-then-immutable matchers, this table is registered and re-registered during live execution
+    /// (a qualifier-scoped registration racing concurrent <see cref="GetFunction{TFunction}"/> resolutions of
+    /// other keys is a supported usage, not a hazard to guard against with external synchronization): its
+    /// lock-free reads keep the hot-path <see cref="GetFunction{TFunction}"/> call cheap, and its indexer
+    /// overwrite semantics on re-registration of an existing key match a plain dictionary's exactly.
     /// </summary>
-    private static Dictionary<(Type KeyType, string? Qualifier), object> CustomFunctionMappings { get; } = [];
+    private static ConcurrentDictionary<(Type KeyType, string? Qualifier), object> CustomFunctionMappings { get; } = [];
 
 
     /// <summary>

@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Collections.Generic;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using System.Globalization;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Sd;
@@ -380,7 +380,7 @@ internal sealed class KbCwtIssuanceTests
     //forbidden iss/sub claims are present.
     private static (string Aud, long Iat, string? Cnonce, bool HasIss, bool HasSub) ReadKbtPayload(ReadOnlyMemory<byte> payload)
     {
-        var reader = new CborReader(payload, CborConformanceMode.Lax);
+        var reader = new CborReader(payload, CborOptions.Lax);
 
         string? aud = null;
         long? iat = null;
@@ -429,7 +429,7 @@ internal sealed class KbCwtIssuanceTests
     //encoded CBOR (the embedded COSE_Sign1 wire bytes).
     private static ReadOnlyMemory<byte> ExtractKcwtEncodedValue(ReadOnlyMemory<byte> protectedHeader)
     {
-        var reader = new CborReader(protectedHeader, CborConformanceMode.Lax);
+        var reader = new CborReader(protectedHeader, CborOptions.Lax);
 
         int? count = reader.ReadStartMap();
         for(int i = 0; i < count; i++)

@@ -55,11 +55,11 @@ internal sealed class VcalmStatusEndpointTests
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private const string ClientId = "https://status.client.test";
-    private static readonly Uri ClientBaseUri = new("https://status.client.test");
+    private static Uri ClientBaseUri { get; } = new("https://status.client.test");
 
     //The §C.3 update + status checking exercise all three roles on the same tenant: issuer (mint the
     //credential and the status list), status (set the bit), verifier (read the warning).
-    private static readonly ImmutableHashSet<CapabilityIdentifier> AllRoleCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> AllRoleCapabilities { get; } =
         ImmutableHashSet.Create(
             WellKnownVcalmCapabilities.VcalmIssuer,
             WellKnownVcalmCapabilities.VcalmVerifier,
@@ -504,6 +504,7 @@ internal sealed class VcalmStatusEndpointTests
         DidDocument issuerDidDocument = await KeyDidBuilder.BuildAsync(
             material.SigningPublicKey,
             MultikeyVerificationMethodTypeInfo.Instance,
+            BaseMemoryPool.Shared,
             includeDefaultContext: false,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -596,7 +597,7 @@ internal sealed class VcalmStatusEndpointTests
             SerializePresentation = presentation => JsonSerializerExtensions.Serialize(presentation, JsonOptions),
             SerializeProofOptions = SerializeProofOptions,
             Decoder = TestSetup.Base58Decoder,
-            ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             MemoryPool = Pool
         };
     }
@@ -692,14 +693,7 @@ internal sealed class VcalmStatusEndpointTests
     {
         VerifiableCredential credential = new()
         {
-            Context = new Context
-            {
-                Contexts =
-                [
-                    Context.Credentials20,
-                    CanonicalizationTestUtilities.CredentialsExamplesV2ContextUrl
-                ]
-            },
+            Context = Context.FromIris(Context.Credentials20, CanonicalizationTestUtilities.CredentialsExamplesV2ContextUrl),
             Id = credentialId,
             Type = ["VerifiableCredential", "ExampleAlumniCredential"],
             Issuer = new Issuer { Id = issuerDid },
@@ -744,14 +738,7 @@ internal sealed class VcalmStatusEndpointTests
     {
         VerifiableCredential credential = new()
         {
-            Context = new Context
-            {
-                Contexts =
-                [
-                    Context.Credentials20,
-                    CanonicalizationTestUtilities.CredentialsExamplesV2ContextUrl
-                ]
-            },
+            Context = Context.FromIris(Context.Credentials20, CanonicalizationTestUtilities.CredentialsExamplesV2ContextUrl),
             Id = credentialId,
             Type = ["VerifiableCredential", "ExampleAlumniCredential"],
             Issuer = new Issuer { Id = issuerDid },
@@ -806,7 +793,7 @@ internal sealed class VcalmStatusEndpointTests
             DeserializeCredential = DeserializeCredential,
             SerializeProofOptions = SerializeProofOptions,
             Encoder = TestSetup.Base58Encoder,
-            ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync
+            ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync
         };
 
 
@@ -826,14 +813,14 @@ internal sealed class VcalmStatusEndpointTests
     //host-material wrapper lets the cleanup loop dispose the RegisterClient material uniformly.
     private sealed class StatusKeyMaterial: IDisposable
     {
-        private readonly VerifierKeyMaterial? hostMaterial;
+        private VerifierKeyMaterial? HostMaterial { get; }
         private bool isDisposed;
 
         public StatusKeyMaterial(PublicKeyMemory signingPublicKey, PrivateKeyMemory signingPrivateKey, VerifierKeyMaterial? hostMaterial)
         {
             SigningPublicKey = signingPublicKey;
             SigningPrivateKey = signingPrivateKey;
-            this.hostMaterial = hostMaterial;
+            this.HostMaterial = hostMaterial;
         }
 
         public PublicKeyMemory SigningPublicKey { get; }
@@ -851,9 +838,9 @@ internal sealed class VcalmStatusEndpointTests
             }
 
             isDisposed = true;
-            if(hostMaterial is not null)
+            if(HostMaterial is not null)
             {
-                hostMaterial.Dispose();
+                HostMaterial.Dispose();
             }
             else
             {

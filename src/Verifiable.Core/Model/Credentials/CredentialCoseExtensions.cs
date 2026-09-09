@@ -518,6 +518,8 @@ public static class CredentialCoseExtensions
         }
         catch
         {
+            //The header and credential are untrusted bytes not yet signature-checked; a decode failure
+            //fails closed rather than escaping as an exception, cancellation excepted above.
             return CoseCredentialVerificationResult.Failed();
         }
 

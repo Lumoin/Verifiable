@@ -1,5 +1,7 @@
 using System;
-using System.Formats.Cbor;
+using System.Buffers;
+using Lumoin.Veritas.Cbor;
+using Verifiable.Cbor;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
@@ -127,7 +129,9 @@ internal sealed class CtapBioEnrollmentRequestCborReaderTests
     [TestMethod]
     public void IgnoresUnrecognizedSubCommandParamsKey()
     {
-        var subCommandParamsWriter = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var subCommandParamsWriterBuffer = new ArrayBufferWriter<byte>();
+        var subCommandParamsWriter = new CborWriter(subCommandParamsWriterBuffer, CborOptions.Ctap2Canonical);
+
         subCommandParamsWriter.WriteStartMap(2);
         subCommandParamsWriter.WriteInt32(WellKnownCtapBioEnrollmentSubCommandParamsKeys.TemplateId);
         subCommandParamsWriter.WriteByteString(TemplateIdBytes);
@@ -135,13 +139,15 @@ internal sealed class CtapBioEnrollmentRequestCborReaderTests
         subCommandParamsWriter.WriteBoolean(true);
         subCommandParamsWriter.WriteEndMap();
 
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(1);
         writer.WriteInt32(WellKnownCtapBioEnrollmentRequestKeys.SubCommandParams);
-        writer.WriteEncodedValue(subCommandParamsWriter.Encode());
+        writer.WriteEncodedValue(subCommandParamsWriterBuffer.WrittenSpan.ToArray());
         writer.WriteEndMap();
 
-        CtapBioEnrollmentRequest decoded = CtapBioEnrollmentRequestCborReader.Read(writer.Encode());
+        CtapBioEnrollmentRequest decoded = CtapBioEnrollmentRequestCborReader.Read(writerBuffer.WrittenSpan.ToArray());
 
         Assert.IsTrue(decoded.TemplateId!.Value.Span.SequenceEqual(TemplateIdBytes));
     }
@@ -154,7 +160,9 @@ internal sealed class CtapBioEnrollmentRequestCborReaderTests
     [TestMethod]
     public void IgnoresUnrecognizedTopLevelMemberKey()
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(2);
         writer.WriteInt32(WellKnownCtapBioEnrollmentRequestKeys.Modality);
         writer.WriteInt32(WellKnownCtapBioEnrollmentModalities.Fingerprint);
@@ -162,7 +170,7 @@ internal sealed class CtapBioEnrollmentRequestCborReaderTests
         writer.WriteBoolean(true);
         writer.WriteEndMap();
 
-        CtapBioEnrollmentRequest decoded = CtapBioEnrollmentRequestCborReader.Read(writer.Encode());
+        CtapBioEnrollmentRequest decoded = CtapBioEnrollmentRequestCborReader.Read(writerBuffer.WrittenSpan.ToArray());
 
         Assert.AreEqual(WellKnownCtapBioEnrollmentModalities.Fingerprint, decoded.Modality);
     }
@@ -172,13 +180,15 @@ internal sealed class CtapBioEnrollmentRequestCborReaderTests
     [TestMethod]
     public void ThrowsWhenModalityHasWrongCborType()
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(1);
         writer.WriteInt32(WellKnownCtapBioEnrollmentRequestKeys.Modality);
         writer.WriteTextString("not-an-integer");
         writer.WriteEndMap();
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => CtapBioEnrollmentRequestCborReader.Read(writer.Encode()));
+        Assert.ThrowsExactly<Fido2FormatException>(() => CtapBioEnrollmentRequestCborReader.Read(writerBuffer.WrittenSpan.ToArray()));
     }
 
 
@@ -186,13 +196,15 @@ internal sealed class CtapBioEnrollmentRequestCborReaderTests
     [TestMethod]
     public void ThrowsWhenGetModalityHasWrongCborType()
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(1);
         writer.WriteInt32(WellKnownCtapBioEnrollmentRequestKeys.GetModality);
         writer.WriteInt32(1);
         writer.WriteEndMap();
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => CtapBioEnrollmentRequestCborReader.Read(writer.Encode()));
+        Assert.ThrowsExactly<Fido2FormatException>(() => CtapBioEnrollmentRequestCborReader.Read(writerBuffer.WrittenSpan.ToArray()));
     }
 
 

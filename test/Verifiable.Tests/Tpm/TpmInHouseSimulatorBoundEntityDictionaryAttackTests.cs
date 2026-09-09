@@ -15,24 +15,26 @@ using Verifiable.Tpm.Spec.Attributes;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
+using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
 /// <summary>
 /// Drives the bound-entity dictionary-attack (DA) state a session's context records at
-/// <c>TPM2_StartAuthSession()</c> time (TPM 2.0 Library Part 1, clause 17.6.10: "The noDA attribute of the bind
+/// <c>TPM2_StartAuthSession()</c> time (TPM 2.0 Library Part 1, clause 16.6.10: "The noDA attribute of the bind
 /// entity is recorded in the session context") against the in-house behavioural <see cref="TpmSimulator"/> —
 /// entirely in-process, with no external assets — through the same production command path production code uses
 /// (<see cref="TpmCommandExecutor"/>, <see cref="TpmSession"/>, and the real command/response codecs).
 /// </summary>
 /// <remarks>
 /// <para>
-/// The governing rule is Part 1, clause 17.8.7: "the authorization failure counter (failedTries) is incremented
+/// The governing rule is Part 1, clause 16.8.7: "the authorization failure counter (failedTries) is incremented
 /// if either the entity being authorized is subject to DA protection or if the session is bound to an entity that
 /// has DA protection" — an explicit OR, independently restated at Part 3, clause 11.1.1 ("use of the session is
 /// subject to DA regardless of the DA status of the entity being authorized"). A session bound to a DA-protected
 /// entity and then used to authorize a NON-DA-protected entity is, absent this rule, an unthrottled online
-/// guessing oracle against the bound entity's own authValue (clause 17.8.7's own worked attack scenario) — the
+/// guessing oracle against the bound entity's own authValue (clause 16.8.7's own worked attack scenario) — the
 /// case every test below authorized-vs-bound mismatch isolates.
 /// </para>
 /// <para>
@@ -80,23 +82,23 @@ internal sealed class TpmInHouseSimulatorBoundEntityDictionaryAttackTests
 
     /// <summary>
     /// The oracle-closure case: a session bound to a DA-protected NV Index, used to authorize a DIFFERENT NO_DA
-    /// Index with a wrong authValue, must charge <c>failedTries</c> — TPM 2.0 Library Part 1, clause 17.8.7's
+    /// Index with a wrong authValue, must charge <c>failedTries</c> — TPM 2.0 Library Part 1, clause 16.8.7's
     /// explicit OR ("...or if the session is bound to an entity that has DA protection"), restated at Part 3,
     /// clause 11.1.1 ("use of the session is subject to DA regardless of the DA status of the entity being
     /// authorized"). Without this OR the target's own <c>TPMA_NV_NO_DA</c> SET would make it, incorrectly, an
-    /// unthrottled oracle against the bind entity's authValue — clause 17.8.7's own worked attack.
+    /// unthrottled oracle against the bind entity's authValue — clause 16.8.7's own worked attack.
     /// </summary>
     [TestMethod]
     public async Task SessionBoundToDaProtectedIndexAuthorizingADifferentNoDaIndexWithWrongAuthCountsAuthFail()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         await DefineNvIndexAsync(tpm, pool, registry, BindIndexHandle, DaProtectedAttributes, CorrectAuth).ConfigureAwait(false);
         await DefineNvIndexAsync(tpm, pool, registry, TargetIndexHandle, NoDaAttributes, CorrectAuth).ConfigureAwait(false);
-        //An NV Index's Name is nameAlg ‖ H(TPMS_NV_PUBLIC) (TPM 2.0 Library Part 1, clause 14, Table 6), and
+        //An NV Index's Name is nameAlg ‖ H(TPMS_NV_PUBLIC) (TPM 2.0 Library Part 1, clause 13, Table 9), and
         //the first write SETs the public-area TPMA_NV_WRITTEN attribute, changing that Name — so the Name the
         //session's cpHash folds must be read AFTER the provisioning write.
         await ProvisionTargetIndexAsync(tpm, pool, registry, TargetIndexHandle, CorrectAuth).ConfigureAwait(false);
@@ -131,9 +133,9 @@ internal sealed class TpmInHouseSimulatorBoundEntityDictionaryAttackTests
 
     /// <summary>
     /// The negative-space counterpart of case 1: a session bound to a NON-DA-protected Index (<c>TPMA_NV_NO_DA</c>
-    /// SET) contributes nothing to the OR (TPM 2.0 Library Part 1, clause 17.8.1: "The authValue for an NV Index
+    /// SET) contributes nothing to the OR (TPM 2.0 Library Part 1, clause 16.8.1: "The authValue for an NV Index
     /// receives DA protection unless the TPMA_NV_NO_DA attribute of the Index is SET"), so a wrong authValue on a
-    /// DIFFERENT NO_DA target is the plain, uncounted <c>TPM_RC_BAD_AUTH</c> — both disjuncts of clause 17.8.7's
+    /// DIFFERENT NO_DA target is the plain, uncounted <c>TPM_RC_BAD_AUTH</c> — both disjuncts of clause 16.8.7's
     /// OR are false.
     /// </summary>
     [TestMethod]
@@ -141,12 +143,12 @@ internal sealed class TpmInHouseSimulatorBoundEntityDictionaryAttackTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         await DefineNvIndexAsync(tpm, pool, registry, BindIndexHandle, NoDaAttributes, CorrectAuth).ConfigureAwait(false);
         await DefineNvIndexAsync(tpm, pool, registry, TargetIndexHandle, NoDaAttributes, CorrectAuth).ConfigureAwait(false);
-        //An NV Index's Name is nameAlg ‖ H(TPMS_NV_PUBLIC) (TPM 2.0 Library Part 1, clause 14, Table 6), and
+        //An NV Index's Name is nameAlg ‖ H(TPMS_NV_PUBLIC) (TPM 2.0 Library Part 1, clause 13, Table 9), and
         //the first write SETs the public-area TPMA_NV_WRITTEN attribute, changing that Name — so the Name the
         //session's cpHash folds must be read AFTER the provisioning write.
         await ProvisionTargetIndexAsync(tpm, pool, registry, TargetIndexHandle, CorrectAuth).ConfigureAwait(false);
@@ -180,9 +182,9 @@ internal sealed class TpmInHouseSimulatorBoundEntityDictionaryAttackTests
 
     /// <summary>
     /// A session bound to <c>TPM_RH_OWNER</c> — a permanent entity other than <c>TPM_RH_LOCKOUT</c> — contributes
-    /// nothing to the OR: TPM 2.0 Library Part 1, clause 17.8.7's closing sentence, "If a session is bound to a
+    /// nothing to the OR: TPM 2.0 Library Part 1, clause 16.8.7's closing sentence, "If a session is bound to a
     /// permanent entity other than TPM_RH_LOCKOUT, then the session is not bound to an entity that has DA
-    /// protection," and clause 17.8.1, "The authValue associated with a permanent entity, other than
+    /// protection," and clause 16.8.1, "The authValue associated with a permanent entity, other than
     /// TPM_RH_LOCKOUT, does not receive DA protection." A wrong authValue on a NO_DA target is therefore the
     /// plain, uncounted <c>TPM_RC_BAD_AUTH</c>.
     /// </summary>
@@ -191,11 +193,11 @@ internal sealed class TpmInHouseSimulatorBoundEntityDictionaryAttackTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         await DefineNvIndexAsync(tpm, pool, registry, TargetIndexHandle, NoDaAttributes, CorrectAuth).ConfigureAwait(false);
-        //An NV Index's Name is nameAlg ‖ H(TPMS_NV_PUBLIC) (TPM 2.0 Library Part 1, clause 14, Table 6), and
+        //An NV Index's Name is nameAlg ‖ H(TPMS_NV_PUBLIC) (TPM 2.0 Library Part 1, clause 13, Table 9), and
         //the first write SETs the public-area TPMA_NV_WRITTEN attribute, changing that Name — so the Name the
         //session's cpHash folds must be read AFTER the provisioning write.
         await ProvisionTargetIndexAsync(tpm, pool, registry, TargetIndexHandle, CorrectAuth).ConfigureAwait(false);
@@ -229,11 +231,11 @@ internal sealed class TpmInHouseSimulatorBoundEntityDictionaryAttackTests
 
     /// <summary>
     /// The one-strike collision: a session bound to <c>TPM_RH_LOCKOUT</c> — DA-protected despite being a
-    /// permanent entity (TPM 2.0 Library Part 1, clause 17.8.1: "lockoutAuth is DA protected even though it is a
+    /// permanent entity (TPM 2.0 Library Part 1, clause 16.8.1: "lockoutAuth is DA protected even though it is a
     /// permanent entity") — authorizing a DIFFERENT, NO_DA-exempt entity with a wrong authValue must spend the
-    /// clause 17.8.5 one-strike lockoutAuth-disable, never the ordinary <c>failedTries</c> counter: "An
+    /// clause 16.8.5 one-strike lockoutAuth-disable, never the ordinary <c>failedTries</c> counter: "An
     /// authorization failure associated with lockoutAuth causes the TPM to enter this special lockout state
-    /// regardless of the setting of failedTries and maxTries." This is precisely clause 17.8.7's attack scenario
+    /// regardless of the setting of failedTries and maxTries." This is precisely clause 16.8.7's attack scenario
     /// with entity A = TPM_RH_LOCKOUT: absent the bind-DA OR, a NO_DA target would make lockoutAuth an
     /// unthrottled oracle.
     /// </summary>
@@ -242,11 +244,11 @@ internal sealed class TpmInHouseSimulatorBoundEntityDictionaryAttackTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         await DefineNvIndexAsync(tpm, pool, registry, TargetIndexHandle, NoDaAttributes, CorrectAuth).ConfigureAwait(false);
-        //An NV Index's Name is nameAlg ‖ H(TPMS_NV_PUBLIC) (TPM 2.0 Library Part 1, clause 14, Table 6), and
+        //An NV Index's Name is nameAlg ‖ H(TPMS_NV_PUBLIC) (TPM 2.0 Library Part 1, clause 13, Table 9), and
         //the first write SETs the public-area TPMA_NV_WRITTEN attribute, changing that Name — so the Name the
         //session's cpHash folds must be read AFTER the provisioning write.
         await ProvisionTargetIndexAsync(tpm, pool, registry, TargetIndexHandle, CorrectAuth).ConfigureAwait(false);
@@ -285,8 +287,8 @@ internal sealed class TpmInHouseSimulatorBoundEntityDictionaryAttackTests
     }
 
     /// <summary>
-    /// The use-time lockout gate: TPM 2.0 Library Part 1, clause 17.8.3, "While in Lockout mode, any use of a
-    /// DA-protected authValue will return TPM_RC_LOCKOUT," composed with clause 17.8.7's bind-DA grant. Once
+    /// The use-time lockout gate: TPM 2.0 Library Part 1, clause 16.8.3, "While in Lockout mode, any use of a
+    /// DA-protected authValue will return TPM_RC_LOCKOUT," composed with clause 16.8.7's bind-DA grant. Once
     /// <c>failedTries == maxTries</c>, a session bound to a DA-protected entity used to authorize a NO_DA target
     /// must be refused with the BARE <c>TPM_RC_LOCKOUT</c> (Part 3, clause 6.2's Table 3 entry — a
     /// command-independent, non-session-encoded code), with no <c>failedTries</c> movement and, proven by
@@ -297,12 +299,12 @@ internal sealed class TpmInHouseSimulatorBoundEntityDictionaryAttackTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         await DriveIntoLockoutAsync(tpm, pool, registry).ConfigureAwait(false);
         await DefineNvIndexAsync(tpm, pool, registry, TargetIndexHandle, NoDaAttributes, CorrectAuth).ConfigureAwait(false);
-        //An NV Index's Name is nameAlg ‖ H(TPMS_NV_PUBLIC) (TPM 2.0 Library Part 1, clause 14, Table 6), and
+        //An NV Index's Name is nameAlg ‖ H(TPMS_NV_PUBLIC) (TPM 2.0 Library Part 1, clause 13, Table 9), and
         //the first write SETs the public-area TPMA_NV_WRITTEN attribute, changing that Name — so the Name the
         //session's cpHash folds must be read AFTER the provisioning write.
         await ProvisionTargetIndexAsync(tpm, pool, registry, TargetIndexHandle, CorrectAuth).ConfigureAwait(false);
@@ -347,7 +349,7 @@ internal sealed class TpmInHouseSimulatorBoundEntityDictionaryAttackTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         await DriveIntoLockoutAsync(tpm, pool, registry).ConfigureAwait(false);
@@ -372,12 +374,12 @@ internal sealed class TpmInHouseSimulatorBoundEntityDictionaryAttackTests
 
     /// <summary>
     /// A companion session that authorizes no entity still owes a genuine command HMAC, and its own bind DA state
-    /// enters the OR exactly as an authorizing session's does: TPM 2.0 Library Part 1, clause 17.8.1's three-uses
+    /// enters the OR exactly as an authorizing session's does: TPM 2.0 Library Part 1, clause 16.8.1's three-uses
     /// enumeration names "the authValue parameter in the computation of sessionKey for a bound session" (use 3)
     /// as itself a DA-protected use, and "All uses of a DA protected authValue receive DA protection." A decrypt/
     /// encrypt-only companion session bound to a DA-protected entity, riding a command whose PRIMARY session
     /// authorizes an unrelated (correctly-supplied) entity, must charge failedTries on its own HMAC mismatch —
-    /// proving the companion is not exempt from clause 17.8.7's OR merely because it authorizes nothing itself.
+    /// proving the companion is not exempt from clause 16.8.7's OR merely because it authorizes nothing itself.
     /// </summary>
     /// <remarks>
     /// This command is <c>TPM2_Unseal()</c>, whose primary (index 0) session must resolve as a genuine HMAC or
@@ -396,7 +398,7 @@ internal sealed class TpmInHouseSimulatorBoundEntityDictionaryAttackTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         await DefineNvIndexAsync(tpm, pool, registry, BindIndexHandle, DaProtectedAttributes, CorrectAuth).ConfigureAwait(false);
@@ -414,12 +416,12 @@ internal sealed class TpmInHouseSimulatorBoundEntityDictionaryAttackTests
 
             TpmResult<TpmDictionaryAttackParameters> before = await tpm.GetDictionaryAttackParametersAsync(pool, TestContext.CancellationToken).ConfigureAwait(false);
 
-            StartAuthSessionInput primaryStart = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(SessionAlg);
+            StartAuthSessionInput primaryStart = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(SessionAlg, TestEntropy.NewCounterStream(), pool);
             TpmResult<StartAuthSessionResponse> primaryStartResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
                 tpm, primaryStart, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
             Assert.IsTrue(primaryStartResult.IsSuccess, $"StartAuthSession (unbound primary) failed: '{primaryStartResult.ResponseCode}'.");
             primarySessionHandle = primaryStartResult.Value.SessionHandle.Value;
-            using TpmSession primarySession = new(new TpmHandle(primarySessionHandle), primaryStartResult.Value.NonceTPM, SessionAlg, pool);
+            using TpmSession primarySession = new(new TpmHandle(primarySessionHandle), primaryStartResult.Value.NonceTPM, SessionAlg, TestEntropy.NewCounterStream(), pool);
             primarySession.SetAuthValue(CorrectAuth, pool);
 
             TpmSession companionSession;
@@ -451,9 +453,9 @@ internal sealed class TpmInHouseSimulatorBoundEntityDictionaryAttackTests
     }
 
     /// <summary>
-    /// The bind-DA state applies uniformly across session types: TPM 2.0 Library Part 1, clause 17.6.10, "For all
+    /// The bind-DA state applies uniformly across session types: TPM 2.0 Library Part 1, clause 16.6.10, "For all
     /// session types, this command will cause initialization of the sessionKey and may establish binding between
-    /// the session and an entity," and clause 17.8.1's "All uses of a DA protected authValue receive DA
+    /// the session and an entity," and clause 16.8.1's "All uses of a DA protected authValue receive DA
     /// protection" names no session-type exception. A POLICY session started bound to a DA-protected entity,
     /// whose accumulated policy otherwise legitimately authorizes <c>TPM2_NV_ChangeAuth()</c>'s ADMIN role
     /// (<c>TPM2_PolicyAuthValue()</c> then <c>TPM2_PolicyCommandCode(TPM_CC_NV_ChangeAuth)</c>, Part 3, clause
@@ -465,14 +467,14 @@ internal sealed class TpmInHouseSimulatorBoundEntityDictionaryAttackTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         await DefineNvIndexAsync(tpm, pool, registry, BindIndexHandle, DaProtectedAttributes, CorrectAuth).ConfigureAwait(false);
 
         TpmPolicy rotationPolicy = new TpmPolicyBuilder().WithAuthValue().WithCommandCode(TpmCcConstants.TPM_CC_NV_ChangeAuth).Build();
         byte[] rotationAuthPolicy = new byte[DigestSize];
-        int written = rotationPolicy.ComputeDigest(SessionAlg, rotationAuthPolicy);
+        int written = rotationPolicy.ComputeDigest(SessionAlg, rotationAuthPolicy, pool);
         Assert.AreEqual(DigestSize, written, "A SHA-256 policy digest is the hash's full width.");
 
         await DefineNvIndexAsync(tpm, pool, registry, TargetIndexHandle, NoDaAttributes, CorrectAuth, rotationAuthPolicy).ConfigureAwait(false);
@@ -514,9 +516,9 @@ internal sealed class TpmInHouseSimulatorBoundEntityDictionaryAttackTests
 
     /// <summary>
     /// The bind derivation reaches ordinary loaded objects, not only NV Indexes and permanent handles: TPM 2.0
-    /// Library Part 1, clause 17.8.1, "The authValue for an object receives DA protection unless the object's
+    /// Library Part 1, clause 16.8.1, "The authValue for an object receives DA protection unless the object's
     /// noDA attribute is SET," applies identically whether the object is the entity being authorized or merely
-    /// the bind entity a session's sessionKey was derived from (clause 17.8.7's OR draws no distinction). A
+    /// the bind entity a session's sessionKey was derived from (clause 16.8.7's OR draws no distinction). A
     /// session bound to an ordinary loaded key with <c>noDA</c> CLEAR, authorizing a DIFFERENT NO_DA Index with a
     /// wrong authValue, must charge failedTries.
     /// </summary>
@@ -525,14 +527,14 @@ internal sealed class TpmInHouseSimulatorBoundEntityDictionaryAttackTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse bindKey = await CreateOrdinaryBindKeyAsync(tpm, registry, pool, isDaProtected: true).ConfigureAwait(false);
         uint bindKeyHandle = bindKey.ObjectHandle.Value;
 
         await DefineNvIndexAsync(tpm, pool, registry, TargetIndexHandle, NoDaAttributes, CorrectAuth).ConfigureAwait(false);
-        //An NV Index's Name is nameAlg ‖ H(TPMS_NV_PUBLIC) (TPM 2.0 Library Part 1, clause 14, Table 6), and
+        //An NV Index's Name is nameAlg ‖ H(TPMS_NV_PUBLIC) (TPM 2.0 Library Part 1, clause 13, Table 9), and
         //the first write SETs the public-area TPMA_NV_WRITTEN attribute, changing that Name — so the Name the
         //session's cpHash folds must be read AFTER the provisioning write.
         await ProvisionTargetIndexAsync(tpm, pool, registry, TargetIndexHandle, CorrectAuth).ConfigureAwait(false);
@@ -566,7 +568,7 @@ internal sealed class TpmInHouseSimulatorBoundEntityDictionaryAttackTests
     }
 
     /// <summary>
-    /// The success invariant: TPM 2.0 Library Part 1, clause 17.8.7's OR governs a FAILED authorization only — it
+    /// The success invariant: TPM 2.0 Library Part 1, clause 16.8.7's OR governs a FAILED authorization only — it
     /// is a disjunction over which conditions cause a charge, not a rule that a DA-protected bind entity by
     /// itself blocks or throttles a CORRECT authorization. A session bound to a DA-protected Index, used to
     /// authorize a NO_DA target with the CORRECT authValue, must succeed and must not move failedTries.
@@ -576,12 +578,12 @@ internal sealed class TpmInHouseSimulatorBoundEntityDictionaryAttackTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         await DefineNvIndexAsync(tpm, pool, registry, BindIndexHandle, DaProtectedAttributes, CorrectAuth).ConfigureAwait(false);
         await DefineNvIndexAsync(tpm, pool, registry, TargetIndexHandle, NoDaAttributes, CorrectAuth).ConfigureAwait(false);
-        //An NV Index's Name is nameAlg ‖ H(TPMS_NV_PUBLIC) (TPM 2.0 Library Part 1, clause 14, Table 6), and
+        //An NV Index's Name is nameAlg ‖ H(TPMS_NV_PUBLIC) (TPM 2.0 Library Part 1, clause 13, Table 9), and
         //the first write SETs the public-area TPMA_NV_WRITTEN attribute, changing that Name — so the Name the
         //session's cpHash folds must be read AFTER the provisioning write.
         await ProvisionTargetIndexAsync(tpm, pool, registry, TargetIndexHandle, CorrectAuth).ConfigureAwait(false);
@@ -623,7 +625,7 @@ internal sealed class TpmInHouseSimulatorBoundEntityDictionaryAttackTests
     /// <param name="registry">The response codec registry.</param>
     /// <param name="nvIndex">The Index handle to define.</param>
     /// <param name="attributes">The Index's TPMA_NV attributes.</param>
-    /// <param name="authValue">The Index authValue (TPM 2.0 Library Part 1, clause 17.8.1's USER-role authorization).</param>
+    /// <param name="authValue">The Index authValue (TPM 2.0 Library Part 1, clause 16.8.1's USER-role authorization).</param>
     /// <param name="authPolicy">The Index's ADMIN-role access policy digest, or empty for none.</param>
     private async Task DefineNvIndexAsync(
         TpmDevice device, BaseMemoryPool pool, TpmResponseRegistry registry, uint nvIndex, TpmaNv attributes, ReadOnlyMemory<byte> authValue, ReadOnlyMemory<byte> authPolicy = default)
@@ -642,7 +644,7 @@ internal sealed class TpmInHouseSimulatorBoundEntityDictionaryAttackTests
 
     /// <summary>
     /// Reads an NV Index's current Name over <c>TPM2_NV_ReadPublic()</c> — the authoritative source an
-    /// HMAC/policy-session-authorized command's cpHash needs (TPM 2.0 Library Part 1, clause 16.7, equation 15).
+    /// HMAC/policy-session-authorized command's cpHash needs (TPM 2.0 Library Part 1, clause 15.7, equation 15).
     /// </summary>
     /// <param name="device">The TPM device.</param>
     /// <param name="nvIndex">The NV Index handle.</param>
@@ -661,7 +663,7 @@ internal sealed class TpmInHouseSimulatorBoundEntityDictionaryAttackTests
     /// Starts a bound, unsalted HMAC session against <paramref name="bindHandle"/> through the production
     /// <c>TPM2_StartAuthSession()</c> path, deriving the client-side session key from
     /// <paramref name="bindAuthValue"/> — the caller's belief of the bind entity's real authValue (TPM 2.0
-    /// Library Part 1, clause 17.6.10, equation 20).
+    /// Library Part 1, clause 16.6.10, equation 20).
     /// </summary>
     /// <param name="tpm">The TPM device.</param>
     /// <param name="registry">The response codec registry.</param>
@@ -678,7 +680,7 @@ internal sealed class TpmInHouseSimulatorBoundEntityDictionaryAttackTests
     private async Task<(uint SessionHandle, TpmSession Session)> StartBoundHmacSessionAsync(
         TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, uint bindHandle, ReadOnlyMemory<byte> bindAuthValue, TpmtSymDef? symmetric = null)
     {
-        StartAuthSessionInput startInput = StartAuthSessionInput.CreateBoundUnsaltedHmacSession(bindHandle, SessionAlg, symmetric);
+        StartAuthSessionInput startInput = StartAuthSessionInput.CreateBoundUnsaltedHmacSession(bindHandle, SessionAlg, TestEntropy.NewCounterStream(), pool, symmetric);
 
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             tpm, startInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
@@ -687,7 +689,7 @@ internal sealed class TpmInHouseSimulatorBoundEntityDictionaryAttackTests
         StartAuthSessionResponse startResponse = startResult.Value;
         TpmSession session = await TpmSession.CreateBoundAsync(
             new TpmHandle(startResponse.SessionHandle.Value), bindAuthValue, startInput.NonceCaller,
-            startResponse.NonceTPM, SessionAlg, pool, symmetric: symmetric, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            startResponse.NonceTPM, SessionAlg, TestEntropy.NewCounterStream(), pool, symmetric: symmetric, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         session.SessionAttributes = TpmaSession.CONTINUE_SESSION;
 
@@ -729,7 +731,7 @@ internal sealed class TpmInHouseSimulatorBoundEntityDictionaryAttackTests
         StartAuthSessionResponse startResponse = startResult.Value;
         TpmSession session = await TpmSession.CreateBoundAsync(
             new TpmHandle(startResponse.SessionHandle.Value), bindAuthValue, startInput.NonceCaller,
-            startResponse.NonceTPM, SessionAlg, pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            startResponse.NonceTPM, SessionAlg, TestEntropy.NewCounterStream(), pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         session.SessionAttributes = TpmaSession.CONTINUE_SESSION;
 
@@ -739,7 +741,7 @@ internal sealed class TpmInHouseSimulatorBoundEntityDictionaryAttackTests
     /// <summary>
     /// Issues <c>TPM2_NV_Read()</c> against <paramref name="targetIndex"/> under Index authorization, folding
     /// <paramref name="suppliedAuth"/> as the target entity's authValue term on <paramref name="session"/> (TPM
-    /// 2.0 Library Part 1, clause 17.6.10, equation 21 — the session is not bound to the entity being authorized;
+    /// 2.0 Library Part 1, clause 16.6.10, equation 21 — the session is not bound to the entity being authorized;
     /// TPM 2.0 Library Part 3, clause 31.13 for the command itself). The simulator's HMAC-session arm of
     /// <c>TPM2_NV_Write()</c> only models the owner arm — an ordinary Index answers <c>TPM_RC_AUTH_TYPE</c> for
     /// Index-authValue authorization over an HMAC session — so every case in this file that needs a session-
@@ -816,12 +818,12 @@ internal sealed class TpmInHouseSimulatorBoundEntityDictionaryAttackTests
         TpmResult<NvWriteResponse> wrongResult = await TpmCommandExecutor.ExecuteAsync<NvWriteResponse>(
             device, wrongWrite, [wrongPasswordSession], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
-        //Arrange machinery, not the normative case under proof: the password arm answers the BARE
-        //TPM_RC_AUTH_FAIL (not session-index-encoded) for this rejection. Lockout engagement itself is proven
+        //Arrange machinery, not the normative case under proof: the password arm answers the
+        //session-index-encoded TPM_RC_AUTH_FAIL for this rejection. Lockout engagement itself is proven
         //by each caller's own normative assertion against the state this priming produces.
         Assert.IsFalse(wrongResult.IsSuccess, "The priming write must fail.");
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_AUTH_FAIL, wrongResult.ResponseCode,
+            HmacKeyHarness.SessionEncodedRc(TpmRcConstants.TPM_RC_AUTH_FAIL, 0), wrongResult.ResponseCode,
             "The priming failure must count and, with maxTries lowered to 1, engage Lockout mode immediately.");
     }
 
@@ -846,7 +848,7 @@ internal sealed class TpmInHouseSimulatorBoundEntityDictionaryAttackTests
     /// <summary>
     /// Creates a transient ECC signing key under the owner hierarchy, with its <c>noDA</c> attribute controlled
     /// by <paramref name="isDaProtected"/> — the bind-entity derivation case for an ordinary loaded object (TPM
-    /// 2.0 Library Part 1, clause 17.8.1: "The authValue for an object receives DA protection unless the object's
+    /// 2.0 Library Part 1, clause 16.8.1: "The authValue for an object receives DA protection unless the object's
     /// noDA attribute is SET").
     /// </summary>
     /// <param name="tpm">The TPM device.</param>
@@ -970,7 +972,7 @@ internal sealed class TpmInHouseSimulatorBoundEntityDictionaryAttackTests
     /// <returns>The operational simulator.</returns>
     private async Task<TpmSimulator> CreateOperationalAsync(BaseMemoryPool pool)
     {
-        var simulator = new TpmSimulator("tpm-in-house-bound-entity-da", signingBackend: BouncyCastleTpmEccSigningBackend.Create());
+        var simulator = new TpmSimulator("tpm-in-house-bound-entity-da", signingBackend: BouncyCastleTpmEccSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await IssueStartupClearAsync(simulator, pool).ConfigureAwait(false);
 

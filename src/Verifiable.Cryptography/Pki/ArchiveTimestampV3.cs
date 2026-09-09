@@ -437,6 +437,11 @@ public static class ArchiveTimestampV3
     /// kept here: an invalid index yields no imprint input at all, so a signature whose archive time-stamp
     /// references material that is no longer there can derive no proof of existence from that token.
     /// </para>
+    /// <para>
+    /// <strong>Manual disposal, not a <see langword="using"/> declaration.</strong> <c>hashIndex</c> is bound
+    /// through <see cref="TryReadHashIndex"/>'s <see langword="out"/> parameter, so it is declared
+    /// <see langword="null"/> and disposed in the <see langword="finally"/> below.
+    /// </para>
     /// </remarks>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the assembled imprint input transfers to the returned result, which the caller disposes; every failure path returns a result that owns nothing.")]
@@ -481,6 +486,13 @@ public static class ArchiveTimestampV3
                 return NotStated(readStatus);
             }
 
+            //TryReadHashIndex's contract guarantees hashIndex is non-null whenever it returns Stated;
+            //this proves it to the compiler instead of a null-forgiving operator.
+            if(hashIndex is null)
+            {
+                return NotStated(ArchiveTimestampCoverageStatus.HashIndexMalformed);
+            }
+
             if(!tokenMaterial.HasEncapsulatedContent)
             {
                 return NotStated(ArchiveTimestampCoverageStatus.TokenMalformed);
@@ -495,7 +507,7 @@ public static class ArchiveTimestampV3
             //Clause 5.5.2: hashIndAlgorithm "shall be the same as the hash algorithm used for computing the
             //message imprint included in the time-stamp token enveloped in the archive time-stamp unsigned
             //attribute". An index under another algorithm names hash values of objects nothing binds.
-            if(!string.Equals(hashIndex!.HashIndexAlgorithm.Oid, tokenInfo.MessageImprintAlgorithm.Oid, StringComparison.Ordinal))
+            if(!string.Equals(hashIndex.HashIndexAlgorithm.Oid, tokenInfo.MessageImprintAlgorithm.Oid, StringComparison.Ordinal))
             {
                 return NotStated(ArchiveTimestampCoverageStatus.HashIndexAlgorithmMismatch);
             }

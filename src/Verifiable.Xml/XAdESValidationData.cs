@@ -111,6 +111,13 @@ public sealed class XAdESValidationData: IDisposable
     /// <param name="value">The read model on success; the caller owns and must dispose it.</param>
     /// <param name="error">The refusal on failure.</param>
     /// <returns><see langword="true"/> when the element was read.</returns>
+    /// <remarks>
+    /// <strong>Manual disposal, not <see langword="using"/> declarations.</strong> <c>certificateValues</c> and
+    /// <c>revocationValues</c> transfer ownership into <paramref name="value"/> on success; the
+    /// <see langword="finally"/> below disposes whichever was actually read when a later grammar or child
+    /// check fails first, never on the success path a <see langword="using"/> declaration would also
+    /// dispose on.
+    /// </remarks>
     internal static bool TryRead(XmlNodeTable table, int elementIndex, BaseMemoryPool pool, out XAdESValidationData? value, out XAdESReadError error)
     {
         ArgumentNullException.ThrowIfNull(table);

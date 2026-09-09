@@ -85,6 +85,12 @@ public sealed class XAdESCounterSignature: IDisposable
     /// <see cref="XAdESReadFailure.MalformedEmbeddedSignature"/> when the <c>ds:Signature</c> child does not
     /// itself read as a well-formed XMLDSIG signature — the byte offset is the embedded read's own offset.</param>
     /// <returns><see langword="true"/> when the element was read.</returns>
+    /// <remarks>
+    /// <strong>Manual disposal, not a <see langword="using"/> declaration.</strong> <c>signature</c> transfers
+    /// ownership into <paramref name="value"/> on success — nulled just before the return so the
+    /// <see langword="finally"/> disposes it only when a later grammar or embedded-read check fails first,
+    /// never on the success path a <see langword="using"/> declaration would also dispose on.
+    /// </remarks>
     public static bool TryRead(XmlNodeTable table, int elementIndex, BaseMemoryPool pool, out XAdESCounterSignature? value, out XAdESReadError error)
     {
         ArgumentNullException.ThrowIfNull(table);

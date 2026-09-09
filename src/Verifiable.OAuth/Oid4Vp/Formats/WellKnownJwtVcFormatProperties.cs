@@ -18,7 +18,7 @@ public static class WellKnownJwtVcFormatProperties
     /// identifiers supported for signing JWT VCs and JWT VPs.
     /// Per OID4VP 1.0 Appendix B.1.
     /// </summary>
-    public static readonly string AlgValuesSupported = Utf8Constants.ToInternedString(AlgValuesSupportedUtf8);
+    public static string AlgValuesSupported { get; } = Utf8Constants.ToInternedString(AlgValuesSupportedUtf8);
 
 
     /// <summary>Returns <see langword="true"/> when <paramref name="value"/> is

@@ -121,6 +121,6 @@ public static class SecurityEventTokenParsing
     }
 
 
-    private static readonly IReadOnlyDictionary<string, object> EmptyPayload =
+    private static IReadOnlyDictionary<string, object> EmptyPayload { get; } =
         new Dictionary<string, object>(0, StringComparer.Ordinal);
 }

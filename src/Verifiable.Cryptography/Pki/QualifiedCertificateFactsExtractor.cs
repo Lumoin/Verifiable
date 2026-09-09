@@ -472,6 +472,8 @@ public static class QualifiedCertificateFactsExtractor
                         }
                         catch(AsnContentException)
                         {
+                            //A malformed QcLimitValue statementInfo declares nothing this library can read;
+                            //the fact stays absent (qcLimitValue null) and the walk continues.
                         }
                     }
 
@@ -498,6 +500,8 @@ public static class QualifiedCertificateFactsExtractor
                         }
                         catch(AsnContentException)
                         {
+                            //A malformed QcRetentionPeriod statementInfo declares nothing this library can
+                            //read; the fact stays absent and the walk continues.
                         }
                     }
 
@@ -533,6 +537,8 @@ public static class QualifiedCertificateFactsExtractor
                         }
                         catch(AsnContentException)
                         {
+                            //A malformed QcPDS statementInfo declares nothing this library can read; the
+                            //fact stays absent and the walk continues.
                         }
                     }
 
@@ -564,6 +570,8 @@ public static class QualifiedCertificateFactsExtractor
                         }
                         catch(AsnContentException)
                         {
+                            //A malformed QcCClegislation statementInfo declares nothing this library can
+                            //read; the fact stays absent and the walk continues.
                         }
                     }
 
@@ -601,6 +609,8 @@ public static class QualifiedCertificateFactsExtractor
                         }
                         catch(AsnContentException)
                         {
+                            //A malformed QcIdentMethod statementInfo declares nothing this library can read;
+                            //the fact stays absent and the walk continues.
                         }
                     }
 
@@ -633,6 +643,8 @@ public static class QualifiedCertificateFactsExtractor
                         }
                         catch(AsnContentException)
                         {
+                            //A malformed QcQSCDlegislation statementInfo declares nothing this library can
+                            //read; the fact stays absent and the walk continues.
                         }
                     }
 

@@ -8,8 +8,8 @@ namespace Verifiable.Tpm.Automata;
 /// <summary>
 /// A command's or a response's parameter area held in pooled storage: the octets that follow the handle and
 /// authorization areas of a command, or that follow the response header and precede the response authorization
-/// area (TPM 2.0 Library Part 1, clause 16.7 equation 15, printed page 103, and clause 16.8 equation 16,
-/// printed page 104 — cpHash's and rpHash's <c>parameters</c> term). The area is a concatenation of a command's
+/// area (TPM 2.0 Library Part 1, clause 15.7 equation 15, printed page 106, and clause 15.8 equation 16,
+/// printed page 107 — cpHash's and rpHash's <c>parameters</c> term). The area is a concatenation of a command's
 /// or response's own parameters and carries no structure of its own, so no TPM 2.0 structure names it and it is
 /// modelled as a length-carrying pooled buffer rather than as a <c>TPM2B_*</c> type.
 /// </summary>
@@ -30,7 +30,7 @@ namespace Verifiable.Tpm.Automata;
 /// <see cref="AsReadOnlyMemory"/> expose, and it exists so a parameter-decryption step can transform the
 /// captured area in place. That is normative rather than an optimization: cpHash is computed over the
 /// parameters exactly as received, ciphertext included (Part 3, clause 5.6, which precedes clause 5.7's
-/// decryption; Part 1, clause 19.1), and the command body is then decoded from the decrypted octets — so the
+/// decryption; Part 1, clause 18.1), and the command body is then decoded from the decrypted octets — so the
 /// ciphertext the digest covered and the plaintext the body consumes must be the same buffer, transformed
 /// between the two readings.
 /// </para>

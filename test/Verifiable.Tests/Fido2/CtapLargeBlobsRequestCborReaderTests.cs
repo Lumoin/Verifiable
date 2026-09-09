@@ -1,5 +1,7 @@
 using System;
-using System.Formats.Cbor;
+using System.Buffers;
+using Lumoin.Veritas.Cbor;
+using Verifiable.Cbor;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
@@ -130,7 +132,9 @@ internal sealed class CtapLargeBlobsRequestCborReaderTests
     [TestMethod]
     public void IgnoresUnrecognizedTopLevelMemberKey()
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(2);
         writer.WriteInt32(WellKnownCtapLargeBlobsRequestKeys.Offset);
         writer.WriteInt32(3);
@@ -138,7 +142,7 @@ internal sealed class CtapLargeBlobsRequestCborReaderTests
         writer.WriteUInt32(42);
         writer.WriteEndMap();
 
-        CtapLargeBlobsRequest decoded = CtapLargeBlobsRequestCborReader.Read(writer.Encode());
+        CtapLargeBlobsRequest decoded = CtapLargeBlobsRequestCborReader.Read(writerBuffer.WrittenSpan.ToArray());
 
         Assert.AreEqual(3, decoded.Offset);
     }
@@ -158,12 +162,14 @@ internal sealed class CtapLargeBlobsRequestCborReaderTests
     [TestMethod]
     public void ThrowsWhenOffsetHasWrongType()
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(1);
         writer.WriteInt32(WellKnownCtapLargeBlobsRequestKeys.Offset);
         writer.WriteByteString(new byte[] { 0x01, 0x02 });
         writer.WriteEndMap();
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => CtapLargeBlobsRequestCborReader.Read(writer.Encode()));
+        Assert.ThrowsExactly<Fido2FormatException>(() => CtapLargeBlobsRequestCborReader.Read(writerBuffer.WrittenSpan.ToArray()));
     }
 }

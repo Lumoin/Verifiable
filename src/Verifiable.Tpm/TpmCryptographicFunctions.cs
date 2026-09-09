@@ -99,6 +99,12 @@ public static class TpmCryptographicFunctions
     /// <param name="context">Per-call state — see the context-key constants; must not be <see langword="null"/>.</param>
     /// <param name="cancellationToken">A token observed across the signing exchange.</param>
     /// <returns>The signature: ECDSA as IEEE P1363 (r || s), RSA as the raw signature octets.</returns>
+    /// <remarks>
+    /// <see cref="ArgumentNullException.ThrowIfNull(object?, string?)"/> on <paramref name="context"/>
+    /// proves it non-null for every indexer read below it — the C# compiler's own nullable flow
+    /// analysis recognizes the guard, so the reads carry no null-dereference risk despite the
+    /// parameter's nullable, defaulted declaration.
+    /// </remarks>
     /// <summary>The backend name stamped on the <see cref="SignatureProducedEvent"/> this function emits.</summary>
     private const string BackendName = "Tpm";
 
@@ -108,10 +114,12 @@ public static class TpmCryptographicFunctions
         ReadOnlyMemory<byte> handleBytes,
         ReadOnlyMemory<byte> dataToSign,
         BaseMemoryPool signaturePool,
+        TimeProvider timeProvider,
         FrozenDictionary<string, object>? context = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(signaturePool);
+        ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(context);
 
         var device = (TpmDevice)context[DeviceContextKey];
@@ -155,7 +163,7 @@ public static class TpmCryptographicFunctions
 
         Signature signatureResult = response.Signature.ToSignature(ecdsaComponentSize, signatureTag, signaturePool);
         CryptoEvent evt = SignatureProducedEvent.Create(
-            signatureTag.Get<Verifiable.Cryptography.Context.CryptoAlgorithm>(), dataToSign.Length, signatureResult.AsReadOnlyMemory().Length, BackendName);
+            signatureTag.Get<Verifiable.Cryptography.Context.CryptoAlgorithm>(), dataToSign.Length, signatureResult.AsReadOnlyMemory().Length, BackendName, timeProvider: timeProvider);
 
         return (signatureResult, evt);
     }

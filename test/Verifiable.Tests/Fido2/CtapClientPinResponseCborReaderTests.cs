@@ -1,6 +1,7 @@
 using System;
 using System.Buffers;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
+using Verifiable.Cbor;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Fido2.Ctap;
 using Verifiable.JCose;
@@ -77,7 +78,9 @@ internal sealed class CtapClientPinResponseCborReaderTests
     [TestMethod]
     public void IgnoresUnrecognizedMemberKey()
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(2);
         writer.WriteInt32(WellKnownCtapClientPinResponseKeys.PinRetries);
         writer.WriteInt32(8);
@@ -85,7 +88,7 @@ internal sealed class CtapClientPinResponseCborReaderTests
         writer.WriteUInt32(42);
         writer.WriteEndMap();
 
-        CtapClientPinResponse decoded = CtapClientPinResponseCborReader.Read(writer.Encode());
+        CtapClientPinResponse decoded = CtapClientPinResponseCborReader.Read(writerBuffer.WrittenSpan.ToArray());
 
         Assert.AreEqual(8, decoded.PinRetries);
     }

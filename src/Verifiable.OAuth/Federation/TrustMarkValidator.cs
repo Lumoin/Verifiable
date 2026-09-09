@@ -28,7 +28,7 @@ public sealed class TrustMarkValidator
     public TrustMarkValidator(
         string issuerId,
         IList<ClaimDelegate<TrustMarkValidationContext>> validationRules,
-        TimeProvider? timeProvider = null)
+        TimeProvider timeProvider)
     {
         ArgumentException.ThrowIfNullOrEmpty(issuerId);
         ArgumentNullException.ThrowIfNull(validationRules);
@@ -42,7 +42,7 @@ public sealed class TrustMarkValidator
     /// Builds a trust mark validator configured with the §7.3 baseline
     /// rule set (signature + exp).
     /// </summary>
-    public static TrustMarkValidator Default(TimeProvider? timeProvider = null) =>
+    public static TrustMarkValidator Default(TimeProvider timeProvider) =>
         new(WellKnownFederationAssessorIds.VerifyTrustMark,
             FederationValidationProfiles.TrustMarkRules(),
             timeProvider);

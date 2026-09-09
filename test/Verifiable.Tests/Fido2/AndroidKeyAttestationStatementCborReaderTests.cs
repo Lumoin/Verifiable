@@ -1,4 +1,6 @@
-using System.Formats.Cbor;
+using System.Buffers;
+using Lumoin.Veritas.Cbor;
+using Verifiable.Cbor;
 using Verifiable.Cbor.Fido2;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
@@ -91,7 +93,9 @@ internal sealed class AndroidKeyAttestationStatementCborReaderTests
     [TestMethod]
     public void StatementDefaultRejectsAnUnrecognisedMember()
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(4);
         writer.WriteTextString("alg");
         writer.WriteInt32(-7);
@@ -104,7 +108,7 @@ internal sealed class AndroidKeyAttestationStatementCborReaderTests
         writer.WriteByteString([9, 9, 9]);
         writer.WriteEndArray();
         writer.WriteEndMap();
-        byte[] cbor = writer.Encode();
+        byte[] cbor = writerBuffer.WrittenSpan.ToArray();
 
         Fido2FormatException exception = Assert.ThrowsExactly<Fido2FormatException>(() => AndroidKeyAttestationStatementCborReader.Parse(cbor, BaseMemoryPool.Shared));
 
@@ -133,6 +137,9 @@ internal sealed class AndroidKeyAttestationStatementCborReaderTests
         byte[] certificateBytes = [9, 8, 7, 6, 5];
         byte[] cbor = EncodeAndroidKeyAttStmtRaw(alg: -7, sig: signature, x5cEntries: [certificateBytes]);
 
+        //statement.X5c is a collection of disposables, not one disposable value: a using declaration
+        //disposes one variable's own value, not a collection's elements, so the foreach below in the
+        //finally block is the release point.
         AndroidKeyAttestationStatement statement = AndroidKeyAttestationStatementCborReader.Parse(cbor, BaseMemoryPool.Shared);
         try
         {
@@ -166,7 +173,9 @@ internal sealed class AndroidKeyAttestationStatementCborReaderTests
     private static byte[] EncodeAndroidKeyAttStmtRaw(int? alg, byte[]? sig, byte[][]? x5cEntries)
     {
         int memberCount = (alg is not null ? 1 : 0) + (sig is not null ? 1 : 0) + (x5cEntries is not null ? 1 : 0);
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(memberCount);
 
         if(alg is not null)
@@ -195,6 +204,6 @@ internal sealed class AndroidKeyAttestationStatementCborReaderTests
 
         writer.WriteEndMap();
 
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 }

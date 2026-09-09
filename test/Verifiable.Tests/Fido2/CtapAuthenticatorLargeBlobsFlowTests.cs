@@ -63,7 +63,7 @@ internal sealed class CtapAuthenticatorLargeBlobsFlowTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("lb-capstone-a");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("lb-capstone-a",BaseMemoryPool.Shared);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         (byte freshStatus, CtapLargeBlobsResponse? freshResponse) = await SendGetAsync(
@@ -132,7 +132,7 @@ internal sealed class CtapAuthenticatorLargeBlobsFlowTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("lb-capstone-b");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("lb-capstone-b",BaseMemoryPool.Shared);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         await EstablishPinAsync(harness.Transceive, pool, ProtocolId, Pin, cancellationToken).ConfigureAwait(false);
@@ -194,7 +194,7 @@ internal sealed class CtapAuthenticatorLargeBlobsFlowTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("lb-capstone-c");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("lb-capstone-c",BaseMemoryPool.Shared);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         ReadOnlyMemory<byte> mcExtensions = CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialExtensionsInput(largeBlobKey: true);
@@ -267,7 +267,7 @@ internal sealed class CtapAuthenticatorLargeBlobsFlowTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("lb-capstone-d");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("lb-capstone-d",BaseMemoryPool.Shared);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         byte[] committed = CtapLargeBlobPlatformFixtures.BuildValidSerializedArray(pool, payloadLength: 30);
@@ -295,7 +295,7 @@ internal sealed class CtapAuthenticatorLargeBlobsFlowTests
             harness.Transceive, pool, new byte[] { 0x80 }, offset: 0, length: 17, token: null, ProtocolId, cancellationToken).ConfigureAwait(false);
         Assert.AreEqual(WellKnownCtapStatusCodes.Ok, pendingStatus);
 
-        simulator.PowerCycle();
+        simulator.PowerCycle(BaseMemoryPool.Shared);
 
         byte continuationAfterCycleStatus = await CtapLargeBlobPlatformFixtures.SendFragmentAsync(
             harness.Transceive, pool, new byte[] { 0x76 }, offset: 1, length: null, token: null, ProtocolId, cancellationToken).ConfigureAwait(false);
@@ -321,7 +321,7 @@ internal sealed class CtapAuthenticatorLargeBlobsFlowTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("lb-capstone-e");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("lb-capstone-e",BaseMemoryPool.Shared);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         byte[] committed = CtapLargeBlobPlatformFixtures.BuildValidSerializedArray(pool, payloadLength: 25);

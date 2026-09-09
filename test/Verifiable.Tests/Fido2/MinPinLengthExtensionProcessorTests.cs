@@ -1,9 +1,10 @@
 using System;
 using System.Buffers;
 using System.Collections.Generic;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using System.Threading;
 using System.Threading.Tasks;
+using Verifiable.Cbor;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Cbor.Fido2;
 using Verifiable.Core.Assessment;
@@ -11,6 +12,7 @@ using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
 using Verifiable.Fido2.Ctap.Authenticator.Automata;
 using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Fido2;
 
@@ -67,9 +69,11 @@ internal sealed class MinPinLengthExtensionProcessorTests
     [TestMethod]
     public async Task NonIntegerValueFailsCeremonyClaimClosed()
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteTextString("not-an-integer");
-        byte[] authenticatorOutputCbor = writer.Encode();
+        byte[] authenticatorOutputCbor = writerBuffer.WrittenSpan.ToArray();
 
         SelectExtensionOutputProcessorDelegate selector = Fido2ExtensionSelectors.FromIdentifiers(
             (WellKnownWebAuthnExtensionIdentifiers.MinPinLength, MinPinLengthExtensionProcessor.ProcessRegistrationOutput));
@@ -78,7 +82,7 @@ internal sealed class MinPinLengthExtensionProcessorTests
             authenticatorExtensionOutputs: [new Fido2ExtensionOutput(WellKnownWebAuthnExtensionIdentifiers.MinPinLength, authenticatorOutputCbor)],
             extensionOutputProcessor: selector);
 
-        var issuer = new ClaimIssuer<RegistrationCeremonyInput>("minpinlength-extension-processor-test", Fido2ValidationProfiles.RegistrationRules());
+        var issuer = new ClaimIssuer<RegistrationCeremonyInput>("minpinlength-extension-processor-test", Fido2ValidationProfiles.RegistrationRules(), new FakeTimeProvider(TestClock.CanonicalEpoch));
         ClaimIssueResult result = await issuer.GenerateClaimsAsync(input, "minpinlength-extension-processor-test-correlation", TestContext.CancellationToken);
 
         Assert.AreEqual(ClaimOutcome.Failure, GetOutcome(result, Fido2ClaimIds.Fido2RegistrationExtensionOutputs));
@@ -106,7 +110,7 @@ internal sealed class MinPinLengthExtensionProcessorTests
             authenticatorExtensionOutputs: [new Fido2ExtensionOutput(WellKnownWebAuthnExtensionIdentifiers.MinPinLength, authenticatorOutputCbor)],
             extensionOutputProcessor: selector);
 
-        var issuer = new ClaimIssuer<RegistrationCeremonyInput>("minpinlength-extension-processor-firewalled-test", Fido2ValidationProfiles.RegistrationRules());
+        var issuer = new ClaimIssuer<RegistrationCeremonyInput>("minpinlength-extension-processor-firewalled-test", Fido2ValidationProfiles.RegistrationRules(), new FakeTimeProvider(TestClock.CanonicalEpoch));
         ClaimIssueResult result = await issuer.GenerateClaimsAsync(input, "minpinlength-extension-processor-firewalled-test-correlation", TestContext.CancellationToken);
 
         Assert.AreEqual(ClaimOutcome.Success, GetOutcome(result, Fido2ClaimIds.Fido2RegistrationMinPinLength));
@@ -126,7 +130,7 @@ internal sealed class MinPinLengthExtensionProcessorTests
     /// </summary>
     private static async Task<byte[]> AuthorizeRpAndMintMinPinLengthAuthenticatorOutputBytesAsync(CancellationToken cancellationToken)
     {
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("minpinlength-processor");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("minpinlength-processor",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
 

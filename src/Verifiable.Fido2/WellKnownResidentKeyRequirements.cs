@@ -22,7 +22,7 @@ public static class WellKnownResidentKeyRequirements
     /// <summary>
     /// The <c>discouraged</c> wire value.
     /// </summary>
-    public static readonly string Discouraged = Utf8Constants.ToInternedString(DiscouragedUtf8);
+    public static string Discouraged { get; } = Utf8Constants.ToInternedString(DiscouragedUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Preferred"/>.</summary>
     public static ReadOnlySpan<byte> PreferredUtf8 => "preferred"u8;
@@ -30,7 +30,7 @@ public static class WellKnownResidentKeyRequirements
     /// <summary>
     /// The <c>preferred</c> wire value.
     /// </summary>
-    public static readonly string Preferred = Utf8Constants.ToInternedString(PreferredUtf8);
+    public static string Preferred { get; } = Utf8Constants.ToInternedString(PreferredUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Required"/>.</summary>
     public static ReadOnlySpan<byte> RequiredUtf8 => "required"u8;
@@ -38,7 +38,7 @@ public static class WellKnownResidentKeyRequirements
     /// <summary>
     /// The <c>required</c> wire value.
     /// </summary>
-    public static readonly string Required = Utf8Constants.ToInternedString(RequiredUtf8);
+    public static string Required { get; } = Utf8Constants.ToInternedString(RequiredUtf8);
 
 
     /// <summary>

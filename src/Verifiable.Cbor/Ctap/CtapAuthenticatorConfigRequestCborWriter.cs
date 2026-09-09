@@ -1,6 +1,7 @@
 using System;
+using System.Buffers;
 using System.Collections.Generic;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
 
@@ -38,7 +39,8 @@ public static class CtapAuthenticatorConfigRequestCborWriter
         bool hasSubCommandParams = request.NewMinPinLength is not null || request.MinPinLengthRpIds is not null
             || request.ForceChangePin is not null || request.PinComplexityPolicy is not null;
 
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.Ctap2Canonical);
 
         int memberCount = 1
             + (hasSubCommandParams ? 1 : 0)
@@ -70,7 +72,7 @@ public static class CtapAuthenticatorConfigRequestCborWriter
 
         writer.WriteEndMap();
 
-        byte[] encoded = writer.Encode();
+        byte[] encoded = buffer.WrittenSpan.ToArray();
 
         return new TaggedMemory<byte>(encoded, Fido2BufferTags.CtapAuthenticatorConfigRequestPayload);
     }
@@ -91,7 +93,8 @@ public static class CtapAuthenticatorConfigRequestCborWriter
     public static TaggedMemory<byte> WriteSubCommandParams(
         int? newMinPinLength, IReadOnlyList<string>? minPinLengthRpIds, bool? forceChangePin, bool? pinComplexityPolicy)
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.Ctap2Canonical);
 
         int memberCount = (newMinPinLength is not null ? 1 : 0)
             + (minPinLengthRpIds is not null ? 1 : 0)
@@ -131,7 +134,7 @@ public static class CtapAuthenticatorConfigRequestCborWriter
 
         writer.WriteEndMap();
 
-        byte[] encoded = writer.Encode();
+        byte[] encoded = buffer.WrittenSpan.ToArray();
 
         return new TaggedMemory<byte>(encoded, Fido2BufferTags.CtapAuthenticatorConfigSubCommandParamsPayload);
     }

@@ -2,6 +2,7 @@ using System;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography;
+using Verifiable.Tpm.Spec.Algorithms;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Structures;
 
@@ -99,6 +100,51 @@ public static class TpmCryptographicProjections
         compressed.CopyTo(owner.Memory.Span);
 
         return new PublicKeyMemory(owner, tag);
+    }
+
+    /// <summary>
+    /// Resolves the most-specific existing <see cref="CryptoTags"/> exchange-public-key tag for a curve this
+    /// simulator's ECC templates admit — <c>Purpose.Exchange</c> + <c>EncodingScheme.EcUncompressed</c>, the tag
+    /// family a retained SEC1 uncompressed point (<see cref="EncodedEcPoint"/>) carries whether the object is
+    /// later used for key exchange or signature verification, since the field is one carrier serving both roles.
+    /// </summary>
+    /// <param name="curve">The curve the point lives on.</param>
+    /// <returns>The matching exchange-public-key tag.</returns>
+    /// <exception cref="InvalidOperationException"><paramref name="curve"/> is a curve no template this simulator builds admits.</exception>
+    public static Tag ToExchangePublicKeyTag(this TpmiEccCurve curve) => curve.Value switch
+    {
+        TpmEccCurveConstants.TPM_ECC_NIST_P256 => CryptoTags.P256ExchangePublicKey,
+        TpmEccCurveConstants.TPM_ECC_NIST_P384 => CryptoTags.P384ExchangePublicKey,
+        TpmEccCurveConstants.TPM_ECC_NIST_P521 => CryptoTags.P521ExchangePublicKey,
+        _ => throw new InvalidOperationException($"No exchange-public-key tag is defined for curve '{curve.Value}'.")
+    };
+
+    /// <summary>
+    /// Projects a <c>TPMS_ECC_POINT</c>'s two coordinates into the cryptography surface's own pooled SEC1
+    /// uncompressed carrier (<c>0x04 || X || Y</c>, <see cref="EncodedEcPoint"/>) — the form
+    /// <c>TpmEccSigningBackend</c>'s <c>ComputeSharedSecret</c>/<c>VerifyDigest</c>/<c>DerivePublicPoint</c>
+    /// delegates already take, so a loaded object's spec-exact public area (<c>PublicArea.Unique.Ecc</c>) can be
+    /// re-exported as the retained SEC1 view without a hand-rolled concatenation at the call site (<c>TPM2_LoadExternal()</c>'s ECC arm).
+    /// </summary>
+    /// <param name="point">The TPM-exported public point to project.</param>
+    /// <param name="componentSize">The curve coordinate size in bytes (32 for NIST P-256).</param>
+    /// <param name="tag">The tag to stamp on the produced carrier (<see cref="ToExchangePublicKeyTag"/>).</param>
+    /// <param name="pool">The memory pool backing the returned carrier.</param>
+    /// <returns>The neutral SEC1 uncompressed point; the caller owns it and must dispose it.</returns>
+    [SuppressMessage("Microsoft.Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the returned EncodedEcPoint transfers to the caller.")]
+    public static EncodedEcPoint ToEncodedEcPoint(this TpmsEccPoint point, int componentSize, Tag tag, BaseMemoryPool pool)
+    {
+        ArgumentNullException.ThrowIfNull(point);
+        ArgumentNullException.ThrowIfNull(tag);
+        ArgumentNullException.ThrowIfNull(pool);
+
+        IMemoryOwner<byte> owner = pool.Rent(1 + (2 * componentSize));
+        Span<byte> destination = owner.Memory.Span;
+        destination[0] = EllipticCurveUtilities.UncompressedCoordinateFormat;
+        LeftPadInto(point.X.AsReadOnlySpan(), destination.Slice(1, componentSize));
+        LeftPadInto(point.Y.AsReadOnlySpan(), destination.Slice(1 + componentSize, componentSize));
+
+        return new EncodedEcPoint(owner, tag);
     }
 
     /// <summary>

@@ -1,5 +1,6 @@
+using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using System.Text;
 using Verifiable.Cbor;
 using Verifiable.Core.Model.SelectiveDisclosure;
@@ -53,7 +54,7 @@ internal sealed class SdCwtPathOperationsTests
         using SdDisclosure nameDisclosure = CreateCborDisclosure("salt1", "name", "John Doe");
 
         byte[] disclosureCbor = SdCwtSerializer.SerializeDisclosure(nameDisclosure);
-        byte[] digest = SdCwtSerializer.ComputeDisclosureDigest(disclosureCbor, HashAlgorithm);
+        byte[] digest = SdCwtSerializer.ComputeDisclosureDigest(disclosureCbor, HashAlgorithm, BaseMemoryPool.Shared);
         string digestBase64 = TestSetup.Base64UrlEncoder(digest);
 
         byte[] payload = CreateCwtPayloadWithDigests([digestBase64]);
@@ -102,7 +103,7 @@ internal sealed class SdCwtPathOperationsTests
         using SdDisclosure disclosure = CreateCborDisclosure("salt", "selective", "value");
 
         byte[] disclosureCbor = SdCwtSerializer.SerializeDisclosure(disclosure);
-        byte[] digest = SdCwtSerializer.ComputeDisclosureDigest(disclosureCbor, HashAlgorithm);
+        byte[] digest = SdCwtSerializer.ComputeDisclosureDigest(disclosureCbor, HashAlgorithm, BaseMemoryPool.Shared);
         string digestBase64 = TestSetup.Base64UrlEncoder(digest);
 
         byte[] payload = CreateCwtPayloadWithDigests([digestBase64]);
@@ -141,8 +142,8 @@ internal sealed class SdCwtPathOperationsTests
 
         byte[] cbor1 = SdCwtSerializer.SerializeDisclosure(disclosure1);
         byte[] cbor2 = SdCwtSerializer.SerializeDisclosure(disclosure2);
-        string digest1 = TestSetup.Base64UrlEncoder(SdCwtSerializer.ComputeDisclosureDigest(cbor1, HashAlgorithm));
-        string digest2 = TestSetup.Base64UrlEncoder(SdCwtSerializer.ComputeDisclosureDigest(cbor2, HashAlgorithm));
+        string digest1 = TestSetup.Base64UrlEncoder(SdCwtSerializer.ComputeDisclosureDigest(cbor1, HashAlgorithm, BaseMemoryPool.Shared));
+        string digest2 = TestSetup.Base64UrlEncoder(SdCwtSerializer.ComputeDisclosureDigest(cbor2, HashAlgorithm, BaseMemoryPool.Shared));
 
         byte[] payload = CreateCwtPayloadWithMultipleDigests([digest1, digest2]);
         SdCwtMessage message = CreateMinimalSdCwt(payload, [disclosure1, disclosure2]);
@@ -177,12 +178,13 @@ internal sealed class SdCwtPathOperationsTests
     private static SdCwtMessage CreateMinimalSdCwt(byte[] payload, IReadOnlyList<SdDisclosure> disclosures)
     {
         //Create minimal protected header with algorithm.
-        var headerWriter = new CborWriter(CborConformanceMode.Canonical);
+        var headerBuffer = new ArrayBufferWriter<byte>();
+        var headerWriter = new CborWriter(headerBuffer, CborOptions.RfcCanonical);
         headerWriter.WriteStartMap(1);
         headerWriter.WriteInt32(CoseHeaderParameters.Alg);
         headerWriter.WriteInt32(WellKnownCoseAlgorithms.Es256);
         headerWriter.WriteEndMap();
-        byte[] protectedHeader = headerWriter.Encode();
+        byte[] protectedHeader = headerBuffer.WrittenSpan.ToArray();
 
         //Create fake signature (64 bytes for ES256).
         byte[] signature = new byte[64];
@@ -193,18 +195,20 @@ internal sealed class SdCwtPathOperationsTests
 
     private static byte[] CreateSimpleCwtPayload()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(WellKnownCwtClaimNames.Iss);
         writer.WriteTextString(TestIssuer);
         writer.WriteEndMap();
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
     }
 
 
     private static byte[] CreateCwtPayloadWithDigests(string[] digests)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(3);
 
         //iss claim.
@@ -225,13 +229,14 @@ internal sealed class SdCwtPathOperationsTests
         writer.WriteTextString("data");
 
         writer.WriteEndMap();
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
     }
 
 
     private static byte[] CreateCwtPayloadWithMultipleDigests(string[] digests)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(2);
 
         //iss claim.
@@ -248,6 +253,6 @@ internal sealed class SdCwtPathOperationsTests
         writer.WriteEndArray();
         writer.WriteEndMap();
 
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
     }
 }

@@ -11,7 +11,7 @@ namespace Verifiable.Tpm.Spec.Attributes;
 /// and are not changed by the TPM.
 /// </para>
 /// <para>
-/// Specification: <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2: Structures, section 8.3 (TPMA_OBJECT) and 8.3.3 (attribute descriptions).
+/// Specification: <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2: Structures, clause 8.3 (TPMA_OBJECT) and 8.3.3 (attribute descriptions).
 /// </para>
 /// </remarks>
 [Flags]
@@ -103,4 +103,27 @@ public enum TpmaObject: uint
     /// Added in version 1.59. Only significant if SIGN_ENCRYPT is set.
     /// </remarks>
     X509SIGN = 0x0008_0000
+}
+
+/// <summary>
+/// The Table 37 judgments an attribute word is read against at unmarshaling.
+/// </summary>
+public static class TpmaObjectExtensions
+{
+    /// <summary>
+    /// The bits Table 37 marks Reserved — 0, 3, 15:12 and 31:20 — each of which "shall be zero"
+    /// (TPM 2.0 Library Part 2, clause 8.3.2).
+    /// </summary>
+    private const uint ReservedBits = 0xFFF0_F009;
+
+    /// <summary>
+    /// Whether <paramref name="attributes"/> carries any bit Table 37 marks Reserved, the condition a TPM refuses
+    /// at unmarshaling with <c>TPM_RC_RESERVED_BITS</c> (Part 4 <c>TPMA_OBJECT_Unmarshal</c>).
+    /// </summary>
+    /// <param name="attributes">The attribute word as received.</param>
+    /// <returns><see langword="true"/> when a reserved bit is SET.</returns>
+    public static bool HasReservedBits(this TpmaObject attributes)
+    {
+        return ((uint)attributes & ReservedBits) != 0;
+    }
 }

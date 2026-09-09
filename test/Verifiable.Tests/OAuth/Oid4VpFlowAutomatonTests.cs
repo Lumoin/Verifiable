@@ -6,12 +6,14 @@ using Verifiable.BouncyCastle;
 using Verifiable.Foundation.Automata;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Dcql;
+using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.AuthCode.States;
 using Verifiable.OAuth.Oid4Vp;
+using Verifiable.OAuth.Oid4Vp.Server;
 using Verifiable.OAuth.Oid4Vp.States;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
@@ -35,12 +37,12 @@ internal sealed class Oid4VpFlowAutomatonTests
 
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
-    private static readonly JwtHeaderSerializer HeaderSerializer =
+    private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)header,
             TestSetup.DefaultSerializationOptions);
 
-    private static readonly JwtPayloadSerializer PayloadSerializer =
+    private static JwtPayloadSerializer PayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)payload,
             TestSetup.DefaultSerializationOptions);
@@ -252,7 +254,7 @@ internal sealed class Oid4VpFlowAutomatonTests
                 ExpiresAt = now.AddMinutes(5),
                 Kind = FlowKind.Oid4VpVerifier,
                 VerifiedAt = now,
-                Claims = new Dictionary<string, IReadOnlyDictionary<string, string>>()
+                Credentials = new Dictionary<CredentialQueryId, VpCredentialClaims>()
             }),
             "PresentationVerified must satisfy the accept predicate.");
 
@@ -326,7 +328,7 @@ internal sealed class Oid4VpFlowAutomatonTests
 
         await pda.StepAsync(
             new VerificationSucceeded(
-                new Dictionary<string, IReadOnlyDictionary<string, string>>(),
+                new Dictionary<CredentialQueryId, VpCredentialClaims>(),
                 TimeProvider.GetUtcNow()),
             TestContext.CancellationToken).ConfigureAwait(false);
 

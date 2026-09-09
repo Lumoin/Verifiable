@@ -1,7 +1,7 @@
 using System;
 using System.Buffers;
 using System.Collections.Generic;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
 
@@ -53,7 +53,7 @@ public static class CtapCredentialManagementRequestCborReader
                 throw new Fido2FormatException(Fido2FormatFailureKind.MissingRequiredParameter, "The authenticatorCredentialManagement request is missing the required 'subCommand' (0x01) member.");
             }
 
-            int subCommand = checked((int)new CborReader(subCommandCbor, CborConformanceMode.Ctap2Canonical).ReadInt64());
+            int subCommand = checked((int)new CborReader(subCommandCbor, CborOptions.Ctap2Canonical, pool).ReadInt64());
 
             ReadOnlyMemory<byte>? subCommandParams = ReadOptionalRawValue(parameters, WellKnownCtapCredentialManagementRequestKeys.SubCommandParams);
 
@@ -61,14 +61,14 @@ public static class CtapCredentialManagementRequestCborReader
                 subCommandParams is ReadOnlyMemory<byte> paramsCbor ? ReadSubCommandParams(paramsCbor, pool) : (null, null, null);
 
             int? pinUvAuthProtocol = parameters.TryGetValue(WellKnownCtapCredentialManagementRequestKeys.PinUvAuthProtocol, out ReadOnlyMemory<byte> pinUvAuthProtocolCbor)
-                ? checked((int)new CborReader(pinUvAuthProtocolCbor, CborConformanceMode.Ctap2Canonical).ReadInt64())
+                ? checked((int)new CborReader(pinUvAuthProtocolCbor, CborOptions.Ctap2Canonical, pool).ReadInt64())
                 : null;
 
             ReadOnlyMemory<byte>? pinUvAuthParam = ReadOptionalByteString(parameters, WellKnownCtapCredentialManagementRequestKeys.PinUvAuthParam);
 
             return new CtapCredentialManagementRequest(subCommand, subCommandParams, rpIdHash, credentialId, user, pinUvAuthProtocol, pinUvAuthParam);
         }
-        catch(CborContentException exception)
+        catch(CborException exception)
         {
             throw new Fido2FormatException(Fido2FormatFailureKind.MalformedCbor, "The authenticatorCredentialManagement request parameter bytes are not valid CTAP2 canonical CBOR.", exception);
         }
@@ -96,7 +96,7 @@ public static class CtapCredentialManagementRequestCborReader
         {
             if(parameters.TryGetValue(key, out ReadOnlyMemory<byte> valueCbor))
             {
-                return new CborReader(valueCbor, CborConformanceMode.Ctap2Canonical).ReadByteString();
+                return new CborReader(valueCbor, CborOptions.Ctap2Canonical).ReadByteString();
             }
 
             return null;
@@ -120,19 +120,19 @@ public static class CtapCredentialManagementRequestCborReader
         ReadOnlyMemory<byte>? rpIdHash = null;
         if(members.TryGetValue(WellKnownCtapCredentialManagementSubCommandParamsKeys.RpIdHash, out ReadOnlyMemory<byte> rpIdHashCbor))
         {
-            rpIdHash = new CborReader(rpIdHashCbor, CborConformanceMode.Ctap2Canonical).ReadByteString();
+            rpIdHash = new CborReader(rpIdHashCbor, CborOptions.Ctap2Canonical, pool).ReadByteString();
         }
 
         PublicKeyCredentialDescriptor? credentialId = null;
         if(members.TryGetValue(WellKnownCtapCredentialManagementSubCommandParamsKeys.CredentialId, out ReadOnlyMemory<byte> credentialIdCbor))
         {
-            credentialId = CtapCommandEntityCborCodec.ReadDescriptor(new CborReader(credentialIdCbor, CborConformanceMode.Ctap2Canonical), pool);
+            credentialId = CtapCommandEntityCborCodec.ReadDescriptor(new CborReader(credentialIdCbor, CborOptions.Ctap2Canonical, pool), pool);
         }
 
         CtapPublicKeyCredentialUserEntity? user = null;
         if(members.TryGetValue(WellKnownCtapCredentialManagementSubCommandParamsKeys.User, out ReadOnlyMemory<byte> userCbor))
         {
-            user = CtapCommandEntityCborCodec.ReadUserEntity(new CborReader(userCbor, CborConformanceMode.Ctap2Canonical), pool);
+            user = CtapCommandEntityCborCodec.ReadUserEntity(new CborReader(userCbor, CborOptions.Ctap2Canonical, pool), pool);
         }
 
         return (rpIdHash, credentialId, user);

@@ -109,10 +109,7 @@ namespace Verifiable.Core.Assessment
         /// <param name="claimIssuer">The claim issuer used to generate claims.</param>
         /// <param name="assessor">The assessor delegate used to evaluate the claims.</param>
         /// <param name="assessorId">The unique identifier for this assessor.</param>
-        /// <param name="timeProvider">
-        /// Time provider for generating timestamps. If <see langword="null"/>,
-        /// <see cref="TimeProvider.System"/> is used.
-        /// </param>
+        /// <param name="timeProvider">Time provider for generating timestamps.</param>
         /// <exception cref="ArgumentNullException">
         /// Thrown when <paramref name="claimIssuer"/> or <paramref name="assessor"/> is null.
         /// </exception>
@@ -123,16 +120,17 @@ namespace Verifiable.Core.Assessment
             ClaimIssuer<TInput> claimIssuer,
             AssessDelegateAsync assessor,
             string assessorId,
-            TimeProvider? timeProvider = null)
+            TimeProvider timeProvider)
         {
             ArgumentNullException.ThrowIfNull(claimIssuer, nameof(claimIssuer));
             ArgumentNullException.ThrowIfNull(assessor, nameof(assessor));
             ArgumentException.ThrowIfNullOrEmpty(assessorId, nameof(assessorId));
+            ArgumentNullException.ThrowIfNull(timeProvider, nameof(timeProvider));
 
             ClaimIssuer = claimIssuer;
             Assessor = assessor;
             AssessorId = assessorId;
-            TimeProvider = timeProvider ?? TimeProvider.System;
+            TimeProvider = timeProvider;
         }
 
 

@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using Verifiable.Core;
@@ -194,7 +195,7 @@ public static class AuthCodeFlowHandlers
         DateTimeOffset now = infrastructure.TimeProvider.GetUtcNow();
         string state = GenerateEntropyHexString(infrastructure);
 
-        PkceParameters pkce = GeneratePkceParameters(infrastructure.Base64UrlEncoder);
+        PkceParameters pkce = GeneratePkceParameters(infrastructure.Base64UrlEncoder, infrastructure.MemoryPool);
 
         ImmutableArray<string> scopes = fields.TryGetValue(OAuthRequestParameterNames.Scope, out string? scopeValue)
             ? [.. scopeValue.Split(' ', StringSplitOptions.RemoveEmptyEntries)]
@@ -217,6 +218,13 @@ public static class AuthCodeFlowHandlers
         //indicators joined by a space into one occurrence.
         AddResourceOccurrences(formFields, resource);
 
+        //RFC 9126 section 2: the pushed request carries the whole authorization request, so fields
+        //this handler does not own - OID4VCI's authorization_details and issuer_state among them -
+        //ride verbatim, exactly as the JAR path already carries them. The flow-owned parameters
+        //above always win: an additional field cannot override the client identity, PKCE material,
+        //or state this handler just minted, and scope was already folded in.
+        AddAdditionalParFields(formFields, fields);
+
         HttpResponseData parHttpResponse;
         try
         {
@@ -227,13 +235,24 @@ public static class AuthCodeFlowHandlers
                 context,
                 cancellationToken).ConfigureAwait(false);
         }
+        catch(OperationCanceledException)
+        {
+            throw;
+        }
         catch(Exception ex)
         {
+            //The HTTP transport is a caller-registered delegate whose failure vocabulary this handler
+            //cannot enumerate; any fault sending the PAR request surfaces as this endpoint's own server
+            //error, cancellation excepted above. The transport exception's own text is not part of an
+            //OAuth error response, so the description is this fixed sentence; the exception itself is
+            //recorded on the current Activity for diagnostics rather than echoed to the caller.
+            Activity.Current?.AddException(ex);
+
             return new AuthCodeFlowEndpointResult
             {
                 Outcome = AuthCodeFlowEndpointOutcome.InternalError,
                 ErrorCode = "server_error",
-                ErrorDescription = ex.Message
+                ErrorDescription = "The pushed authorization request could not be sent."
             };
         }
 
@@ -305,8 +324,6 @@ public static class AuthCodeFlowHandlers
         {
             return metadataResult.Error!;
         }
-
-        AuthorizationServerMetadata metadata = metadataResult.Value;
 
         //RFC 6749 §4.1.2.1 Authorization Error Response — error is present instead of code.
         //RFC 9207 §2.4/§4: "clients MUST NOT assume that the error originates from the
@@ -828,7 +845,7 @@ public static class AuthCodeFlowHandlers
         DateTimeOffset now = infrastructure.TimeProvider.GetUtcNow();
         string state = GenerateEntropyHexString(infrastructure);
         string nonce = jarOptions.Nonce ?? GenerateEntropyHexString(infrastructure);
-        PkceParameters pkce = GeneratePkceParameters(infrastructure.Base64UrlEncoder);
+        PkceParameters pkce = GeneratePkceParameters(infrastructure.Base64UrlEncoder, infrastructure.MemoryPool);
 
         AuthCodeRequestObject requestObject = BuildJarRequestObject(
             registration, jarOptions, pkce, state, nonce, now);
@@ -863,13 +880,24 @@ public static class AuthCodeFlowHandlers
                 context,
                 cancellationToken).ConfigureAwait(false);
         }
+        catch(OperationCanceledException)
+        {
+            throw;
+        }
         catch(Exception ex)
         {
+            //Same rationale as the non-JAR PAR send site in this file: the transport delegate's failure
+            //vocabulary is not enumerable here, so any fault surfaces as this endpoint's own server error,
+            //cancellation excepted above. The transport exception's own text is not part of an OAuth error
+            //response, so the description is this fixed sentence; the exception itself is recorded on the
+            //current Activity for diagnostics rather than echoed to the caller.
+            Activity.Current?.AddException(ex);
+
             return new AuthCodeFlowEndpointResult
             {
                 Outcome = AuthCodeFlowEndpointOutcome.InternalError,
                 ErrorCode = "server_error",
-                ErrorDescription = ex.Message
+                ErrorDescription = "The pushed authorization request could not be sent."
             };
         }
 
@@ -946,7 +974,7 @@ public static class AuthCodeFlowHandlers
         DateTimeOffset now = infrastructure.TimeProvider.GetUtcNow();
         string state = GenerateEntropyHexString(infrastructure);
         string nonce = jarOptions.Nonce ?? GenerateEntropyHexString(infrastructure);
-        PkceParameters pkce = GeneratePkceParameters(infrastructure.Base64UrlEncoder);
+        PkceParameters pkce = GeneratePkceParameters(infrastructure.Base64UrlEncoder, infrastructure.MemoryPool);
 
         AuthCodeRequestObject requestObject = new()
         {
@@ -1058,9 +1086,9 @@ public static class AuthCodeFlowHandlers
     }
 
 
-    private static PkceParameters GeneratePkceParameters(EncodeDelegate base64UrlEncoder)
+    private static PkceParameters GeneratePkceParameters(EncodeDelegate base64UrlEncoder, BaseMemoryPool pool)
     {
-        return PkceGeneration.Generate(base64UrlEncoder, BaseMemoryPool.Shared);
+        return PkceGeneration.Generate(base64UrlEncoder, pool);
     }
 
     private static OutgoingFormFields EncodeParRequestBody(ParRequestBody body)
@@ -1125,6 +1153,37 @@ public static class AuthCodeFlowHandlers
     /// occurrence. A <see langword="null"/>, empty, or all-whitespace entry is skipped rather
     /// than emitted as a blank occurrence.
     /// </summary>
+    /// <summary>
+    /// The parameter names <c>HandleParAsync</c> composes itself. An additional field arriving under
+    /// one of these names is dropped rather than allowed to override what the flow minted - the
+    /// caller extends the request, never the flow's own identity, PKCE, or state.
+    /// </summary>
+    private static ImmutableHashSet<string> ParFlowOwnedFieldNames { get; } = ImmutableHashSet.Create(
+        StringComparer.Ordinal,
+        OAuthRequestParameterNames.ClientId,
+        OAuthRequestParameterNames.ResponseType,
+        OAuthRequestParameterNames.RedirectUri,
+        OAuthRequestParameterNames.Scope,
+        OAuthRequestParameterNames.State,
+        OAuthRequestParameterNames.CodeChallenge,
+        OAuthRequestParameterNames.CodeChallengeMethod,
+        OAuthRequestParameterNames.Resource);
+
+
+    //Appends the caller's additional fields to the pushed request body, each under its own name,
+    //skipping the flow-owned names so the composed request stays the flow's.
+    private static void AddAdditionalParFields(OutgoingFormFields formFields, IReadOnlyDictionary<string, string> fields)
+    {
+        foreach((string key, string value) in fields)
+        {
+            if(!ParFlowOwnedFieldNames.Contains(key))
+            {
+                formFields.Add(key, value);
+            }
+        }
+    }
+
+
     private static void AddResourceOccurrences(OutgoingFormFields fields, IReadOnlyList<string>? resource)
     {
         if(resource is null)

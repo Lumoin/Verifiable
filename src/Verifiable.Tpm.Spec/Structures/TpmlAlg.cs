@@ -22,7 +22,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// } TPML_ALG;
 /// </code>
 /// <para>
-/// Part 2, Table 121 bounds an input <c>count</c> by the implementation-dependent <c>MAX_ALG_LIST_SIZE</c>
+/// Part 2, Table 124 bounds an input <c>count</c> by the implementation-dependent <c>MAX_ALG_LIST_SIZE</c>
 /// ("The maximum only applies to an algorithm list in a command. The response size is limited only by the
 /// size of the parameter buffer") and names <c>TPM_RC_SIZE</c> as the response when it is exceeded. This
 /// carrier holds no pooled memory — each element is a 2-octet value type — so the bound enforced here is the
@@ -30,7 +30,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// count that could not possibly fit in the remaining wire bytes is refused before it can size an allocation.
 /// </para>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, clause 10.9.3, Table 121.
+/// Specification reference: TPM 2.0 Library Part 2, clause 10.8.3, Table 124.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -109,7 +109,7 @@ public sealed class TpmlAlg: ITpmWireType
         }
 
         //Each algorithm identifier occupies 2 octets on the wire, so a count larger than the remaining buffer
-        //can hold is a malformed length and must not size the backing array (Part 2, §10.9.3).
+        //can hold is a malformed length and must not size the backing array (Part 2, clause 10.8.3).
         reader.EnsureCount(count, sizeof(ushort));
 
         var builder = ImmutableArray.CreateBuilder<TpmAlgIdConstants>((int)count);

@@ -36,7 +36,7 @@ internal sealed class PeerDidResolverTests
     private const string SingleAuthenticationKeyDid =
         "did:peer:2.Vz6Mkj3PUd1WjvaDhNZhhhXQdz5UnZXmS7ehtx8bsPpD47kKc";
 
-    private static readonly ExchangeContext ResolutionContext = new();
+    private static ExchangeContext ResolutionContext { get; } = new();
 
     public TestContext TestContext { get; set; } = null!;
 
@@ -313,10 +313,9 @@ internal sealed class PeerDidResolverTests
 
         //Context is the DID core context followed by the Multikey context, in order.
         Assert.IsNotNull(document.Context);
-        Assert.IsNotNull(document.Context!.Contexts);
-        Assert.HasCount(2, document.Context.Contexts!);
-        Assert.AreEqual(Context.DidCore10, document.Context.Contexts![0]);
-        Assert.AreEqual(Context.Multikey10, document.Context.Contexts![1]);
+        Assert.HasCount(2, document.Context!.Entries);
+        Assert.AreEqual(Context.DidCore10, document.Context.Entries[0].Iri);
+        Assert.AreEqual(Context.Multikey10, document.Context.Entries[1].Iri);
 
         //Two Multikey verification methods with relative #key-N ids and the full DID as controller;
         //the publicKeyMultibase is the encoded key from the DID string, re-canonicalized identically.

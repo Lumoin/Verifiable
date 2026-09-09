@@ -1,4 +1,4 @@
-﻿using System.Buffers;
+using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Verifiable.Cesr;
@@ -13,7 +13,7 @@ namespace Verifiable.Cesr;
 [SuppressMessage("Performance", "CA1815:Override equals and operator equals on value types", Justification = "This is a disposable owner of pooled memory, not a comparable value; equality is not meaningful.")]
 public readonly struct CesrParsedIndexedSignature: IDisposable
 {
-    private readonly IMemoryOwner<byte> rawOwner;
+    private IMemoryOwner<byte> RawOwner { get; }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CesrParsedIndexedSignature"/> struct.
@@ -28,7 +28,7 @@ public readonly struct CesrParsedIndexedSignature: IDisposable
         Code = code;
         Index = index;
         Ondex = ondex;
-        this.rawOwner = rawOwner;
+        this.RawOwner = rawOwner;
         RawLength = rawLength;
     }
 
@@ -56,10 +56,10 @@ public readonly struct CesrParsedIndexedSignature: IDisposable
     /// <summary>
     /// The recovered raw signature, without code or lead bytes.
     /// </summary>
-    public ReadOnlySpan<byte> Raw => rawOwner.Memory.Span[..RawLength];
+    public ReadOnlySpan<byte> Raw => RawOwner.Memory.Span[..RawLength];
 
     /// <summary>
     /// Returns the pooled raw buffer to its pool.
     /// </summary>
-    public void Dispose() => rawOwner.Dispose();
+    public void Dispose() => RawOwner.Dispose();
 }

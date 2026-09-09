@@ -23,7 +23,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// When scheme is TPM_ALG_NULL, details is not present on the wire.
 /// </para>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 11.2.4.2.
+/// Specification reference: TPM 2.0 Library Part 2, clause 11.2.4.3.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]

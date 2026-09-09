@@ -203,7 +203,7 @@ public static class FederationEndpoints
                         "Client registration not found in context."));
                 }
 
-                if(((ClientRecord)registration).FederationEntityId is null)
+                if(registration.FederationEntityId is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError,
@@ -211,7 +211,7 @@ public static class FederationEndpoints
                         + "ClientRecord.FederationEntityId to be set."));
                 }
 
-                if(!((ClientRecord)registration).SigningKeys.TryGetValue(
+                if(!registration.SigningKeys.TryGetValue(
                         KeyUsageContext.FederationEntitySignature, out SigningKeySet? federationKeys)
                     || federationKeys.Current.IsEmpty)
                 {
@@ -283,12 +283,12 @@ public static class FederationEndpoints
                 //published Entity Configuration matches what the endpoints actually
                 //serve. Automatic (§12.1) first, then explicit (§12.2).
                 List<string> clientRegistrationTypesSupported = [];
-                if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownFederationCapabilityIdentifiers.RegisterClientsAutomatically))
+                if(registration.IsCapabilityAllowed(WellKnownFederationCapabilityIdentifiers.RegisterClientsAutomatically))
                 {
                     clientRegistrationTypesSupported.Add(WellKnownFederationRegistrationTypeValues.Automatic);
                 }
 
-                if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownFederationCapabilityIdentifiers.RegisterClientsExplicitly))
+                if(registration.IsCapabilityAllowed(WellKnownFederationCapabilityIdentifiers.RegisterClientsExplicitly))
                 {
                     clientRegistrationTypesSupported.Add(WellKnownFederationRegistrationTypeValues.Explicit);
                 }
@@ -297,7 +297,7 @@ public static class FederationEndpoints
                     EntityStatementJsonBuilder.BuildHeader(signingKeyId.Value, alg);
                 Dictionary<string, object> payloadDict =
                     EntityStatementJsonBuilder.BuildConfigurationPayload(
-                        ((ClientRecord)registration).FederationEntityId,
+                        registration.FederationEntityId,
                         now,
                         expiresAt,
                         jwks,
@@ -310,7 +310,7 @@ public static class FederationEndpoints
                     EntityStatementJsonBuilder.EncodeJwtPart,
                     base64UrlEncoder,
                     privateKey,
-                    BaseMemoryPool.Shared,
+                    oauth.MemoryPool!,
                     ct).ConfigureAwait(false);
 
                 string compactJws = JwsSerialization.SerializeCompact(jwsMessage, base64UrlEncoder);
@@ -393,7 +393,7 @@ public static class FederationEndpoints
                         "Client registration not found in context."));
                 }
 
-                if(((ClientRecord)registration).FederationEntityId is null)
+                if(registration.FederationEntityId is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError,
@@ -417,7 +417,7 @@ public static class FederationEndpoints
                         + "to be configured."));
                 }
 
-                if(!((ClientRecord)registration).SigningKeys.TryGetValue(
+                if(!registration.SigningKeys.TryGetValue(
                         KeyUsageContext.FederationEntitySignature, out SigningKeySet? federationKeys)
                     || federationKeys.Current.IsEmpty)
                 {
@@ -473,7 +473,7 @@ public static class FederationEndpoints
                 //statement. Uri equality normalises the empty-vs-"/" path so the
                 //guard is not defeated by a trailing slash.
                 if(Uri.TryCreate(subject.Value, UriKind.Absolute, out Uri? subjectUri)
-                    && subjectUri == ((ClientRecord)registration).FederationEntityId)
+                    && subjectUri == registration.FederationEntityId)
                 {
                     return (null, ServerHttpResponse.BadRequest(
                         OAuthErrors.InvalidRequest,
@@ -515,7 +515,7 @@ public static class FederationEndpoints
                     EntityStatementJsonBuilder.BuildHeader(signingKeyId.Value, alg);
                 Dictionary<string, object> payloadDict =
                     EntityStatementJsonBuilder.BuildSubordinatePayload(
-                        issuerEntityIdentifier: ((ClientRecord)registration).FederationEntityId,
+                        issuerEntityIdentifier: registration.FederationEntityId,
                         subjectEntityIdentifier: new Uri(subject.Value),
                         issuedAt: now,
                         expiresAt: expiresAt,
@@ -527,7 +527,7 @@ public static class FederationEndpoints
                     EntityStatementJsonBuilder.EncodeJwtPart,
                     base64UrlEncoder,
                     privateKey,
-                    BaseMemoryPool.Shared,
+                    oauth.MemoryPool!,
                     ct).ConfigureAwait(false);
 
                 string compactJws = JwsSerialization.SerializeCompact(jwsMessage, base64UrlEncoder);
@@ -622,7 +622,7 @@ public static class FederationEndpoints
                         "Client registration not found in context."));
                 }
 
-                if(((ClientRecord)registration).FederationEntityId is null)
+                if(registration.FederationEntityId is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError,
@@ -829,7 +829,7 @@ public static class FederationEndpoints
                         "Client registration not found in context."));
                 }
 
-                if(((ClientRecord)registration).FederationEntityId is null)
+                if(registration.FederationEntityId is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError,
@@ -853,7 +853,7 @@ public static class FederationEndpoints
                         + "to be configured."));
                 }
 
-                if(!((ClientRecord)registration).SigningKeys.TryGetValue(
+                if(!registration.SigningKeys.TryGetValue(
                         KeyUsageContext.FederationEntitySignature, out SigningKeySet? federationKeys)
                     || federationKeys.Current.IsEmpty)
                 {
@@ -978,7 +978,7 @@ public static class FederationEndpoints
                         signingKeyId.Value, alg, WellKnownFederationMediaTypes.ResolveResponseJwt);
                 Dictionary<string, object> payloadDict =
                     EntityStatementJsonBuilder.BuildResolveResponsePayload(
-                        resolverEntityIdentifier: ((ClientRecord)registration).FederationEntityId,
+                        resolverEntityIdentifier: registration.FederationEntityId,
                         subjectEntityIdentifier: subject.Value,
                         issuedAt: now,
                         expiresAt: expiresAt,
@@ -990,7 +990,7 @@ public static class FederationEndpoints
                     EntityStatementJsonBuilder.EncodeJwtPart,
                     base64UrlEncoder,
                     privateKey,
-                    BaseMemoryPool.Shared,
+                    oauth.MemoryPool!,
                     ct).ConfigureAwait(false);
 
                 string compactJws = JwsSerialization.SerializeCompact(jwsMessage, base64UrlEncoder);
@@ -1066,7 +1066,7 @@ public static class FederationEndpoints
                         "Client registration not found in context."));
                 }
 
-                if(((ClientRecord)registration).FederationEntityId is null)
+                if(registration.FederationEntityId is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError,
@@ -1090,7 +1090,7 @@ public static class FederationEndpoints
                         + "to be configured."));
                 }
 
-                if(!((ClientRecord)registration).SigningKeys.TryGetValue(
+                if(!registration.SigningKeys.TryGetValue(
                         KeyUsageContext.FederationEntitySignature, out SigningKeySet? federationKeys)
                     || federationKeys.Current.IsEmpty)
                 {
@@ -1151,7 +1151,7 @@ public static class FederationEndpoints
                         signingKeyId.Value, alg, WellKnownFederationMediaTypes.HistoricalKeysJwt);
                 Dictionary<string, object> payloadDict =
                     EntityStatementJsonBuilder.BuildHistoricalKeysPayload(
-                        entityIdentifier: ((ClientRecord)registration).FederationEntityId,
+                        entityIdentifier: registration.FederationEntityId,
                         issuedAt: now,
                         contribution: contribution);
 
@@ -1161,7 +1161,7 @@ public static class FederationEndpoints
                     EntityStatementJsonBuilder.EncodeJwtPart,
                     base64UrlEncoder,
                     privateKey,
-                    BaseMemoryPool.Shared,
+                    oauth.MemoryPool!,
                     ct).ConfigureAwait(false);
 
                 string compactJws = JwsSerialization.SerializeCompact(jwsMessage, base64UrlEncoder);
@@ -1231,7 +1231,7 @@ public static class FederationEndpoints
                         "Client registration not found in context."));
                 }
 
-                if(((ClientRecord)registration).FederationEntityId is null)
+                if(registration.FederationEntityId is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError,
@@ -1248,7 +1248,7 @@ public static class FederationEndpoints
                         + "to be configured."));
                 }
 
-                if(!((ClientRecord)registration).SigningKeys.TryGetValue(
+                if(!registration.SigningKeys.TryGetValue(
                         KeyUsageContext.FederationEntitySignature, out SigningKeySet? federationKeys)
                     || federationKeys.Current.IsEmpty)
                 {
@@ -1341,7 +1341,7 @@ public static class FederationEndpoints
                         signingKeyId.Value, alg, WellKnownFederationMediaTypes.ExplicitRegistrationResponseJwt);
                 Dictionary<string, object> payloadDict =
                     EntityStatementJsonBuilder.BuildExplicitRegistrationResponsePayload(
-                        opEntityIdentifier: ((ClientRecord)registration).FederationEntityId,
+                        opEntityIdentifier: registration.FederationEntityId,
                         rpEntityIdentifier: contribution.Subject,
                         issuedAt: now,
                         expiresAt: expiresAt,
@@ -1353,7 +1353,7 @@ public static class FederationEndpoints
                     EntityStatementJsonBuilder.EncodeJwtPart,
                     base64UrlEncoder,
                     privateKey,
-                    BaseMemoryPool.Shared,
+                    oauth.MemoryPool!,
                     ct).ConfigureAwait(false);
 
                 string compactJws = JwsSerialization.SerializeCompact(jwsMessage, base64UrlEncoder);
@@ -1435,7 +1435,7 @@ public static class FederationEndpoints
                         "Client registration not found in context."));
                 }
 
-                if(((ClientRecord)registration).FederationEntityId is null)
+                if(registration.FederationEntityId is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError,
@@ -1578,7 +1578,7 @@ public static class FederationEndpoints
                         "Client registration not found in context."));
                 }
 
-                if(((ClientRecord)registration).FederationEntityId is null)
+                if(registration.FederationEntityId is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError,
@@ -1708,7 +1708,7 @@ public static class FederationEndpoints
                         "Client registration not found in context."));
                 }
 
-                if(((ClientRecord)registration).FederationEntityId is null)
+                if(registration.FederationEntityId is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError,
@@ -1732,7 +1732,7 @@ public static class FederationEndpoints
                         + "to be configured."));
                 }
 
-                if(!((ClientRecord)registration).SigningKeys.TryGetValue(
+                if(!registration.SigningKeys.TryGetValue(
                         KeyUsageContext.FederationEntitySignature, out SigningKeySet? federationKeys)
                     || federationKeys.Current.IsEmpty)
                 {
@@ -1804,7 +1804,7 @@ public static class FederationEndpoints
                 //Verifiable.OAuth serialization firewall — no System.Text.Json.
                 Dictionary<string, object> payloadDict = new(StringComparer.Ordinal)
                 {
-                    [WellKnownJwtClaimNames.Iss] = ((ClientRecord)registration).FederationEntityId!.ToString(),
+                    [WellKnownJwtClaimNames.Iss] = registration.FederationEntityId!.ToString(),
                     [WellKnownJwtClaimNames.Iat] = now.ToUnixTimeSeconds(),
                     [WellKnownFederationClaimNames.TrustMark] = trustMarkValue,
                     [WellKnownFederationClaimNames.Status] = status
@@ -1816,7 +1816,7 @@ public static class FederationEndpoints
                     EntityStatementJsonBuilder.EncodeJwtPart,
                     base64UrlEncoder,
                     privateKey,
-                    BaseMemoryPool.Shared,
+                    oauth.MemoryPool!,
                     ct).ConfigureAwait(false);
 
                 string compactJws = JwsSerialization.SerializeCompact(jwsMessage, base64UrlEncoder);

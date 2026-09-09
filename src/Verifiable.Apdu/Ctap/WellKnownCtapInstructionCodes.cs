@@ -30,7 +30,7 @@ public static class WellKnownCtapInstructionCodes
     /// CTAP 2.3, section 11.3.5.1: Command framing</see> — <c>CLA 0x80, INS 0x10</c>, P1 bit
     /// <c>0x80</c> declares client support for <see cref="NfcCtapGetResponse"/>.
     /// </remarks>
-    public static readonly InstructionCode NfcCtapMsg = InstructionCode.Create(0x10, "NFCCTAP_MSG");
+    public static InstructionCode NfcCtapMsg { get; } = InstructionCode.Create(0x10, "NFCCTAP_MSG");
 
     /// <summary>
     /// NFCCTAP_GETRESPONSE (0x11). Polls for a response deferred by
@@ -41,7 +41,7 @@ public static class WellKnownCtapInstructionCodes
     /// CTAP 2.3, section 11.3.7.2: NFCCTAP_GETRESPONSE (0x11)</see> — <c>CLA 0x80, INS 0x11</c>;
     /// P1/P2 both <c>0x00</c> polls normally, P1 <c>0x11</c>/P2 <c>0x00</c> cancels.
     /// </remarks>
-    public static readonly InstructionCode NfcCtapGetResponse = InstructionCode.Create(0x11, "NFCCTAP_GETRESPONSE");
+    public static InstructionCode NfcCtapGetResponse { get; } = InstructionCode.Create(0x11, "NFCCTAP_GETRESPONSE");
 
     /// <summary>
     /// NFCCTAP_CONTROL (0x12). Deselects the FIDO applet (<c>END CTAP_MSG</c>, P1 <c>0x01</c>); the
@@ -52,7 +52,7 @@ public static class WellKnownCtapInstructionCodes
     /// CTAP 2.3, section 11.3.4: Applet deselection</see> — <c>CLA 0x80, INS 0x12, P1 0x01, P2 0x00</c>,
     /// no data, no Le.
     /// </remarks>
-    public static readonly InstructionCode NfcCtapControl = InstructionCode.Create(0x12, "NFCCTAP_CONTROL");
+    public static InstructionCode NfcCtapControl { get; } = InstructionCode.Create(0x12, "NFCCTAP_CONTROL");
 
 
     /// <summary>

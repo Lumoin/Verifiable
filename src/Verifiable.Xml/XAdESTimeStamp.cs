@@ -29,8 +29,8 @@ public readonly struct XAdESTimeStamp: IEquatable<XAdESTimeStamp>
     /// <c>Include</c> both feeds the message-imprint reconstruction engines and, in the
     /// <c>referencedData="true"</c> case, drives a full nested reference-processing pass. Chosen generously
     /// above the number of signed data objects any legitimate signature would explicitly select;
-    /// <c>XAdESGrowthBoundsCostTests.IncludeFloodIsRefusedWithinTheCeiling</c> measures a flood one entry past
-    /// this bound refusing well inside its own loose ceiling.
+    /// <c>XAdESGrowthBoundsCostTests.IncludeFloodIsRefusedWithNoPooledRent</c> measures a flood one entry past
+    /// this bound refusing with no pooled rent, since an <c>Include</c> entry carries no pooled content on any path.
     /// </summary>
     public const int MaximumIncludeCount = 4096;
 

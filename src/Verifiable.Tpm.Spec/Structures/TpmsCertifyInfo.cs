@@ -24,7 +24,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// } TPMS_CERTIFY_INFO;
 /// </code>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 10.12.3, Table 169.
+/// Specification reference: TPM 2.0 Library Part 2, clause 10.11.3, Table 145.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -121,4 +121,11 @@ public sealed class TpmsCertifyInfo: ITpmWireType, IDisposable
     }
 
     private string DebuggerDisplay => $"TPMS_CERTIFY_INFO(name={Name.Size} bytes, qualifiedName={QualifiedName.Size} bytes)";
+
+    /// <summary>
+    /// Returns the same metadata-only summary the debugger shows — the Name's and Qualified Name's
+    /// octet lengths, never the octets themselves — so an enclosing type's own diagnostic string
+    /// interpolation renders this instance meaningfully instead of its type name.
+    /// </summary>
+    public override string ToString() => DebuggerDisplay;
 }

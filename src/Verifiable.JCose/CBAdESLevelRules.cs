@@ -336,7 +336,7 @@ public static class CBAdESLevelRules
         /// Determines whether <paramref name="identifier"/> names MD5 — the <c>tstr</c> arm compared
         /// case-insensitively against <c>"MD5"</c>; the <c>int</c> arm never matches, mirroring
         /// <c>CBAdESHeaderRules.Check</c>'s own local <c>IsMd5</c> helper (duplicated here rather than shared,
-        /// since that one is private to its own method — the S2 imprint-builder classifier precedent).
+        /// since that one is private to its own method).
         /// </summary>
         /// <param name="identifier">The digest-algorithm identifier to test.</param>
         /// <returns><see langword="true"/> when <paramref name="identifier"/> names MD5.</returns>
@@ -639,7 +639,7 @@ public static class CBAdESLevelRules
     /// </summary>
     private sealed class CandidateDigestIndex(IReadOnlyList<AdESPkiObject> candidates, BaseMemoryPool pool)
     {
-        private readonly Dictionary<int, HashSet<string>> digestsByOutputLength = [];
+        private Dictionary<int, HashSet<string>> DigestsByOutputLength { get; } = [];
 
         /// <summary>
         /// Determines whether <paramref name="referenceDigest"/> (declared under <paramref name="algorithm"/>)
@@ -661,10 +661,10 @@ public static class CBAdESLevelRules
             }
 
             int outputLength = referenceDigest.Length;
-            if(!digestsByOutputLength.TryGetValue(outputLength, out HashSet<string>? digests))
+            if(!DigestsByOutputLength.TryGetValue(outputLength, out HashSet<string>? digests))
             {
                 digests = await BuildIndexAsync(tag, outputLength, cancellationToken).ConfigureAwait(false);
-                digestsByOutputLength[outputLength] = digests;
+                DigestsByOutputLength[outputLength] = digests;
             }
 
             return digests.Contains(Convert.ToHexStringLower(referenceDigest.AsReadOnlySpan()));

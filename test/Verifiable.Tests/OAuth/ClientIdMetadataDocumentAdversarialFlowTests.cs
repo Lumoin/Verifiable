@@ -1026,7 +1026,7 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
     /// <summary>The span event name for a resolver-side policy denial (see <see cref="ClientIdMismatchEventName"/>).</summary>
     private const string PolicyDeniedEventName = ClientIdMetadataMaterialization.PolicyDeniedEventName;
 
-    private static readonly ClientIdMetadataDocumentResolverOptions RequirePrivateKeyJwtOptions = new()
+    private static ClientIdMetadataDocumentResolverOptions RequirePrivateKeyJwtOptions { get; } = new()
     {
         AdditionalDocumentValidation = static (document, uri, context, ct) =>
             ValueTask.FromResult(document.TokenEndpointAuthMethod == ClientAuthenticationMethod.PrivateKeyJwt)

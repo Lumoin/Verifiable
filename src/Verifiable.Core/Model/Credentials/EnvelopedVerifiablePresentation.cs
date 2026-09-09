@@ -1,5 +1,8 @@
+using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Core.Model.Common;
 
 namespace Verifiable.Core.Model.Credentials;
@@ -20,11 +23,11 @@ namespace Verifiable.Core.Model.Credentials;
 /// </para>
 /// <para>
 /// See <see href="https://www.w3.org/TR/vc-data-model-2.0/#enveloped-verifiable-presentations">
-/// VC-DM 2.0 §4.13 Enveloped Verifiable Presentations</see>.
+/// VC-DM 2.0 §4.13 Verifiable Presentations, "Enveloped Verifiable Presentations"</see>.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("EnvelopedVerifiablePresentation(Id = {Id})")]
-public sealed class EnvelopedVerifiablePresentation
+public sealed class EnvelopedVerifiablePresentation: IEquatable<EnvelopedVerifiablePresentation>
 {
     /// <summary>
     /// The JSON-LD context. MUST be present and include a context that defines the
@@ -43,4 +46,72 @@ public sealed class EnvelopedVerifiablePresentation
     /// The type, which must be <c>"EnvelopedVerifiablePresentation"</c>.
     /// </summary>
     public List<string>? Type { get; set; }
+
+
+    /// <summary>
+    /// Equality is identity-based on <see cref="Id"/> (the <c>data:</c> URL, which embeds the
+    /// enveloped bytes and so is unique per secured payload) and <see cref="Context"/>. RFC 2397
+    /// embeds a <c>data:</c> URL's content directly in the URL body rather than by reference, so
+    /// <see cref="Id"/> alone already carries the entire enveloping-secured presentation: two
+    /// instances with the same <see cref="Id"/> cannot differ in the bytes they envelope. This
+    /// covers the enveloped payload; <see cref="Type"/> is not additionally consulted because
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#enveloped-verifiable-presentations">
+    /// VC-DM 2.0 §4.13 Verifiable Presentations, "Enveloped Verifiable Presentations"</see> fixes it
+    /// to the single value <c>"EnvelopedVerifiablePresentation"</c> for every conformant instance of
+    /// this type, so a conformant document carries no content in <see cref="Type"/> that
+    /// <see cref="Id"/> does not already determine.
+    /// </summary>
+    /// <param name="other">The instance to compare against.</param>
+    /// <returns><see langword="true"/> if the instances are equal; otherwise <see langword="false"/>.</returns>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public bool Equals(EnvelopedVerifiablePresentation? other)
+    {
+        if(other is null)
+        {
+            return false;
+        }
+
+        if(ReferenceEquals(this, other))
+        {
+            return true;
+        }
+
+        return Equals(Context, other.Context) && string.Equals(Id, other.Id, StringComparison.Ordinal);
+    }
+
+
+    /// <inheritdoc/>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public override bool Equals([NotNullWhen(true)] object? obj) =>
+        obj is EnvelopedVerifiablePresentation other && Equals(other);
+
+
+    /// <inheritdoc/>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(Context);
+        hash.Add(Id, StringComparer.Ordinal);
+
+        return hash.ToHashCode();
+    }
+
+
+    /// <inheritdoc/>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public static bool operator ==(EnvelopedVerifiablePresentation? left, EnvelopedVerifiablePresentation? right)
+    {
+        if(left is null)
+        {
+            return right is null;
+        }
+
+        return left.Equals(right);
+    }
+
+
+    /// <inheritdoc/>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public static bool operator !=(EnvelopedVerifiablePresentation? left, EnvelopedVerifiablePresentation? right) => !(left == right);
 }

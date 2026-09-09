@@ -1,8 +1,9 @@
 using System.Buffers;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Verifiable.BouncyCastle;
+using Verifiable.Cbor;
 using Verifiable.Cbor.Fido2;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
@@ -11,6 +12,7 @@ using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Microsoft;
 using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Fido2;
 
@@ -95,19 +97,7 @@ internal sealed class AndroidKeyAttestationTests
             (WellKnownWebAuthnAttestationFormats.AndroidKey, AndroidKeyAttestation.Build(
                 AndroidKeyAttestationStatementCborReader.Parse, MicrosoftX509Functions.ValidateChainAsync, MicrosoftX509Functions.ReadCertificateExtensionValue)));
 
-        Fido2RegistrationOutcome outcome = await Fido2RegistrationVerifier.VerifyAsync(
-            parts.Format,
-            attestationStatement: parts.AttestationStatement,
-            authDataBytes,
-            clientDataJson,
-            ceremonyInput,
-            selectVerifier,
-            AlwaysUnique,
-            trustAnchors: [rootPki],
-            validationTime: TestClock.CanonicalEpoch,
-            CorrelationId,
-            BaseMemoryPool.Shared,
-            cancellationToken: TestContext.CancellationToken);
+        Fido2RegistrationOutcome outcome = await Fido2RegistrationVerifier.VerifyAsync(parts.Format, attestationStatement: parts.AttestationStatement, authDataBytes, clientDataJson, ceremonyInput, selectVerifier, AlwaysUnique, trustAnchors: [rootPki], validationTime: TestClock.CanonicalEpoch, CorrelationId, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         Assert.IsInstanceOfType<CertifiedAttestationResult>(outcome.AttestationResult);
         Assert.AreEqual(AttestationType.Basic, ((CertifiedAttestationResult)outcome.AttestationResult).Type);
@@ -468,14 +458,16 @@ internal sealed class AndroidKeyAttestationTests
         //Hand-encoded directly: the shipped AndroidKeyAttestationStatementCborWriter always writes x5c
         //(android-key has no self-attestation branch), so this packed-shaped, x5c-omitted map is a shape
         //only a raw, writer-independent encoder can produce.
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(2);
         writer.WriteTextString("alg");
         writer.WriteInt32(WellKnownCoseAlgorithms.Es256);
         writer.WriteTextString("sig");
         writer.WriteByteString(signature);
         writer.WriteEndMap();
-        byte[] packedShapedAttStmt = writer.Encode();
+        byte[] packedShapedAttStmt = writerBuffer.WrittenSpan.ToArray();
 
         AttestationVerifyDelegate verify = AndroidKeyAttestation.Build(
             AndroidKeyAttestationStatementCborReader.Parse, MicrosoftX509Functions.ValidateChainAsync, MicrosoftX509Functions.ReadCertificateExtensionValue);

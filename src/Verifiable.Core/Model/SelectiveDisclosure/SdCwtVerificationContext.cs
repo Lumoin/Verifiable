@@ -18,11 +18,18 @@ namespace Verifiable.Core.Model.SelectiveDisclosure;
 /// </remarks>
 public sealed class SdCwtVerificationContext: IDisposable
 {
+    /// <summary>Whether the parsed message has already been disposed.</summary>
     private bool disposed;
 
+
+    /// <summary>
+    /// Creates the intermediate state the structural verification produced.
+    /// </summary>
+    /// <param name="message">The parsed COSE_Sign1 message, whose ownership transfers here.</param>
+    /// <param name="boundPaths">The positions the holder-selected disclosures bound to.</param>
     internal SdCwtVerificationContext(
         CoseSign1Message message,
-        IReadOnlyDictionary<SdDisclosure, CredentialPath> boundPaths)
+        SdDisclosurePaths boundPaths)
     {
         Message = message;
         BoundPaths = boundPaths;
@@ -38,7 +45,13 @@ public sealed class SdCwtVerificationContext: IDisposable
     /// The disclosures that bound to a path in the payload, keyed to their credential path.
     /// A holder-selected disclosure absent from this map had no matching digest in the payload.
     /// </summary>
-    public IReadOnlyDictionary<SdDisclosure, CredentialPath> BoundPaths { get; }
+    /// <remarks>
+    /// The keys are the caller's own <see cref="SdToken{TEnvelope}"/> disclosure instances,
+    /// borrowed rather than copied: identity here is reference identity, so a lookup answers only
+    /// for the very instances the verification was handed, and the map is meaningful only while
+    /// that token is alive.
+    /// </remarks>
+    public SdDisclosurePaths BoundPaths { get; }
 
     /// <inheritdoc/>
     public void Dispose()

@@ -1,6 +1,8 @@
 using System;
+using System.Buffers;
 using System.Collections.Generic;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
+using Verifiable.Cbor;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
@@ -64,14 +66,16 @@ internal sealed class CtapGetInfoResponseCborReaderTests
     [TestMethod]
     public void ThrowsWhenVersionsMemberIsMissing()
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(1);
         writer.WriteInt32(WellKnownCtapGetInfoMemberKeys.Aaguid);
         writer.WriteByteString(new byte[16]);
         writer.WriteEndMap();
 
         Fido2FormatException exception = Assert.ThrowsExactly<Fido2FormatException>(
-            () => CtapGetInfoResponseCborReader.Read(writer.Encode()));
+            () => CtapGetInfoResponseCborReader.Read(writerBuffer.WrittenSpan.ToArray()));
 
         Assert.Contains("versions", exception.Message, StringComparison.Ordinal);
     }
@@ -81,7 +85,9 @@ internal sealed class CtapGetInfoResponseCborReaderTests
     [TestMethod]
     public void ThrowsWhenAaguidMemberIsMissing()
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(1);
         writer.WriteInt32(WellKnownCtapGetInfoMemberKeys.Versions);
         writer.WriteStartArray(1);
@@ -90,7 +96,7 @@ internal sealed class CtapGetInfoResponseCborReaderTests
         writer.WriteEndMap();
 
         Fido2FormatException exception = Assert.ThrowsExactly<Fido2FormatException>(
-            () => CtapGetInfoResponseCborReader.Read(writer.Encode()));
+            () => CtapGetInfoResponseCborReader.Read(writerBuffer.WrittenSpan.ToArray()));
 
         Assert.Contains("aaguid", exception.Message, StringComparison.Ordinal);
     }
@@ -104,7 +110,9 @@ internal sealed class CtapGetInfoResponseCborReaderTests
     [TestMethod]
     public void IgnoresUnrecognizedTopLevelMemberKey()
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(3);
         writer.WriteInt32(WellKnownCtapGetInfoMemberKeys.Versions);
         writer.WriteStartArray(1);
@@ -116,7 +124,7 @@ internal sealed class CtapGetInfoResponseCborReaderTests
         writer.WriteUInt32(42);
         writer.WriteEndMap();
 
-        CtapGetInfoResponse decoded = CtapGetInfoResponseCborReader.Read(writer.Encode());
+        CtapGetInfoResponse decoded = CtapGetInfoResponseCborReader.Read(writerBuffer.WrittenSpan.ToArray());
 
         Assert.AreEqual(WellKnownCtapVersions.Fido23, decoded.Versions[0]);
     }
@@ -209,7 +217,9 @@ internal sealed class CtapGetInfoResponseCborReaderTests
     [TestMethod]
     public void IgnoresUnrecognizedOptionId()
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(3);
         writer.WriteInt32(WellKnownCtapGetInfoMemberKeys.Versions);
         writer.WriteStartArray(1);
@@ -224,7 +234,7 @@ internal sealed class CtapGetInfoResponseCborReaderTests
         writer.WriteEndMap();
         writer.WriteEndMap();
 
-        CtapGetInfoResponse decoded = CtapGetInfoResponseCborReader.Read(writer.Encode());
+        CtapGetInfoResponse decoded = CtapGetInfoResponseCborReader.Read(writerBuffer.WrittenSpan.ToArray());
 
         Assert.IsNotNull(decoded.Options);
         Assert.IsNull(decoded.Options!.Ep);

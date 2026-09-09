@@ -17,6 +17,7 @@ using Verifiable.Tpm.Infrastructure.Sessions;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -33,16 +34,17 @@ namespace Verifiable.Tests.Tpm;
 /// through the per-call <c>context</c> dictionary rather than a closure. Two independently operational
 /// simulators stand in for two distinct devices: the signing key is created only on
 /// <c>deviceWithKey</c>, so a context naming <c>deviceWithoutKey</c> is a "poisoned" default — routing
-/// a Sign command to it fails with <see cref="TpmRcConstants.TPM_RC_HANDLE"/> because the handle does
-/// not resolve there (TPM 2.0 Part 3, clause 20.2), the same failure
-/// <c>TpmInHouseSimulatorSignTests.SignWithUnknownKeyHandleReturnsHandle</c> proves for a raw command.
+/// a Sign command to it fails with <see cref="TpmRcConstants.TPM_RC_REFERENCE_H0"/> because the
+/// transient-range handle does not resolve there (TPM 2.0 Library Part 3, clause 5.4, step 2.1), the
+/// same failure <c>TpmInHouseSimulatorSignTests.SignWithUnknownKeyHandleAnswersReferenceH0</c> proves
+/// for a raw command.
 /// </para>
 /// <para>
 /// The test binds the constructor default to the poisoned context, first proving the default really
 /// is wired through (no explicit override fails identically), then supplies the correct per-call
 /// context and asserts signing succeeds and the resulting signature verifies against the key's real,
 /// exported public area — which is only possible if the per-call context, not the poisoned default,
-/// reached <see cref="TpmCryptographicFunctions.SignAsync"/>.
+/// reached <see cref="TpmCryptographicFunctionsAdapter.SignAsync"/>.
 /// </para>
 /// </remarks>
 [TestClass]
@@ -74,7 +76,7 @@ internal sealed class TpmSigningContextPrecedenceTests
 
         //The key lives only on this device.
         using TpmSimulator simulatorWithKey = await CreateOperationalSimulatorAsync(pool, "tpm-context-precedence-with-key").ConfigureAwait(false);
-        using TpmDevice deviceWithKey = TpmDevice.Create(simulatorWithKey.SubmitAsync);
+        using TpmDevice deviceWithKey = TpmDevice.Create(simulatorWithKey.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         using CreatePrimaryInput primaryInput = CreatePrimaryInput.ForEccSigningKey(
             TpmRh.TPM_RH_OWNER, password: null, TpmEccCurveConstants.TPM_ECC_NIST_P256,
@@ -88,7 +90,7 @@ internal sealed class TpmSigningContextPrecedenceTests
         //A distinct, independently operational simulator with no key created: the same handle value
         //does not resolve there.
         using TpmSimulator simulatorWithoutKey = await CreateOperationalSimulatorAsync(pool, "tpm-context-precedence-without-key").ConfigureAwait(false);
-        using TpmDevice deviceWithoutKey = TpmDevice.Create(simulatorWithoutKey.SubmitAsync);
+        using TpmDevice deviceWithoutKey = TpmDevice.Create(simulatorWithoutKey.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         FrozenDictionary<string, object> poisonedDefaultContext = TpmCryptographicFunctions.CreateP256SigningContext(deviceWithoutKey);
         FrozenDictionary<string, object> correctContext = TpmCryptographicFunctions.CreateP256SigningContext(deviceWithKey);
@@ -96,7 +98,7 @@ internal sealed class TpmSigningContextPrecedenceTests
         using var privateKey = new PrivateKey(
             TpmCryptographicFunctions.CreateHandleKeyMemory(primary.ObjectHandle.Value, CryptoTags.P256PrivateKey, pool),
             "tpm-context-precedence",
-            TpmCryptographicFunctions.SignAsync,
+            TpmCryptographicFunctionsAdapter.SignAsync,
             poisonedDefaultContext);
 
         //Baseline: with no per-call override, the constructor default is genuinely used, and it names
@@ -147,7 +149,7 @@ internal sealed class TpmSigningContextPrecedenceTests
     /// <returns>The operational simulator.</returns>
     private async Task<TpmSimulator> CreateOperationalSimulatorAsync(BaseMemoryPool pool, string tpmId)
     {
-        var simulator = new TpmSimulator(tpmId, signingBackend: BouncyCastleTpmEccSigningBackend.Create());
+        var simulator = new TpmSimulator(tpmId, signingBackend: BouncyCastleTpmEccSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await BringOperationalAsync(simulator, pool).ConfigureAwait(false);
 

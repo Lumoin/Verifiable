@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Cbor.Fido2;
 using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
@@ -48,7 +48,7 @@ public static class CtapAuthenticatorConfigRequestCborReader
                 throw new Fido2FormatException(Fido2FormatFailureKind.MissingRequiredParameter, "The authenticatorConfig request is missing the required 'subCommand' (0x01) member.");
             }
 
-            int subCommand = checked((int)new CborReader(subCommandCbor, CborConformanceMode.Ctap2Canonical).ReadInt64());
+            int subCommand = checked((int)new CborReader(subCommandCbor, CborOptions.Ctap2Canonical).ReadInt64());
 
             ReadOnlyMemory<byte>? subCommandParams = ReadOptionalRawValue(parameters, WellKnownCtapAuthenticatorConfigRequestKeys.SubCommandParams);
 
@@ -56,7 +56,7 @@ public static class CtapAuthenticatorConfigRequestCborReader
                 subCommandParams is ReadOnlyMemory<byte> paramsCbor ? ReadSubCommandParams(paramsCbor) : (null, null, null, null);
 
             int? pinUvAuthProtocol = parameters.TryGetValue(WellKnownCtapAuthenticatorConfigRequestKeys.PinUvAuthProtocol, out ReadOnlyMemory<byte> pinUvAuthProtocolCbor)
-                ? checked((int)new CborReader(pinUvAuthProtocolCbor, CborConformanceMode.Ctap2Canonical).ReadInt64())
+                ? checked((int)new CborReader(pinUvAuthProtocolCbor, CborOptions.Ctap2Canonical).ReadInt64())
                 : null;
 
             ReadOnlyMemory<byte>? pinUvAuthParam = ReadOptionalByteString(parameters, WellKnownCtapAuthenticatorConfigRequestKeys.PinUvAuthParam);
@@ -64,7 +64,7 @@ public static class CtapAuthenticatorConfigRequestCborReader
             return new CtapAuthenticatorConfigRequest(
                 subCommand, subCommandParams, newMinPinLength, minPinLengthRpIds, forceChangePin, pinComplexityPolicy, pinUvAuthProtocol, pinUvAuthParam);
         }
-        catch(CborContentException exception)
+        catch(CborException exception)
         {
             throw new Fido2FormatException(Fido2FormatFailureKind.MalformedCbor, "The authenticatorConfig request parameter bytes are not valid CTAP2 canonical CBOR.", exception);
         }
@@ -97,7 +97,7 @@ public static class CtapAuthenticatorConfigRequestCborReader
         {
             if(parameters.TryGetValue(key, out ReadOnlyMemory<byte> valueCbor))
             {
-                return new CborReader(valueCbor, CborConformanceMode.Ctap2Canonical).ReadByteString();
+                return new CborReader(valueCbor, CborOptions.Ctap2Canonical).ReadByteString();
             }
 
             return null;
@@ -118,19 +118,19 @@ public static class CtapAuthenticatorConfigRequestCborReader
         IReadOnlyDictionary<int, ReadOnlyMemory<byte>> members = CtapParameterMapReader.Read(subCommandParamsCbor);
 
         int? newMinPinLength = members.TryGetValue(WellKnownCtapAuthenticatorConfigSubCommandParamsKeys.NewMinPinLength, out ReadOnlyMemory<byte> newMinPinLengthCbor)
-            ? checked((int)new CborReader(newMinPinLengthCbor, CborConformanceMode.Ctap2Canonical).ReadInt64())
+            ? checked((int)new CborReader(newMinPinLengthCbor, CborOptions.Ctap2Canonical).ReadInt64())
             : null;
 
         IReadOnlyList<string>? minPinLengthRpIds = members.TryGetValue(WellKnownCtapAuthenticatorConfigSubCommandParamsKeys.MinPinLengthRpIds, out ReadOnlyMemory<byte> minPinLengthRpIdsCbor)
-            ? ReadStringArray(new CborReader(minPinLengthRpIdsCbor, CborConformanceMode.Ctap2Canonical))
+            ? ReadStringArray(new CborReader(minPinLengthRpIdsCbor, CborOptions.Ctap2Canonical))
             : null;
 
         bool? forceChangePin = members.TryGetValue(WellKnownCtapAuthenticatorConfigSubCommandParamsKeys.ForceChangePin, out ReadOnlyMemory<byte> forceChangePinCbor)
-            ? new CborReader(forceChangePinCbor, CborConformanceMode.Ctap2Canonical).ReadBoolean()
+            ? new CborReader(forceChangePinCbor, CborOptions.Ctap2Canonical).ReadBoolean()
             : null;
 
         bool? pinComplexityPolicy = members.TryGetValue(WellKnownCtapAuthenticatorConfigSubCommandParamsKeys.PinComplexityPolicy, out ReadOnlyMemory<byte> pinComplexityPolicyCbor)
-            ? new CborReader(pinComplexityPolicyCbor, CborConformanceMode.Ctap2Canonical).ReadBoolean()
+            ? new CborReader(pinComplexityPolicyCbor, CborOptions.Ctap2Canonical).ReadBoolean()
             : null;
 
         return (newMinPinLength, minPinLengthRpIds, forceChangePin, pinComplexityPolicy);

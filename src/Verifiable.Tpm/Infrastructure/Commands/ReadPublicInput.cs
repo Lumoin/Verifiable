@@ -12,7 +12,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// Reads the public area of a loaded object. No authorization is required.
 /// </para>
 /// <para>
-/// Command structure (TPM 2.0 Part 3, Section 12.4):
+/// Command structure (TPM 2.0 Library Part 3, clause 12.4):
 /// </para>
 /// <list type="bullet">
 ///   <item><description>objectHandle (TPMI_DH_OBJECT): Handle of the object to read.</description></item>
@@ -23,6 +23,15 @@ public sealed class ReadPublicInput: ITpmCommandInput
 {
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_ReadPublic;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <c>objectHandle</c> carries Auth Index None (TPM 2.0 Library Part 3, clause 12.4, Table 24) — the first
+    /// session in an authorization area over this command is a companion, never an authorizer, so a decrypt or
+    /// encrypt session's own <c>nonceTPM</c> never folds into session 0's command HMAC (TPM 2.0 Library Part 1,
+    /// clause 16.6.5).
+    /// </remarks>
+    public bool IsFirstHandleAuthorized => false;
 
     /// <summary>
     /// Gets the handle of the object to read.

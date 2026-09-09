@@ -31,7 +31,7 @@ internal sealed class CtapAuthenticatorChangePinTests
     [TestMethod]
     public async Task ChangePinHappyPathSucceeds()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("changepin-happy");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("changepin-happy",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         await CtapAuthenticatorSetPinTests.EstablishPinAsync(simulator, pool, "1234");
 
@@ -59,7 +59,7 @@ internal sealed class CtapAuthenticatorChangePinTests
     [TestMethod]
     public async Task ChangePinMissingMandatoryParametersReturnsMissingParameter()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("changepin-missing-params");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("changepin-missing-params",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         await CtapAuthenticatorSetPinTests.EstablishPinAsync(simulator, pool, "1234");
 
@@ -84,7 +84,7 @@ internal sealed class CtapAuthenticatorChangePinTests
     [TestMethod]
     public async Task ChangePinUnsupportedProtocolReturnsInvalidParameter()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("changepin-unsupported-protocol");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("changepin-unsupported-protocol",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         await CtapAuthenticatorSetPinTests.EstablishPinAsync(simulator, pool, "1234");
 
@@ -110,7 +110,7 @@ internal sealed class CtapAuthenticatorChangePinTests
     [TestMethod]
     public async Task ChangePinWithNoPinSetReturnsPinNotSetAndNeverDecrementsRetries()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("changepin-no-pin-set");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("changepin-no-pin-set",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using CtapPlatformPinSession session = await CtapPinCryptoFixtures.EstablishSessionAsync(
@@ -133,7 +133,7 @@ internal sealed class CtapAuthenticatorChangePinTests
     [TestMethod]
     public async Task ChangePinVerifyFailureReturnsPinAuthInvalidWithoutDecrementingRetries()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("changepin-verify-failure");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("changepin-verify-failure",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         await CtapAuthenticatorSetPinTests.EstablishPinAsync(simulator, pool, "1234");
 
@@ -160,7 +160,7 @@ internal sealed class CtapAuthenticatorChangePinTests
     [TestMethod]
     public async Task ChangePinThreeConsecutiveMismatchesLatchesPowerCycleRequired()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("changepin-mismatch-trilogy");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("changepin-mismatch-trilogy",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         await CtapAuthenticatorSetPinTests.EstablishPinAsync(simulator, pool, "1234");
 
@@ -200,7 +200,7 @@ internal sealed class CtapAuthenticatorChangePinTests
     [TestMethod]
     public async Task ChangePinMismatchThatSimultaneouslyExhaustsRetriesAndCompletesTheTrilogyReturnsPinBlocked()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("changepin-simultaneous-boundary");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("changepin-simultaneous-boundary",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         await CtapAuthenticatorSetPinTests.EstablishPinAsync(simulator, pool, "1234");
 
@@ -210,7 +210,7 @@ internal sealed class CtapAuthenticatorChangePinTests
         for(int i = 0; i < 5; i++)
         {
             Assert.AreEqual(WellKnownCtapStatusCodes.PinInvalid, await AttemptWrongCurrentPinAsync(simulator, pool));
-            simulator.PowerCycle();
+            simulator.PowerCycle(BaseMemoryPool.Shared);
         }
         Assert.AreEqual(3, await GetPinRetriesAsync(simulator, pool));
         Assert.IsFalse(await GetPowerCycleStateAsync(simulator, pool));
@@ -246,7 +246,7 @@ internal sealed class CtapAuthenticatorChangePinTests
     [TestMethod]
     public async Task ChangePinCurrentPinHashDecryptFailureAppliesMismatchSemantics()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("changepin-currentpinhash-decrypt-failure");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("changepin-currentpinhash-decrypt-failure",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         await CtapAuthenticatorSetPinTests.EstablishPinAsync(simulator, pool, "1234");
 
@@ -277,7 +277,7 @@ internal sealed class CtapAuthenticatorChangePinTests
     [TestMethod]
     public async Task ChangePinThreeConsecutiveCurrentPinHashDecryptFailuresLatchPowerCycleRequired()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("changepin-currentpinhash-decrypt-failure-trilogy");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("changepin-currentpinhash-decrypt-failure-trilogy",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         await CtapAuthenticatorSetPinTests.EstablishPinAsync(simulator, pool, "1234");
 
@@ -302,7 +302,7 @@ internal sealed class CtapAuthenticatorChangePinTests
     [TestMethod]
     public async Task ChangePinSuccessAfterMismatchesRestoresRetriesToMaximum()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("changepin-success-restores-retries");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("changepin-success-restores-retries",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         await CtapAuthenticatorSetPinTests.EstablishPinAsync(simulator, pool, "1234");
 
@@ -328,7 +328,7 @@ internal sealed class CtapAuthenticatorChangePinTests
     [TestMethod]
     public async Task ChangePinMismatchRegeneratesOnlySelectedProtocolsKeyAgreementKey()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("changepin-mismatch-regenerate");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("changepin-mismatch-regenerate",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         await CtapAuthenticatorSetPinTests.EstablishPinAsync(simulator, pool, "1234");
 
@@ -363,7 +363,7 @@ internal sealed class CtapAuthenticatorChangePinTests
     [TestMethod]
     public async Task ChangePinSuccessInvalidatesTokensOnAllProtocols()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("changepin-invalidates-all-tokens");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("changepin-invalidates-all-tokens",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         await CtapAuthenticatorSetPinTests.EstablishPinAsync(simulator, pool, "1234");
 
@@ -425,7 +425,7 @@ internal sealed class CtapAuthenticatorChangePinTests
     [DataRow(CtapPinUvAuthProtocolId.Two, 64, DisplayName = "protocol two: 64-byte shared secret")]
     public async Task ChangePinZeroesTheSharedSecretBeforeReturningItToThePool(CtapPinUvAuthProtocolId protocolId, int sharedSecretLength)
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator($"changepin-zeroization-{protocolId}");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator($"changepin-zeroization-{protocolId}",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         await CtapAuthenticatorSetPinTests.EstablishPinAsync(simulator, pool, "1234", protocolId);
 

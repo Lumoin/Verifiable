@@ -1,6 +1,7 @@
 using System;
 using System.Buffers;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
+using Verifiable.Cbor;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Cryptography;
 using Verifiable.Fido2;
@@ -131,13 +132,15 @@ internal sealed class CtapGetAssertionRequestCborReaderTests
     {
         using DigestValue clientDataHash = Fido2TestVectors.WrapRpIdHash(ClientDataHashBytes, BaseMemoryPool.Shared);
 
-        var extensionsWriter = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var extensionsWriterBuffer = new ArrayBufferWriter<byte>();
+        var extensionsWriter = new CborWriter(extensionsWriterBuffer, CborOptions.Ctap2Canonical);
+
         extensionsWriter.WriteStartMap(1);
         extensionsWriter.WriteTextString(WellKnownWebAuthnExtensionIdentifiers.LargeBlobKey);
         extensionsWriter.WriteBoolean(true);
         extensionsWriter.WriteEndMap();
 
-        var written = new CtapGetAssertionRequest("rp.co", clientDataHash, Extensions: extensionsWriter.Encode());
+        var written = new CtapGetAssertionRequest("rp.co", clientDataHash, Extensions: extensionsWriterBuffer.WrittenSpan.ToArray());
 
         CtapGetAssertionRequest decoded = CtapGetAssertionRequestCborReader.Read(CtapGetAssertionRequestCborWriter.Write(written).Memory, BaseMemoryPool.Shared);
 
@@ -180,14 +183,16 @@ internal sealed class CtapGetAssertionRequestCborReaderTests
     [TestMethod]
     public void ThrowsWhenRpIdMemberIsMissing()
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(1);
         writer.WriteInt32(WellKnownCtapGetAssertionRequestKeys.ClientDataHash);
         writer.WriteByteString(ClientDataHashBytes);
         writer.WriteEndMap();
 
         Fido2FormatException exception = Assert.ThrowsExactly<Fido2FormatException>(
-            () => CtapGetAssertionRequestCborReader.Read(writer.Encode(), BaseMemoryPool.Shared));
+            () => CtapGetAssertionRequestCborReader.Read(writerBuffer.WrittenSpan.ToArray(), BaseMemoryPool.Shared));
 
         Assert.Contains("rpId", exception.Message, StringComparison.Ordinal);
     }
@@ -197,14 +202,16 @@ internal sealed class CtapGetAssertionRequestCborReaderTests
     [TestMethod]
     public void ThrowsWhenClientDataHashMemberIsMissing()
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(1);
         writer.WriteInt32(WellKnownCtapGetAssertionRequestKeys.RpId);
         writer.WriteTextString("rp.co");
         writer.WriteEndMap();
 
         Fido2FormatException exception = Assert.ThrowsExactly<Fido2FormatException>(
-            () => CtapGetAssertionRequestCborReader.Read(writer.Encode(), BaseMemoryPool.Shared));
+            () => CtapGetAssertionRequestCborReader.Read(writerBuffer.WrittenSpan.ToArray(), BaseMemoryPool.Shared));
 
         Assert.Contains("clientDataHash", exception.Message, StringComparison.Ordinal);
     }
@@ -214,7 +221,9 @@ internal sealed class CtapGetAssertionRequestCborReaderTests
     [TestMethod]
     public void ThrowsWhenRpIdHasWrongCborType()
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(2);
         writer.WriteInt32(WellKnownCtapGetAssertionRequestKeys.RpId);
         writer.WriteByteString([0x01]);
@@ -223,7 +232,7 @@ internal sealed class CtapGetAssertionRequestCborReaderTests
         writer.WriteEndMap();
 
         Assert.ThrowsExactly<Fido2FormatException>(
-            () => CtapGetAssertionRequestCborReader.Read(writer.Encode(), BaseMemoryPool.Shared));
+            () => CtapGetAssertionRequestCborReader.Read(writerBuffer.WrittenSpan.ToArray(), BaseMemoryPool.Shared));
     }
 
 
@@ -260,7 +269,9 @@ internal sealed class CtapGetAssertionRequestCborReaderTests
     [TestMethod]
     public void IgnoresUnrecognizedTopLevelMemberKey()
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(3);
         writer.WriteInt32(WellKnownCtapGetAssertionRequestKeys.RpId);
         writer.WriteTextString("rp.co");
@@ -270,7 +281,7 @@ internal sealed class CtapGetAssertionRequestCborReaderTests
         writer.WriteBoolean(true);
         writer.WriteEndMap();
 
-        CtapGetAssertionRequest decoded = CtapGetAssertionRequestCborReader.Read(writer.Encode(), BaseMemoryPool.Shared);
+        CtapGetAssertionRequest decoded = CtapGetAssertionRequestCborReader.Read(writerBuffer.WrittenSpan.ToArray(), BaseMemoryPool.Shared);
 
         try
         {

@@ -15,6 +15,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Verifiable.Foundation\Verifiable.Foundation.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Core\Verifiable.Core.csproj" />
+    <ProjectReference Include="..\..\src\Verifiable.Xml\Verifiable.Xml.csproj" />
   </ItemGroup>
   
 </Project>

@@ -63,7 +63,7 @@ internal sealed class SecureMessagingSessionTests
         using SecureMessagingSession session = CreateSession();
 
         //Advance the session exactly as the genuine exchange would before the first response.
-        using(ProtectedCommandApdu _ = await session.ProtectCommandAsync(
+        using(await session.ProtectCommandAsync(
             0x00, 0xA4, 0x02, 0x0C, Convert.FromHexString("011E"), null,
             BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false))
         {
@@ -104,7 +104,7 @@ internal sealed class SecureMessagingSessionTests
         using SecureMessagingSession session = CreateSession();
 
         //Advance the session exactly as the genuine exchange would before the first response.
-        using(ProtectedCommandApdu _ = await session.ProtectCommandAsync(
+        using(await session.ProtectCommandAsync(
             0x00, 0xA4, 0x02, 0x0C, Convert.FromHexString("011E"), null,
             BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false))
         {

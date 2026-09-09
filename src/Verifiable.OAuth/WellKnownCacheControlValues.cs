@@ -26,5 +26,5 @@ public static class WellKnownCacheControlValues
     /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1#section-3.2.3">OAuth 2.1 §3.2.3</see>
     /// on responses carrying tokens, credentials, or other sensitive information.
     /// </summary>
-    public static readonly string NoStore = Utf8Constants.ToInternedString(NoStoreUtf8);
+    public static string NoStore { get; } = Utf8Constants.ToInternedString(NoStoreUtf8);
 }

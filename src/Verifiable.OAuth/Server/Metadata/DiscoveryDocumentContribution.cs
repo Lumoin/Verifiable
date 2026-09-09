@@ -18,9 +18,11 @@ namespace Verifiable.OAuth.Server.Metadata;
 /// <para>
 /// Order is significant: fields are emitted in the order they appear in
 /// <see cref="Fields"/>. The library's base discovery fields are written
-/// first; contributed fields follow. The contribution is strictly additive
-/// — the library's base fields take precedence over any contributed field
-/// with a duplicate name.
+/// first; contributed fields follow. A contributed field naming a member the
+/// base emission already wrote — or that an earlier contributed field already
+/// named — is a composition defect: the document request is refused with
+/// <see cref="InvalidOperationException"/> naming the duplicate member,
+/// rather than serialized with the name twice.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("DiscoveryDocumentContribution Fields={Fields.Count}")]
@@ -31,7 +33,7 @@ public sealed record DiscoveryDocumentContribution(IReadOnlyList<DiscoveryField>
     /// <see cref="ContributeDiscoveryFieldsDelegate"/> implementations that
     /// have nothing to add for a given request.
     /// </summary>
-    public static readonly DiscoveryDocumentContribution Empty =
+    public static DiscoveryDocumentContribution Empty { get; } =
         new(Array.Empty<DiscoveryField>());
 }
 

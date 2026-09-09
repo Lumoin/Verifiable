@@ -32,7 +32,7 @@ public static class Oid4VciProofIssuance
     /// Credential Issuer rejects a proof whose <c>typ</c> is anything else, so the
     /// constant is the wire contract both sides name from one source.
     /// </summary>
-    public static readonly string ProofJwtType = Utf8Constants.ToInternedString(ProofJwtTypeUtf8);
+    public static string ProofJwtType { get; } = Utf8Constants.ToInternedString(ProofJwtTypeUtf8);
 
 
     /// <summary>

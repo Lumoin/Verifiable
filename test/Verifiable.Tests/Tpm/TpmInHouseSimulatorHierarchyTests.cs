@@ -7,6 +7,7 @@ using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Cryptography;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Extensions.DictionaryAttack;
@@ -19,6 +20,7 @@ using Verifiable.Tpm.Spec.Attributes;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -35,7 +37,7 @@ namespace Verifiable.Tests.Tpm;
 /// <b>These commands are simulator-only by construction.</b> <c>TPM2_Clear</c> discards the storage primary
 /// seed and every key derived under it, and <c>TPM2_HierarchyControl</c> can disable the platform hierarchy
 /// until the next platform reset (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM
-/// 2.0 Library Specification</see>, Part 3, Sections 24.6.1 and 24.2.1). Nothing in this file, and nothing any
+/// 2.0 Library Specification</see>, Part 3, clauses 24.6.1 and 24.2.1). Nothing in this file, and nothing any
 /// hardware-gated test reaches, may ever put one of them on a real device.
 /// </para>
 /// <para>
@@ -48,10 +50,10 @@ namespace Verifiable.Tests.Tpm;
 /// <c>TpmInHouseSimulatorDictionaryAttackTests</c>.
 /// </para>
 /// <para>
-/// <b>Two response codes are inferences, and are marked as such at their own tests.</b> Part 3, Section 24.8
-/// names no code for a <c>TPM2_HierarchyChangeAuth</c> against a disabled hierarchy, and Section 24.2.1 names
+/// <b>Two response codes are inferences, and are marked as such at their own tests.</b> Part 3, clause 24.8
+/// names no code for a <c>TPM2_HierarchyChangeAuth</c> against a disabled hierarchy, and clause 24.2.1 names
 /// none for a wrong-authority <c>TPM2_HierarchyControl</c>; the codes asserted here are read off the shared
-/// availability rule of Part 1, Section 11.2 and the sibling command's stated code in Section 24.3.1.
+/// availability rule of Part 1, clause 10.2 and the sibling command's stated code in clause 24.3.1.
 /// </para>
 /// </remarks>
 [TestClass]
@@ -65,8 +67,8 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
 
     /// <summary>
     /// The octet bound on a hierarchy authorization value. A hierarchy has no Name algorithm, so the bound is
-    /// "the digest produced by the hash algorithm used for context integrity" (TPM 2.0 Library Part 1, Section
-    /// 17.6.4.2; Part 3, Section 24.8.1 restates it as the command's own rule, with a worked SHA-384 example
+    /// "the digest produced by the hash algorithm used for context integrity" (TPM 2.0 Library Part 1, clause
+    /// 16.6.4.2; Part 3, clause 24.8.1 restates it as the command's own rule, with a worked SHA-384 example
     /// giving 48 octets). This simulator's context-integrity hash is SHA-256, so the bound is its digest width.
     /// </summary>
     private const int ContextIntegrityDigestSize = 32;
@@ -74,7 +76,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// <summary>Every RSA storage-parent-shaped template this simulator builds fixes nameAlg to SHA-256.</summary>
     private const TpmAlgIdConstants TpmKeyNameAlg = TpmAlgIdConstants.TPM_ALG_SHA256;
 
-    /// <summary>The RSA public exponent the framework RSA key generator uses (TPM 2.0 Library Part 2, Table 215).</summary>
+    /// <summary>The RSA public exponent the framework RSA key generator uses (TPM 2.0 Library Part 2, Table 228).</summary>
     private const uint DefaultRsaExponent = 65537;
 
     /// <summary>The RSA modulus size this file's RSA CreatePrimary templates use.</summary>
@@ -82,7 +84,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
 
     /// <summary>
     /// A handle inside the Authenticated Countdown Timer range <c>TPMI_RH_HIERARCHY_POLICY</c> also admits
-    /// (TPM 2.0 Library Part 2, Section 9.29's <c>TPM_RH_ACT_0</c> at 0x40000110); this library models no ACT.
+    /// (TPM 2.0 Library Part 2, clause 9.29's <c>TPM_RH_ACT_0</c> at 0x40000110); this library models no ACT.
     /// </summary>
     private const uint ActHandle = 0x4000_0110;
 
@@ -103,9 +105,9 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// <c>TPM2_HierarchyChangeAuth</c> "allows the authorization secret for a hierarchy or lockout to be changed
     /// using the current authorization value as the command authorization"
     /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 3, Section 24.8.1), so after a rotation the replaced value must stop
+    /// Specification</see>, Part 3, clause 24.8.1), so after a rotation the replaced value must stop
     /// authorizing and the installed one must start. The Empty Buffer is a knowable, usable authorization value
-    /// rather than a disabled one (Part 1, Section 11.2, Table 5), so rotating back to it must also work - the
+    /// rather than a disabled one (Part 1, clause 10.2, Table 8), so rotating back to it must also work - the
     /// last leg pins exactly that, since a design that treated "empty" as "unset" would refuse it.
     /// </summary>
     /// <param name="hierarchy">The hierarchy handle whose authorization value is rotated.</param>
@@ -118,7 +120,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
         var hierarchyHandle = (TpmRh)hierarchy;
 
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         TpmResult<HierarchyChangeAuthResponse> firstRotation = await device.ChangeHierarchyAuthAsync(
             hierarchyHandle, ReadOnlyMemory<byte>.Empty, FirstAuth, TestContext.CancellationToken).ConfigureAwait(false);
@@ -128,8 +130,8 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
             hierarchyHandle, ReadOnlyMemory<byte>.Empty, SecondAuth, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsFalse(staleRotation.IsSuccess, "The replaced authorization value must no longer authorize the command.");
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_BAD_AUTH, staleRotation.ResponseCode,
-            "Owner, endorsement and platform authorization values are dictionary-attack exempt permanent-entity values (Part 1, Section 17.8.1), so a mismatch is the plain TPM_RC_BAD_AUTH.");
+            HmacKeyHarness.SessionEncodedRc(TpmRcConstants.TPM_RC_BAD_AUTH, 0), staleRotation.ResponseCode,
+            "Owner, endorsement and platform authorization values are dictionary-attack exempt permanent-entity values (Part 1, clause 16.8.1), so a mismatch is the plain TPM_RC_BAD_AUTH.");
 
         TpmResult<HierarchyChangeAuthResponse> secondRotation = await device.ChangeHierarchyAuthWithPasswordAsync(
             hierarchyHandle, FirstAuth, SecondAuth, TestContext.CancellationToken).ConfigureAwait(false);
@@ -148,12 +150,12 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
 
     /// <summary>
     /// <c>lockoutAuth</c> is the one permanent entity inside dictionary-attack protection (TPM 2.0 Library Part
-    /// 1, Section 17.8.1), so a wrong current value on its rotation is not merely refused: it engages the
+    /// 1, clause 16.8.1), so a wrong current value on its rotation is not merely refused: it engages the
     /// special lockoutAuth-failure state that bars further use of the value "regardless of the setting of
-    /// failedTries and maxTries" (Section 17.8.5,
+    /// failedTries and maxTries" (clause 16.8.5,
     /// <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
     /// Specification</see>), so the very next attempt - the CORRECT one - answers <c>TPM_RC_LOCKOUT</c> before
-    /// any value is compared. Platform Authorization is categorically exempt from all of it (Part 3, Section
+    /// any value is compared. Platform Authorization is categorically exempt from all of it (Part 3, clause
     /// 25.1), which is what keeps a platform-authorized command the recovery path out of a self-inflicted
     /// lockout; the last leg proves that exemption is real rather than assumed.
     /// </summary>
@@ -161,14 +163,14 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     public async Task HierarchyChangeAuthOnLockoutSpendsTheOneStrikeAndPlatformAuthorizationStaysUsable()
     {
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         TpmResult<HierarchyChangeAuthResponse> wrongValue = await device.ChangeHierarchyAuthWithPasswordAsync(
             TpmRh.TPM_RH_LOCKOUT, WrongAuth, FirstAuth, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsFalse(wrongValue.IsSuccess, "A wrong lockoutAuth must not rotate the lockout entity's authorization value.");
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_AUTH_FAIL, wrongValue.ResponseCode,
-            "A lockoutAuth mismatch is TPM_RC_AUTH_FAIL, the code Section 17.8.5's one-strike state hangs off, not the dictionary-attack-exempt TPM_RC_BAD_AUTH.");
+            HmacKeyHarness.SessionEncodedRc(TpmRcConstants.TPM_RC_AUTH_FAIL, 0), wrongValue.ResponseCode,
+            "A lockoutAuth mismatch is TPM_RC_AUTH_FAIL, the code clause 16.8.5's one-strike state hangs off, not the dictionary-attack-exempt TPM_RC_BAD_AUTH.");
 
         TpmResult<HierarchyChangeAuthResponse> correctValue = await device.ChangeHierarchyAuthWithPasswordAsync(
             TpmRh.TPM_RH_LOCKOUT, ReadOnlyMemory<byte>.Empty, FirstAuth, TestContext.CancellationToken).ConfigureAwait(false);
@@ -188,8 +190,8 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// The size gate strips before it measures, and the order is normative rather than an optimization:
     /// "Trailing octets of zero are to be removed from any string before it is used as an authValue"
     /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 1, Section 17.6.4.3) and only the remainder is measured against the bound
-    /// Section 24.8.1 states for this command, "the digest produced by the hash algorithm used for context
+    /// Specification</see>, Part 1, clause 16.6.4.3) and only the remainder is measured against the bound
+    /// Part 3, clause 24.8.1 states for this command, "the digest produced by the hash algorithm used for context
     /// integrity". A genuine 33-octet value is therefore <c>TPM_RC_SIZE</c> while a 32-octet value padded out
     /// with trailing zeros is accepted - and the value actually installed is the STRIPPED one, proven by
     /// authorizing with the 32-octet form afterwards. A gate that measured first would reject the padded value;
@@ -200,7 +202,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     public async Task HierarchyChangeAuthStripsTrailingZerosBeforeMeasuringNewAuthAgainstTheContextIntegrityDigestSize()
     {
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         //One octet past the bound with no trailing zero to strip: nothing can bring it inside the limit.
         byte[] overlongNewAuth = new byte[ContextIntegrityDigestSize + 1];
@@ -212,7 +214,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
         TpmResult<HierarchyChangeAuthResponse> overlongResult = await device.ChangeHierarchyAuthWithPasswordAsync(
             TpmRh.TPM_RH_OWNER, ReadOnlyMemory<byte>.Empty, overlongNewAuth, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsFalse(overlongResult.IsSuccess, "A newAuth longer than the context-integrity digest size must not be accepted.");
-        Assert.AreEqual(TpmRcConstants.TPM_RC_SIZE, overlongResult.ResponseCode);
+        Assert.AreEqual(HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SIZE, 0), overlongResult.ResponseCode, "Table 205: newAuth is TPM2_HierarchyChangeAuth()'s sole parameter (parameter 1); a value wider than the context-integrity digest size is parameter-encoded TPM_RC_SIZE at index 0.");
 
         TpmResult<HierarchyChangeAuthResponse> stillEmpty = await device.ChangeHierarchyAuthWithPasswordAsync(
             TpmRh.TPM_RH_OWNER, ReadOnlyMemory<byte>.Empty, FirstAuth, TestContext.CancellationToken).ConfigureAwait(false);
@@ -242,7 +244,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// a SEPARATE decrypt session, so it never appears as wire content; the value being replaced never appears
     /// either, because it only ever enters as a term of the session keys
     /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 1, Sections 19.1 and 17.6.10). Every command octet the verb sends is captured
+    /// Specification</see>, Part 1, clauses 18.1 and 16.6.10). Every command octet the verb sends is captured
     /// and searched. The hierarchy already carries a real authorization value here, so a failure of this test
     /// would be a genuine secret on the bus rather than an artefact of a factory-state Empty Buffer.
     /// </summary>
@@ -250,7 +252,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     public async Task ChangeHierarchyAuthAsyncNeverSendsEitherAuthorizationValueAsPlaintextOnTheWire()
     {
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         TpmResult<HierarchyChangeAuthResponse> provisioning = await plainDevice.ChangeHierarchyAuthWithPasswordAsync(
             TpmRh.TPM_RH_OWNER, ReadOnlyMemory<byte>.Empty, FirstAuth, TestContext.CancellationToken).ConfigureAwait(false);
@@ -280,12 +282,12 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// keystream derivation applied to three rotations. The decrypt companion is bound to the target hierarchy,
     /// so its session key is <c>KDFa(authValue, "ATH", nonceTPM, nonceCaller)</c>
     /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 1, Section 17.6.10, equation 20) and the XOR keystream over <c>newAuth</c>
-    /// (Section 19.2) derives from it alone. While the hierarchy's authorization value is still the Empty
+    /// Specification</see>, Part 1, clause 16.6.10, equation 20) and the XOR keystream over <c>newAuth</c>
+    /// (clause 18.2) derives from it alone. While the hierarchy's authorization value is still the Empty
     /// Buffer, that key is a function of the two public <c>TPM2_StartAuthSession</c> nonces and nothing else, so
     /// the first provisioning rotation's encryption is structural rather than confidential - and this test
     /// recovers the value to say so. Once a real authorization value is installed the SAME derivation stops
-    /// recovering it, and the salted overload folds a secret only the TPM can recover (Section 17.6.12, equation
+    /// recovering it, and the salted overload folds a secret only the TPM can recover (clause 16.6.12, equation
     /// 25) so it closes the factory-state case too.
     /// </summary>
     [TestMethod]
@@ -359,11 +361,11 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     }
 
     /// <summary>
-    /// The response-key rule, pinned on the wire. Part 3, Section 24.8.1: "The HMAC in the response shall use
+    /// The response-key rule, pinned on the wire. Part 3, clause 24.8.1: "The HMAC in the response shall use
     /// the new authorization value when computing the response HMAC"
     /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
     /// Specification</see>) - which bites only for a session whose HMAC key carries the authorization value at
-    /// all, so this test composes the UNBOUND HMAC session where it does (Part 1, Section 17.6.10's equation 22
+    /// all, so this test composes the UNBOUND HMAC session where it does (Part 1, clause 16.6.10's equation 22
     /// drops that term for a session bound to the entity it authorizes, which is why the shipped verb binds).
     /// Both candidate response HMACs are recomputed off-wire from the captured exchange: the NEW-keyed one must
     /// equal what the TPM framed and the OLD-keyed one must not. The host session's own key was fixed at
@@ -376,14 +378,14 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRotationRegistry();
 
         TpmResult<HierarchyChangeAuthResponse> provisioning = await plainDevice.ChangeHierarchyAuthWithPasswordAsync(
             TpmRh.TPM_RH_OWNER, ReadOnlyMemory<byte>.Empty, FirstAuth, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(provisioning.IsSuccess, $"Provisioning the first authorization value failed: '{provisioning.ResponseCode}'.");
 
-        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(SessionAlg);
+        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(SessionAlg, TestEntropy.NewCounterStream(), pool);
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             plainDevice, startInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession (unbound HMAC) failed: '{startResult.ResponseCode}'.");
@@ -406,11 +408,11 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
             return result;
         }
 
-        using TpmDevice capturingDevice = TpmDevice.Create(CaptureRotationAsync);
+        using TpmDevice capturingDevice = TpmDevice.Create(CaptureRotationAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         try
         {
-            using TpmSession session = new(new TpmHandle(sessionHandle), started.NonceTPM, SessionAlg, pool);
+            using TpmSession session = new(new TpmHandle(sessionHandle), started.NonceTPM, SessionAlg, TestEntropy.NewCounterStream(), pool);
             session.SetAuthValue(FirstAuth, pool);
 
             using Tpm2bAuth newAuth = Tpm2bAuth.Create(SecondAuth, pool);
@@ -440,8 +442,8 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
         byte[] hmacData = await BuildResponseHmacDataAsync(
             capturedResponse!, TpmCcConstants.TPM_CC_HierarchyChangeAuth, responseNonceTpm, commandNonceCaller, sessionAttributes, pool).ConfigureAwait(false);
 
-        //An unbound, unsalted session's sessionKey is the Empty Buffer (Part 1, Section 17.6.9), so the whole
-        //HMAC key is the authorization value term alone, trailing zeros already removed (Section 17.6.4.3).
+        //An unbound, unsalted session's sessionKey is the Empty Buffer (Part 1, clause 16.6.9), so the whole
+        //HMAC key is the authorization value term alone, trailing zeros already removed (clause 16.6.4.3).
         byte[] newKeyedHmac = await ComputeSessionHmacAsync(StripTrailingZeros(SecondAuth), hmacData, pool).ConfigureAwait(false);
         byte[] oldKeyedHmac = await ComputeSessionHmacAsync(StripTrailingZeros(FirstAuth), hmacData, pool).ConfigureAwait(false);
 
@@ -465,7 +467,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// <c>TPM_RC_AUTH_FAIL</c>, while the identical exchange left alone succeeds. This is what makes the
     /// group's "no key swap is needed here" reasoning non-vacuous - the response HMAC key is the session key,
     /// fixed at <c>TPM2_StartAuthSession</c> and unaffected by the value the command replaces (TPM 2.0 Library
-    /// Part 1, Section 17.6.10, equations 21/22,
+    /// Part 1, clause 16.6.10, equations 21/22,
     /// <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
     /// Specification</see>), and the host still checks it.
     /// </summary>
@@ -497,7 +499,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
             return CopyToResponse(responseBytes, commandPool);
         }
 
-        using(TpmDevice tamperingDevice = TpmDevice.Create(TamperRotationResponseAsync))
+        using(TpmDevice tamperingDevice = TpmDevice.Create(TamperRotationResponseAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream()))
         {
             TpmResult<HierarchyChangeAuthResponse> result = await tamperingDevice.ChangeHierarchyAuthAsync(
                 TpmRh.TPM_RH_OWNER, ReadOnlyMemory<byte>.Empty, FirstAuth, TestContext.CancellationToken).ConfigureAwait(false);
@@ -507,7 +509,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
             Assert.AreEqual(TpmRcConstants.TPM_RC_AUTH_FAIL, result.ResponseCode);
         }
 
-        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResult<HierarchyChangeAuthResponse> untampered = await plainDevice.ChangeHierarchyAuthAsync(
             TpmRh.TPM_RH_OWNER, FirstAuth, SecondAuth, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(
@@ -517,7 +519,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
 
     /// <summary>
     /// A decrypt or encrypt attribute on the AUTHORIZING session is refused with a session-encoded
-    /// <c>TPM_RC_ATTRIBUTES</c> rather than honoured. Part 1, Section 19.1's note is the reason: a session used
+    /// <c>TPM_RC_ATTRIBUTES</c> rather than honoured. Part 1, clause 18.1's note is the reason: a session used
     /// both to authorize an entity and to encrypt folds that entity's authorization value into its
     /// <c>sessionValue</c> (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM
     /// 2.0 Library Specification</see>), which would key the encryption of the NEW authorization value on the
@@ -543,7 +545,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
             return await simulator.SubmitAsync(command, commandPool, ct).ConfigureAwait(false);
         }
 
-        using TpmDevice tamperingDevice = TpmDevice.Create(ClaimDecryptOnRotationAsync);
+        using TpmDevice tamperingDevice = TpmDevice.Create(ClaimDecryptOnRotationAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         TpmResult<HierarchyChangeAuthResponse> result = await tamperingDevice.ChangeHierarchyAuthAsync(
             TpmRh.TPM_RH_OWNER, ReadOnlyMemory<byte>.Empty, FirstAuth, TestContext.CancellationToken).ConfigureAwait(false);
@@ -556,7 +558,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
             TpmRcConstants.TPM_RC_ATTRIBUTES, result.ResponseCode,
             "The refusal names the offending session, so the raw wire code carries the session-index modifier.");
 
-        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResult<HierarchyChangeAuthResponse> untouched = await plainDevice.ChangeHierarchyAuthWithPasswordAsync(
             TpmRh.TPM_RH_OWNER, ReadOnlyMemory<byte>.Empty, SecondAuth, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(
@@ -568,11 +570,11 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// A hierarchy whose enable is CLEAR can authorize nothing at all - "When an enable is FALSE, the
     /// corresponding authValue and authPolicy cannot be used to authorize any TPM action"
     /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 1, Section 11.2, Table 5), which Section 11.2 restates for this command
+    /// Specification</see>, Part 1, clause 10.2, Table 8), which clause 10.2 restates for this command
     /// specifically: "TPM2_HierarchyChangeAuth() can change the authValue associated with a hierarchy but only
-    /// if the hierarchy is enabled". Section 24.8 names no response code for the refusal; the code asserted here
+    /// if the hierarchy is enabled". clause 24.8 names no response code for the refusal; the code asserted here
     /// is read off the sibling command's stated one for the identical condition ("If the enable associated with
-    /// authHandle is not SET ... the TPM returns TPM_RC_HIERARCHY", Section 24.3.1), so it is an inference by
+    /// authHandle is not SET ... the TPM returns TPM_RC_HIERARCHY", clause 24.3.1), so it is an inference by
     /// analogy rather than a quotation. The same refusal is asserted for <c>TPM2_SetPrimaryPolicy</c>, where it
     /// IS quoted, so the two cannot silently drift apart.
     /// </summary>
@@ -580,7 +582,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     public async Task ADisabledHierarchyCanAuthorizeNeitherItsOwnAuthorizationChangeNorItsPolicyInstallation()
     {
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         TpmResult<HierarchyControlResponse> disableResult = await device.DisableHierarchyWithPasswordAsync(
             TpmRh.TPM_RH_ENDORSEMENT, ReadOnlyMemory<byte>.Empty, TpmRh.TPM_RH_ENDORSEMENT, TestContext.CancellationToken).ConfigureAwait(false);
@@ -589,13 +591,13 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
         TpmResult<HierarchyChangeAuthResponse> rotation = await device.ChangeHierarchyAuthWithPasswordAsync(
             TpmRh.TPM_RH_ENDORSEMENT, ReadOnlyMemory<byte>.Empty, FirstAuth, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsFalse(rotation.IsSuccess, "A disabled hierarchy must not be able to change its own authorization value.");
-        Assert.AreEqual(TpmRcConstants.TPM_RC_HIERARCHY, rotation.ResponseCode);
+        Assert.AreEqual(HmacKeyHarness.HandleEncodedRc(TpmRcConstants.TPM_RC_HIERARCHY, 0), rotation.ResponseCode, "Table 205: authHandle is TPM2_HierarchyChangeAuth()'s sole handle (handle 1); a disabled hierarchy is handle-encoded TPM_RC_HIERARCHY at index 0.");
 
         byte[] policyDigest = ComputePolicyAuthValueDigest();
         TpmResult<SetPrimaryPolicyResponse> policyResult = await device.SetPrimaryPolicyWithPasswordAsync(
             TpmRh.TPM_RH_ENDORSEMENT, ReadOnlyMemory<byte>.Empty, policyDigest, SessionAlg, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsFalse(policyResult.IsSuccess, "A disabled hierarchy must not be able to install its own policy.");
-        Assert.AreEqual(TpmRcConstants.TPM_RC_HIERARCHY, policyResult.ResponseCode);
+        Assert.AreEqual(HmacKeyHarness.HandleEncodedRc(TpmRcConstants.TPM_RC_HIERARCHY, 0), policyResult.ResponseCode, "Table 195: authHandle is TPM2_SetPrimaryPolicy()'s sole handle (handle 1); a disabled hierarchy is handle-encoded TPM_RC_HIERARCHY at index 0.");
 
         TpmResult<HierarchyControlResponse> enableResult = await device.EnableHierarchyWithPasswordAsync(
             ReadOnlyMemory<byte>.Empty, TpmRh.TPM_RH_ENDORSEMENT, TestContext.CancellationToken).ConfigureAwait(false);
@@ -612,8 +614,8 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// <c>TPM2_ClearControl</c>'s authorization asymmetry, end to end. "Lockout Authorization may be used to SET
     /// disableClear but not to CLEAR it. Platform Authorization may be used to SET or CLEAR disableClear"
     /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 3, Section 24.7.1), and with the control SET, "If TPM2_ClearControl() has
-    /// disabled this command, the TPM shall return TPM_RC_DISABLED" (Section 24.6.1). The refused CLEAR is
+    /// Specification</see>, Part 3, clause 24.7.1), and with the control SET, "If TPM2_ClearControl() has
+    /// disabled this command, the TPM shall return TPM_RC_DISABLED" (clause 24.6.1). The refused CLEAR is
     /// <c>TPM_RC_AUTH_FAIL</c> even though nothing about the supplied value was wrong, and it must NOT behave
     /// like the authorization-compare failure that shares that code: no dictionary-attack counter moves and
     /// lockoutAuth stays usable, which the closing legs prove.
@@ -623,7 +625,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         TpmResult<ClearControlResponse> lockoutSet = await device.ClearControlAsync(
             TpmRh.TPM_RH_LOCKOUT, ReadOnlyMemory<byte>.Empty, isDisablingClear: true, TestContext.CancellationToken).ConfigureAwait(false);
@@ -638,11 +640,11 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
             TpmRh.TPM_RH_LOCKOUT, ReadOnlyMemory<byte>.Empty, isDisablingClear: false, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsFalse(lockoutClear.IsSuccess, "Lockout Authorization must never CLEAR disableClear - the ratchet only tightens.");
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_AUTH_FAIL, lockoutClear.ResponseCode,
-            "The refusal reuses the generic authorization-failure code rather than the TPM_RC_AUTH_TYPE its sibling TPM2_HierarchyControl answers for a wrong-authority combination.");
+            HmacKeyHarness.SessionEncodedRc(TpmRcConstants.TPM_RC_AUTH_FAIL, 0), lockoutClear.ResponseCode,
+            "The refusal reuses the generic authorization-failure code, session-encoded to authHandle's own authorizing session, rather than the TPM_RC_AUTH_TYPE its sibling TPM2_HierarchyControl answers for a wrong-authority combination.");
 
         //Not a value failure: the same authorization still works in the direction it is allowed, so the refusal
-        //above spent no dictionary-attack strike (Part 1, Section 17.8.5's one-strike state would have barred this).
+        //above spent no dictionary-attack strike (Part 1, clause 16.8.5's one-strike state would have barred this).
         TpmResult<ClearControlResponse> lockoutStillUsable = await device.ClearControlAsync(
             TpmRh.TPM_RH_LOCKOUT, ReadOnlyMemory<byte>.Empty, isDisablingClear: true, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(
@@ -665,7 +667,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// <summary>
     /// <c>TPM2_Clear</c> "removes all TPM context associated with a specific Owner"
     /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 3, Section 24.6.1): among its listed effects, ownerAuth, endorsementAuth and
+    /// Specification</see>, Part 3, clause 24.6.1): among its listed effects, ownerAuth, endorsementAuth and
     /// lockoutAuth are set to the Empty Buffer along with their three policies, while platformAuth appears
     /// nowhere on that list and must survive. This drives all four to distinct real values first, so a Clear
     /// that reset the wrong ones - or all of them - is observable in both directions.
@@ -679,7 +681,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
         byte[] platformAuth = [0xAA, 0xBB, 0xCC];
 
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         await RotateAsync(device, TpmRh.TPM_RH_OWNER, ReadOnlyMemory<byte>.Empty, ownerAuth).ConfigureAwait(false);
         await RotateAsync(device, TpmRh.TPM_RH_ENDORSEMENT, ReadOnlyMemory<byte>.Empty, endorsementAuth).ConfigureAwait(false);
@@ -711,20 +713,20 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
             TpmRh.TPM_RH_PLATFORM, platformAuth, isDisablingClear: false, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(
             platformSurvives.IsSuccess,
-            $"platformAuth appears on no clause of Section 24.6.1's effect list, so the value installed before the clear must still authorize: '{platformSurvives.ResponseCode}'.");
+            $"platformAuth appears on no clause of clause 24.6.1's effect list, so the value installed before the clear must still authorize: '{platformSurvives.ResponseCode}'.");
 
         TpmResult<ClearControlResponse> platformNotEmptied = await device.ClearControlWithPasswordAsync(
             TpmRh.TPM_RH_PLATFORM, ReadOnlyMemory<byte>.Empty, isDisablingClear: true, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsFalse(platformNotEmptied.IsSuccess, "A clear that emptied platformAuth too would let the Empty Buffer authorize here.");
-        Assert.AreEqual(TpmRcConstants.TPM_RC_BAD_AUTH, platformNotEmptied.ResponseCode);
+        Assert.AreEqual(HmacKeyHarness.SessionEncodedRc(TpmRcConstants.TPM_RC_BAD_AUTH, 0), platformNotEmptied.ResponseCode, "authHandle's authorizing session is session 1 of Table 201 (TPM 2.0 Library Part 2, clause 6.6.2); a platformAuth that would also have emptied itself is session-encoded TPM_RC_BAD_AUTH there.");
     }
 
     /// <summary>
-    /// Three more items of Section 24.6.1's effect list, read back through the surfaces that report them: "SET
+    /// Three more items of clause 24.6.1's effect list, read back through the surfaces that report them: "SET
     /// shEnable and ehEnable", "set Clock to zero ... set resetCount to zero ... set restartCount to zero and
     /// ... set Safe to YES", and "increment pcrUpdateCounter"
     /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 3, Section 24.6.1). The two enables are driven CLEAR first so their restoration
+    /// Specification</see>, Part 3, clause 24.6.1). The two enables are driven CLEAR first so their restoration
     /// is observable, and <c>resetCount</c> is non-zero before the clear because the <c>TPM2_Startup</c> that
     /// brought the TPM up already incremented it - without that, zeroing it would be indistinguishable from
     /// leaving it alone. The <c>pcrUpdateCounter</c> increment is what lets an application build a policy
@@ -735,7 +737,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateClockAndPcrRegistry();
 
         TpmResult<HierarchyControlResponse> disableStorage = await device.DisableHierarchyWithPasswordAsync(
@@ -777,10 +779,10 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// <c>shEnable</c> CLEAR no primary object may be created under the storage hierarchy, because neither its
     /// authorization value nor its policy can authorize anything
     /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 1, Section 11.2, Table 5) and the handle names an unavailable hierarchy
-    /// (<c>TPM_RC_HIERARCHY</c>, the code Part 3, Section 24.3.1 states for the same condition). Recovery is
+    /// Specification</see>, Part 1, clause 10.2, Table 8) and the handle names an unavailable hierarchy
+    /// (<c>TPM_RC_HIERARCHY</c>, the code Part 3, clause 24.3.1 states for the same condition). Recovery is
     /// exclusively Platform Authorization's: "When shEnable is CLEAR, it can only be SET
-    /// (TPM2_HierarchyControl()) if Platform Authorization is provided" (Part 1, Section 11.4), and the storage
+    /// (TPM2_HierarchyControl()) if Platform Authorization is provided" (Part 1, clause 10.4), and the storage
     /// hierarchy's own attempt to re-enable itself cannot even reach that rule - the availability gate answers
     /// first, which is what makes the privilege asymmetry structural rather than a check that could be forgotten.
     /// </summary>
@@ -789,7 +791,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateKeyRegistry();
 
         TpmResult<CreatePrimaryResponse> beforeDisable = await CreateOwnerPrimaryAsync(device, registry, pool).ConfigureAwait(false);
@@ -813,8 +815,8 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
             device, TpmRh.TPM_RH_OWNER, ReadOnlyMemory<byte>.Empty, TpmRh.TPM_RH_OWNER, TpmiYesNo.Yes).ConfigureAwait(false);
         Assert.IsFalse(ownAttempt.IsSuccess, "A disabled hierarchy must not be able to re-enable itself.");
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_HIERARCHY, ownAttempt.ResponseCode,
-            "The availability gate of Part 1, Section 11.2 answers before the command's own authority rule, so the refusal names the hierarchy rather than the authorization type.");
+            HmacKeyHarness.HandleEncodedRc(TpmRcConstants.TPM_RC_HIERARCHY, 0), ownAttempt.ResponseCode,
+            "The availability gate of Part 1, clause 10.2 answers before the command's own authority rule, so the refusal names the hierarchy rather than the authorization type.");
 
         TpmResult<HierarchyControlResponse> platformEnable = await device.EnableHierarchyWithPasswordAsync(
             ReadOnlyMemory<byte>.Empty, TpmRh.TPM_RH_OWNER, TestContext.CancellationToken).ConfigureAwait(false);
@@ -831,7 +833,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// <summary>
     /// Every authorization that is not applicable to the enable being written is refused with
     /// <c>TPM_RC_AUTH_TYPE</c> - the authorization was supplied correctly but is the wrong KIND for the action.
-    /// Part 3, Section 24.2.1 states the permitted combinations rather than a response code: phEnable and
+    /// Part 3, clause 24.2.1 states the permitted combinations rather than a response code: phEnable and
     /// phEnableNV move only "if platformAuth/platformPolicy is provided", shEnable "if either
     /// platformAuth/platformPolicy or ownerAuth/ownerPolicy is provided", ehEnable "if either
     /// platformAuth/platformPolicy or endorsementAuth/endorsementPolicy is provided"
@@ -853,7 +855,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     public async Task HierarchyControlRefusesAnAuthorizationThatIsNotApplicableToTheEnableBeingWritten(uint authHandle, uint enable, bool isSetting)
     {
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         TpmResult<HierarchyControlResponse> result = await HierarchyControlWithPasswordAsync(
             device, (TpmRh)authHandle, ReadOnlyMemory<byte>.Empty, (TpmRh)enable, isSetting ? TpmiYesNo.Yes : TpmiYesNo.No).ConfigureAwait(false);
@@ -879,19 +881,19 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// <summary>
     /// CLEARing <c>phEnable</c> is a one-way door for the whole command surface: "phEnable may not be SET using
     /// this command" (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0
-    /// Library Specification</see>, Part 3, Section 24.2.1) and "When phEnable is CLEAR, a _TPM_Init is required
-    /// to SET it. On any _TPM_Init, phEnable is SET" (Part 1, Section 11.3). Disabling the platform hierarchy
+    /// Library Specification</see>, Part 3, clause 24.2.1) and "When phEnable is CLEAR, a _TPM_Init is required
+    /// to SET it. On any _TPM_Init, phEnable is SET" (Part 1, clause 10.3). Disabling the platform hierarchy
     /// therefore also removes the only authorization that could re-enable the storage hierarchy, which the
     /// middle leg proves; a full <c>TPM2_Startup</c> reset then restores all four enables at once, "phEnable
     /// shall be SET" from the every-startup list plus "phEnableNV, shEnable and ehEnable shall be SET" from the
-    /// TPM Reset list (Part 3, Section 9.3).
+    /// TPM Reset list (Part 3, clause 9.3).
     /// </summary>
     [TestMethod]
     public async Task ClearingThePlatformEnableIsOneWayUntilAStartupResetRestoresAllFourEnables()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         TpmResult<HierarchyControlResponse> disableStorage = await device.DisableHierarchyWithPasswordAsync(
             TpmRh.TPM_RH_OWNER, ReadOnlyMemory<byte>.Empty, TpmRh.TPM_RH_OWNER, TestContext.CancellationToken).ConfigureAwait(false);
@@ -909,13 +911,13 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
             device, TpmRh.TPM_RH_PLATFORM, ReadOnlyMemory<byte>.Empty, TpmRh.TPM_RH_PLATFORM, TpmiYesNo.Yes).ConfigureAwait(false);
         Assert.IsFalse(selfEnable.IsSuccess, "No command may SET phEnable.");
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_HIERARCHY, selfEnable.ResponseCode,
+            HmacKeyHarness.HandleEncodedRc(TpmRcConstants.TPM_RC_HIERARCHY, 0), selfEnable.ResponseCode,
             "platformAuth cannot authorize anything while phEnable is CLEAR, so the attempt is refused by the availability gate.");
 
         TpmResult<HierarchyControlResponse> rescueStorage = await device.EnableHierarchyWithPasswordAsync(
             ReadOnlyMemory<byte>.Empty, TpmRh.TPM_RH_OWNER, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsFalse(rescueStorage.IsSuccess, "Disabling the platform hierarchy also removes the only authorization that could re-enable the storage one.");
-        Assert.AreEqual(TpmRcConstants.TPM_RC_HIERARCHY, rescueStorage.ResponseCode);
+        Assert.AreEqual(HmacKeyHarness.HandleEncodedRc(TpmRcConstants.TPM_RC_HIERARCHY, 0), rescueStorage.ResponseCode, "Table 193: authHandle is TPM2_HierarchyControl()'s sole handle (handle 1); the availability gate CLEAR by the platform's own disable is handle-encoded TPM_RC_HIERARCHY at index 0.");
 
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await IssueStartupClearAsync(simulator, pool).ConfigureAwait(false);
@@ -937,11 +939,11 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// platformAuth is a per-boot secret rather than a persistent one: "On TPM Reset or TPM Restart, platformAuth
     /// is set to an EmptyAuth, and platformPolicy is set to an Empty Policy"
     /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 1, Section 11.3), which Part 3, Section 9.3 states as a bullet of its own on the
+    /// Specification</see>, Part 1, clause 10.3), which Part 3, clause 9.3 states as a bullet of its own on the
     /// TPM Reset list, "platformAuth and platformPolicy shall be set to the Empty Buffer". A value platform
     /// firmware installs therefore stops authorizing at the next power cycle and the Empty Buffer authorizes
     /// again - the opposite of <c>ownerAuth</c> and <c>lockoutAuth</c>, which survive every reset and only
-    /// <c>TPM2_Clear</c> returns (Section 24.6.1, whose effect list never mentions platformAuth). The middle leg
+    /// <c>TPM2_Clear</c> returns (clause 24.6.1, whose effect list never mentions platformAuth). The middle leg
     /// is what makes the last two non-vacuous: the installed value must genuinely have displaced the Empty Buffer
     /// before the reset, or "the Empty Buffer authorizes afterwards" would also be true of a TPM that never
     /// changed at all.
@@ -951,7 +953,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         TpmResult<HierarchyChangeAuthResponse> install = await device.ChangeHierarchyAuthWithPasswordAsync(
             TpmRh.TPM_RH_PLATFORM, ReadOnlyMemory<byte>.Empty, FirstAuth, TestContext.CancellationToken).ConfigureAwait(false);
@@ -963,9 +965,9 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
             TpmRh.TPM_RH_PLATFORM, ReadOnlyMemory<byte>.Empty, SecondAuth, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsFalse(emptyBeforeReset.IsSuccess, "The Empty Buffer must stop authorizing once a platform authorization value is installed.");
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_BAD_AUTH,
+            HmacKeyHarness.SessionEncodedRc(TpmRcConstants.TPM_RC_BAD_AUTH, 0),
             emptyBeforeReset.IsTpmError ? emptyBeforeReset.ResponseCode : default,
-            "platformAuth is a dictionary-attack exempt permanent-entity value (Part 1, Section 17.8.1), so a mismatch is the plain TPM_RC_BAD_AUTH.");
+            "platformAuth is a dictionary-attack exempt permanent-entity value (Part 1, clause 16.8.1), so a mismatch is the plain TPM_RC_BAD_AUTH.");
 
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await IssueStartupClearAsync(simulator, pool).ConfigureAwait(false);
@@ -974,7 +976,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
             TpmRh.TPM_RH_PLATFORM, FirstAuth, SecondAuth, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsFalse(installedAfterReset.IsSuccess, "A TPM Reset must discard the installed platform authorization value.");
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_BAD_AUTH,
+            HmacKeyHarness.SessionEncodedRc(TpmRcConstants.TPM_RC_BAD_AUTH, 0),
             installedAfterReset.IsTpmError ? installedAfterReset.ResponseCode : default,
             "Nothing of the installed value survives the reset, so offering it is an ordinary mismatch rather than a refusal of the hierarchy itself.");
 
@@ -988,13 +990,13 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// <summary>
     /// A TPM Restart - <c>TPM2_Shutdown(STATE)</c>, then <c>_TPM_Init</c>, then <c>TPM2_Startup(CLEAR)</c>
     /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 3, Section 9.3) - restores exactly what a TPM Reset restores for this command
-    /// family, and Section 9.3 spells it out on the Restart list itself rather than by reference to the Reset
+    /// Specification</see>, Part 3, clause 9.3) - restores exactly what a TPM Reset restores for this command
+    /// family, and clause 9.3 spells it out on the Restart list itself rather than by reference to the Reset
     /// one: "phEnableNV, shEnable and ehEnable shall be SET" and "platformAuth and platformPolicy shall be set to
     /// the Empty Buffer", joined by the every-startup rule "On any TPM2_Startup(), phEnable shall be SET". Only a
     /// TPM Resume carries any of it forward. The counter readback pins that this sequence really took the Restart
     /// path: a Restart increments <c>restartCount</c> and leaves <c>resetCount</c> alone, where a Reset would do
-    /// the reverse (Part 1, Sections 36.4-36.5), so a TPM that answered a Reset here would fail that assertion
+    /// the reverse (Part 1, clauses 33.4-33.5), so a TPM that answered a Reset here would fail that assertion
     /// rather than pass the enable checks for the wrong reason.
     /// </summary>
     [TestMethod]
@@ -1002,7 +1004,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateClockAndPcrRegistry();
 
         TpmResult<HierarchyChangeAuthResponse> install = await device.ChangeHierarchyAuthWithPasswordAsync(
@@ -1050,7 +1052,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
             TpmRh.TPM_RH_PLATFORM, FirstAuth, SecondAuth, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsFalse(installedAfterRestart.IsSuccess, "A TPM Restart must empty platformAuth exactly as a TPM Reset does.");
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_BAD_AUTH,
+            HmacKeyHarness.SessionEncodedRc(TpmRcConstants.TPM_RC_BAD_AUTH, 0),
             installedAfterRestart.IsTpmError ? installedAfterRestart.ResponseCode : default,
             "The platform hierarchy is enabled again, so the refusal is the value mismatch rather than an unavailable hierarchy.");
 
@@ -1066,16 +1068,16 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// Empty Buffer. If hashAlg is TPM_ALG_NULL, then this shall be an Empty Buffer" and "If the authPolicy is
     /// an Empty Buffer, then this field shall be TPM_ALG_NULL"
     /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 3, Section 24.3.2), with the size rule stated as "When hashAlg is not
+    /// Specification</see>, Part 3, clause 24.3.2), with the size rule stated as "When hashAlg is not
     /// TPM_ALG_NULL, if the size of authPolicy is not consistent with the hash algorithm, the TPM returns
-    /// TPM_RC_SIZE" (Section 24.3.1). One rule covers both directions because the null algorithm's digest size
+    /// TPM_RC_SIZE" (clause 24.3.1). One rule covers both directions because the null algorithm's digest size
     /// is zero, so each ladder rung below is a genuine size disagreement rather than a special case.
     /// </summary>
     [TestMethod]
     public async Task SetPrimaryPolicyRefusesEveryDigestWhoseSizeDisagreesWithItsHashAlgorithm()
     {
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         byte[] fullWidthDigest = ComputePolicyAuthValueDigest();
         byte[] shortDigest = fullWidthDigest.AsSpan(0, Sha256DigestSize - 1).ToArray();
@@ -1083,18 +1085,18 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
         TpmResult<SetPrimaryPolicyResponse> digestWithNullAlg = await device.SetPrimaryPolicyWithPasswordAsync(
             TpmRh.TPM_RH_OWNER, ReadOnlyMemory<byte>.Empty, fullWidthDigest, TpmAlgIdConstants.TPM_ALG_NULL, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_SIZE, digestWithNullAlg.ResponseCode,
+            HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SIZE, 0), digestWithNullAlg.ResponseCode,
             "A non-empty digest offered with TPM_ALG_NULL disagrees with the null algorithm's zero digest size.");
 
         TpmResult<SetPrimaryPolicyResponse> emptyWithRealAlg = await device.SetPrimaryPolicyWithPasswordAsync(
             TpmRh.TPM_RH_OWNER, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, SessionAlg, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_SIZE, emptyWithRealAlg.ResponseCode,
+            HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SIZE, 0), emptyWithRealAlg.ResponseCode,
             "An Empty Buffer offered with a real algorithm disagrees with that algorithm's digest size.");
 
         TpmResult<SetPrimaryPolicyResponse> shortWithRealAlg = await device.SetPrimaryPolicyWithPasswordAsync(
             TpmRh.TPM_RH_OWNER, ReadOnlyMemory<byte>.Empty, shortDigest, SessionAlg, TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(TpmRcConstants.TPM_RC_SIZE, shortWithRealAlg.ResponseCode, "A digest one octet short of the algorithm's width must be refused.");
+        Assert.AreEqual(HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SIZE, 0), shortWithRealAlg.ResponseCode, "A digest one octet short of the algorithm's width must be refused.");
 
         TpmResult<SetPrimaryPolicyResponse> consistent = await device.SetPrimaryPolicyWithPasswordAsync(
             TpmRh.TPM_RH_OWNER, ReadOnlyMemory<byte>.Empty, fullWidthDigest, SessionAlg, TestContext.CancellationToken).ConfigureAwait(false);
@@ -1112,8 +1114,8 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// <c>TPMI_RH_ACT</c> ("TPM_RH_LOCKOUT, TPM_RH_ENDORSEMENT, TPM_RH_OWNER, TPMI_RH_ACT or
     /// TPM_RH_PLATFORM+{PP}",
     /// <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 3, Section 24.3.2), and "On TPMs implementing Authenticated Countdown Timers
-    /// (ACT), this command may also be used to set the authorization policy for an ACT" (Section 24.3.1). This
+    /// Specification</see>, Part 3, clause 24.3.2), and "On TPMs implementing Authenticated Countdown Timers
+    /// (ACT), this command may also be used to set the authorization policy for an ACT" (clause 24.3.1). This
     /// library implements no ACT, so an ACT handle must be refused as an out-of-range value for the interface
     /// type rather than silently accepted into a policy slot that does not exist.
     /// </summary>
@@ -1121,24 +1123,24 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     public async Task SetPrimaryPolicyRefusesAnAuthenticatedCountdownTimerHandleWithValue()
     {
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         TpmResult<SetPrimaryPolicyResponse> result = await device.SetPrimaryPolicyWithPasswordAsync(
             (TpmRh)ActHandle, ReadOnlyMemory<byte>.Empty, ComputePolicyAuthValueDigest(), SessionAlg, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsSuccess, "An unmodelled ACT handle must not be accepted as a policy target.");
-        Assert.AreEqual(TpmRcConstants.TPM_RC_VALUE, result.ResponseCode);
+        Assert.AreEqual(HmacKeyHarness.HandleEncodedRc(TpmRcConstants.TPM_RC_VALUE, 0), result.ResponseCode, "Table 195: authHandle is TPM2_SetPrimaryPolicy()'s sole handle (handle 1); an authenticated but unmodelled ACT handle is handle-encoded TPM_RC_VALUE at index 0.");
     }
 
     /// <summary>
     /// The closure this command exists to provide, proven in both directions. A hierarchy's policy path starts
     /// disabled: "When the authPolicy is empty, it cannot match any policyDigest value so the use of authPolicy
     /// is disabled" (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0
-    /// Library Specification</see>, Part 1, Section 11.2, Table 5), so a policy session offered as the
+    /// Library Specification</see>, Part 1, clause 10.2, Table 8), so a policy session offered as the
     /// authorizer of <c>TPM2_PolicySecret</c> against a policy-less hierarchy is answered with
     /// <c>TPM_RC_AUTH_UNAVAILABLE</c> - the entity has no policy path at all, which is a different answer from a
     /// policy that failed to match. <c>TPM2_SetPrimaryPolicy</c> installs one ("The policy that is changed is
-    /// the policy associated with authHandle", Part 3, Section 24.3.1) and the same session then authorizes;
+    /// the policy associated with authHandle", Part 3, clause 24.3.1) and the same session then authorizes;
     /// a session whose accumulated digest reaches a DIFFERENT value is <c>TPM_RC_POLICY_FAIL</c>; and
     /// reinstalling the Empty Buffer closes the path again.
     /// </summary>
@@ -1147,7 +1149,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreatePolicyRegistry();
 
         TpmRcConstants beforeInstall = await AuthorizeOwnerPolicySecretOverAPolicySessionAsync(
@@ -1169,8 +1171,8 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
         TpmRcConstants unsatisfied = await AuthorizeOwnerPolicySecretOverAPolicySessionAsync(
             device, registry, pool, foldCommandCodeFirst: true).ConfigureAwait(false);
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_POLICY_FAIL, unsatisfied,
-            "A session that reaches a different digest fails the comparison, which is a distinct answer from having no policy path at all.");
+            HmacKeyHarness.SessionEncodedRc(TpmRcConstants.TPM_RC_POLICY_FAIL, 0), unsatisfied,
+            "A session that reaches a different digest fails the comparison, which is a distinct answer from having no policy path at all — CheckAuthSession's outcome wrap, the sole authorizing session, slot 0.");
 
         TpmResult<SetPrimaryPolicyResponse> uninstall = await device.SetPrimaryPolicyWithPasswordAsync(
             TpmRh.TPM_RH_OWNER, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, TpmAlgIdConstants.TPM_ALG_NULL, TestContext.CancellationToken).ConfigureAwait(false);
@@ -1188,7 +1190,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// constants: <c>TPMA_PERMANENT</c>'s <c>ownerAuthSet</c>/<c>endorsementAuthSet</c>/<c>lockoutAuthSet</c>
     /// and <c>disableClear</c>, and <c>TPMA_STARTUP_CLEAR</c>'s four enables
     /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 2, Sections 8.6 and 8.7). These are the only surface through which a caller can
+    /// Specification</see>, Part 2, clauses 8.6 and 8.7). These are the only surface through which a caller can
     /// observe that a hierarchy has been disabled at all, since a disabled hierarchy refuses both its
     /// authorization value and its policy and nothing else in the response surface distinguishes that from a
     /// wrong secret. Every bit is driven in both directions by the five commands themselves.
@@ -1198,7 +1200,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         var atManufacture = (TpmaPermanent)await ReadPropertyAsync(device, pool, TpmPtConstants.TPM_PT_PERMANENT).ConfigureAwait(false);
         Assert.IsFalse(atManufacture.HasFlag(TpmaPermanent.OWNER_AUTH_SET), "A freshly started TPM's ownerAuth is the Empty Buffer.");
@@ -1254,11 +1256,11 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
 
     /// <summary>
     /// <c>@primaryHandle</c> is <c>TPM2_CreatePrimary</c>'s own USER-role authorization handle (TPM 2.0 Library
-    /// Part 3, Section 24.1, Table 174), so once the owner hierarchy carries a real authorization value a
+    /// Part 3, clause 24.1, Table 191), so once the owner hierarchy carries a real authorization value a
     /// WRONG password must refuse the command exactly as every other hierarchy command in this family refuses
     /// one: the bare, dictionary-attack-uncharged <c>TPM_RC_BAD_AUTH</c> a permanent entity's authValue
     /// mismatch answers (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM
-    /// 2.0 Library Specification</see>, Part 1, Section 17.8.1), never the session-encoded code an object slot
+    /// 2.0 Library Specification</see>, Part 1, clause 16.8.1), never the session-encoded code an object slot
     /// answers for the same kind of mismatch. The CORRECT password must still create. Both directions are
     /// proven across all four modelled CreatePrimary templates - ECC and RSA signing keys, ECC and RSA
     /// restricted storage parents - because each is dispatched to its own handler, and verifying some templates'
@@ -1270,7 +1272,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateKeyRegistry();
 
         await RotateAsync(device, TpmRh.TPM_RH_OWNER, ReadOnlyMemory<byte>.Empty, FirstAuth).ConfigureAwait(false);
@@ -1299,8 +1301,8 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
                 device, input, [wrongAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
             Assert.IsFalse(wrongResult.IsSuccess, $"A wrong owner hierarchy password must not create a primary under {templateName}.");
             Assert.AreEqual(
-                TpmRcConstants.TPM_RC_BAD_AUTH, wrongResult.ResponseCode,
-                $"The owner hierarchy is a dictionary-attack exempt permanent entity, so a mismatch under {templateName} is the bare TPM_RC_BAD_AUTH, never session-encoded.");
+                HmacKeyHarness.SessionEncodedRc(TpmRcConstants.TPM_RC_BAD_AUTH, 0), wrongResult.ResponseCode,
+                $"The owner hierarchy is a dictionary-attack exempt permanent entity, so a mismatch under {templateName} fails the primaryHandle authorization, session 1 of TPM2_CreatePrimary()'s own command table.");
 
             TpmResult<TpmDictionaryAttackParameters> afterWrong = await device.GetDictionaryAttackParametersAsync(
                 pool, TestContext.CancellationToken).ConfigureAwait(false);
@@ -1323,11 +1325,11 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// <summary>
     /// The null hierarchy has no authValue slot of its own - its authorization value is structurally empty
     /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 1, Section 11.2), a different footing from a rotated-then-emptied hierarchy's
+    /// Specification</see>, Part 1, clause 10.2), a different footing from a rotated-then-emptied hierarchy's
     /// live Empty Buffer VALUE. <c>TPM2_CreatePrimary</c>'s null-hierarchy arm compares the supplied password,
-    /// trailing zeros stripped (Section 17.6.4.3), against that structural emptiness: any non-empty remainder
+    /// trailing zeros stripped (clause 16.6.4.3), against that structural emptiness: any non-empty remainder
     /// answers the bare, dictionary-attack-uncharged <c>TPM_RC_BAD_AUTH</c> a permanent entity's mismatch
-    /// answers (Section 17.8.1) - TPM_RH_NULL included, since only lockoutAuth carries the one-strike exception
+    /// answers (clause 16.8.1) - TPM_RH_NULL included, since only lockoutAuth carries the one-strike exception
     /// - while the Empty Buffer still creates.
     /// </summary>
     [TestMethod]
@@ -1335,7 +1337,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
-        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateKeyRegistry();
 
         using CreatePrimaryInput input = CreatePrimaryInput.ForEccSigningKey(
@@ -1350,8 +1352,8 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
             device, input, [nonEmptyAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsFalse(nonEmptyResult.IsSuccess, "A non-empty password offered against the null hierarchy must never authorize CreatePrimary.");
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_BAD_AUTH, nonEmptyResult.ResponseCode,
-            "The null hierarchy's structurally empty authValue mismatches any non-empty supplied password with the bare, dictionary-attack-exempt TPM_RC_BAD_AUTH.");
+            HmacKeyHarness.SessionEncodedRc(TpmRcConstants.TPM_RC_BAD_AUTH, 0), nonEmptyResult.ResponseCode,
+            "The null hierarchy's structurally empty authValue mismatches any non-empty supplied password at the primaryHandle authorization, session 1 of TPM2_CreatePrimary()'s own command table.");
 
         TpmResult<TpmDictionaryAttackParameters> afterWrong = await device.GetDictionaryAttackParametersAsync(
             pool, TestContext.CancellationToken).ConfigureAwait(false);
@@ -1368,6 +1370,144 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
         {
             _ = await device.FlushContextAsync(emptyResult.Value.ObjectHandle.Value, CancellationToken.None).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    /// TPM 2.0 Library Part 2, clause 9.13, Table 59 (<c>TPMI_RH_HIERARCHY</c>): only <c>TPM_RH_OWNER</c>,
+    /// <c>TPM_RH_ENDORSEMENT</c>, <c>TPM_RH_PLATFORM</c> and <c>TPM_RH_NULL</c> admit a primary object.
+    /// <c>TPM_RH_LOCKOUT</c> is a permanent handle outside that four-value set, so <c>TPM2_CreatePrimary()</c>
+    /// must refuse it with the bare <c>TPM_RC_VALUE</c> before any state moves — no object created.
+    /// </summary>
+    [TestMethod]
+    public async Task CreatePrimaryWithAnOutOfSetPermanentHandleReturnsValue()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
+        TpmResponseRegistry registry = CreateKeyRegistry();
+
+        using CreatePrimaryInput input = CreatePrimaryInput.ForEccSigningKey(
+            TpmRh.TPM_RH_LOCKOUT, password: null, TpmEccCurveConstants.TPM_ECC_NIST_P256, TpmtEccScheme.Ecdsa(SessionAlg), pool);
+
+        using TpmPasswordSession auth = TpmPasswordSession.CreateEmpty(pool);
+        TpmResult<CreatePrimaryResponse> result = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
+            device, input, [auth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsSuccess, "TPM_RH_LOCKOUT is outside Table 59's four admitted hierarchy selectors and must never create a primary.");
+        Assert.AreEqual(
+            TpmRcConstants.TPM_RC_VALUE, result.ResponseCode,
+            $"An out-of-set permanent primaryHandle must be refused with the bare TPM_RC_VALUE (got '{result.ResponseCode}').");
+    }
+
+    /// <summary>
+    /// TPM 2.0 Library Part 2, clause 9.13, Table 59 (<c>TPMI_RH_HIERARCHY</c>): the four admitted values are
+    /// all PERMANENT handles, so a TRANSIENT-range handle offered as <c>primaryHandle</c> — a wholly different
+    /// handle type, not merely an out-of-set permanent one — is refused by the very same <c>#TPM_RC_VALUE</c>
+    /// gate before any state moves.
+    /// </summary>
+    [TestMethod]
+    public async Task CreatePrimaryWithATransientRangeHandleReturnsValue()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
+        TpmResponseRegistry registry = CreateKeyRegistry();
+
+        using CreatePrimaryInput input = CreateTransientRangeHandlePrimaryInput(pool);
+
+        using TpmPasswordSession auth = TpmPasswordSession.CreateEmpty(pool);
+        TpmResult<CreatePrimaryResponse> result = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
+            device, input, [auth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsSuccess, "A transient-range handle is a different handle type entirely from Table 59's four permanent selectors and must never create a primary.");
+        Assert.AreEqual(
+            TpmRcConstants.TPM_RC_VALUE, result.ResponseCode,
+            $"A transient-range primaryHandle must be refused with the bare TPM_RC_VALUE (got '{result.ResponseCode}').");
+    }
+
+    /// <summary>
+    /// Composes a CreatePrimary input whose <c>primaryHandle</c> is a raw transient-range handle rather than any
+    /// of Table 59's four permanent hierarchy selectors — an otherwise-ordinary ECC signing template, since only
+    /// the handle itself is the probe.
+    /// </summary>
+    /// <param name="pool">The memory pool.</param>
+    /// <returns>The command input.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the composed sensitive area and public template transfers to the returned CreatePrimaryInput, whose Dispose releases them.")]
+    private static CreatePrimaryInput CreateTransientRangeHandlePrimaryInput(BaseMemoryPool pool)
+    {
+        Tpm2bSensitiveCreate inSensitive = Tpm2bSensitiveCreate.CreateEmpty(pool);
+
+        var attributes =
+            TpmaObject.FIXED_TPM |
+            TpmaObject.FIXED_PARENT |
+            TpmaObject.SENSITIVE_DATA_ORIGIN |
+            TpmaObject.USER_WITH_AUTH |
+            TpmaObject.SIGN_ENCRYPT |
+            TpmaObject.NO_DA;
+
+        Tpm2bPublic inPublic = Tpm2bPublic.CreateEccSigningTemplate(
+            TpmAlgIdConstants.TPM_ALG_SHA256, attributes, TpmEccCurveConstants.TPM_ECC_NIST_P256, TpmtEccScheme.Ecdsa(SessionAlg));
+
+        return new CreatePrimaryInput((TpmRh)TpmHandleRanges.TRANSIENT_FIRST, inSensitive, inPublic, Tpm2bData.Empty, TpmlPcrSelection.Empty);
+    }
+
+    /// <summary>
+    /// TPM 2.0 Library Part 2, clause 9.13, Table 59 (<c>TPMI_RH_HIERARCHY</c>): <c>TPM_RH_PLATFORM</c> is one of
+    /// the four admitted hierarchy selectors, so <c>TPM2_CreatePrimary()</c> must admit it exactly as it admits
+    /// <c>TPM_RH_OWNER</c> — a primary object is created and flushable.
+    /// </summary>
+    [TestMethod]
+    public async Task CreatePrimaryUnderThePlatformHierarchySucceeds()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
+        TpmResponseRegistry registry = CreateKeyRegistry();
+
+        using CreatePrimaryInput input = CreatePrimaryInput.ForEccSigningKey(
+            TpmRh.TPM_RH_PLATFORM, password: null, TpmEccCurveConstants.TPM_ECC_NIST_P256, TpmtEccScheme.Ecdsa(SessionAlg), pool);
+
+        using TpmPasswordSession auth = TpmPasswordSession.CreateEmpty(pool);
+        TpmResult<CreatePrimaryResponse> result = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
+            device, input, [auth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsSuccess, $"TPM_RH_PLATFORM is one of Table 59's four admitted hierarchy selectors, so CreatePrimary must succeed under it (got '{result.ResponseCode}').");
+
+        using(result.Value)
+        {
+            _ = await device.FlushContextAsync(result.Value.ObjectHandle.Value, CancellationToken.None).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// The <c>TPM_RC_VALUE</c> refusal of <see cref="CreatePrimaryWithAnOutOfSetPermanentHandleReturnsValue"/>
+    /// leaves no rented carrier behind: the primaryHandle refusal answers before the parsed
+    /// <c>inSensitive</c>/<c>inPublic</c> template is adopted into any state, so every carrier the parse rented
+    /// for it is released on the refusing path — the pool balance returns to its pre-command baseline.
+    /// </summary>
+    [TestMethod]
+    public async Task CreatePrimaryMeteredPoolAcrossTheOutOfSetHandleRefusal()
+    {
+        using var trackingPool = new MeteredHousePool();
+        BaseMemoryPool pool = trackingPool.Pool;
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
+        TpmResponseRegistry registry = CreateKeyRegistry();
+
+        long baseline = trackingPool.OutstandingCount;
+
+        using CreatePrimaryInput input = CreatePrimaryInput.ForEccSigningKey(
+            TpmRh.TPM_RH_LOCKOUT, password: null, TpmEccCurveConstants.TPM_ECC_NIST_P256, TpmtEccScheme.Ecdsa(SessionAlg), pool);
+        using TpmPasswordSession auth = TpmPasswordSession.CreateEmpty(pool);
+
+        TpmResult<CreatePrimaryResponse> result = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
+            device, input, [auth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(TpmRcConstants.TPM_RC_VALUE, result.ResponseCode, "The seeding refusal must be the out-of-set-handle TPM_RC_VALUE.");
+
+        Assert.AreEqual(
+            baseline, trackingPool.OutstandingCount,
+            "A refused CreatePrimary must leave the pool exactly where it found it: the parsed template rents nothing that survives the refusal.");
     }
 
     /// <summary>
@@ -1419,7 +1559,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// <remarks>
     /// The session is self-referential - it authorizes the assertion it is also the target of - which keeps the
     /// composition to one session; the distinct-sessions case is covered in the sibling secure-channel tests.
-    /// <c>TPM2_PolicyAuthValue</c> is folded in every case because Part 3, Section 23.4.1 requires the
+    /// <c>TPM2_PolicyAuthValue</c> is folded in every case because Part 3, clause 23.4.1 requires the
     /// authorizing session to have <c>isAuthValueNeeded</c> or <c>isPasswordNeeded</c> SET, so a session without
     /// it would be refused with <c>TPM_RC_MODE</c> before the hierarchy's policy is ever consulted.
     /// </remarks>
@@ -1431,7 +1571,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     private async Task<TpmRcConstants> AuthorizeOwnerPolicySecretOverAPolicySessionAsync(
         TpmDevice device, TpmResponseRegistry registry, BaseMemoryPool pool, bool foldCommandCodeFirst)
     {
-        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedPolicySession(SessionAlg);
+        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedPolicySession(SessionAlg, TestEntropy.NewCounterStream(), pool);
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             device, startInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession (policy) failed: '{startResult.ResponseCode}'.");
@@ -1441,7 +1581,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
 
         try
         {
-            using TpmSession session = new(new TpmHandle(sessionHandle), started.NonceTPM, SessionAlg, pool);
+            using TpmSession session = new(new TpmHandle(sessionHandle), started.NonceTPM, SessionAlg, TestEntropy.NewCounterStream(), pool);
 
             if(foldCommandCodeFirst)
             {
@@ -1478,7 +1618,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
 
     /// <summary>
     /// Transcribes the policy digest a session reaches by folding <c>TPM2_PolicyAuthValue</c> alone:
-    /// <c>policyDigest = H(ZeroDigest ‖ TPM_CC_PolicyAuthValue)</c> (TPM 2.0 Library Part 3, Section 23.11), the
+    /// <c>policyDigest = H(ZeroDigest ‖ TPM_CC_PolicyAuthValue)</c> (TPM 2.0 Library Part 3, clause 23.11), the
     /// value installed as a hierarchy's authorization policy wherever this file needs one a real session can
     /// satisfy.
     /// </summary>
@@ -1488,7 +1628,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
         byte[] digest = new byte[Sha256DigestSize];
         Span<byte> zero = stackalloc byte[Sha256DigestSize];
         zero.Clear();
-        _ = TpmPolicyDigest.ExtendForAuthValue(zero, SessionAlg, digest);
+        _ = TpmPolicyDigest.ExtendForAuthValue(zero, SessionAlg, digest, BaseMemoryPool.Shared);
 
         return digest;
     }
@@ -1591,7 +1731,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// does: <see cref="Tpm2bPublic.CreateRsaStorageParent"/> otherwise builds only the populated
     /// <c>outPublic</c> form a generated key returns, so passing an empty modulus here reproduces the
     /// caller-supplied, empty-unique <c>inPublic</c> shape a real <c>TPM2_CreatePrimary</c> command sends (TPM
-    /// 2.0 Library Part 3, Section 24.1, Table 174).
+    /// 2.0 Library Part 3, clause 24.1, Table 191).
     /// </summary>
     /// <param name="hierarchy">The hierarchy under which to create the parent.</param>
     /// <param name="password">Optional authValue for the parent (<see langword="null"/> for none).</param>
@@ -1631,9 +1771,9 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// Recovers what a bus observer holding <paramref name="candidateAuthValue"/> would read out of a captured
     /// rotation's encrypted <c>newAuth</c> parameter. The decrypt companion is bound to the target hierarchy, so
     /// its session key is <c>KDFa(sessionAlg, strip(authValue), "ATH", nonceTPM, nonceCaller)</c> (TPM 2.0
-    /// Library Part 1, Section 17.6.10, equation 20); a decrypt-only session's <c>sessionValue</c> is that key
-    /// alone (Section 19.1), and the command-direction XOR mask derives from it with
-    /// <c>nonceNewer</c> = nonceCaller and <c>nonceOlder</c> = the session's nonceTPM (Section 19.2). Uses the
+    /// Library Part 1, clause 16.6.10, equation 20); a decrypt-only session's <c>sessionValue</c> is that key
+    /// alone (clause 18.1), and the command-direction XOR mask derives from it with
+    /// <c>nonceNewer</c> = nonceCaller and <c>nonceOlder</c> = the session's nonceTPM (clause 18.2). Uses the
     /// project's own KDF and parameter-encryption primitives over wire bytes only, so a match means the
     /// keystream was genuinely derivable from the candidate and a mismatch means it was not.
     /// </summary>
@@ -1668,7 +1808,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// Assembles the data a response authorization HMAC is computed over:
     /// <c>rpHash ‖ nonceTPM ‖ nonceCaller ‖ sessionAttributes</c>, where
     /// <c>rpHash = H(responseCode ‖ commandCode ‖ parameters)</c> and every command in this family has no
-    /// response parameters at all (TPM 2.0 Library Part 1, clauses 16.8 and 17.6.5).
+    /// response parameters at all (TPM 2.0 Library Part 1, clauses 15.8 and 16.6.5).
     /// </summary>
     /// <param name="responseBytes">The captured response bytes, whose header supplies the response code.</param>
     /// <param name="commandCode">The command code folded into rpHash.</param>
@@ -1705,9 +1845,9 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
 
     /// <summary>
     /// Computes a session authorization HMAC: <c>HMAC_sessionAlg(sessionKey ‖ authValue, data)</c> (TPM 2.0
-    /// Library Part 1, Section 17.6.5, equation 17). The caller supplies the whole concatenated key, which for
+    /// Library Part 1, clause 16.6.5, equation 17). The caller supplies the whole concatenated key, which for
     /// an unbound, unsalted session reduces to the authorization value alone since such a session's key is the
-    /// Empty Buffer (Section 17.6.9).
+    /// Empty Buffer (clause 16.6.9).
     /// </summary>
     /// <param name="sessionValue">The concatenated HMAC key, trailing zeros already removed from its authValue term.</param>
     /// <param name="data">The HMAC input.</param>
@@ -1741,7 +1881,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// <summary>
     /// Locates the <c>TPM2_StartAuthSession</c> exchange that created <paramref name="sessionHandle"/>: the
     /// command that requested the session and the nonceTPM its response carried, which is the session's
-    /// <c>nonceOlder</c> for the first command sent over it (TPM 2.0 Library Part 1, Section 19.2).
+    /// <c>nonceOlder</c> for the first command sent over it (TPM 2.0 Library Part 1, clause 18.2).
     /// </summary>
     /// <param name="pairs">The recorded command/response triples.</param>
     /// <param name="sessionHandle">The session handle to find.</param>
@@ -1773,7 +1913,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
 
     /// <summary>
     /// Reads the <c>nonceCaller</c> a captured <c>TPM2_StartAuthSession</c> command declared - the KDFa
-    /// <c>contextV</c> of the session key it established (TPM 2.0 Library Part 3, Section 11.1).
+    /// <c>contextV</c> of the session key it established (TPM 2.0 Library Part 3, clause 11.1).
     /// </summary>
     /// <param name="command">The captured command bytes.</param>
     /// <returns>The caller nonce.</returns>
@@ -1793,7 +1933,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// Walks a built command's authorization area and yields each session entry's handle, caller nonce,
     /// attributes octet, and the position of its <c>hmac</c> field's data octets: handle area,
     /// <c>authorizationSize</c>, then one <c>sessionHandle ‖ nonceCaller ‖ sessionAttributes ‖ hmac</c> entry
-    /// per session until the declared size is consumed (TPM 2.0 Library Part 1, Section 18.5).
+    /// per session until the declared size is consumed (TPM 2.0 Library Part 1, clause 17.5).
     /// </summary>
     /// <param name="command">The captured command bytes.</param>
     /// <param name="handleCount">The number of handles in the command's handle area.</param>
@@ -1846,7 +1986,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// <summary>
     /// Reads the (encrypted) <c>newAuth</c> parameter's data octets out of a built
     /// <c>TPM2_HierarchyChangeAuth</c> command: the command's sole parameter, a <c>TPM2B_AUTH</c> whose size
-    /// field is never encrypted (TPM 2.0 Library Part 1, Section 19.1).
+    /// field is never encrypted (TPM 2.0 Library Part 1, clause 18.1).
     /// </summary>
     /// <param name="command">The captured command bytes.</param>
     /// <param name="handleCount">The number of handles in the command's handle area.</param>
@@ -1935,7 +2075,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
 
     /// <summary>
     /// Removes trailing zero octets, the transformation an authorization value always undergoes before it is
-    /// used in an authorization computation (TPM 2.0 Library Part 1, Section 17.6.4.3).
+    /// used in an authorization computation (TPM 2.0 Library Part 1, clause 16.6.4.3).
     /// </summary>
     /// <param name="value">The value to strip.</param>
     /// <returns>The value with trailing zero octets removed.</returns>
@@ -1996,7 +2136,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
             return await simulator.SubmitAsync(command, commandPool, ct).ConfigureAwait(false);
         }
 
-        return TpmDevice.Create(CaptureAsync);
+        return TpmDevice.Create(CaptureAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
     }
 
     /// <summary>
@@ -2019,7 +2159,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
             return result;
         }
 
-        return TpmDevice.Create(RecordAsync);
+        return TpmDevice.Create(RecordAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
     }
 
     /// <summary>Creates a response codec registry for the raw rotation compositions this file drives directly.</summary>
@@ -2061,7 +2201,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     private async Task<TpmSimulator> CreateOperationalAsync()
     {
         var simulator = new TpmSimulator(
-            "tpm-in-house-hierarchy", signingBackend: BouncyCastleTpmEccSigningBackend.Create(), rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create());
+            "tpm-in-house-hierarchy", signingBackend: BouncyCastleTpmEccSigningBackend.Create(), rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await IssueStartupClearAsync(simulator, BaseMemoryPool.Shared).ConfigureAwait(false);
 
@@ -2099,7 +2239,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// Issues <c>TPM2_Shutdown(TPM_SU_STATE)</c> directly against the simulator, framed the same unauthorized way
     /// <see cref="IssueStartupClearAsync"/> frames its own command, to record the orderly shutdown type that makes
     /// the following <c>TPM2_Startup(CLEAR)</c> a TPM Restart rather than a TPM Reset (TPM 2.0 Library Part 3,
-    /// Section 9.3).
+    /// clause 9.3).
     /// </summary>
     /// <param name="simulator">The simulator to shut down.</param>
     /// <param name="pool">The memory pool.</param>

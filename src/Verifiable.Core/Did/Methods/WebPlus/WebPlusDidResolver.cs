@@ -287,6 +287,8 @@ public static class WebPlusDidResolver
             }
             catch
             {
+                //ParseEntries walks untrusted fetched bytes through caller-supplied parsers; any failure to
+                //parse them is an invalid DID from the resolver's perspective, cancellation excepted above.
                 return DidResolutionResult.Failure(DidResolutionErrors.InvalidDid);
             }
 
@@ -408,6 +410,9 @@ public static class WebPlusDidResolver
             }
             catch
             {
+                //documentDeserializer is a caller-supplied delegate over untrusted canonical bytes; any
+                //failure to parse them is an invalid DID from the resolver's perspective, cancellation
+                //excepted above.
                 return DidResolutionResult.Failure(DidResolutionErrors.InvalidDid);
             }
 
@@ -479,6 +484,8 @@ public static class WebPlusDidResolver
         }
         catch
         {
+            //A transport/network failure is a not-found from this helper's perspective, cancellation
+            //excepted above.
             return null;
         }
 

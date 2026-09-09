@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
-using System.Reflection;
+using System.Text.RegularExpressions;
 using Verifiable.Cryptography.Pki;
+using Verifiable.Tests.Foundation;
 
 namespace Verifiable.Tests.EuEArk;
 
@@ -526,30 +528,47 @@ internal sealed class PreservationParameterNameTests
     }
 
 
+    /// <summary>Matches a <c>public static class</c> declaration or a <c>public static PreservationName</c> get-only property assigned from its two-argument constructor, in document order.</summary>
+    private static Regex ClassOrNameDeclarationPattern { get; } = new(
+        @"public\s+static\s+class\s+(\w+)|public\s+static\s+PreservationName\s+(\w+)\s*\{\s*get;\s*\}\s*=\s*new\(\s*""((?:[^""\\]|\\.)*)""\s*,\s*""((?:[^""\\]|\\.)*)""\s*\)\s*;",
+        RegexOptions.Compiled);
+
+
     /// <summary>
-    /// Every name pair the registry declares, found by reflection over the classes rather than by a list this
-    /// test keeps, so a class added without a test row still shows up in the counts.
+    /// Every name pair the registry declares, found by a source scan of the three files that declare a
+    /// <c>*ParameterNames</c> class over <see cref="PreservationName"/> — walking each file's declarations in
+    /// order and tracking the enclosing class name — rather than by a list this test keeps, so a class or a
+    /// property added without a test row still shows up in the counts. The two string arguments each
+    /// declaration's own source states are read directly into a real <see cref="PreservationName"/> through its
+    /// public constructor; no reflection reaches into the loaded assembly.
     /// </summary>
     /// <returns>The declaring class, the property and the pair.</returns>
     private static List<(string ClassName, string PropertyName, PreservationName Name)> EveryDeclaredName()
     {
-        List<(string ClassName, string PropertyName, PreservationName Name)> declarations = [];
-        foreach(Type type in typeof(PreservationName).Assembly.GetTypes())
-        {
-            bool isParameterNameClass = type.IsAbstract
-                && type.IsSealed
-                && type.IsPublic
-                && type.Name.EndsWith("ParameterNames", StringComparison.Ordinal);
-            if(!isParameterNameClass)
-            {
-                continue;
-            }
+        string repositoryRoot = SourceHygieneScanner.FindRepositoryRoot();
+        string[] relativePaths =
+        [
+            "src/Verifiable.Cryptography/Pki/PreservationParameterNames.cs",
+            "src/Verifiable.Cryptography/Pki/PreservationOperationParameterNames.cs",
+            "src/Verifiable.Cryptography/Pki/PreservationDigestList.cs",
+        ];
 
-            foreach(PropertyInfo property in type.GetProperties(BindingFlags.Public | BindingFlags.Static))
+        List<(string ClassName, string PropertyName, PreservationName Name)> declarations = [];
+
+        foreach(string relativePath in relativePaths)
+        {
+            string text = File.ReadAllText(Path.Combine(repositoryRoot, relativePath));
+            string currentClassName = string.Empty;
+
+            foreach(Match match in ClassOrNameDeclarationPattern.Matches(text))
             {
-                if(property.PropertyType == typeof(PreservationName))
+                if(match.Groups[1].Success)
                 {
-                    declarations.Add((type.Name, property.Name, (PreservationName)property.GetValue(null)!));
+                    currentClassName = match.Groups[1].Value;
+                }
+                else if(currentClassName.EndsWith("ParameterNames", StringComparison.Ordinal))
+                {
+                    declarations.Add((currentClassName, match.Groups[2].Value, new PreservationName(match.Groups[3].Value, match.Groups[4].Value)));
                 }
             }
         }

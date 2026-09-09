@@ -7,6 +7,7 @@ using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Threading;
 using System.Threading.Tasks;
+using Verifiable.Cryptography;
 
 namespace Verifiable.Tpm;
 
@@ -60,8 +61,8 @@ public delegate ValueTask<TpmResult<TpmResponse>> TpmSubmitHandler(
 /// <b>Basic usage:</b>
 /// </para>
 /// <code>
-/// using var tpm = TpmDevice.Open();
 /// using var pool = BaseMemoryPool.Shared;
+/// using var tpm = TpmDevice.Open(pool, RandomNumberGenerator.Fill);
 ///
 /// using TpmResponse response = (await tpm.SubmitAsync(commandBytes, pool)).Value;
 /// //Parse response...
@@ -72,7 +73,7 @@ public delegate ValueTask<TpmResult<TpmResponse>> TpmSubmitHandler(
 /// <code>
 /// var virtualTpm = new TpmVirtualDevice();
 /// virtualTpm.Record(input, output);
-/// using var tpm = TpmDevice.Create(virtualTpm.Submit);
+/// using var tpm = TpmDevice.Create(virtualTpm.Submit, BaseMemoryPool.Shared, RandomNumberGenerator.Fill);
 /// </code>
 /// <para>
 /// <b>Recording traffic:</b> Attach a <see cref="TpmRecorder"/> to capture exchanges:
@@ -144,7 +145,11 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
     /// </summary>
     private const int StModeOffset = 24;
 
+    /// <summary>
+    /// A field, not a property: a lock target must be one instance that no accessor can re-mint.
+    /// </summary>
     private readonly Lock observerLock = new();
+
     private TpmSubmitHandler? CustomHandler { get; }
     private Action? CustomDispose { get; }
     private IObserver<TpmExchange>[] observers = [];
@@ -200,6 +205,16 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
         //Exposes the diagnostic info so the caller knows why it broke.
         get => failure;
     }
+
+    /// <summary>
+    /// The pool this device's extension verbs rent their command/response buffers from.
+    /// </summary>
+    public BaseMemoryPool Pool { get; }
+
+    /// <summary>
+    /// The entropy this device's host side mints its session nonces and salts from.
+    /// </summary>
+    public FillEntropyDelegate Rng { get; }
 
 
     /// <summary>
@@ -258,8 +273,10 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
             TpmPlatform platform = DetectPlatform();
             if(platform == TpmPlatform.Windows)
             {
-                //Try to open and immediately close a context.
-                uint result = Tbsi_Context_Create(ref defaultContextParams, out IntPtr context);
+                //Try to open and immediately close a context. A local copy of the template is passed by
+                //ref: the shared static template itself is never mutated.
+                TbsContextParams contextParams = DefaultContextParams;
+                uint result = Tbsi_Context_Create(ref contextParams, out IntPtr context);
                 if(result == (uint)TbsResult.TBS_SUCCESS)
                 {
                     _ = Tbsip_Context_Close(context);
@@ -284,12 +301,14 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
     /// <summary>
     /// Opens a connection to the TPM using auto-detected platform.
     /// </summary>
+    /// <param name="pool">The pool this device's extension verbs rent their command/response buffers from.</param>
+    /// <param name="rng">The entropy this device's host side mints its session nonces and salts from.</param>
     /// <returns>An open TPM device.</returns>
     [UnsupportedOSPlatform("browser")]
-    public static TpmDevice Open()
+    public static TpmDevice Open(BaseMemoryPool pool, FillEntropyDelegate rng)
     {
         TpmPlatform platform = DetectPlatform();
-        var device = new TpmDevice(platform);
+        var device = new TpmDevice(platform, pool, rng);
         device.OpenCore();
 
         return device;
@@ -359,12 +378,14 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
     /// <summary>
     /// Initializes a new TpmDevice with a custom submit handler.
     /// </summary>
-    private TpmDevice(TpmSubmitHandler handler, Action? disposeAction)
+    private TpmDevice(TpmSubmitHandler handler, Action? disposeAction, BaseMemoryPool pool, FillEntropyDelegate rng)
     {
         Platform = TpmPlatform.Virtual;
         Endpoint = "Virtual";
         CustomHandler = handler;
         CustomDispose = disposeAction;
+        Pool = pool;
+        Rng = rng;
     }
 
 
@@ -372,11 +393,13 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
     /// Opens a connection to the TPM for a specific platform.
     /// </summary>
     /// <param name="platform">The platform to use.</param>
+    /// <param name="pool">The pool this device's extension verbs rent their command/response buffers from.</param>
+    /// <param name="rng">The entropy this device's host side mints its session nonces and salts from.</param>
     /// <returns>An open TPM device.</returns>
     [UnsupportedOSPlatform("browser")]
-    public static TpmDevice Open(TpmPlatform platform)
+    public static TpmDevice Open(TpmPlatform platform, BaseMemoryPool pool, FillEntropyDelegate rng)
     {
-        var device = new TpmDevice(platform);
+        var device = new TpmDevice(platform, pool, rng);
         device.OpenCore();
 
         return device;
@@ -386,6 +409,8 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
     /// Creates a TpmDevice backed by a custom submit handler.
     /// </summary>
     /// <param name="handler">The delegate that handles command submission.</param>
+    /// <param name="pool">The pool this device's extension verbs rent their command/response buffers from.</param>
+    /// <param name="rng">The entropy this device's host side mints its session nonces and salts from.</param>
     /// <param name="disposeAction">Optional action to invoke when the device is disposed.</param>
     /// <returns>A TpmDevice that delegates to the provided handler.</returns>
     /// <remarks>
@@ -396,14 +421,16 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
     /// <code>
     /// var virtualTpm = new TpmVirtualDevice();
     /// virtualTpm.Record(input, output);
-    /// using var tpm = TpmDevice.Create(virtualTpm.Submit);
+    /// using var tpm = TpmDevice.Create(virtualTpm.Submit, BaseMemoryPool.Shared, RandomNumberGenerator.Fill);
     /// </code>
     /// </remarks>
-    public static TpmDevice Create(TpmSubmitHandler handler, Action? disposeAction = null)
+    public static TpmDevice Create(TpmSubmitHandler handler, BaseMemoryPool pool, FillEntropyDelegate rng, Action? disposeAction = null)
     {
         ArgumentNullException.ThrowIfNull(handler);
+        ArgumentNullException.ThrowIfNull(pool);
+        ArgumentNullException.ThrowIfNull(rng);
 
-        return new TpmDevice(handler, disposeAction);
+        return new TpmDevice(handler, disposeAction, pool, rng);
     }
 
 
@@ -431,9 +458,14 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
     /// <summary>
     /// Initializes a new TpmDevice for hardware access.
     /// </summary>
-    private TpmDevice(TpmPlatform platform)
+    private TpmDevice(TpmPlatform platform, BaseMemoryPool pool, FillEntropyDelegate rng)
     {
+        ArgumentNullException.ThrowIfNull(pool);
+        ArgumentNullException.ThrowIfNull(rng);
+
         Platform = platform;
+        Pool = pool;
+        Rng = rng;
     }
 
 
@@ -536,7 +568,10 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
     [UnsupportedOSPlatform("browser")]
     private void OpenWindows()
     {
-        uint result = Tbsi_Context_Create(ref defaultContextParams, out windowsContext);
+        //A local copy of the template is passed by ref: the shared static template itself is never
+        //mutated by an instance, keeping every TpmDevice's own open request independent.
+        TbsContextParams contextParams = DefaultContextParams;
+        uint result = Tbsi_Context_Create(ref contextParams, out windowsContext);
         if(result != (uint)TbsResult.TBS_SUCCESS)
         {
             TbsResult tbsResult = (TbsResult)result;
@@ -747,7 +782,12 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
     }
 
 
-    private static TbsContextParams defaultContextParams = new()
+    /// <summary>
+    /// The fixed <c>Tbsi_Context_Create</c> request template (version 2, <c>IncludeTpm20</c>). Every call
+    /// site copies this into a local before passing it by <see langword="ref"/>, so no instance or static
+    /// caller ever mutates the shared template itself.
+    /// </summary>
+    private static TbsContextParams DefaultContextParams { get; } = new()
     {
         Version = 2,
         Flags = 4 //IncludeTpm20.

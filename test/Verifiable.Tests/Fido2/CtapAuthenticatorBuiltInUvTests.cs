@@ -66,7 +66,7 @@ internal sealed class CtapAuthenticatorBuiltInUvTests
     public async Task GetPinUvAuthTokenUsingUvWithPermissionsWithoutEnrollmentsReturnsNotAllowed()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("0x06-not-configured");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("0x06-not-configured",BaseMemoryPool.Shared);
         await CtapConfigFixtures.EstablishPinAsync(simulator, pool, DefaultProtocol, DefaultPin, TestContext.CancellationToken);
 
         byte status = await SendUvTokenRequestExpectingErrorAsync(simulator, pool, WellKnownCtapPinUvAuthTokenPermissions.Be);
@@ -328,7 +328,7 @@ internal sealed class CtapAuthenticatorBuiltInUvTests
     public async Task MakeCredentialOptionsUvTrueWithoutEnrollmentReturnsInvalidOption()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("mc-uv-unconfigured");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("mc-uv-unconfigured",BaseMemoryPool.Shared);
         await CtapConfigFixtures.EstablishPinAsync(simulator, pool, DefaultProtocol, DefaultPin, TestContext.CancellationToken);
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool, options: new CtapCommandOptions(UserVerification: true));
@@ -412,7 +412,7 @@ internal sealed class CtapAuthenticatorBuiltInUvTests
     public async Task MakeCredentialAlwaysUvForcesBuiltInUvWhenNeitherParamNorUvRequested()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("mc-alwaysuv-forced-uv");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("mc-alwaysuv-forced-uv",BaseMemoryPool.Shared);
 
         var enableRequest = new CtapAuthenticatorConfigRequest(SubCommand: WellKnownCtapAuthenticatorConfigSubCommands.ToggleAlwaysUv);
         using(PooledMemory enableResponse = await CtapConfigFixtures.SendAuthenticatorConfigAsync(simulator, enableRequest, pool, TestContext.CancellationToken))
@@ -449,7 +449,7 @@ internal sealed class CtapAuthenticatorBuiltInUvTests
     public async Task GetAssertionLevelThreeCredProtectInvisibleWithoutUvVisibleThroughBuiltInUv()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("ga-level3-credprotect-uv");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("ga-level3-credprotect-uv",BaseMemoryPool.Shared);
 
         CtapRegisteredCredential registered = await RegisterCredentialAsync(
             simulator, pool, BuildFixedBytes(16, 0x60), TestContext.CancellationToken, credProtect: 3);
@@ -491,7 +491,7 @@ internal sealed class CtapAuthenticatorBuiltInUvTests
         Justification = "Ownership of the returned CtapAuthenticatorSimulator transfers to the caller, which every call site wraps in its own using declaration.")]
     private async Task<CtapAuthenticatorSimulator> CreateEnrolledSimulatorAsync(string runId, BaseMemoryPool pool, SimulateBuiltInUvDelegate? simulateBuiltInUv = null)
     {
-        CtapAuthenticatorSimulator simulator = CreateSimulator(runId, simulateBuiltInUv: simulateBuiltInUv);
+        CtapAuthenticatorSimulator simulator = CreateSimulator(runId, BaseMemoryPool.Shared, simulateBuiltInUv: simulateBuiltInUv);
         await CtapConfigFixtures.EstablishPinAsync(simulator, pool, DefaultProtocol, DefaultPin, TestContext.CancellationToken);
         byte[] beToken = await CtapConfigFixtures.IssueTokenAsync(
             simulator, pool, DefaultProtocol, DefaultPin, WellKnownCtapPinUvAuthTokenPermissions.Be, rpId: null, TestContext.CancellationToken);
@@ -606,10 +606,12 @@ internal sealed class CtapAuthenticatorBuiltInUvTests
             }
             catch(CtapCommandException exception) when(exception.StatusCode == WellKnownCtapStatusCodes.PinAuthBlocked)
             {
-                simulator.PowerCycle();
+                simulator.PowerCycle(BaseMemoryPool.Shared);
             }
             catch(CtapCommandException)
             {
+                //The expected outcome of every wrong-PIN attempt this drain performs: the authenticator
+                //refuses with its own PIN-mismatch status, pinRetries decrements, and the loop rechecks it.
             }
         }
     }

@@ -212,9 +212,9 @@ internal static class CborPrimitives
 internal ref struct CborCursor
 {
     /// <summary>The full input this cursor reads from.</summary>
-    private readonly ReadOnlySpan<byte> data;
+    private ReadOnlySpan<byte> Data { get; }
 
-    /// <summary>The next unread offset into <see cref="data"/>.</summary>
+    /// <summary>The next unread offset into <see cref="Data"/>.</summary>
     private int position;
 
 
@@ -222,7 +222,7 @@ internal ref struct CborCursor
     /// <param name="data">The CBOR-encoded bytes to read from.</param>
     public CborCursor(ReadOnlySpan<byte> data)
     {
-        this.data = data;
+        this.Data = data;
         position = 0;
     }
 
@@ -233,7 +233,7 @@ internal ref struct CborCursor
     public (byte MajorType, ulong Argument) ReadHeader()
     {
         EnsureAvailable(1);
-        byte first = data[position];
+        byte first = Data[position];
         position++;
 
         byte majorType = (byte)(first >> 5);
@@ -469,7 +469,7 @@ internal ref struct CborCursor
 
         int len = (int)length;
         EnsureAvailable(len);
-        ReadOnlySpan<byte> slice = data.Slice(position, len);
+        ReadOnlySpan<byte> slice = Data.Slice(position, len);
         position += len;
 
         return slice;
@@ -482,10 +482,10 @@ internal ref struct CborCursor
         EnsureAvailable(byteCount);
         ulong value = byteCount switch
         {
-            1 => data[position],
-            2 => BinaryPrimitives.ReadUInt16BigEndian(data.Slice(position, 2)),
-            4 => BinaryPrimitives.ReadUInt32BigEndian(data.Slice(position, 4)),
-            8 => BinaryPrimitives.ReadUInt64BigEndian(data.Slice(position, 8)),
+            1 => Data[position],
+            2 => BinaryPrimitives.ReadUInt16BigEndian(Data.Slice(position, 2)),
+            4 => BinaryPrimitives.ReadUInt32BigEndian(Data.Slice(position, 4)),
+            8 => BinaryPrimitives.ReadUInt64BigEndian(Data.Slice(position, 8)),
             _ => throw new CtapAuthenticatorSnapshotException("Unreachable CBOR header argument width.")
         };
         position += byteCount;
@@ -497,7 +497,7 @@ internal ref struct CborCursor
     /// <summary>Throws if fewer than <paramref name="count"/> bytes remain unread.</summary>
     private readonly void EnsureAvailable(int count)
     {
-        if(position + count > data.Length)
+        if(position + count > Data.Length)
         {
             throw new CtapAuthenticatorSnapshotException("The snapshot payload is truncated.");
         }

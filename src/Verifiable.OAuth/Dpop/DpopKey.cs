@@ -20,6 +20,10 @@ namespace Verifiable.OAuth.Dpop;
 public sealed class DpopKey
 {
     private string? cachedThumbprint;
+
+    /// <summary>
+    /// A field, not a property: a lock target must be one instance that no accessor can re-mint.
+    /// </summary>
     private readonly object thumbprintLock = new();
 
     /// <summary>The non-owning key material the application created and manages.</summary>

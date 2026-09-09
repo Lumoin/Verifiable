@@ -1,5 +1,5 @@
 using System.Buffers;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Fido2;
 
@@ -7,7 +7,7 @@ namespace Verifiable.Cbor.Fido2;
 
 /// <summary>
 /// The shipped default for <see cref="ParsePackedAttestationStatementDelegate"/>: decodes a
-/// <c>packed</c> attestation statement's CBOR bytes using System.Formats.Cbor.
+/// <c>packed</c> attestation statement's CBOR bytes.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -58,7 +58,7 @@ public static class PackedAttestationStatementCborReader
         List<PkiCertificateMemory>? x5c = null;
         try
         {
-            var reader = new CborReader(attestationStatement, CborConformanceMode.Ctap2Canonical);
+            var reader = new CborReader(attestationStatement, CborOptions.Ctap2Canonical, pool);
             int? entryCount = reader.ReadStartMap();
 
             int? alg = null;
@@ -108,7 +108,7 @@ public static class PackedAttestationStatementCborReader
 
             return new PackedAttestationStatement(alg.Value, sig.Value, x5c);
         }
-        catch(Exception exception) when(exception is CborContentException or InvalidOperationException or OverflowException or FormatException)
+        catch(Exception exception) when(exception is CborException or InvalidOperationException or OverflowException or FormatException)
         {
             DisposeAll(x5c);
             throw new Fido2FormatException("The packed attestation statement bytes are not valid CTAP2 canonical CBOR conforming to the packed attStmt syntax.", exception);

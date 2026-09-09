@@ -23,7 +23,7 @@ namespace Verifiable.Cryptography
         /// ReadOnlySpan<byte> RsaExponent65537 = new byte[] { 0x01, 0x00, 0x01 };
         /// This translates to "AQAB" in Base64.
         /// </remarks>
-        public static readonly string DefaultExponent = Utf8Constants.ToInternedString(DefaultExponentUtf8);
+        public static string DefaultExponent { get; } = Utf8Constants.ToInternedString(DefaultExponentUtf8);
 
         /// <summary>
         /// The 2048 byte RSA ASN.1 DER encoded prefix as defined at <see href="https://w3c-ccg.github.io/did-method-key/#x2048-bit-modulus-public-exponent-65537"/>.
@@ -98,12 +98,13 @@ namespace Verifiable.Cryptography
             encodingBuffer[index] = IfMsbSetPrefixSuffix;
 
             //Then the actual content is moved to the result array.
+            Span<byte> encodingBufferSpan = encodingBuffer;
             ++index;
-            rsaModulusBytes.CopyTo(((Span<byte>)encodingBuffer)[index..]);
+            rsaModulusBytes.CopyTo(encodingBufferSpan[index..]);
 
             //And finally the suffix bytes to make the DER encoding complete.
             index += rsaModulusBytes.Length;
-            RsaSuffix.CopyTo(((Span<byte>)encodingBuffer)[index..]);
+            RsaSuffix.CopyTo(encodingBufferSpan[index..]);
 
             return encodingBuffer;
         }

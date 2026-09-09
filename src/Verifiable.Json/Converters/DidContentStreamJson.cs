@@ -101,6 +101,16 @@ internal static class DidContentStreamJson
     }
 
 
+    /// <summary>
+    /// Writes <paramref name="utf8"/> to <paramref name="writer"/> as raw JSON when it decodes as a single
+    /// complete JSON value with no trailing bytes, disposing the parsed <see cref="JsonDocument"/> once the
+    /// value has been copied out (<see langword="parsed"/> is bound through <see cref="JsonDocument.TryParseValue"/>'s
+    /// <see langword="out"/> parameter, so a <see langword="using"/> declaration cannot target it — declared
+    /// <see langword="null"/> and disposed manually in the <see langword="finally"/> below instead).
+    /// </summary>
+    /// <param name="writer">The writer to copy the parsed value into.</param>
+    /// <param name="utf8">The candidate UTF-8 JSON bytes.</param>
+    /// <returns><see langword="true"/> when <paramref name="utf8"/> was a single complete JSON value and was written; otherwise <see langword="false"/>.</returns>
     private static bool TryWriteRawJson(Utf8JsonWriter writer, ReadOnlySpan<byte> utf8)
     {
         JsonDocument? parsed = null;

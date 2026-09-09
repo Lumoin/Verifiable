@@ -17,7 +17,7 @@ internal sealed class DidResolverTests
 
     //DID resolution does no network I/O at this layer, so a default context suffices;
     //it exists only to satisfy the SSRF-policy-carrying parameter.
-    private static readonly ExchangeContext Context = new();
+    private static ExchangeContext Context { get; } = new();
 
     public TestContext TestContext { get; set; } = null!;
 

@@ -67,7 +67,7 @@ public sealed record AndroidKeyAuthorizationList(IReadOnlySet<int> Purposes, int
         {
             //XOR combines the set's members order-independently, matching SetEquals' own
             //order-independent equality.
-            purposesHash ^= purpose.GetHashCode();
+            purposesHash ^= purpose;
         }
 
         return HashCode.Combine(Origin, HasAllApplications, purposesHash);

@@ -54,9 +54,9 @@ internal sealed class VcalmVerifierEndpointTests
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private const string ClientId = "https://verifier.client.test";
-    private static readonly Uri ClientBaseUri = new("https://verifier.client.test");
+    private static Uri ClientBaseUri { get; } = new("https://verifier.client.test");
 
-    private static readonly ImmutableHashSet<CapabilityIdentifier> VerifierCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> VerifierCapabilities { get; } =
         ImmutableHashSet.Create(WellKnownVcalmCapabilities.VcalmVerifier);
 
     private static JsonSerializerOptions JsonOptions { get; } = TestSetup.DefaultSerializationOptions;
@@ -96,7 +96,7 @@ internal sealed class VcalmVerifierEndpointTests
     private static ProofOptionsSerializeDelegate SerializeProofOptions { get; } =
         ProofOptionsSerializer.Create(JsonOptions);
 
-    private static readonly ExchangeContext EmptyContext = new();
+    private static ExchangeContext EmptyContext { get; } = new();
 
     //Registered key material lives for the test's lifetime and is disposed at cleanup; the host
     //keeps the registration, so the material cannot be disposed at the end of RegisterVerifier.
@@ -606,6 +606,175 @@ internal sealed class VcalmVerifierEndpointTests
         Assert.IsTrue(validFrom.GetProperty(VcalmParameterNames.Verified).GetBoolean());
     }
 
+    /// <summary>
+    /// §3.3.1 <c>results.credentialSchema[]</c>: a credential conforming to its declared schema
+    /// emits one <c>{verified:true, input:{id,type}}</c> item and stays verified. Each item MUST be
+    /// an object of the form <c>verified</c> [boolean], <c>input</c> [object] (VCALM 1.0 §3.3.1);
+    /// evaluation Success per
+    /// <see href="https://www.w3.org/TR/vc-json-schema/#evaluation">VC JSON Schema §4.2</see>.
+    /// </summary>
+    [TestMethod]
+    public async Task ConformingCredentialSchemaEmitsVerifiedTrueResult()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = RegisterVerifier(
+            app,
+            schemaValidators: SchemaValidationTestUtilities.CreateSchemaRegistry(),
+            resolveSchemaDocument: SchemaValidationTestUtilities.CreateEmbeddedSchemaResolver(TestSchemas));
+
+        DataIntegritySecuredCredential credential = await SignCredentialAsync(
+            validUntilPast: false,
+            schemas: [new CredentialSchema { Id = AlumniSchemaUrl, Type = "JsonSchema" }]).ConfigureAwait(false);
+        string body = BuildCredentialRequestBody(credential, returnProblemDetails: false, returnResults: true);
+
+        using JsonDocument response = await PostCredentialAsync(app, segment, body, expectedStatus: 200).ConfigureAwait(false);
+
+        Assert.IsTrue(response.RootElement.GetProperty(VcalmParameterNames.Verified).GetBoolean());
+        JsonElement schemaResults = response.RootElement
+            .GetProperty(VcalmParameterNames.Results)
+            .GetProperty(VcalmParameterNames.CredentialSchema);
+        Assert.AreEqual(1, schemaResults.GetArrayLength(), "One credentialSchema entry produces one result item.");
+        Assert.IsTrue(schemaResults[0].GetProperty(VcalmParameterNames.Verified).GetBoolean());
+        JsonElement input = schemaResults[0].GetProperty(VcalmParameterNames.Input);
+        Assert.AreEqual(AlumniSchemaUrl, input.GetProperty(VcalmParameterNames.Id).GetString());
+        Assert.AreEqual("JsonSchema", input.GetProperty(VcalmParameterNames.Type).GetString());
+    }
+
+
+    /// <summary>
+    /// A credential violating its declared schema verifies false with a
+    /// <c>MALFORMED_VALUE_ERROR</c>: §3.8.1 classifies only status and validity ProblemDetails as
+    /// warnings, so a schema Failure
+    /// (<see href="https://www.w3.org/TR/vc-json-schema/#evaluation">VC JSON Schema §4.2</see>)
+    /// is an error and flips <c>verified</c>.
+    /// </summary>
+    [TestMethod]
+    public async Task SchemaViolatingCredentialVerifiesFalseWithError()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = RegisterVerifier(
+            app,
+            schemaValidators: SchemaValidationTestUtilities.CreateSchemaRegistry(),
+            resolveSchemaDocument: SchemaValidationTestUtilities.CreateEmbeddedSchemaResolver(TestSchemas));
+
+        DataIntegritySecuredCredential credential = await SignCredentialAsync(
+            validUntilPast: false,
+            schemas: [new CredentialSchema { Id = EmailSchemaUrl, Type = "JsonSchema" }]).ConfigureAwait(false);
+        string body = BuildCredentialRequestBody(credential, returnProblemDetails: true, returnResults: true);
+
+        using JsonDocument response = await PostCredentialAsync(app, segment, body, expectedStatus: 200).ConfigureAwait(false);
+
+        Assert.IsFalse(response.RootElement.GetProperty(VcalmParameterNames.Verified).GetBoolean(),
+            "A schema-violating credential must verify false.");
+        JsonElement problems = response.RootElement.GetProperty(VcalmParameterNames.ProblemDetails);
+        Assert.IsGreaterThan(0, problems.GetArrayLength());
+        Assert.AreEqual(VcalmProblemTypes.MalformedValueError,
+            problems[0].GetProperty(VcalmParameterNames.ProblemType).GetString(),
+            "A schema Failure is a MALFORMED_VALUE_ERROR.");
+        JsonElement schemaResults = response.RootElement
+            .GetProperty(VcalmParameterNames.Results)
+            .GetProperty(VcalmParameterNames.CredentialSchema);
+        Assert.IsFalse(schemaResults[0].GetProperty(VcalmParameterNames.Verified).GetBoolean());
+    }
+
+
+    /// <summary>
+    /// An unresolvable schema document and an unregistered mechanism both evaluate Indeterminate
+    /// (<see href="https://www.w3.org/TR/vc-json-schema/#evaluation">VC JSON Schema §4.2</see>):
+    /// the per-entry result is <c>verified:false</c> without asserting an error, so the overall
+    /// <c>verified</c> does not flip — an undeterminable schema is not asserted as non-conformant,
+    /// mirroring the undeterminable-status convention. With multiple schemas each entry contributes
+    /// its own result (VC Data Model 2.0 §4.11: validity per each associated type's rules).
+    /// </summary>
+    [TestMethod]
+    public async Task IndeterminateSchemaEntriesReportFalseWithoutFlippingVerified()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = RegisterVerifier(
+            app,
+            schemaValidators: SchemaValidationTestUtilities.CreateSchemaRegistry(),
+            resolveSchemaDocument: SchemaValidationTestUtilities.CreateEmbeddedSchemaResolver(TestSchemas));
+
+        DataIntegritySecuredCredential credential = await SignCredentialAsync(
+            validUntilPast: false,
+            schemas:
+            [
+                new CredentialSchema { Id = AlumniSchemaUrl, Type = "JsonSchema" },
+                new CredentialSchema { Id = "https://schemas.example/absent.json", Type = "JsonSchema" },
+                new CredentialSchema { Id = AlumniSchemaUrl, Type = "VendorMechanism" }
+            ]).ConfigureAwait(false);
+        string body = BuildCredentialRequestBody(credential, returnProblemDetails: true, returnResults: true);
+
+        using JsonDocument response = await PostCredentialAsync(app, segment, body, expectedStatus: 200).ConfigureAwait(false);
+
+        Assert.IsTrue(response.RootElement.GetProperty(VcalmParameterNames.Verified).GetBoolean(),
+            "Indeterminate schema entries must not flip the overall verified.");
+        JsonElement schemaResults = response.RootElement
+            .GetProperty(VcalmParameterNames.Results)
+            .GetProperty(VcalmParameterNames.CredentialSchema);
+        Assert.AreEqual(3, schemaResults.GetArrayLength(), "Three entries produce three result items (§4.11).");
+        Assert.IsTrue(schemaResults[0].GetProperty(VcalmParameterNames.Verified).GetBoolean());
+        Assert.IsFalse(schemaResults[1].GetProperty(VcalmParameterNames.Verified).GetBoolean());
+        Assert.IsFalse(schemaResults[2].GetProperty(VcalmParameterNames.Verified).GetBoolean());
+    }
+
+
+    /// <summary>
+    /// A <c>credentialSchema</c> entry missing its <c>type</c> is a malformed value: VC Data Model
+    /// 2.0 §4.11 — each credentialSchema MUST specify its <c>type</c> and an <c>id</c> URL.
+    /// </summary>
+    [TestMethod]
+    public async Task SchemaEntryWithoutTypeVerifiesFalseWithMalformedValueError()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = RegisterVerifier(
+            app,
+            schemaValidators: SchemaValidationTestUtilities.CreateSchemaRegistry(),
+            resolveSchemaDocument: SchemaValidationTestUtilities.CreateEmbeddedSchemaResolver(TestSchemas));
+
+        DataIntegritySecuredCredential credential = await SignCredentialAsync(
+            validUntilPast: false,
+            schemas: [new CredentialSchema { Id = AlumniSchemaUrl, Type = "" }]).ConfigureAwait(false);
+        string body = BuildCredentialRequestBody(credential, returnProblemDetails: true, returnResults: true);
+
+        using JsonDocument response = await PostCredentialAsync(app, segment, body, expectedStatus: 200).ConfigureAwait(false);
+
+        Assert.IsFalse(response.RootElement.GetProperty(VcalmParameterNames.Verified).GetBoolean());
+        JsonElement problems = response.RootElement.GetProperty(VcalmParameterNames.ProblemDetails);
+        Assert.AreEqual(VcalmProblemTypes.MalformedValueError,
+            problems[0].GetProperty(VcalmParameterNames.ProblemType).GetString());
+    }
+
+
+    private const string AlumniSchemaUrl = "https://schemas.example/alumni.json";
+    private const string EmailSchemaUrl = "https://schemas.example/email.json";
+
+    /// <summary>The embedded schema documents the schema tests resolve by id.</summary>
+    private static Dictionary<string, string> TestSchemas { get; } = new(StringComparer.Ordinal)
+    {
+        [AlumniSchemaUrl] = /*lang=json,strict*/ """
+            {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "type": "object",
+              "required": ["credentialSubject"]
+            }
+            """,
+        [EmailSchemaUrl] = /*lang=json,strict*/ """
+            {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "type": "object",
+              "properties": {
+                "credentialSubject": {
+                  "type": "object",
+                  "required": ["emailAddress"]
+                }
+              },
+              "required": ["credentialSubject"]
+            }
+            """
+    };
+
+
 
     /// <summary>
     /// §2.4 unknown-option MUST: an <c>options</c> member the verifier does not understand is rejected
@@ -822,6 +991,35 @@ internal sealed class VcalmVerifierEndpointTests
 
 
     /// <summary>
+    /// <see cref="VerifiablePresentation.Equals(VerifiablePresentation?)"/> and
+    /// <see cref="DataIntegritySecuredPresentation"/>'s proof-folding equality compare the
+    /// presentation's full structural content. An honest presentation
+    /// (<see cref="SignPresentationAsync"/>) and one claiming the SAME holder but signed by a
+    /// different key (<see cref="SignPresentationWithSameHolderDifferentSignerAsync"/>) agree on
+    /// Context, Id (both null), Type, and Holder, and MUST still compare unequal because they
+    /// differ in <see cref="DataIntegritySecuredPresentation.Proof"/>. Per
+    /// <see href="https://www.w3.org/TR/vc-data-integrity/#proofs">Data Integrity 1.0 §2.1 Proofs</see>
+    /// the proof is part of what the presentation asserts, not incidental to its identity.
+    /// </summary>
+    [TestMethod]
+    public async Task HonestAndSameHolderDifferentSignerPresentationsAreNotEqual()
+    {
+        const string Challenge = "challenge-equality-proof";
+        const string Domain = "verifier.example";
+
+        DataIntegritySecuredPresentation honest = await SignPresentationAsync(Challenge, Domain).ConfigureAwait(false);
+        DataIntegritySecuredPresentation impersonated =
+            await SignPresentationWithSameHolderDifferentSignerAsync(Challenge, Domain).ConfigureAwait(false);
+
+        Assert.AreEqual(honest.Holder, impersonated.Holder,
+            "The test's premise requires the SAME holder claim under two different signers.");
+        Assert.AreNotEqual(honest, impersonated,
+            "A presentation's identity includes its proof: two presentations claiming the same holder "
+            + "but secured by different signers are different signed artifacts, not the same one twice.");
+    }
+
+
+    /// <summary>
     /// §3.3.2 unproofed alternative: a <c>presentation</c> (unproofed JSON-LD) request verifies its
     /// contained credentials only; with no contained credentials, it verifies true (nothing to
     /// contradict the verification process).
@@ -834,7 +1032,7 @@ internal sealed class VcalmVerifierEndpointTests
 
         VerifiablePresentation presentation = new()
         {
-            Context = new Context { Contexts = [Context.Credentials20] },
+            Context = Context.FromIris(Context.Credentials20),
             Type = ["VerifiablePresentation"],
             Holder = "did:example:holder-unproofed"
         };
@@ -1022,7 +1220,9 @@ internal sealed class VcalmVerifierEndpointTests
         ContextResolverDelegate? contextResolver = null,
         PersistVcalmChallengeDelegate? persistChallenge = null,
         ConsumeVcalmChallengeDelegate? consumeChallenge = null,
-        SdIssuerContext? sd = null)
+        SdIssuerContext? sd = null,
+        VcalmSchemaValidatorRegistry? schemaValidators = null,
+        ResolveVcalmSchemaDocumentDelegate? resolveSchemaDocument = null)
     {
         VerifierKeyMaterial material = app.RegisterClient(ClientId, ClientBaseUri, VerifierCapabilities);
         RegisteredMaterials.Add(material);
@@ -1042,16 +1242,20 @@ internal sealed class VcalmVerifierEndpointTests
             SerializePresentation = SerializePresentation,
             SerializeProofOptions = SerializeProofOptions,
             Decoder = TestSetup.Base58Decoder,
-            ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             MemoryPool = Pool,
             //§3.4 ecdsa-sd-2023 derived-proof seams: the CBOR derived-proof parser, the P-256
             //verification function, and the base64url codec the SD verifier composes. When wired, a
             //derived (0xd9 5d 01) proof routes to the derived-proof verifier; when null, an SD derived
             //credential falls through to the generic path (verified:false). RDFC is the SD canonicalizer.
             ParseDerivedProof = sd is null ? null : EcdsaSd2023CborSerializer.ParseDerivedProof,
-            VerifyDerivedSignature = sd is null ? null : BouncyCastleCryptographicFunctions.VerifyP256Async,
+            VerifyDerivedSignature = sd is null ? null : BouncyCastleCryptographicFunctionsAdapter.VerifyP256Async,
             SdProofEncoder = sd is null ? null : TestSetup.Base64UrlEncoder,
-            SdProofDecoder = sd is null ? null : TestSetup.Base64UrlDecoder
+            SdProofDecoder = sd is null ? null : TestSetup.Base64UrlDecoder,
+            //The §3.3.1 results.credentialSchema seams: wired only by the schema tests; unwired
+            //deployments keep empty schema results.
+            SchemaValidators = schemaValidators,
+            ResolveSchemaDocument = resolveSchemaDocument
         };
 
         if(persistChallenge is not null)
@@ -1076,7 +1280,8 @@ internal sealed class VcalmVerifierEndpointTests
     //§3.8.1 validity-period WARNING; withStatus adds a §C.3 BitstringStatusListEntry credentialStatus so
     //the verifier's status-resolution path runs.
     private async Task<DataIntegritySecuredCredential> SignCredentialAsync(
-        bool validUntilPast, bool withStatus = false, CredentialStatus? customStatus = null)
+        bool validUntilPast, bool withStatus = false, CredentialStatus? customStatus = null,
+        List<CredentialSchema>? schemas = null)
     {
         Verifiable.Cryptography.PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyPair =
             TestKeyMaterialProvider.CreateEd25519KeyMaterial();
@@ -1086,6 +1291,7 @@ internal sealed class VcalmVerifierEndpointTests
         DidDocument issuerDidDocument = await KeyDidBuilder.BuildAsync(
             issuerPublic,
             MultikeyVerificationMethodTypeInfo.Instance,
+            BaseMemoryPool.Shared,
             includeDefaultContext: false,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -1094,14 +1300,7 @@ internal sealed class VcalmVerifierEndpointTests
 
         VerifiableCredential credential = new()
         {
-            Context = new Context
-            {
-                Contexts =
-                [
-                    Context.Credentials20,
-                    CanonicalizationTestUtilities.CredentialsExamplesV2ContextUrl
-                ]
-            },
+            Context = Context.FromIris(Context.Credentials20, CanonicalizationTestUtilities.CredentialsExamplesV2ContextUrl),
             Id = "urn:uuid:vcalm-test-credential",
             Type = ["VerifiableCredential", "ExampleAlumniCredential"],
             Issuer = new Issuer { Id = issuerDid },
@@ -1119,6 +1318,11 @@ internal sealed class VcalmVerifierEndpointTests
                 }
             ]
         };
+
+        if(schemas is not null)
+        {
+            credential.CredentialSchema = schemas;
+        }
 
         if(customStatus is not null)
         {
@@ -1157,41 +1361,46 @@ internal sealed class VcalmVerifierEndpointTests
             DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             Pool,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
     }
 
 
-    //Signs a holder presentation with eddsa-jcs-2022 binding the given challenge and domain, under a
-    //did:key holder the KeyDidResolver resolves locally. JCS is context-free and yields a non-empty
-    //canonical form for a minimal presentation.
-    private async Task<DataIntegritySecuredPresentation> SignPresentationAsync(string challenge, string domain)
+    /// <summary>
+    /// Builds and signs an eddsa-jcs-2022 embedded-proof presentation claiming
+    /// <paramref name="holderDid"/> and signed by <paramref name="signerPrivate"/> /
+    /// <paramref name="signerVerificationMethodId"/>, binding the given
+    /// <paramref name="challenge"/> and <paramref name="domain"/>. This is the common plumbing
+    /// shared by every <c>SignPresentation*</c> fixture below; JCS is context-free and yields a
+    /// non-empty canonical form for a minimal presentation.
+    /// </summary>
+    /// <param name="challenge">The verifier's challenge to bind into the proof.</param>
+    /// <param name="domain">The verifier's domain to bind into the proof.</param>
+    /// <param name="holderDid">The DID the presentation's <c>holder</c> member claims.</param>
+    /// <param name="signerPrivate">The private key that signs the proof.</param>
+    /// <param name="signerVerificationMethodId">
+    /// The verification method id the proof's <c>verificationMethod</c> references.
+    /// </param>
+    /// <returns>The signed <see cref="DataIntegritySecuredPresentation"/>.</returns>
+    private async Task<DataIntegritySecuredPresentation> SignPresentationCoreAsync(
+        string challenge,
+        string domain,
+        string holderDid,
+        PrivateKeyMemory signerPrivate,
+        string signerVerificationMethodId)
     {
-        Verifiable.Cryptography.PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyPair =
-            TestKeyMaterialProvider.CreateEd25519KeyMaterial();
-        using PublicKeyMemory holderPublic = keyPair.PublicKey;
-        using PrivateKeyMemory holderPrivate = keyPair.PrivateKey;
-
-        DidDocument holderDidDocument = await KeyDidBuilder.BuildAsync(
-            holderPublic,
-            MultikeyVerificationMethodTypeInfo.Instance,
-            includeDefaultContext: false,
-            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
-
-        string verificationMethodId = holderDidDocument.VerificationMethod![0].Id!;
-        string holderDid = holderDidDocument.Id!.ToString();
         DateTime proofCreated = TimeProvider.GetUtcNow().UtcDateTime;
 
         return await new VerifiablePresentation
         {
-            Context = new Context { Contexts = [Context.Credentials20] },
+            Context = Context.FromIris(Context.Credentials20),
             Type = ["VerifiablePresentation"],
             Holder = holderDid
         }.SignAsync(
-            holderPrivate,
-            verificationMethodId,
+            signerPrivate,
+            signerVerificationMethodId,
             EddsaJcs2022CryptosuiteInfo.Instance,
             proofCreated,
             challenge,
@@ -1203,18 +1412,110 @@ internal sealed class VcalmVerifierEndpointTests
             DeserializePresentation,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             Pool,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
     }
 
 
-    //Signs a holder presentation whose proof's verificationMethod belongs to one did:key (the
-    //attacker's signing key) but whose holder member claims a DIFFERENT did:key (the victim). The
-    //signature is cryptographically valid for the attacker key, but the claimed holder DID does NOT
-    //control that key — the verify-time holder-to-verificationMethod binding must reject it
-    //(GetLocalAuthenticationMethodById finds no such method in the victim's document).
+    /// <summary>
+    /// Signs a holder presentation with eddsa-jcs-2022 binding the given <paramref name="challenge"/>
+    /// and <paramref name="domain"/>, under a did:key holder the <see cref="KeyDidResolver"/>
+    /// resolves locally. The holder key is the cached Ed25519 identity
+    /// (<see cref="TestKeyMaterialProvider.CreateEd25519KeyMaterial"/>), so the resulting holder DID
+    /// is the SAME did:key across every call in this class;
+    /// <see cref="SignPresentationWithSameHolderDifferentSignerAsync"/> relies on that stability to
+    /// claim the identical holder under a different signer.
+    /// </summary>
+    /// <param name="challenge">The verifier's challenge to bind into the proof.</param>
+    /// <param name="domain">The verifier's domain to bind into the proof.</param>
+    /// <returns>The signed, honestly-held <see cref="DataIntegritySecuredPresentation"/>.</returns>
+    private async Task<DataIntegritySecuredPresentation> SignPresentationAsync(string challenge, string domain)
+    {
+        Verifiable.Cryptography.PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyPair =
+            TestKeyMaterialProvider.CreateEd25519KeyMaterial();
+        using PublicKeyMemory holderPublic = keyPair.PublicKey;
+        using PrivateKeyMemory holderPrivate = keyPair.PrivateKey;
+
+        DidDocument holderDidDocument = await KeyDidBuilder.BuildAsync(
+            holderPublic,
+            MultikeyVerificationMethodTypeInfo.Instance,
+            BaseMemoryPool.Shared,
+            includeDefaultContext: false,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        string verificationMethodId = holderDidDocument.VerificationMethod![0].Id!;
+        string holderDid = holderDidDocument.Id!.ToString();
+
+        return await SignPresentationCoreAsync(
+            challenge, domain, holderDid, holderPrivate, verificationMethodId).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Signs a holder presentation whose proof's <c>verificationMethod</c> belongs to a FRESH
+    /// attacker did:key, but whose <c>holder</c> member claims the SAME cached did:key that
+    /// <see cref="SignPresentationAsync"/> signs honestly for. The resulting presentation shares
+    /// Context, Id, Type, and Holder with an honest <see cref="SignPresentationAsync"/> presentation
+    /// and differs only in <see cref="DataIntegritySecuredPresentation.Proof"/>, so telling the two
+    /// apart requires the folded-in proof to be part of equality.
+    /// </summary>
+    /// <param name="challenge">The verifier's challenge to bind into the proof.</param>
+    /// <param name="domain">The verifier's domain to bind into the proof.</param>
+    /// <returns>
+    /// The signed <see cref="DataIntegritySecuredPresentation"/> claiming the honest holder under a
+    /// different signer.
+    /// </returns>
+    private async Task<DataIntegritySecuredPresentation> SignPresentationWithSameHolderDifferentSignerAsync(
+        string challenge, string domain)
+    {
+        Verifiable.Cryptography.PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> holderKeys =
+            TestKeyMaterialProvider.CreateEd25519KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        DidDocument holderDidDocument = await KeyDidBuilder.BuildAsync(
+            holderPublic,
+            MultikeyVerificationMethodTypeInfo.Instance,
+            BaseMemoryPool.Shared,
+            includeDefaultContext: false,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        string holderDid = holderDidDocument.Id!.ToString();
+
+        //A FRESH key is required here for the same reason SignPresentationWithForgedHolderAsync
+        //requires one: the cached CreateEd25519KeyMaterial would hand this signer the holder's OWN
+        //key, collapsing "different signer" into the honest case.
+        Verifiable.Cryptography.PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> otherSignerKeys =
+            TestKeyMaterialProvider.CreateFreshEd25519KeyMaterial();
+        using PublicKeyMemory otherSignerPublic = otherSignerKeys.PublicKey;
+        using PrivateKeyMemory otherSignerPrivate = otherSignerKeys.PrivateKey;
+        DidDocument otherSignerDocument = await KeyDidBuilder.BuildAsync(
+            otherSignerPublic,
+            MultikeyVerificationMethodTypeInfo.Instance,
+            BaseMemoryPool.Shared,
+            includeDefaultContext: false,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        string otherSignerVerificationMethodId = otherSignerDocument.VerificationMethod![0].Id!;
+
+        return await SignPresentationCoreAsync(
+            challenge, domain, holderDid, otherSignerPrivate, otherSignerVerificationMethodId).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Signs a holder presentation whose proof's <c>verificationMethod</c> belongs to one did:key
+    /// (the attacker's signing key) but whose <c>holder</c> member claims a DIFFERENT did:key (the
+    /// victim). The signature is cryptographically valid for the attacker key, but the claimed
+    /// holder DID does NOT control that key: the verify-time holder-to-verificationMethod binding
+    /// must reject it (<c>GetLocalAuthenticationMethodById</c> finds no such method in the victim's
+    /// document).
+    /// </summary>
+    /// <param name="challenge">The verifier's challenge to bind into the proof.</param>
+    /// <param name="domain">The verifier's domain to bind into the proof.</param>
+    /// <returns>
+    /// The signed <see cref="DataIntegritySecuredPresentation"/> whose holder does not control the
+    /// signing key.
+    /// </returns>
     private async Task<DataIntegritySecuredPresentation> SignPresentationWithForgedHolderAsync(
         string challenge, string domain)
     {
@@ -1228,6 +1529,7 @@ internal sealed class VcalmVerifierEndpointTests
         DidDocument victimDocument = await KeyDidBuilder.BuildAsync(
             victimPublic,
             MultikeyVerificationMethodTypeInfo.Instance,
+            BaseMemoryPool.Shared,
             includeDefaultContext: false,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         string victimDid = victimDocument.Id!.ToString();
@@ -1240,6 +1542,7 @@ internal sealed class VcalmVerifierEndpointTests
         DidDocument attackerDocument = await KeyDidBuilder.BuildAsync(
             attackerPublic,
             MultikeyVerificationMethodTypeInfo.Instance,
+            BaseMemoryPool.Shared,
             includeDefaultContext: false,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         string attackerVerificationMethodId = attackerDocument.VerificationMethod![0].Id!;
@@ -1249,31 +1552,8 @@ internal sealed class VcalmVerifierEndpointTests
         Assert.AreNotEqual(victimDid, attackerDocument.Id!.ToString(),
             "The forged-holder test requires two DISTINCT did:key identities.");
 
-        DateTime proofCreated = TimeProvider.GetUtcNow().UtcDateTime;
-
-        return await new VerifiablePresentation
-        {
-            Context = new Context { Contexts = [Context.Credentials20] },
-            Type = ["VerifiablePresentation"],
-            Holder = victimDid
-        }.SignAsync(
-            attackerPrivate,
-            attackerVerificationMethodId,
-            EddsaJcs2022CryptosuiteInfo.Instance,
-            proofCreated,
-            challenge,
-            domain,
-            JcsCanonicalizer,
-            contextResolver: null,
-            ProofValueCodecs.EncodeBase58Btc,
-            SerializePresentation,
-            DeserializePresentation,
-            SerializeProofOptions,
-            TestSetup.Base58Encoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
-            Pool,
-            EmptyContext,
-            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        return await SignPresentationCoreAsync(
+            challenge, domain, victimDid, attackerPrivate, attackerVerificationMethodId).ConfigureAwait(false);
     }
 
 
@@ -1291,6 +1571,7 @@ internal sealed class VcalmVerifierEndpointTests
         DidDocument issuerDidDocument = await KeyDidBuilder.BuildAsync(
             issuer.PublicKey,
             MultikeyVerificationMethodTypeInfo.Instance,
+            BaseMemoryPool.Shared,
             includeDefaultContext: false,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 

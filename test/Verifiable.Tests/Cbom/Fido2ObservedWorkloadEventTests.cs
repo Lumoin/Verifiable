@@ -3,8 +3,10 @@ using System.Collections.Concurrent;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Time.Testing;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Cbom;
 
@@ -36,7 +38,7 @@ internal sealed class Fido2ObservedWorkloadEventTests
         var observed = new ConcurrentQueue<CryptoEvent>();
         using(CryptographicKeyEvents.Events.Subscribe(new CollectingObserver(observed)))
         {
-            await VerifiableOperations.RunFido2ObservedWorkloadAsync(CancellationToken.None).ConfigureAwait(false);
+            await VerifiableOperations.RunFido2ObservedWorkloadAsync(BaseMemoryPool.Shared, new FakeTimeProvider(TestClock.CanonicalEpoch), CancellationToken.None).ConfigureAwait(false);
 
             Assert.Contains(
                 (SignatureProducedEvent e) => e.Algorithm == CryptoAlgorithm.P256,

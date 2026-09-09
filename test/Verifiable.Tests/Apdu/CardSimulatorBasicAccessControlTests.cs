@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Threading.Tasks;
 using Verifiable.Apdu;
 using Verifiable.Apdu.Automata;
@@ -6,6 +7,8 @@ using Verifiable.Apdu.Bac;
 using Verifiable.Apdu.Lds;
 using Verifiable.Apdu.SecureMessaging;
 using Verifiable.Cryptography;
+using Microsoft.Extensions.Time.Testing;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Apdu;
 
@@ -33,10 +36,11 @@ internal sealed class CardSimulatorBasicAccessControlTests
 
 
     [TestMethod]
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The tuple-deconstructed access keys are disposed in the finally block; using cannot target a tuple-deconstruction assignment.")]
     public async Task EstablishesBasicAccessControlAgainstTheRealTerminal()
     {
         using ElementaryFile dataGroup1 = DataGroup1.Write(Td2MachineReadableZone, BaseMemoryPool.Shared);
-        using var card = new CardSimulator("passport-bac", [dataGroup1], FillAscending);
+        using var card = new CardSimulator("passport-bac", [dataGroup1], FillAscending, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         using ApduDevice device = ApduDevice.Create(card.TransceiveAsync);
 
         //The terminal derives the same access keys from the MRZ it read optically off the data page.
@@ -69,7 +73,7 @@ internal sealed class CardSimulatorBasicAccessControlTests
     {
         using ElementaryFile efCom = EfCom.Write("0106", "040000", [0x61, 0x75], BaseMemoryPool.Shared);
         using ElementaryFile dataGroup1 = DataGroup1.Write(Td2MachineReadableZone, BaseMemoryPool.Shared);
-        using var card = new CardSimulator("passport-sm-read", [efCom, dataGroup1], FillAscending);
+        using var card = new CardSimulator("passport-sm-read", [efCom, dataGroup1], FillAscending, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         using ApduDevice device = ApduDevice.Create(card.TransceiveAsync);
 
         (SecureMessagingSession session, SymmetricKeyMemory encryptionKey, SymmetricKeyMemory macKey) =
@@ -96,7 +100,7 @@ internal sealed class CardSimulatorBasicAccessControlTests
     public async Task RejectsPlaintextCommandsAfterSecureMessagingIsEstablished()
     {
         using ElementaryFile dataGroup1 = DataGroup1.Write(Td2MachineReadableZone, BaseMemoryPool.Shared);
-        using var card = new CardSimulator("passport-sm-gate", [dataGroup1], FillAscending);
+        using var card = new CardSimulator("passport-sm-gate", [dataGroup1], FillAscending, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         using ApduDevice device = ApduDevice.Create(card.TransceiveAsync);
 
         (SecureMessagingSession session, SymmetricKeyMemory encryptionKey, SymmetricKeyMemory macKey) =
@@ -141,7 +145,7 @@ internal sealed class CardSimulatorBasicAccessControlTests
     public async Task RejectsExternalAuthenticateWithoutAChallenge()
     {
         using ElementaryFile dataGroup1 = DataGroup1.Write(Td2MachineReadableZone, BaseMemoryPool.Shared);
-        using var card = new CardSimulator("passport-bac-nochallenge", [dataGroup1], FillAscending);
+        using var card = new CardSimulator("passport-bac-nochallenge", [dataGroup1], FillAscending, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         using ApduDevice device = ApduDevice.Create(card.TransceiveAsync);
 
         //EXTERNAL AUTHENTICATE before any GET CHALLENGE: the card has issued no nonce.

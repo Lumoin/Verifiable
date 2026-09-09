@@ -12,13 +12,14 @@ using Verifiable.Tpm.Infrastructure.Sessions;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
 /// <summary>
 /// Proves the pooled-carrier ownership of the <c>TPM2B_NAME</c> parameters three commands take on the wire —
-/// <c>TPM2_PolicyAuthorize()</c>'s <c>keySign</c> (TPM 2.0 Library Part 3, Section 23.16, Table 153),
-/// <c>TPM2_PolicyTicket()</c>'s <c>authName</c> (Section 23.5, Table 131), and
+/// <c>TPM2_PolicyAuthorize()</c>'s <c>keySign</c> (TPM 2.0 Library Part 3, clause 23.16, Table 170),
+/// <c>TPM2_PolicyTicket()</c>'s <c>authName</c> (clause 23.5, Table 148), and
 /// <c>TPM2_MakeCredential()</c>'s <c>objectName</c> (clause 12.6, Table 28) — against the in-house behavioural
 /// <see cref="TpmSimulator"/>. Each Name rides a carrier the parser rents as its last act, and each reaches the
 /// pool again on every path its command can leave by: refused before the command body runs, refused inside the
@@ -48,10 +49,14 @@ internal sealed class TpmInHouseSimulatorNameCarrierTests
     /// <summary>The policy session hash algorithm every session here is started with.</summary>
     private const TpmAlgIdConstants SessionAlg = TpmAlgIdConstants.TPM_ALG_SHA256;
 
-    /// <summary>The width of every Name these tests drive: a 2-octet nameAlg prefix plus a SHA-256 digest (TPM 2.0 Library Part 1, clause 14, Table 6).</summary>
+    /// <summary>The width of every Name these tests drive: a 2-octet nameAlg prefix plus a SHA-256 digest (TPM 2.0 Library Part 1, clause 13, Table 9).</summary>
     private const int NameSize = sizeof(ushort) + 32;
 
-    /// <summary>A transient-range handle no test ever loads, so <c>TPM2_MakeCredential()</c> refuses it with <c>TPM_RC_HANDLE</c>.</summary>
+    /// <summary>
+    /// A transient-range handle no test ever loads, so <c>TPM2_MakeCredential()</c> refuses it with
+    /// <c>TPM_RC_REFERENCE_H0</c> (TPM 2.0 Library Part 3, clause 5.4, step 2.1: "If the handle references a
+    /// transient object, the handle shall reference a loaded object (TPM_RC_REFERENCE_H0 + N …)").
+    /// </summary>
     private const uint UnloadedObjectHandle = 0x8000_0010;
 
     /// <summary>
@@ -70,7 +75,7 @@ internal sealed class TpmInHouseSimulatorNameCarrierTests
 
     /// <summary>
     /// A <c>TPM2_PolicyAuthorize()</c> whose <c>keySign</c> names a hash algorithm the TPM does not implement is
-    /// refused with <c>TPM_RC_HASH</c> (TPM 2.0 Library Part 3, Section 23.16) before the session's digest is
+    /// refused with <c>TPM_RC_HASH</c> (TPM 2.0 Library Part 3, clause 23.16) before the session's digest is
     /// compared or any ticket is consulted — so the Name carrier the parser rented has no later owner and the
     /// refusing arm releases it through the request record's own disposal.
     /// </summary>
@@ -79,7 +84,7 @@ internal sealed class TpmInHouseSimulatorNameCarrierTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         uint sessionHandle = await StartPolicySessionAsync(tpm, registry, trackingPool.Pool, isTrial: false).ConfigureAwait(false);
@@ -91,7 +96,7 @@ internal sealed class TpmInHouseSimulatorNameCarrierTests
             TpmResult<PolicyAuthorizeResponse> result = await AuthorizeAsync(
                 tpm, registry, trackingPool.Pool, sessionHandle, ZeroDigest(), NameWithAlg(TpmAlgIdConstants.TPM_ALG_NULL)).ConfigureAwait(false);
             Assert.AreEqual(
-                TpmRcConstants.TPM_RC_HASH, result.ResponseCode,
+                HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_HASH, 2), result.ResponseCode,
                 "A keySign whose first two octets name no implemented hash is TPM_RC_HASH, refused before the digest comparison.");
 
             Assert.AreEqual(
@@ -110,7 +115,7 @@ internal sealed class TpmInHouseSimulatorNameCarrierTests
 
     /// <summary>
     /// A <c>TPM2_PolicyAuthorize()</c> on a TRIAL session skips the digest comparison and the ticket
-    /// re-verification entirely and folds unconditionally (TPM 2.0 Library Part 3, Section 23.16: the digest "is
+    /// re-verification entirely and folds unconditionally (TPM 2.0 Library Part 3, clause 23.16: the digest "is
     /// extended as if the ticket is valid without actual verification"), so the parse-rented Name carrier
     /// transfers straight into the fold that writes it into the policyDigest — and that fold is its terminal
     /// owner. The session keeps exactly one carrier the assertion created: the advanced policyDigest itself,
@@ -124,7 +129,7 @@ internal sealed class TpmInHouseSimulatorNameCarrierTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         long beforeSession = trackingPool.OutstandingCount;
@@ -153,8 +158,8 @@ internal sealed class TpmInHouseSimulatorNameCarrierTests
 
     /// <summary>
     /// A non-trial <c>TPM2_PolicyAuthorize()</c> whose <c>checkTicket</c> does not reproduce
-    /// <c>HMAC(proof, TPM_ST_VERIFIED ‖ aHash ‖ keySign)</c> is refused with <c>TPM_RC_VALUE</c> (TPM 2.0
-    /// Library Part 3, Section 23.16) — but only after the re-verification effect has run, which is the arm
+    /// <c>HMAC(proof, TPM_ST_VERIFIED ‖ aHash ‖ keySign)</c> is refused with <c>TPM_RC_POLICY</c> ("If the
+    /// ticket is not valid, the TPM shall return TPM_RC_POLICY", TPM 2.0 Library Part 3, clause 23.16.1) — but only after the re-verification effect has run, which is the arm
     /// where the Name carrier has already travelled request → action → effect → feedback. The rejecting
     /// continuation is its terminal owner there, in place of the fold that would have consumed it.
     /// </summary>
@@ -163,7 +168,7 @@ internal sealed class TpmInHouseSimulatorNameCarrierTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         uint sessionHandle = await StartPolicySessionAsync(tpm, registry, trackingPool.Pool, isTrial: false).ConfigureAwait(false);
@@ -173,12 +178,12 @@ internal sealed class TpmInHouseSimulatorNameCarrierTests
             long nameRentsBefore = trackingPool.RentedCountOfSize(NameSize);
 
             //A fresh policy session's policyDigest is all zeros, so an all-zero approvedPolicy passes the
-            //equality check (Section 23.16) and the command reaches the ticket re-verification effect.
+            //equality check (clause 23.16) and the command reaches the ticket re-verification effect.
             TpmResult<PolicyAuthorizeResponse> result = await AuthorizeAsync(
                 tpm, registry, trackingPool.Pool, sessionHandle, ZeroDigest(), NameWithAlg(SessionAlg)).ConfigureAwait(false);
             Assert.AreEqual(
-                TpmRcConstants.TPM_RC_VALUE, result.ResponseCode,
-                "A checkTicket that does not reproduce the expected verified-ticket HMAC is TPM_RC_VALUE, answered by the continuation the effect fed.");
+                TpmRcConstants.TPM_RC_POLICY, result.ResponseCode,
+                "A checkTicket that does not reproduce the expected verified-ticket HMAC is TPM_RC_POLICY, answered by the continuation the effect fed.");
 
             Assert.AreEqual(
                 nameRentsBefore + 2, trackingPool.RentedCountOfSize(NameSize),
@@ -196,7 +201,7 @@ internal sealed class TpmInHouseSimulatorNameCarrierTests
 
     /// <summary>
     /// A <c>TPM2_PolicyTicket()</c> against a TRIAL session is refused with <c>TPM_RC_ATTRIBUTES</c> (TPM 2.0
-    /// Library Part 3, Section 23.5: a ticket IS the authorization material a trial session exists to predict
+    /// Library Part 3, clause 23.5: a ticket IS the authorization material a trial session exists to predict
     /// without holding) before the timeout is even read, so the parse-rented <c>authName</c> carrier is released
     /// by the refusing arm through the request record's own disposal.
     /// </summary>
@@ -205,7 +210,7 @@ internal sealed class TpmInHouseSimulatorNameCarrierTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         uint sessionHandle = await StartPolicySessionAsync(tpm, registry, trackingPool.Pool, isTrial: true).ConfigureAwait(false);
@@ -217,7 +222,7 @@ internal sealed class TpmInHouseSimulatorNameCarrierTests
             TpmResult<PolicyTicketResponse> result = await ReplayTicketAsync(
                 tpm, registry, trackingPool.Pool, sessionHandle, NameWithAlg(SessionAlg)).ConfigureAwait(false);
             Assert.AreEqual(
-                TpmRcConstants.TPM_RC_ATTRIBUTES, result.ResponseCode,
+                HmacKeyHarness.HandleEncodedRc(TpmRcConstants.TPM_RC_ATTRIBUTES, 0), result.ResponseCode,
                 "A trial session cannot replay a ticket, and the refusal precedes every parameter check.");
 
             Assert.AreEqual(
@@ -236,7 +241,7 @@ internal sealed class TpmInHouseSimulatorNameCarrierTests
 
     /// <summary>
     /// A <c>TPM2_PolicyTicket()</c> whose ticket does not reproduce the equation-12 HMAC (TPM 2.0 Library Part 2,
-    /// Section 10.7.5, Table 111) is refused with <c>TPM_RC_TICKET</c> only after the recompute effect has run,
+    /// clause 10.6.6, Table 114) is refused with <c>TPM_RC_TICKET</c> only after the recompute effect has run,
     /// which is the arm where the Name carrier has already travelled request → action → effect → feedback. The
     /// rejecting continuation is its terminal owner there, in place of the fold that would have consumed it.
     /// </summary>
@@ -245,7 +250,7 @@ internal sealed class TpmInHouseSimulatorNameCarrierTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         uint sessionHandle = await StartPolicySessionAsync(tpm, registry, trackingPool.Pool, isTrial: false).ConfigureAwait(false);
@@ -257,8 +262,8 @@ internal sealed class TpmInHouseSimulatorNameCarrierTests
             TpmResult<PolicyTicketResponse> result = await ReplayTicketAsync(
                 tpm, registry, trackingPool.Pool, sessionHandle, NameWithAlg(SessionAlg)).ConfigureAwait(false);
             Assert.AreEqual(
-                TpmRcConstants.TPM_RC_TICKET, result.ResponseCode,
-                "A ticket digest that does not recompute is TPM_RC_TICKET, answered by the continuation the effect fed.");
+                HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_TICKET, 4), result.ResponseCode,
+                "A ticket digest that does not recompute is TPM_RC_TICKET at ticket, parameter 5 of Table 148, answered by the continuation the effect fed.");
 
             Assert.AreEqual(
                 nameRentsBefore + 2, trackingPool.RentedCountOfSize(NameSize),
@@ -276,16 +281,16 @@ internal sealed class TpmInHouseSimulatorNameCarrierTests
 
     /// <summary>
     /// A <c>TPM2_MakeCredential()</c> naming a credential key that is not loaded is refused with
-    /// <c>TPM_RC_HANDLE</c> (TPM 2.0 Library Part 3, clause 12.6) before any wrap action is declared, so the
-    /// parse-rented <c>objectName</c> carrier never transfers and the refusing arm releases it through the
-    /// request record's own disposal.
+    /// <c>TPM_RC_REFERENCE_H0</c> (TPM 2.0 Library Part 3, clause 5.4, step 2.1) before any wrap action is
+    /// declared, so the parse-rented <c>objectName</c> carrier never transfers and the refusing arm releases it
+    /// through the request record's own disposal.
     /// </summary>
     [TestMethod]
     public async Task RefusedMakeCredentialReturnsTheObjectNameCarrierToPool()
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         long baseline = trackingPool.OutstandingCount;
@@ -294,8 +299,8 @@ internal sealed class TpmInHouseSimulatorNameCarrierTests
         TpmResult<MakeCredentialResponse> result = await WrapCredentialAsync(
             tpm, registry, trackingPool.Pool, TpmiDhObject.FromValue(UnloadedObjectHandle), NameWithAlg(SessionAlg)).ConfigureAwait(false);
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_HANDLE, result.ResponseCode,
-            "A credential key that is not loaded is TPM_RC_HANDLE, refused before the wrap action is declared.");
+            TpmRcConstants.TPM_RC_REFERENCE_H0, result.ResponseCode,
+            "An unloaded transient-range credential key is TPM_RC_REFERENCE_H0, refused before the wrap action is declared.");
 
         Assert.AreEqual(
             nameRentsBefore + 2, trackingPool.RentedCountOfSize(NameSize),
@@ -309,7 +314,7 @@ internal sealed class TpmInHouseSimulatorNameCarrierTests
     /// <summary>
     /// A successful <c>TPM2_MakeCredential()</c> transfers the parse-rented <c>objectName</c> carrier into the
     /// wrap action, whose effect binds the credential's symmetric and HMAC keys to that Name (TPM 2.0 Library
-    /// Part 1, clause 24) and is its terminal owner — so the carrier reaches the pool once the response has been
+    /// Part 1, clause 21) and is its terminal owner — so the carrier reaches the pool once the response has been
     /// consumed, exactly as it does on the refusing arm.
     /// </summary>
     [TestMethod]
@@ -317,7 +322,7 @@ internal sealed class TpmInHouseSimulatorNameCarrierTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse credentialKey = await CreateStorageParentAsync(tpm, registry, trackingPool.Pool).ConfigureAwait(false);
@@ -366,7 +371,7 @@ internal sealed class TpmInHouseSimulatorNameCarrierTests
     {
         using PolicyAuthorizeInput input = PolicyAuthorizeInput.Create(
             policySession, approvedPolicy, PolicyRef, keySign,
-            (ushort)TpmStConstants.TPM_ST_VERIFIED, (uint)TpmRh.TPM_RH_OWNER, ZeroDigest(), pool);
+            (ushort)TpmStConstants.TPM_ST_VERIFIED, (uint)TpmRh.TPM_RH_OWNER, checkTicketMetadata: null, ZeroDigest(), pool);
 
         return await TpmCommandExecutor.ExecuteAsync<PolicyAuthorizeResponse>(
             tpm, input, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
@@ -417,8 +422,8 @@ internal sealed class TpmInHouseSimulatorNameCarrierTests
     private async Task<uint> StartPolicySessionAsync(TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, bool isTrial)
     {
         StartAuthSessionInput input = isTrial
-            ? StartAuthSessionInput.CreateTrialPolicySession(SessionAlg)
-            : StartAuthSessionInput.CreateUnboundUnsaltedPolicySession(SessionAlg);
+            ? StartAuthSessionInput.CreateTrialPolicySession(SessionAlg, TestEntropy.NewCounterStream(), pool)
+            : StartAuthSessionInput.CreateUnboundUnsaltedPolicySession(SessionAlg, TestEntropy.NewCounterStream(), pool);
 
         TpmResult<StartAuthSessionResponse> result = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             tpm, input, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
@@ -464,7 +469,7 @@ internal sealed class TpmInHouseSimulatorNameCarrierTests
     /// <returns>The operational simulator.</returns>
     private async Task<TpmSimulator> CreateOperationalAsync(BaseMemoryPool pool)
     {
-        var simulator = new TpmSimulator("tpm-in-house-name-carriers", signingBackend: BouncyCastleTpmEccSigningBackend.Create());
+        var simulator = new TpmSimulator("tpm-in-house-name-carriers", signingBackend: BouncyCastleTpmEccSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await BringOperationalAsync(simulator, pool).ConfigureAwait(false);
 

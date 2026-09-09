@@ -17,19 +17,19 @@ internal sealed class KeriDelegationTests
     private const string DelegateeAid = "EHqSsH1Imc2MEcgzEordBUFqJKWTcRyTz2GRc2SG3aur";
     private const string DelegatorAid = "EPR7FWsN3tOM8PqfMap2FRfF4MFQ4v3ZXjBUcMVtvhmB";
 
-    private static readonly string[] SigningKeys =
+    private static string[] SigningKeys { get; } =
     [
         "DEE-HCMSwqMDkEBzlmUNmVBAGIinGu7wZ5_hfY6bSMz3",
         "DHyJFyFzuD5vvUWv5jy6nwWI3wZmSnoePu29tBR-jXkv"
     ];
 
-    private static readonly string[] NextKeyDigests =
+    private static string[] NextKeyDigests { get; } =
     [
         "EFzr1nnfHpT-nkSfd6vQvbPC-Kq6zy8vbVvUmwxcM1e-",
         "EIXFsLk9kmESy0ZsoHMUaDyK_g3DVRiJQYiAlyeCeYJM"
     ];
 
-    private static readonly string[] NoStrings = [];
+    private static string[] NoStrings { get; } = [];
 
 
     /// <summary>

@@ -168,7 +168,7 @@ public sealed class PAdESSignatureValidationResult: IDisposable
 [DebuggerDisplay("PAdESValidationResult: {IsSuccess}, {Signatures?.Count} signature(s)")]
 public sealed class PAdESValidationResult: IDisposable
 {
-    private readonly PdfByteSurfaceParseResult byteSurface;
+    private PdfByteSurfaceParseResult ByteSurface { get; }
     private bool disposed;
 
 
@@ -176,7 +176,7 @@ public sealed class PAdESValidationResult: IDisposable
     {
         IsSuccess = isSuccess;
         FailureReason = failureReason;
-        this.byteSurface = byteSurface;
+        this.ByteSurface = byteSurface;
         Signatures = signatures;
     }
 
@@ -209,7 +209,7 @@ public sealed class PAdESValidationResult: IDisposable
             return;
         }
 
-        byteSurface.Dispose();
+        ByteSurface.Dispose();
         if(Signatures is not null)
         {
             for(int i = 0; i < Signatures.Count; ++i)

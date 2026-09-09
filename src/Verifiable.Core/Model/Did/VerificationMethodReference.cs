@@ -179,7 +179,7 @@ public abstract class VerificationMethodReference: IEquatable<VerificationMethod
     /// <inheritdoc/>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public override bool Equals([NotNullWhen(true)] object? obj) =>
-        obj is VerificationMethodReference reference && Equals(reference);
+        obj is not null && GetType() == obj.GetType() && Equals((VerificationMethodReference)obj);
 
 
     /// <inheritdoc/>

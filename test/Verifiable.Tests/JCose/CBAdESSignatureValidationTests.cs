@@ -1,7 +1,8 @@
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Cbor;
@@ -12,6 +13,7 @@ using Verifiable.JCose;
 using Verifiable.Microsoft;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.JCose;
 
@@ -49,8 +51,8 @@ namespace Verifiable.Tests.JCose;
 /// <para>
 /// <strong>Key material.</strong> Every signature is minted with the P-256 key-provisioning pattern
 /// <c>Verifiable.Tests.Cose.CoseTests</c> establishes: <see cref="TestKeyMaterialProvider.CreateP256KeyMaterial"/>
-/// (Microsoft ECDsa backend) paired with <see cref="MicrosoftCryptographicFunctions.SignP256Async"/>/
-/// <see cref="MicrosoftCryptographicFunctions.VerifyP256Async"/>.
+/// (Microsoft ECDsa backend) paired with <see cref="MicrosoftCryptographicFunctionsAdapter.SignP256Async"/>/
+/// <see cref="MicrosoftCryptographicFunctionsAdapter.VerifyP256Async"/>.
 /// </para>
 /// <para>
 /// <strong>No-throw convention.</strong> Every test that feeds malformed or non-conformant wire bytes
@@ -127,7 +129,8 @@ internal sealed class CBAdESSignatureValidationTests
         byte[] digestBytes = await CreateSha256DigestBytesAsync("signing certificate"u8.ToArray(), TestContext.CancellationToken).ConfigureAwait(false);
         DateTimeOffset expectedIssuedAt = TestClock.CanonicalEpoch;
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(3);
         writer.WriteInt32(1); // alg, RFC 9052 section 3.1.
         writer.WriteInt32(WellKnownCoseAlgorithms.Es256);
@@ -139,7 +142,7 @@ internal sealed class CBAdESSignatureValidationTests
         writer.WriteInt32(34); // x5t, RFC 9360 section 2 / clause 5.1.7.
         WriteHashAlgorithmDigestPairOracle(writer, new AdESDigestAlgorithmIntegerIdentifier(WellKnownCoseAlgorithms.Sha256), digestBytes);
         writer.WriteEndMap();
-        byte[] protectedHeader = writer.Encode();
+        byte[] protectedHeader = writerBuffer.WrittenSpan.ToArray();
 
         byte[] payload = "payload signed under a float-form CWT-Claims iat"u8.ToArray();
         byte[] sigStructure = CoseSerialization.BuildSigStructure(protectedHeader, payload, []);
@@ -284,14 +287,15 @@ internal sealed class CBAdESSignatureValidationTests
         using var publicKey = keyMaterial.PublicKey;
         keyMaterial.PrivateKey.Dispose(); // Not needed -- parsing fails while decoding the protected header, before any signature is checked.
 
-        var writer = new CborWriter(CborConformanceMode.Lax);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Lax);
         writer.WriteStartMap(2);
         writer.WriteInt32(1); // alg, RFC 9052 section 3.1.
         writer.WriteInt32(WellKnownCoseAlgorithms.Es256);
         writer.WriteInt32(1); // alg again -- duplicate, non-ascending label.
         writer.WriteInt32(WellKnownCoseAlgorithms.Es256);
         writer.WriteEndMap();
-        byte[] protectedHeader = writer.Encode();
+        byte[] protectedHeader = writerBuffer.WrittenSpan.ToArray();
 
         byte[] payload = "payload over a duplicate-labelled header"u8.ToArray();
         byte[] signature = [0x01, 0x02, 0x03]; // Never verified -- parsing fails before the signature step.
@@ -364,14 +368,15 @@ internal sealed class CBAdESSignatureValidationTests
         (byte[] protectedHeader, byte[] payload, _) = await CreateBaselineSignedComponentsAsync(
             privateKey, digestBytes, TestContext.CancellationToken).ConfigureAwait(false);
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
-        writer.WriteTag((CborTag)18); // COSE_Sign1_Tagged, RFC 9052 section 2 / clause 4.3.
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
+        writer.WriteTag(new CborTag((ulong)18)); // COSE_Sign1_Tagged, RFC 9052 section 2 / clause 4.3.
         writer.WriteStartArray(3);
         writer.WriteByteString(protectedHeader);
         WriteEmptyUnprotectedMap(writer);
         writer.WriteByteString(payload);
         writer.WriteEndArray();
-        byte[] wireBytes = writer.Encode();
+        byte[] wireBytes = writerBuffer.WrittenSpan.ToArray();
 
         using CBAdESValidationResult result = await ValidateExpectingNoThrowAsync(
             wireBytes, publicKey, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -407,7 +412,8 @@ internal sealed class CBAdESSignatureValidationTests
         /// <returns>The encoded bytes.</returns>
         static byte[] BuildDeeplyNestedArrayBytes(int depth)
         {
-            var nestedWriter = new CborWriter(CborConformanceMode.Canonical);
+            var nestedWriterBuffer = new ArrayBufferWriter<byte>();
+            var nestedWriter = new CborWriter(nestedWriterBuffer, CborOptions.RfcCanonical);
             for(int i = 0; i < depth; i++)
             {
                 nestedWriter.WriteStartArray(1);
@@ -420,7 +426,7 @@ internal sealed class CBAdESSignatureValidationTests
                 nestedWriter.WriteEndArray();
             }
 
-            return nestedWriter.Encode();
+            return nestedWriterBuffer.WrittenSpan.ToArray();
         }
     }
 
@@ -443,14 +449,15 @@ internal sealed class CBAdESSignatureValidationTests
 
         byte[] digestBytes = await CreateSha256DigestBytesAsync("signing certificate"u8.ToArray(), TestContext.CancellationToken).ConfigureAwait(false);
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(2);
         writer.WriteInt32(1); // alg, RFC 9052 section 3.1.
         writer.WriteInt32(WellKnownCoseAlgorithms.Es256);
         writer.WriteInt32(34); // x5t, RFC 9360 section 2 / clause 5.1.7. CWT Claims (15) deliberately omitted.
         WriteHashAlgorithmDigestPairOracle(writer, new AdESDigestAlgorithmIntegerIdentifier(WellKnownCoseAlgorithms.Sha256), digestBytes);
         writer.WriteEndMap();
-        byte[] protectedHeader = writer.Encode();
+        byte[] protectedHeader = writerBuffer.WrittenSpan.ToArray();
 
         byte[] payload = "payload signed under a header with no iat"u8.ToArray();
         byte[] sigStructure = CoseSerialization.BuildSigStructure(protectedHeader, payload, []);
@@ -483,14 +490,15 @@ internal sealed class CBAdESSignatureValidationTests
         // Arbitrary 16 bytes -- neither the model nor the codec validates digest length against the claimed algorithm.
         byte[] md5DigestBytes = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10];
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(2);
         writer.WriteInt32(1); // alg, RFC 9052 section 3.1.
         writer.WriteInt32(WellKnownCoseAlgorithms.Es256);
         writer.WriteInt32(34); // x5t, RFC 9360 section 2 / clause 5.1.7. CWT Claims (15) deliberately omitted.
         WriteHashAlgorithmDigestPairOracle(writer, new AdESDigestAlgorithmTextIdentifier("MD5"), md5DigestBytes);
         writer.WriteEndMap();
-        byte[] protectedHeader = writer.Encode();
+        byte[] protectedHeader = writerBuffer.WrittenSpan.ToArray();
 
         byte[] payload = "payload signed under a header with no iat and an MD5-identified x5t"u8.ToArray();
         byte[] sigStructure = CoseSerialization.BuildSigStructure(protectedHeader, payload, []);
@@ -544,7 +552,8 @@ internal sealed class CBAdESSignatureValidationTests
         byte[] digestBytes = await CreateSha256DigestBytesAsync("signing certificate"u8.ToArray(), TestContext.CancellationToken).ConfigureAwait(false);
         DateTimeOffset expectedIssuedAt = TestClock.CanonicalEpoch;
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(3);
         writer.WriteInt32(1); // alg, RFC 9052 section 3.1.
         writer.WriteInt32(WellKnownCoseAlgorithms.Es256);
@@ -558,7 +567,7 @@ internal sealed class CBAdESSignatureValidationTests
         writer.WriteInt32(34); // x5t, RFC 9360 section 2 / clause 5.1.7.
         WriteHashAlgorithmDigestPairOracle(writer, new AdESDigestAlgorithmIntegerIdentifier(WellKnownCoseAlgorithms.Sha256), digestBytes);
         writer.WriteEndMap();
-        byte[] protectedHeader = writer.Encode();
+        byte[] protectedHeader = writerBuffer.WrittenSpan.ToArray();
 
         byte[] payload = "payload signed under a CWT-Claims map carrying a sibling claim"u8.ToArray();
         byte[] sigStructure = CoseSerialization.BuildSigStructure(protectedHeader, payload, []);
@@ -592,11 +601,13 @@ internal sealed class CBAdESSignatureValidationTests
 
         byte[] digestBytes = await CreateSha256DigestBytesAsync("signing certificate"u8.ToArray(), TestContext.CancellationToken).ConfigureAwait(false);
 
-        var unprofiledValueWriter = new CborWriter(CborConformanceMode.Canonical);
+        var unprofiledValueWriterBuffer = new ArrayBufferWriter<byte>();
+        var unprofiledValueWriter = new CborWriter(unprofiledValueWriterBuffer, CborOptions.RfcCanonical);
         unprofiledValueWriter.WriteByteString(new byte[] { 0xCA, 0xFE });
-        byte[] expectedUnprofiledBytes = unprofiledValueWriter.Encode();
+        byte[] expectedUnprofiledBytes = unprofiledValueWriterBuffer.WrittenSpan.ToArray();
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(5);
         writer.WriteInt32(1); // alg, RFC 9052 section 3.1.
         writer.WriteInt32(WellKnownCoseAlgorithms.Es256);
@@ -614,7 +625,7 @@ internal sealed class CBAdESSignatureValidationTests
         writer.WriteTextString("x-test-ext");
         writer.WriteEncodedValue(expectedUnprofiledBytes);
         writer.WriteEndMap();
-        byte[] protectedHeader = writer.Encode();
+        byte[] protectedHeader = writerBuffer.WrittenSpan.ToArray();
 
         byte[] payload = "payload signed under a header carrying a tstr-arm crit element and a tstr-keyed unprofiled header"u8.ToArray();
         byte[] sigStructure = CoseSerialization.BuildSigStructure(protectedHeader, payload, []);
@@ -651,7 +662,8 @@ internal sealed class CBAdESSignatureValidationTests
         using var publicKey = keyMaterial.PublicKey;
         keyMaterial.PrivateKey.Dispose(); // Not needed -- parsing fails while decoding the protected header, before any signature is checked.
 
-        var writer = new CborWriter(CborConformanceMode.Lax);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Lax);
         writer.WriteStartMap(2);
         // An arbitrary unprofiled label -- its 3-byte canonical encoding is deliberately written FIRST, ahead of
         // the shorter text-string key below, to construct a non-canonical top-level key order (RFC 8949 section
@@ -663,7 +675,7 @@ internal sealed class CBAdESSignatureValidationTests
         writer.WriteTextString("a");
         writer.WriteByteString([0x02]);
         writer.WriteEndMap();
-        byte[] protectedHeader = writer.Encode();
+        byte[] protectedHeader = writerBuffer.WrittenSpan.ToArray();
 
         byte[] payload = "payload over a non-canonically ordered mixed int/tstr protected header"u8.ToArray();
         byte[] signature = [0x01, 0x02, 0x03]; // Never verified -- parsing fails before the signature step.
@@ -1091,7 +1103,7 @@ internal sealed class CBAdESSignatureValidationTests
                 CBAdESSignatureSerialization.ParseCBAdESSign1,
                 CoseSerialization.BuildSigStructure,
                 publicKey,
-                MicrosoftCryptographicFunctions.VerifyP256Async,
+                MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
                 dereference: null,
                 dereferenceContext: new CBAdESDetachedObjectDereferenceContext(null, null),
                 externalDetachedPayload: null,
@@ -1189,7 +1201,7 @@ internal sealed class CBAdESSignatureValidationTests
                 CBAdESSignatureSerialization.ParseCBAdESSign1,
                 CoseSerialization.BuildSigStructure,
                 publicKey,
-                MicrosoftCryptographicFunctions.VerifyP256Async,
+                MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
                 cancelThenSucceed,
                 context,
                 externalDetachedPayload: null,
@@ -1216,7 +1228,7 @@ internal sealed class CBAdESSignatureValidationTests
                     parse: null!,
                     CoseSerialization.BuildSigStructure,
                     publicKey,
-                    MicrosoftCryptographicFunctions.VerifyP256Async,
+                    MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
                     dereference: null,
                     dereferenceContext: null,
                     externalDetachedPayload: null,
@@ -1240,7 +1252,7 @@ internal sealed class CBAdESSignatureValidationTests
                     CBAdESSignatureSerialization.ParseCBAdESSign1,
                     buildSigStructure: null!,
                     publicKey,
-                    MicrosoftCryptographicFunctions.VerifyP256Async,
+                    MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
                     dereference: null,
                     dereferenceContext: null,
                     externalDetachedPayload: null,
@@ -1264,7 +1276,7 @@ internal sealed class CBAdESSignatureValidationTests
                     CBAdESSignatureSerialization.ParseCBAdESSign1,
                     CoseSerialization.BuildSigStructure,
                     publicKey: null!,
-                    MicrosoftCryptographicFunctions.VerifyP256Async,
+                    MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
                     dereference: null,
                     dereferenceContext: null,
                     externalDetachedPayload: null,
@@ -1312,7 +1324,7 @@ internal sealed class CBAdESSignatureValidationTests
                     CBAdESSignatureSerialization.ParseCBAdESSign1,
                     CoseSerialization.BuildSigStructure,
                     publicKey,
-                    MicrosoftCryptographicFunctions.VerifyP256Async,
+                    MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
                     dereference: null,
                     dereferenceContext: null,
                     externalDetachedPayload: null,
@@ -1360,7 +1372,7 @@ internal sealed class CBAdESSignatureValidationTests
                 CBAdESSignatureSerialization.ParseCBAdESSign1,
                 CoseSerialization.BuildSigStructure,
                 publicKey,
-                MicrosoftCryptographicFunctions.VerifyP256Async,
+                MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
                 dereference,
                 dereferenceContext,
                 externalDetachedPayload,
@@ -1474,7 +1486,7 @@ internal sealed class CBAdESSignatureValidationTests
 
     /// <summary>
     /// Signs <paramref name="sigStructure"/> with <paramref name="privateKey"/> via
-    /// <see cref="MicrosoftCryptographicFunctions.SignP256Async"/> — the P-256 key-provisioning pattern
+    /// <see cref="MicrosoftCryptographicFunctionsAdapter.SignP256Async"/> — the P-256 key-provisioning pattern
     /// <c>Verifiable.Tests.Cose.CoseTests</c> establishes — returning the raw signature bytes for direct
     /// splicing into an independently minted <c>COSE_Sign1</c> array.
     /// </summary>
@@ -1484,8 +1496,7 @@ internal sealed class CBAdESSignatureValidationTests
     /// <returns>The raw signature bytes.</returns>
     private static async ValueTask<byte[]> SignSigStructureAsync(PrivateKeyMemory privateKey, byte[] sigStructure, CancellationToken cancellationToken)
     {
-        (Signature signature, _) = await MicrosoftCryptographicFunctions.SignP256Async(
-            privateKey.AsReadOnlyMemory(), sigStructure, BaseMemoryPool.Shared, cancellationToken: cancellationToken).ConfigureAwait(false);
+        (Signature signature, _) = await MicrosoftCryptographicFunctions.SignP256Async(privateKey.AsReadOnlyMemory(), sigStructure, BaseMemoryPool.Shared, cancellationToken: cancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch)).ConfigureAwait(false);
         using(signature)
         {
             return signature.AsReadOnlySpan().ToArray();
@@ -1540,7 +1551,8 @@ internal sealed class CBAdESSignatureValidationTests
             + (x5t is not null ? 1 : 0)
             + (sigD is not null ? 1 : 0);
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(memberCount);
 
         writer.WriteInt32(1); // alg, RFC 9052 section 3.1.
@@ -1580,7 +1592,7 @@ internal sealed class CBAdESSignatureValidationTests
         }
 
         writer.WriteEndMap();
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -1716,8 +1728,9 @@ internal sealed class CBAdESSignatureValidationTests
         ReadOnlyMemory<byte>? payload,
         byte[] signature)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
-        writer.WriteTag((CborTag)18); // COSE_Sign1_Tagged, RFC 9052 section 2 / clause 4.3.
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
+        writer.WriteTag(new CborTag((ulong)18)); // COSE_Sign1_Tagged, RFC 9052 section 2 / clause 4.3.
         writer.WriteStartArray(4);
         writer.WriteByteString(protectedHeader);
         writeUnprotectedMap(writer);
@@ -1733,7 +1746,7 @@ internal sealed class CBAdESSignatureValidationTests
 
         writer.WriteByteString(signature);
         writer.WriteEndArray();
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 

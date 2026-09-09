@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
 
@@ -50,7 +50,7 @@ public static class CtapLargeBlobsRequestCborReader
 
             return new CtapLargeBlobsRequest(get, set, offset, length, pinUvAuthParam, pinUvAuthProtocol);
         }
-        catch(CborContentException exception)
+        catch(CborException exception)
         {
             throw new Fido2FormatException(Fido2FormatFailureKind.MalformedCbor, "The authenticatorLargeBlobs request parameter bytes are not valid CTAP2 canonical CBOR.", exception);
         }
@@ -65,7 +65,7 @@ public static class CtapLargeBlobsRequestCborReader
         {
             if(parameters.TryGetValue(key, out ReadOnlyMemory<byte> valueCbor))
             {
-                return checked((int)new CborReader(valueCbor, CborConformanceMode.Ctap2Canonical).ReadInt64());
+                return checked((int)new CborReader(valueCbor, CborOptions.Ctap2Canonical).ReadInt64());
             }
 
             return null;
@@ -79,7 +79,7 @@ public static class CtapLargeBlobsRequestCborReader
         {
             if(parameters.TryGetValue(key, out ReadOnlyMemory<byte> valueCbor))
             {
-                return new CborReader(valueCbor, CborConformanceMode.Ctap2Canonical).ReadByteString();
+                return new CborReader(valueCbor, CborOptions.Ctap2Canonical).ReadByteString();
             }
 
             return null;

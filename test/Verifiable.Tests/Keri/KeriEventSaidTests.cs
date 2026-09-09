@@ -1,15 +1,17 @@
 using System;
 using System.Buffers;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using System.Text;
 using Lumoin.Base;
 using Verifiable.BouncyCastle;
+using Verifiable.Cbor;
 using Verifiable.Cesr;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Keri;
 using Verifiable.Microsoft;
 using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Keri;
 
@@ -24,7 +26,7 @@ namespace Verifiable.Tests.Keri;
 [TestClass]
 internal sealed class KeriEventSaidTests
 {
-    private static readonly string Code = CesrDigestCodes.Blake3Bits256;
+    private static string Code { get; } = CesrDigestCodes.Blake3Bits256;
     private const string SigningKey = "DBFiIgoCOpJ_zW_OO0GdffhHfEvJWb1HxpDx95bFvufu";
     private const string OtherAid = "EPR7FWsN3tOM8PqfMap2FRfF4MFQ4v3ZXjBUcMVtvhmB";
 
@@ -33,10 +35,10 @@ internal sealed class KeriEventSaidTests
     /// An algorithm-agile digest oracle: a Blake3 request routes to the BouncyCastle backend, every other to the
     /// Microsoft backend. Constructed in the test, independent of the production registry.
     /// </summary>
-    private static readonly ComputeDigestDelegate AgileDigest = (input, outputByteLength, tag, pool, context, cancellationToken) =>
+    private static ComputeDigestDelegate AgileDigest { get; } = (input, outputByteLength, tag, pool, context, cancellationToken) =>
         tag.TryGet<CryptoAlgorithm>(out CryptoAlgorithm algorithm) && algorithm == CryptoAlgorithm.Blake3
-            ? BouncyCastleCryptographicFunctions.ComputeBlake3DigestAsync(input, outputByteLength, tag, pool, context, cancellationToken)
-            : MicrosoftCryptographicFunctions.ComputeDigestAsync(input, outputByteLength, tag, pool, context, cancellationToken);
+            ? BouncyCastleCryptographicFunctions.ComputeBlake3DigestAsync(input, outputByteLength, tag, pool, new FakeTimeProvider(TestClock.CanonicalEpoch), context, cancellationToken)
+            : MicrosoftCryptographicFunctions.ComputeDigestAsync(input, outputByteLength, tag, pool, new FakeTimeProvider(TestClock.CanonicalEpoch), context, cancellationToken);
 
 
     /// <summary>
@@ -159,7 +161,8 @@ internal sealed class KeriEventSaidTests
     //Encodes the inception as CBOR into a pooled buffer the caller owns, returning the owner and the byte length.
     private static IMemoryOwner<byte> EncodeInceptionCbor(string identifierAndSaid, out int length)
     {
-        var writer = new CborWriter();
+        using var buffer = new SlabBufferWriter(BaseMemoryPool.Shared);
+        var writer = new CborWriter(buffer, CborOptions.Strict);
         writer.WriteStartMap(13);
         KeriEventWireFixtures.WriteScalar(writer, "v", "KERICAACAACBOR0000ff.");
         KeriEventWireFixtures.WriteScalar(writer, "t", "icp");
@@ -176,9 +179,8 @@ internal sealed class KeriEventSaidTests
         KeriEventWireFixtures.WriteList(writer, "a", []);
         writer.WriteEndMap();
 
-        length = writer.BytesWritten;
-        IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(length);
-        writer.Encode(owner.Memory.Span);
+        IMemoryOwner<byte> owner = buffer.Detach();
+        length = owner.Memory.Length;
 
         return owner;
     }
@@ -210,22 +212,22 @@ internal sealed class KeriEventSaidTests
     //A minted event's serialization, carried in a pooled buffer the test owns and disposes, with its SAID.
     private sealed class MintedEvent: IDisposable
     {
-        private readonly IMemoryOwner<byte> owner;
-        private readonly int length;
+        private IMemoryOwner<byte> Owner { get; }
+        private int Length { get; }
 
         public MintedEvent(IMemoryOwner<byte> owner, int length, string said)
         {
-            this.owner = owner;
-            this.length = length;
+            this.Owner = owner;
+            this.Length = length;
             Said = said;
         }
 
         public string Said { get; }
 
-        public ReadOnlySpan<byte> Serialization => owner.Memory.Span[..length];
+        public ReadOnlySpan<byte> Serialization => Owner.Memory.Span[..Length];
 
-        public ReadOnlyMemory<byte> Memory => owner.Memory[..length];
+        public ReadOnlyMemory<byte> Memory => Owner.Memory[..Length];
 
-        public void Dispose() => owner.Dispose();
+        public void Dispose() => Owner.Dispose();
     }
 }

@@ -169,6 +169,60 @@ public static class VcalmJsonParsing
 
 
     /// <summary>
+    /// Builds a <see cref="ParseVcalmPresentationSchemaDelegate"/> for a step's §3.6.1
+    /// <c>presentationSchema</c> envelope: <c>{type, jsonSchema?}</c> with a REQUIRED string
+    /// <c>type</c>, where the JSON Schema mechanism carries the inline <c>jsonSchema</c> object
+    /// whose raw text rides through for the validator. A non-object envelope or a missing
+    /// <c>type</c> parses to <see langword="null"/> (the participate endpoint refuses fail-closed).
+    /// </summary>
+    public static ParseVcalmPresentationSchemaDelegate CreatePresentationSchemaParser() =>
+        presentationSchemaJson => ParsePresentationSchema(presentationSchemaJson);
+
+
+    //§3.6.1 presentationSchema: {type, jsonSchema?}. The alternate-mechanism arm admits additional
+    //members beyond this specification's scope, so unknown members are not rejected here; the
+    //mechanism the type selects interprets its own payload.
+    private static VcalmPresentationSchema? ParsePresentationSchema(string presentationSchemaJson)
+    {
+        ArgumentNullException.ThrowIfNull(presentationSchemaJson);
+
+        JsonDocument doc;
+        try
+        {
+            doc = JsonDocument.Parse(presentationSchemaJson);
+        }
+        catch(JsonException)
+        {
+            return null;
+        }
+
+        using(doc)
+        {
+            JsonElement root = doc.RootElement;
+            if(root.ValueKind != JsonValueKind.Object
+                || !root.TryGetProperty("type", out JsonElement typeElement)
+                || typeElement.ValueKind != JsonValueKind.String)
+            {
+                return null;
+            }
+
+            string? schemaJson = null;
+            if(root.TryGetProperty("jsonSchema", out JsonElement schemaElement)
+                && schemaElement.ValueKind == JsonValueKind.Object)
+            {
+                schemaJson = schemaElement.GetRawText();
+            }
+
+            return new VcalmPresentationSchema
+            {
+                Type = typeElement.GetString()!,
+                SchemaJson = schemaJson
+            };
+        }
+    }
+
+
+    /// <summary>
     /// Builds a <see cref="ParseVcalmInviteRequestDelegate"/> for the §3.7.5 inviteRequest body. The
     /// body is the small fixed-shape <c>{url, purpose, referenceId?}</c> object read with
     /// <see cref="JsonDocument"/>.
@@ -712,7 +766,7 @@ public static class VcalmJsonParsing
                 return VcalmIssueCredentialRequest.Malformed();
             }
 
-            //VC-DM 2.0 §4.1: @context MUST be an ordered set — a JSON array; the VC-API issuer interface
+            //VC-DM 2.0 §4.3: @context MUST be an ordered set — a JSON array; the VC-API issuer interface
             //likewise requires type to be an array. A core member present with the WRONG JSON shape is a
             //malformed credential: the issuer MUST NOT coerce a bare scalar (e.g. a single @context URL or
             //a single type term) into a one-element array and then secure it. Presence — a MISSING member —

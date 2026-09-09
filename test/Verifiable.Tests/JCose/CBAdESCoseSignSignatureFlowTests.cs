@@ -1,7 +1,8 @@
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -119,10 +120,10 @@ internal sealed class CBAdESCoseSignSignatureFlowTests
         using PublicKeyMemory secondPublicKey = secondKeyMaterial.PublicKey;
         using PrivateKeyMemory secondPrivateKey = secondKeyMaterial.PrivateKey;
 
-        CBAdESProtectedHeaders firstHeaders = await BuildConformantHeadersAsync("conformant signer", TestContext.CancellationToken).ConfigureAwait(false);
+        using CBAdESProtectedHeaders firstHeaders = await BuildConformantHeadersAsync("conformant signer", TestContext.CancellationToken).ConfigureAwait(false);
 
         (AdESCertificateThumbprint thumbprint, byte[] _) = await CreateSigningCertificateThumbprintAsync("non-conformant signer", TestContext.CancellationToken).ConfigureAwait(false);
-        var secondHeaders = new CBAdESProtectedHeaders(WellKnownCoseAlgorithms.Es256, cwtClaims: null, x5t: thumbprint); //CB-6.3-10: CwtClaims omitted.
+        using var secondHeaders = new CBAdESProtectedHeaders(WellKnownCoseAlgorithms.Es256, cwtClaims: null, x5t: thumbprint); //CB-6.3-10: CwtClaims omitted.
 
         EncodedCoseProtectedHeader bodyProtectedHeader = EncodedCoseProtectedHeader.FromBytes(ReadOnlySpan<byte>.Empty, BaseMemoryPool.Shared);
         EncodedCoseProtectedHeader firstEncodedHeader = CBAdESSignatureSerialization.EncodeCBAdESProtectedHeader(firstHeaders, BaseMemoryPool.Shared);
@@ -139,9 +140,6 @@ internal sealed class CBAdESCoseSignSignatureFlowTests
             bodyProtectedHeader, bodyUnprotectedHeader: null, payloadBytes, signers, CoseSerialization.BuildCoseSignatureSigStructure,
             BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false))
         {
-            firstHeaders.Dispose();
-            secondHeaders.Dispose();
-
             using EncodedCoseSign wireBytes = CoseSerialization.SerializeCoseSign(message, BaseMemoryPool.Shared);
             wireCopy = wireBytes.AsReadOnlySpan().ToArray();
         }
@@ -236,7 +234,8 @@ internal sealed class CBAdESCoseSignSignatureFlowTests
         byte[] precedingElement = EncodeUnknownUHeaderInstance(9001);
         byte[] followingElement = EncodeUnknownUHeaderInstance(9002);
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartArray(4);
         writer.WriteByteString(bodyProtectedHeaderBytes);
         writer.WriteStartMap(0);
@@ -257,7 +256,7 @@ internal sealed class CBAdESCoseSignSignatureFlowTests
         writer.WriteEndArray();
         writer.WriteEndArray();
 
-        using CBAdESSignParseResult parsed = CBAdESSignatureSerialization.ParseCBAdESSign(writer.Encode(), BaseMemoryPool.Shared);
+        using CBAdESSignParseResult parsed = CBAdESSignatureSerialization.ParseCBAdESSign(writerBuffer.WrittenSpan.ToArray(), BaseMemoryPool.Shared);
         Assert.IsTrue(parsed.IsSuccess);
         Assert.HasCount(1, parsed.Signers!);
 
@@ -283,7 +282,8 @@ internal sealed class CBAdESCoseSignSignatureFlowTests
 
         using(result)
         {
-            var oracleWriter = new CborWriter(CborConformanceMode.Canonical);
+            var oracleWriterBuffer = new ArrayBufferWriter<byte>();
+            var oracleWriter = new CborWriter(oracleWriterBuffer, CborOptions.RfcCanonical);
             oracleWriter.WriteStartArray(7);
             oracleWriter.WriteTextString("Signature"); //step 2: COSE_Sign context text.
             oracleWriter.WriteByteString(bodyProtectedHeaderBytes); //step 3.
@@ -293,7 +293,7 @@ internal sealed class CBAdESCoseSignSignatureFlowTests
             oracleWriter.WriteByteString(signerSignatureBytes); //step 9.
             oracleWriter.WriteByteString(precedingElement); //steps 10/11: only the element preceding index 1 -- the array element is itself a bstr wrapping the UHeaderInstance map ([+bstr .cbor UHeaderInstance]), so the accumulator carries the bstr-wrapped encoding, not the bare map bytes.
             oracleWriter.WriteEndArray();
-            byte[] expected = oracleWriter.Encode();
+            byte[] expected = oracleWriterBuffer.WrittenSpan.ToArray();
 
             Assert.IsTrue(expected.AsSpan().SequenceEqual(result!.AsReadOnlySpan()),
                 "The threaded-through, wire-sourced imprint input must match the independent oracle exactly.");
@@ -522,7 +522,7 @@ internal sealed class CBAdESCoseSignSignatureFlowTests
 
         var sigDEntries = new List<CBAdESDetachedObjectEntry> { new("https://example.org/misplaced-sigd", digest: null, contentType: null) };
         using var misplacedDetachedObjects = new CBAdESDetachedObjects(CBAdESDetachedMechanisms.ObjectIdByURI, sigDEntries, hashAlgorithm: null);
-        var misplacedBodyHeaders = new CBAdESProtectedHeaders(
+        using var misplacedBodyHeaders = new CBAdESProtectedHeaders(
             WellKnownCoseAlgorithms.Es256,
             cwtClaims: null,
             contentType: new CBAdESContentTypeText("text/plain"),
@@ -531,7 +531,7 @@ internal sealed class CBAdESCoseSignSignatureFlowTests
             detachedObjects: misplacedDetachedObjects,
             criticalLabels: [new CoseHeaderIntegerLabel(CBAdESHeaderParameters.SigD)]);
 
-        CBAdESProtectedHeaders signerHeaders = await BuildConformantHeadersAsync("body-layer-misplacement signer", TestContext.CancellationToken).ConfigureAwait(false);
+        using CBAdESProtectedHeaders signerHeaders = await BuildConformantHeadersAsync("body-layer-misplacement signer", TestContext.CancellationToken).ConfigureAwait(false);
 
         EncodedCoseProtectedHeader bodyProtectedHeader = CBAdESSignatureSerialization.EncodeCBAdESProtectedHeader(misplacedBodyHeaders, BaseMemoryPool.Shared);
         EncodedCoseProtectedHeader signerProtectedHeader = CBAdESSignatureSerialization.EncodeCBAdESProtectedHeader(signerHeaders, BaseMemoryPool.Shared);
@@ -542,9 +542,6 @@ internal sealed class CBAdESCoseSignSignatureFlowTests
             bodyProtectedHeader, bodyUnprotectedHeader: null, payloadBytes, signers, CoseSerialization.BuildCoseSignatureSigStructure,
             BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false))
         {
-            misplacedBodyHeaders.Dispose();
-            signerHeaders.Dispose();
-
             using EncodedCoseSign wireBytes = CoseSerialization.SerializeCoseSign(message, BaseMemoryPool.Shared);
             wireCopy = wireBytes.AsReadOnlySpan().ToArray();
         }
@@ -651,9 +648,10 @@ internal sealed class CBAdESCoseSignSignatureFlowTests
             "full-house policy document"u8.ToArray(), 32, CryptoTags.Sha256Digest, BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        var qualifyingValueWriter = new CborWriter(CborConformanceMode.Canonical);
+        var qualifyingValueWriterBuffer = new ArrayBufferWriter<byte>();
+        var qualifyingValueWriter = new CborWriter(qualifyingValueWriterBuffer, CborOptions.RfcCanonical);
         qualifyingValueWriter.WriteTextString("cose-sign-full-house-claimed-value");
-        byte[] claimedQualifyingValueBytes = qualifyingValueWriter.Encode();
+        byte[] claimedQualifyingValueBytes = qualifyingValueWriterBuffer.WrittenSpan.ToArray();
 
         var keyMaterial = TestKeyMaterialProvider.CreateP256KeyMaterial();
         using PublicKeyMemory publicKey = keyMaterial.PublicKey;
@@ -821,11 +819,12 @@ internal sealed class CBAdESCoseSignSignatureFlowTests
     /// <returns>The encoded map bytes.</returns>
     private static byte[] EncodeUnknownUHeaderInstance(int label)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(label);
         writer.WriteInt32(1);
         writer.WriteEndMap();
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 }

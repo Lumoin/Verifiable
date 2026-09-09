@@ -289,6 +289,12 @@ public static class CoseCounterSign
 
         cancellationToken.ThrowIfCancellationRequested();
 
+        //The (ReadOnlyMemory<byte>?) casts are load-bearing, not redundant: ReadOnlyMemory<byte> has
+        //its own implicit conversion from a null array, so without the cast the switch's inferred
+        //common type for this position is the non-nullable ReadOnlyMemory<byte> and the abbreviated
+        //arm's "null" silently becomes an empty-but-present memory (HasValue true, Length 0) instead
+        //of "absent" (HasValue false) — collapsing exactly the RFC 9338 §3.3 distinction
+        //BuildCountersignStructure enforces below.
         (bool isAbbreviated, ReadOnlyMemory<byte>? signProtected, ReadOnlyMemory<byte> signatureBytes) = counterSignature switch
         {
             CounterSignatureV2 full =>

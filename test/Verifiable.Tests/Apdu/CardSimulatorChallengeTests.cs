@@ -7,6 +7,7 @@ using Verifiable.Apdu.Lds;
 using Verifiable.Cryptography;
 using Verifiable.Foundation.Automata;
 using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Apdu;
 
@@ -27,7 +28,7 @@ internal sealed class CardSimulatorChallengeTests
     public async Task ReturnsTheModelledChallengeBytes()
     {
         using ElementaryFile efCom = EfCom.Write("0106", "040000", [0x61, 0x75], BaseMemoryPool.Shared);
-        using var card = new CardSimulator("passport-challenge", [efCom], FillAscending);
+        using var card = new CardSimulator("passport-challenge", [efCom], FillAscending, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         using ApduDevice device = ApduDevice.Create(card.TransceiveAsync);
 
         ApduResult<GetChallengeResponse> result = await device.GetChallengeAsync(
@@ -44,7 +45,7 @@ internal sealed class CardSimulatorChallengeTests
     public async Task EmitsRequestedAndGeneratedTraceEntries()
     {
         using ElementaryFile efCom = EfCom.Write("0106", "040000", [0x61, 0x75], BaseMemoryPool.Shared);
-        using var card = new CardSimulator("passport-challenge-trace", [efCom], FillAscending);
+        using var card = new CardSimulator("passport-challenge-trace", [efCom], FillAscending, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         var observer = new TestObserver<TraceEntry<CardSimulatorState, CardSimulatorInput>>();
         using IDisposable subscription = card.Subscribe(observer);
         using ApduDevice device = ApduDevice.Create(card.TransceiveAsync);
@@ -72,7 +73,7 @@ internal sealed class CardSimulatorChallengeTests
         using ElementaryFile efCom = EfCom.Write("0106", "040000", [0x61, 0x75], BaseMemoryPool.Shared);
 
         //No RNG injected: the default deterministic counter stream must still differ across successive draws.
-        using var card = new CardSimulator("passport-default-rng", [efCom]);
+        using var card = new CardSimulator("passport-default-rng", [efCom], rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         using ApduDevice device = ApduDevice.Create(card.TransceiveAsync);
 
         using GetChallengeResponse first = (await device.GetChallengeAsync(

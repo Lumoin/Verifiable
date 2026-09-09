@@ -17,9 +17,9 @@ namespace Verifiable.Tests.Cesr;
 [TestClass]
 internal sealed class CesrGroupReaderTests
 {
-    private static readonly byte[] PublicKeyRaw = Convert.FromHexString("0ff9dafee5024209554babba1e341af32c637fcaec9e3e65d568ecda03db1ce6");
-    private static readonly byte[] SaltRaw = Convert.FromHexString("3f033eef724684dfcdc01ceb16d49d4d");
-    private static readonly byte[] SignatureRaw = [.. Enumerable.Range(0, 64).Select(i => (byte)i)];
+    private static byte[] PublicKeyRaw { get; } = Convert.FromHexString("0ff9dafee5024209554babba1e341af32c637fcaec9e3e65d568ecda03db1ce6");
+    private static byte[] SaltRaw { get; } = Convert.FromHexString("3f033eef724684dfcdc01ceb16d49d4d");
+    private static byte[] SignatureRaw { get; } = [.. Enumerable.Range(0, 64).Select(i => (byte)i)];
 
 
     /// <summary>

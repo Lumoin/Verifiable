@@ -30,11 +30,11 @@ internal sealed class DpopEndToEndTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly DateTimeOffset NowInstant = TestClock.CanonicalEpoch.AddDays(-18);
+    private static DateTimeOffset NowInstant { get; } = TestClock.CanonicalEpoch.AddDays(-18);
     private const string ClientId = "https://client.example.com";
     private const string TestSubject = "subject-1";
-    private static readonly Uri ClientBaseUri = new("https://client.example.com");
-    private static readonly Uri RedirectUri = new("https://client.example.com/callback");
+    private static Uri ClientBaseUri { get; } = new("https://client.example.com");
+    private static Uri RedirectUri { get; } = new("https://client.example.com/callback");
 
     private FakeTimeProvider TimeProvider { get; } = new(NowInstant);
 
@@ -192,7 +192,7 @@ internal sealed class DpopEndToEndTests
             fixture.DpopKey,
             TestHostShell.Base64UrlEncoder,
             DpopTestSupport.Serializer,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             TestHostShell.MemoryPool,
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -205,7 +205,7 @@ internal sealed class DpopEndToEndTests
                 AccessToken = accessToken,
                 NonceRequired = false
             },
-            MicrosoftCryptographicFunctions.VerifyP256Async,
+            MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             DpopTestSupport.Parser,
             TestHostShell.Base64UrlEncoder,
             TestHostShell.Base64UrlDecoder,
@@ -309,6 +309,98 @@ internal sealed class DpopEndToEndTests
         //Diagnostic-accessor agreement: GetConfirmationForAccessToken returns null.
         Assert.IsNull(host.GetConfirmationForAccessToken(accessToken),
             "Diagnostic accessor must agree with the wire — no binding recorded.");
+    }
+
+
+    /// <summary>
+    /// RFC 9449 §11.1 over the full DPoP-bound AuthCode wire: a store that records the DPoP proof
+    /// <c>jti</c> but never resolves what it saved under <c>FlowKind.JtiReplay</c> cannot maintain the
+    /// used-<c>jti</c> set, so <see cref="JtiReplayGuard"/> answers
+    /// <see cref="JtiReplayOutcome.StoreUnavailable"/> and the token endpoint refuses the exchange with
+    /// <c>server_error</c> — the silent no-op the half-wiring would otherwise produce is caught rather
+    /// than admitted.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.1">RFC 9449, Section 11.1</see>.
+    /// </summary>
+    [TestMethod]
+    public async Task DpopTokenEndpointFailsClosedWhenStoreCannotProveItself()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri);
+        host.EnableDpop();
+
+        using DpopClientFixture fixture = await host.CreateDpopEnabledOAuthClientAsync(
+            material.Registration,
+            RedirectUri.OriginalString,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        AuthCodeFlowEndpointResult parResult = await fixture.Client.AuthCode.StartParAsync(
+            fixture.Registration,
+            RedirectUri,
+            OAuthFormEncodedFields.Empty,
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, parResult.Outcome, parResult.ErrorDescription);
+
+        string flowId = fixture.ClientFlowStore.Keys.Single();
+        ParCompletedState parCompleted = (ParCompletedState)fixture.ClientFlowStore[flowId];
+
+        RequestFields authorizeFields = new()
+        {
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.RequestUri] = parCompleted.Par.RequestUri.ToString()
+        };
+        ExchangeContext authorizeContext = new();
+        authorizeContext.SetSubjectId(TestSubject);
+
+        ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
+            material.Registration.TenantId.Value,
+            WellKnownEndpointNames.AuthCodeAuthorize,
+            WellKnownHttpMethods.Get,
+            authorizeFields,
+            authorizeContext,
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(302, authorizeResponse.StatusCode, authorizeResponse.Body);
+
+        (string code, string? iss) = ParseAuthorizeRedirect(authorizeResponse.Location!);
+        Dictionary<string, string> callbackFields = new(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.Code] = code,
+            [OAuthRequestParameterNames.State] = flowId,
+            [OAuthRequestParameterNames.Iss] = iss!
+        };
+        AuthCodeFlowEndpointResult callbackResult = await fixture.Client.AuthCode.HandleCallbackAsync(
+            fixture.Registration,
+            new OAuthFormEncodedFields(callbackFields),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, callbackResult.Outcome, callbackResult.ErrorDescription);
+
+        HalfWireJtiReplayStore(host.Server);
+
+        //The token endpoint's DPoP proof carries a jti; the half-wired store saves it but cannot resolve
+        //it, so the guard cannot prove the replay defense ran and the exchange fails closed.
+        AuthCodeFlowEndpointResult tokenResult = await fixture.Client.AuthCode.ExchangeTokenAsync(
+            fixture.Registration,
+            flowId,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreNotEqual(AuthCodeFlowEndpointOutcome.Ok, tokenResult.Outcome, "The half-wired store must refuse the exchange.");
+        Assert.AreEqual(OAuthErrors.ServerError, tokenResult.ErrorCode,
+            $"RFC 9449 §11.1: a store that cannot prove it recorded the DPoP jti fails the exchange closed. Description: {tokenResult.ErrorDescription}");
+    }
+
+
+    /// <summary>
+    /// Rewires the host's replay store so it saves normally but never resolves anything under
+    /// <c>FlowKind.JtiReplay</c>, while every other correlation kind still resolves through the host's
+    /// real resolver. This is the half-wired store the guard's post-save self-check must catch.
+    /// </summary>
+    /// <param name="server">The hosted server whose OAuth integration resolver is wrapped.</param>
+    private static void HalfWireJtiReplayStore(EndpointServer server)
+    {
+        ResolveCorrelationKeyDelegate original = server.OAuth().ResolveCorrelationKeyAsync!;
+        server.OAuth().ResolveCorrelationKeyAsync = (tenantId, flowKind, externalHandle, ctx, ct) =>
+            flowKind == FlowKind.JtiReplay
+                ? ValueTask.FromResult<string?>(null)
+                : original(tenantId, flowKind, externalHandle, ctx, ct);
     }
 
 

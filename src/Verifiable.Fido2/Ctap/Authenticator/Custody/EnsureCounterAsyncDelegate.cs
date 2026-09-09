@@ -16,7 +16,7 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Custody;
 /// capture). This value CAN repeat across the lifetime of one authenticator instance (an
 /// <c>authenticatorReset</c> restarts the mint-order sequence at zero) — an implementation backed by a
 /// rollback-protected counter primitive (for example a TPM Counter Index, TPM 2.0 Library Part 1, Section
-/// 37.2.6.3's phantom-counter mechanism) is exactly what makes that reuse safe: a counter identified by a
+/// 34.2.6.3's phantom-counter mechanism) is exactly what makes that reuse safe: a counter identified by a
 /// previously retired <paramref name="creationSequence"/> seeds strictly above every value it held before
 /// retirement.
 /// </param>

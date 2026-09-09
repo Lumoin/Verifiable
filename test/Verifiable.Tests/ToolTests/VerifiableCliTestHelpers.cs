@@ -160,7 +160,7 @@ internal static class VerifiableCliTestHelpers
     public static string? GetExecutablePath()
     {
         string basePath = AppContext.BaseDirectory;
-        string projectRoot = Path.GetFullPath(Path.Combine(basePath, "../../../../.."));
+        string projectRoot = Path.GetFullPath(Path.Join(basePath, "../../../../.."));
 
         string[] configurations = ["Debug", "Release"];
         string[] projectPaths = ["src/Verifiable", "Verifiable"];
@@ -170,7 +170,7 @@ internal static class VerifiableCliTestHelpers
         {
             foreach(var config in configurations)
             {
-                string path = Path.Combine(projectRoot, projectPath, "bin", config, "net10.0", $"verifiable{extension}");
+                string path = Path.Join(projectRoot, projectPath, "bin", config, "net10.0", $"verifiable{extension}");
                 if(File.Exists(path))
                 {
                     return path;

@@ -37,7 +37,7 @@ public static class EudiAv
     /// Attestation type and namespace share the same value per the EUDI
     /// rulebook convention.
     /// </summary>
-    public static readonly string AttestationType = Utf8Constants.ToInternedString(AttestationTypeUtf8);
+    public static string AttestationType { get; } = Utf8Constants.ToInternedString(AttestationTypeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="DefaultCredentialQueryId"/>.</summary>
     public static ReadOnlySpan<byte> DefaultCredentialQueryIdUtf8 => "age_verification"u8;
@@ -47,7 +47,7 @@ public static class EudiAv
     /// VP Token responses. Not mandated by the AV Rulebook but a widely
     /// used convention in the EUDI Wallet ecosystem.
     /// </summary>
-    public static readonly string DefaultCredentialQueryId = Utf8Constants.ToInternedString(DefaultCredentialQueryIdUtf8);
+    public static string DefaultCredentialQueryId { get; } = Utf8Constants.ToInternedString(DefaultCredentialQueryIdUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="SdJwtVct"/>.</summary>
     public static ReadOnlySpan<byte> SdJwtVctUtf8 => "urn:eudi:av:1"u8;
@@ -57,7 +57,7 @@ public static class EudiAv
     /// attestations. Domestic types extend this base using the convention
     /// <c>urn:eudi:av:{country}:1</c>, mirroring <see cref="EudiPid.SdJwtVct"/>.
     /// </summary>
-    public static readonly string SdJwtVct = Utf8Constants.ToInternedString(SdJwtVctUtf8);
+    public static string SdJwtVct { get; } = Utf8Constants.ToInternedString(SdJwtVctUtf8);
 
     private const string VctPrefix = "urn:eudi:av:";
     private const string VctVersionSuffix = ":1";
@@ -176,7 +176,7 @@ public static class EudiAv
     public static class Mdoc
     {
         /// <summary>The namespace for AV attributes in mso_mdoc encoding.</summary>
-        public static readonly string Namespace = AttestationType;
+        public static string Namespace { get; } = AttestationType;
 
         /// <summary>The UTF-8 source literal of <see cref="AgeOver18"/>.</summary>
         public static ReadOnlySpan<byte> AgeOver18Utf8 => "age_over_18"u8;
@@ -186,7 +186,7 @@ public static class EudiAv
         /// attribute; the entire attestation centres on this single
         /// boolean.
         /// </summary>
-        public static readonly string AgeOver18 = Utf8Constants.ToInternedString(AgeOver18Utf8);
+        public static string AgeOver18 { get; } = Utf8Constants.ToInternedString(AgeOver18Utf8);
 
         /// <summary>The UTF-8 source literal of <see cref="IssuanceDate"/>.</summary>
         public static ReadOnlySpan<byte> IssuanceDateUtf8 => "issuance_date"u8;
@@ -195,7 +195,7 @@ public static class EudiAv
         /// Optional metadata: date the AV attestation was issued.
         /// Mirrors the same field on PID per the rulebook convention.
         /// </summary>
-        public static readonly string IssuanceDate = Utf8Constants.ToInternedString(IssuanceDateUtf8);
+        public static string IssuanceDate { get; } = Utf8Constants.ToInternedString(IssuanceDateUtf8);
 
         /// <summary>The UTF-8 source literal of <see cref="ExpiryDate"/>.</summary>
         public static ReadOnlySpan<byte> ExpiryDateUtf8 => "expiry_date"u8;
@@ -203,7 +203,7 @@ public static class EudiAv
         /// <summary>
         /// Optional metadata: date the AV attestation expires.
         /// </summary>
-        public static readonly string ExpiryDate = Utf8Constants.ToInternedString(ExpiryDateUtf8);
+        public static string ExpiryDate { get; } = Utf8Constants.ToInternedString(ExpiryDateUtf8);
 
         /// <summary>The UTF-8 source literal of <see cref="IssuingAuthority"/>.</summary>
         public static ReadOnlySpan<byte> IssuingAuthorityUtf8 => "issuing_authority"u8;
@@ -211,7 +211,7 @@ public static class EudiAv
         /// <summary>
         /// Optional metadata: the issuing authority's name or country code.
         /// </summary>
-        public static readonly string IssuingAuthority = Utf8Constants.ToInternedString(IssuingAuthorityUtf8);
+        public static string IssuingAuthority { get; } = Utf8Constants.ToInternedString(IssuingAuthorityUtf8);
 
         /// <summary>The UTF-8 source literal of <see cref="IssuingCountry"/>.</summary>
         public static ReadOnlySpan<byte> IssuingCountryUtf8 => "issuing_country"u8;
@@ -220,7 +220,7 @@ public static class EudiAv
         /// Optional metadata: ISO 3166-1 alpha-2 country code of the AV
         /// provider.
         /// </summary>
-        public static readonly string IssuingCountry = Utf8Constants.ToInternedString(IssuingCountryUtf8);
+        public static string IssuingCountry { get; } = Utf8Constants.ToInternedString(IssuingCountryUtf8);
     }
 
 
@@ -241,36 +241,36 @@ public static class EudiAv
         /// disclosable properties under it
         /// (e.g. <c>age_equal_or_over.18</c>).
         /// </summary>
-        public static readonly string AgeEqualOrOver = Utf8Constants.ToInternedString(AgeEqualOrOverUtf8);
+        public static string AgeEqualOrOver { get; } = Utf8Constants.ToInternedString(AgeEqualOrOverUtf8);
 
         /// <summary>The UTF-8 source literal of <see cref="AgeEqualOrOver18"/>.</summary>
         public static ReadOnlySpan<byte> AgeEqualOrOver18Utf8 => "age_equal_or_over.18"u8;
 
         /// <summary>The over-18 boolean under <see cref="AgeEqualOrOver"/>.</summary>
-        public static readonly string AgeEqualOrOver18 = Utf8Constants.ToInternedString(AgeEqualOrOver18Utf8);
+        public static string AgeEqualOrOver18 { get; } = Utf8Constants.ToInternedString(AgeEqualOrOver18Utf8);
 
         /// <summary>The UTF-8 source literal of <see cref="DateOfIssuance"/>.</summary>
         public static ReadOnlySpan<byte> DateOfIssuanceUtf8 => "date_of_issuance"u8;
 
         /// <summary>Administrative issuance date in ISO 8601-1 YYYY-MM-DD format.</summary>
-        public static readonly string DateOfIssuance = Utf8Constants.ToInternedString(DateOfIssuanceUtf8);
+        public static string DateOfIssuance { get; } = Utf8Constants.ToInternedString(DateOfIssuanceUtf8);
 
         /// <summary>The UTF-8 source literal of <see cref="DateOfExpiry"/>.</summary>
         public static ReadOnlySpan<byte> DateOfExpiryUtf8 => "date_of_expiry"u8;
 
         /// <summary>Administrative expiry date in ISO 8601-1 YYYY-MM-DD format.</summary>
-        public static readonly string DateOfExpiry = Utf8Constants.ToInternedString(DateOfExpiryUtf8);
+        public static string DateOfExpiry { get; } = Utf8Constants.ToInternedString(DateOfExpiryUtf8);
 
         /// <summary>The UTF-8 source literal of <see cref="IssuingAuthority"/>.</summary>
         public static ReadOnlySpan<byte> IssuingAuthorityUtf8 => "issuing_authority"u8;
 
         /// <summary>Name of the authority that issued the AV attestation.</summary>
-        public static readonly string IssuingAuthority = Utf8Constants.ToInternedString(IssuingAuthorityUtf8);
+        public static string IssuingAuthority { get; } = Utf8Constants.ToInternedString(IssuingAuthorityUtf8);
 
         /// <summary>The UTF-8 source literal of <see cref="IssuingCountry"/>.</summary>
         public static ReadOnlySpan<byte> IssuingCountryUtf8 => "issuing_country"u8;
 
         /// <summary>ISO 3166-1 alpha-2 country code of the AV provider.</summary>
-        public static readonly string IssuingCountry = Utf8Constants.ToInternedString(IssuingCountryUtf8);
+        public static string IssuingCountry { get; } = Utf8Constants.ToInternedString(IssuingCountryUtf8);
     }
 }

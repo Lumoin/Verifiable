@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
-using System.Net;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading;
@@ -76,7 +75,7 @@ internal delegate Task<MinimalHttpResponse> MinimalHttpHandlerDelegate(
 /// </summary>
 internal sealed class MinimalHttpHost: IAsyncDisposable
 {
-    private readonly WebApplication app;
+    private WebApplication App { get; }
 
     /// <summary>The loopback base address Kestrel bound (ephemeral port).</summary>
     public Uri BaseAddress { get; }
@@ -87,7 +86,7 @@ internal sealed class MinimalHttpHost: IAsyncDisposable
 
     private MinimalHttpHost(WebApplication app, Uri baseAddress, X509Certificate2 certificate)
     {
-        this.app = app;
+        this.App = app;
         BaseAddress = baseAddress;
         Certificate = certificate;
     }
@@ -103,12 +102,12 @@ internal sealed class MinimalHttpHost: IAsyncDisposable
         X509Certificate2 certificate = LoopbackTls.CreateServerCertificate("minimal-loopback-test-host");
 
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
-        builder.Logging.ClearProviders();
+        LoopbackKestrel.ConfigureLoopbackLogging(builder.Logging);
 
         //A single explicit HTTPS Listen call — no UseUrls — so there is no plaintext fallback on
         //this host at all.
         builder.WebHost.ConfigureKestrel(options =>
-            options.Listen(IPAddress.Loopback, port: 0, listenOptions => listenOptions.UseHttps(certificate)));
+            LoopbackKestrel.ConfigureLoopbackListener(options, certificate));
 
         WebApplication app = builder.Build();
 
@@ -129,8 +128,8 @@ internal sealed class MinimalHttpHost: IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        await app.StopAsync(CancellationToken.None).ConfigureAwait(false);
-        await app.DisposeAsync().ConfigureAwait(false);
+        await App.StopAsync(CancellationToken.None).ConfigureAwait(false);
+        await App.DisposeAsync().ConfigureAwait(false);
         Certificate.Dispose();
     }
 
@@ -139,12 +138,12 @@ internal sealed class MinimalHttpHost: IAsyncDisposable
     //shape of AuthorizationServerHttpApplication without the dispatcher.
     private sealed class DelegatedApplication
     {
-        private readonly MinimalHttpHandlerDelegate handler;
+        private MinimalHttpHandlerDelegate Handler { get; }
 
 
         public DelegatedApplication(MinimalHttpHandlerDelegate handler)
         {
-            this.handler = handler;
+            this.Handler = handler;
         }
 
 
@@ -157,7 +156,7 @@ internal sealed class MinimalHttpHost: IAsyncDisposable
                 body = Encoding.UTF8.GetString(buffer.ToArray());
             }
 
-            MinimalHttpResponse response = await handler(
+            MinimalHttpResponse response = await Handler(
                 new MinimalHttpRequest
                 {
                     Path = context.Request.Path.HasValue ? context.Request.Path.Value! : string.Empty,

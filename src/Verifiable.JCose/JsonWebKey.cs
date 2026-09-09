@@ -177,7 +177,7 @@ public class JsonWebKey: Dictionary<string, object>, IEquatable<JsonWebKey>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public override bool Equals([NotNullWhen(true)] object? obj)
     {
-        return obj is JsonWebKey other && Equals(other);
+        return obj is not null && GetType() == obj.GetType() && Equals((JsonWebKey)obj);
     }
 
 

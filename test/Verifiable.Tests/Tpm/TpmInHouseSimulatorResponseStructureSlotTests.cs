@@ -13,6 +13,7 @@ using Verifiable.Tpm.Spec.Attributes;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -63,7 +64,7 @@ internal sealed class TpmInHouseSimulatorResponseStructureSlotTests
     public TestContext TestContext { get; set; } = null!;
 
     /// <summary>
-    /// A completed <c>TPM2_GetRandom()</c> returns its <c>randomBytes</c> carrier to the pool: Table 72 types
+    /// A completed <c>TPM2_GetRandom()</c> returns its <c>randomBytes</c> carrier to the pool: Table 76 types
     /// that response parameter <c>TPM2B_DIGEST</c> (TPM 2.0 Library Part 3, clause 16.1), so the RNG effect rents
     /// exactly the requested octets into that carrier and the serializer is its terminal owner. The request is
     /// deliberately for a non-zero width: a zero-length request frames the dispose-immune shared empty digest,
@@ -74,7 +75,7 @@ internal sealed class TpmInHouseSimulatorResponseStructureSlotTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-slots-getrandom").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         long baseline = trackingPool.OutstandingCount;
@@ -104,7 +105,7 @@ internal sealed class TpmInHouseSimulatorResponseStructureSlotTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-slots-create").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         uint parentHandle;
@@ -135,7 +136,7 @@ internal sealed class TpmInHouseSimulatorResponseStructureSlotTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-slots-load").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         uint parentHandle;
@@ -171,7 +172,7 @@ internal sealed class TpmInHouseSimulatorResponseStructureSlotTests
     }
 
     /// <summary>
-    /// A completed <c>TPM2_NV_ReadPublic()</c> returns the Index's <c>nvName</c> carrier to the pool: Table 235
+    /// A completed <c>TPM2_NV_ReadPublic()</c> returns the Index's <c>nvName</c> carrier to the pool: Table 252
     /// types that response parameter <c>TPM2B_NAME</c> (TPM 2.0 Library Part 3, clause 31.6), so the Name effect
     /// adopts the octets it computed into that carrier and the serializer is its terminal owner alongside the
     /// built public area.
@@ -181,7 +182,7 @@ internal sealed class TpmInHouseSimulatorResponseStructureSlotTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-slots-nvreadpublic").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         await DefineIndexAsync(tpm, registry, trackingPool.Pool).ConfigureAwait(false);
@@ -205,7 +206,7 @@ internal sealed class TpmInHouseSimulatorResponseStructureSlotTests
     /// <summary>
     /// A completed <c>TPM2_NV_Read()</c> authorized over an HMAC session returns the response session's own
     /// <c>hmac</c> carrier to the pool: <c>TPMS_AUTH_RESPONSE.hmac</c> is a <c>TPM2B_AUTH</c> (TPM 2.0 Library
-    /// Part 2, clause 10.13.3, Table 154), so the framing effect rents exactly the session digest into that
+    /// Part 2, clause 10.12.3, Table 157), so the framing effect rents exactly the session digest into that
     /// carrier and the serializer is its terminal owner. The client session is built OUTSIDE the measured window
     /// because it adopts the response's nonceTPM carrier, which would otherwise blur the one balance under proof.
     /// </summary>
@@ -214,14 +215,14 @@ internal sealed class TpmInHouseSimulatorResponseStructureSlotTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-slots-nvread-session").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         await DefineIndexAsync(tpm, registry, trackingPool.Pool).ConfigureAwait(false);
         await WriteIndexAsync(tpm, registry, trackingPool.Pool).ConfigureAwait(false);
 
         //An NV Index authorized over an HMAC session contributes its Name to cpHash, so the caller reads it
-        //first (TPM 2.0 Library Part 1, clause 16.7, equation 15).
+        //first (TPM 2.0 Library Part 1, clause 15.7, equation 15).
         ReadOnlyMemory<byte>[] handleNames;
         {
             var readPublicInput = new NvReadPublicInput(NvIndexHandle);
@@ -236,14 +237,14 @@ internal sealed class TpmInHouseSimulatorResponseStructureSlotTests
             handleNames = [indexName, indexName];
         }
 
-        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(SessionAlg);
+        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(SessionAlg, TestEntropy.NewCounterStream(), BaseMemoryPool.Shared);
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             tpm, startInput, [], null, trackingPool.Pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(startResult.IsSuccess, $"TPM2_StartAuthSession failed: '{startResult.ResponseCode}'.");
 
         using StartAuthSessionResponse started = startResult.Value;
         uint sessionHandle = started.SessionHandle.Value;
-        using TpmSession session = new(new TpmHandle(sessionHandle), started.NonceTPM, SessionAlg, trackingPool.Pool);
+        using TpmSession session = new(new TpmHandle(sessionHandle), started.NonceTPM, SessionAlg, TestEntropy.NewCounterStream(), trackingPool.Pool);
         session.SessionAttributes = TpmaSession.CONTINUE_SESSION;
 
         long baseline = trackingPool.OutstandingCount;
@@ -273,7 +274,7 @@ internal sealed class TpmInHouseSimulatorResponseStructureSlotTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-slots-makecredential").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse credentialKey = await CreateStoragePrimaryAsync(tpm, registry, trackingPool.Pool).ConfigureAwait(false);
@@ -307,7 +308,7 @@ internal sealed class TpmInHouseSimulatorResponseStructureSlotTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-slots-activatecredential").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse credentialKey = await CreateStoragePrimaryAsync(tpm, registry, trackingPool.Pool).ConfigureAwait(false);
@@ -343,9 +344,9 @@ internal sealed class TpmInHouseSimulatorResponseStructureSlotTests
     }
 
     /// <summary>
-    /// A completed <c>TPM2_VerifySignature()</c> returns its <c>validation</c> ticket to the pool: Table 108 gives
-    /// the response exactly one parameter, a <c>TPMT_TK_VERIFIED</c> (TPM 2.0 Library Part 3, clause 20.1; Part 2,
-    /// clause 10.7.4, Table 110), so the tag, hierarchy, and ticket HMAC travel as one owned structure that the
+    /// A completed <c>TPM2_VerifySignature()</c> returns its <c>validation</c> ticket to the pool: Table 117 gives
+    /// the response exactly one parameter, a <c>TPMT_TK_VERIFIED</c> (TPM 2.0 Library Part 3, clause 20.2; Part 2,
+    /// clause 10.6.5, Table 113), so the tag, hierarchy, and ticket HMAC travel as one owned structure that the
     /// serializer is the terminal owner of.
     /// </summary>
     [TestMethod]
@@ -353,7 +354,7 @@ internal sealed class TpmInHouseSimulatorResponseStructureSlotTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-slots-verifysignature").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse signingKey = await CreateSigningPrimaryAsync(tpm, registry, trackingPool.Pool).ConfigureAwait(false);
@@ -391,7 +392,7 @@ internal sealed class TpmInHouseSimulatorResponseStructureSlotTests
     /// <summary>
     /// Adopting a <c>TPM2B_NAME</c> whose declared size overruns the buffer it is handed releases that buffer
     /// before the refusal leaves: an adopter takes ownership or releases it, never both and never neither, so a
-    /// rejected adoption cannot orphan the producer's rental (TPM 2.0 Library Part 2, clause 10.5.3, Table 104).
+    /// rejected adoption cannot orphan the producer's rental (TPM 2.0 Library Part 2, clause 10.4.3, Table 105).
     /// </summary>
     [TestMethod]
     public void NameAdoptionOfAnOverrunningSizeReleasesTheStorage()
@@ -411,7 +412,7 @@ internal sealed class TpmInHouseSimulatorResponseStructureSlotTests
     /// <summary>
     /// Adopting a <c>TPM2B_ENCRYPTED_SECRET</c> with a negative declared length releases the buffer before the
     /// refusal leaves — the same release-on-failure contract every adopter carries (TPM 2.0 Library Part 2,
-    /// clause 11.4.3, Table 210).
+    /// clause 11.4.3, Table 224).
     /// </summary>
     [TestMethod]
     public void EncryptedSecretAdoptionOfANegativeLengthReleasesTheStorage()
@@ -431,7 +432,7 @@ internal sealed class TpmInHouseSimulatorResponseStructureSlotTests
     /// <summary>
     /// Adopting a zero-length <c>TPM2B_PRIVATE</c> yields the shared empty singleton and releases the buffer it
     /// was handed: the singleton owns no storage, so keeping the rental alive behind it would leak a segment no
-    /// disposal ever reaches (TPM 2.0 Library Part 2, clause 12.3.7, Table 227).
+    /// disposal ever reaches (TPM 2.0 Library Part 2, clause 12.3.7, Table 243).
     /// </summary>
     [TestMethod]
     public void PrivateAdoptionOfAZeroLengthValueYieldsTheEmptySingletonAndReleasesTheStorage()
@@ -455,7 +456,7 @@ internal sealed class TpmInHouseSimulatorResponseStructureSlotTests
     /// <summary>
     /// Adopting a <c>TPM2B_ID_OBJECT</c> carries exactly the declared prefix of a longer buffer: the producer
     /// rents whatever width its own layout needs and declares how much of it is the value, and the carrier frames
-    /// that prefix and nothing else (TPM 2.0 Library Part 2, clause 12.4.3, Table 229).
+    /// that prefix and nothing else (TPM 2.0 Library Part 2, clause 12.4.3, Table 245).
     /// </summary>
     [TestMethod]
     public void IdObjectAdoptionCarriesOnlyTheDeclaredPrefixOfALongerBuffer()
@@ -480,8 +481,8 @@ internal sealed class TpmInHouseSimulatorResponseStructureSlotTests
     /// <summary>
     /// Adopting a <c>TPMT_TK_VERIFIED</c> whose declared digest length overruns the buffer releases that buffer
     /// before the refusal leaves, and a zero-length one yields the shared NULL ticket and releases it too — the
-    /// ticket owns storage only when it genuinely carries a digest (TPM 2.0 Library Part 2, clause 10.7.4,
-    /// Table 110).
+    /// ticket owns storage only when it genuinely carries a digest (TPM 2.0 Library Part 2, clause 10.6.5,
+    /// Table 113).
     /// </summary>
     [TestMethod]
     public void VerifiedTicketAdoptionReleasesTheDigestOnRefusalAndOnTheNullForm()
@@ -491,12 +492,12 @@ internal sealed class TpmInHouseSimulatorResponseStructureSlotTests
         long baseline = trackingPool.OutstandingCount;
         IMemoryOwner<byte> overrunning = trackingPool.Pool.Rent(32);
 
-        _ = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => TpmtTkVerified.FromMarshaled(TpmiRhHierarchy.Owner, overrunning, 33));
+        _ = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => TpmtTkVerified.FromMarshaled(TpmStConstants.TPM_ST_VERIFIED, TpmiRhHierarchy.Owner, null, overrunning, 33));
 
         Assert.AreEqual(baseline, trackingPool.OutstandingCount, "A refused adoption must return the buffer it was handed.");
 
         IMemoryOwner<byte> emptyDigest = trackingPool.Pool.Rent(32);
-        TpmtTkVerified nullTicket = TpmtTkVerified.FromMarshaled(TpmiRhHierarchy.Null, emptyDigest, 0);
+        TpmtTkVerified nullTicket = TpmtTkVerified.FromMarshaled(TpmStConstants.TPM_ST_VERIFIED, TpmiRhHierarchy.Null, null, emptyDigest, 0);
 
         Assert.IsTrue(nullTicket.IsNull, "A zero-length digest under TPM_RH_NULL is the NULL Verified Ticket.");
         Assert.AreSame(TpmtTkVerified.Null, nullTicket, "A zero-length adoption under TPM_RH_NULL must yield the shared sentinel.");
@@ -505,7 +506,7 @@ internal sealed class TpmInHouseSimulatorResponseStructureSlotTests
         nullTicket.Dispose();
 
         Assert.AreEqual(baseline, trackingPool.OutstandingCount, "Disposing the shared NULL ticket must stay a no-op.");
-        Assert.IsTrue(TpmtTkVerified.Null.Digest.IsEmpty, "The disposed-through sentinel must still read as an empty digest.");
+        Assert.IsTrue(TpmtTkVerified.Null.Hmac.IsEmpty, "The disposed-through sentinel must still read as an empty digest.");
         Assert.IsTrue(TpmtTkVerified.Null.IsNull, "The disposed-through sentinel must still be the NULL Verified Ticket.");
     }
 
@@ -515,8 +516,8 @@ internal sealed class TpmInHouseSimulatorResponseStructureSlotTests
     /// <see cref="TpmtTkVerified.Null"/> directly may retire it, because every consumer of a NULL ticket holds
     /// the same instance and a caller that releases a returned ticket without inspecting it would otherwise
     /// break every later one. After both disposals the sentinel still reads an empty digest and still frames
-    /// the NULL tuple <c>(TPM_ST_VERIFIED, TPM_RH_NULL, empty)</c> of TPM 2.0 Library Part 2, clause 10.7.2
-    /// (clause 10.7.4, Table 110).
+    /// the NULL tuple <c>(TPM_ST_VERIFIED, TPM_RH_NULL, empty)</c> of TPM 2.0 Library Part 2, clause 10.6.2
+    /// (clause 10.6.5, Table 113).
     /// </summary>
     [TestMethod]
     public void VerifiedTicketNullSentinelStaysUsableAfterEveryDisposal()
@@ -526,14 +527,14 @@ internal sealed class TpmInHouseSimulatorResponseStructureSlotTests
 
         long baseline = trackingPool.OutstandingCount;
         IMemoryOwner<byte> adopted = trackingPool.Pool.Rent(32);
-        TpmtTkVerified fromAdoption = TpmtTkVerified.FromMarshaled(TpmiRhHierarchy.Null, adopted, 0);
+        TpmtTkVerified fromAdoption = TpmtTkVerified.FromMarshaled(TpmStConstants.TPM_ST_VERIFIED, TpmiRhHierarchy.Null, null, adopted, 0);
 
         Assert.AreSame(TpmtTkVerified.Null, fromAdoption, "The zero-length NULL form must be the shared sentinel, not a fresh instance.");
 
         fromAdoption.Dispose();
         TpmtTkVerified.Null.Dispose();
 
-        Assert.IsTrue(TpmtTkVerified.Null.Digest.IsEmpty, "The sentinel carries no digest and must stay readable after disposal.");
+        Assert.IsTrue(TpmtTkVerified.Null.Hmac.IsEmpty, "The sentinel carries no digest and must stay readable after disposal.");
         Assert.AreEqual(sizeof(ushort) + sizeof(uint) + sizeof(ushort), TpmtTkVerified.Null.SerializedSize, "The NULL tuple frames as tag, hierarchy, and an empty TPM2B_DIGEST.");
 
         {
@@ -551,12 +552,12 @@ internal sealed class TpmInHouseSimulatorResponseStructureSlotTests
 
     /// <summary>
     /// A zero-length digest adopted under a hierarchy other than <c>TPM_RH_NULL</c> is NOT the NULL Verified
-    /// Ticket: clause 10.7.2 defines that sentinel as the whole tuple <c>(TPM_ST_VERIFIED, TPM_RH_NULL, empty
+    /// Ticket: clause 10.6.2 defines that sentinel as the whole tuple <c>(TPM_ST_VERIFIED, TPM_RH_NULL, empty
     /// digest)</c>, so the hierarchy is part of the value. The adoption keeps the hierarchy it was handed in a
     /// storage-less ticket that frames those exact octets back — the same instance
     /// <see cref="TpmtTkVerified.Parse"/> reconstructs when it reads them off the wire — and the buffer it was
     /// handed is released either way, since a digest-less ticket owns nothing (TPM 2.0 Library Part 2, clause
-    /// 10.7.4, Table 110).
+    /// 10.6.5, Table 113).
     /// </summary>
     [TestMethod]
     public void VerifiedTicketAdoptionOfAZeroLengthDigestUnderANonNullHierarchyKeepsThatHierarchy()
@@ -567,12 +568,12 @@ internal sealed class TpmInHouseSimulatorResponseStructureSlotTests
         long baseline = trackingPool.OutstandingCount;
         {
             IMemoryOwner<byte> storage = trackingPool.Pool.Rent(32);
-            using TpmtTkVerified adopted = TpmtTkVerified.FromMarshaled(TpmiRhHierarchy.Owner, storage, 0);
+            using TpmtTkVerified adopted = TpmtTkVerified.FromMarshaled(TpmStConstants.TPM_ST_VERIFIED, TpmiRhHierarchy.Owner, null, storage, 0);
 
             Assert.AreNotSame(TpmtTkVerified.Null, adopted, "Only TPM_RH_NULL yields the shared NULL sentinel.");
             Assert.IsFalse(adopted.IsNull, "A ticket under the owner hierarchy is not the NULL Verified Ticket.");
             Assert.AreEqual(TpmiRhHierarchy.Owner, adopted.Hierarchy, "The adopter must keep the hierarchy it was handed.");
-            Assert.IsTrue(adopted.Digest.IsEmpty, "A zero-length adoption carries no digest octets.");
+            Assert.IsTrue(adopted.Hmac.IsEmpty, "A zero-length adoption carries no digest octets.");
             Assert.AreEqual(baseline, trackingPool.OutstandingCount, "A digest-less ticket owns no storage, so the adopted buffer must be returned.");
 
             using IMemoryOwner<byte> framing = trackingPool.Pool.Rent(adopted.SerializedSize);
@@ -590,8 +591,8 @@ internal sealed class TpmInHouseSimulatorResponseStructureSlotTests
     /// <summary>
     /// Every adopter refuses a <see langword="null"/> buffer with <see cref="ArgumentNullException"/>: adoption
     /// is a transfer of ownership, so with nothing handed over there is nothing to take and nothing to release,
-    /// and the refusal precedes every length check (TPM 2.0 Library Part 2, clause 10.5.3, Table 104; clause
-    /// 11.4.3, Table 210; clause 12.3.7, Table 227; clause 12.4.3, Table 229; clause 10.7.4, Table 110).
+    /// and the refusal precedes every length check (TPM 2.0 Library Part 2, clause 10.4.3, Table 105; clause
+    /// 11.4.3, Table 224; clause 12.3.7, Table 243; clause 12.4.3, Table 245; clause 10.6.5, Table 113).
     /// </summary>
     [TestMethod]
     public void AdoptionOfANullStorageIsRefusedByEveryAdopter()
@@ -601,15 +602,15 @@ internal sealed class TpmInHouseSimulatorResponseStructureSlotTests
         _ = Assert.ThrowsExactly<ArgumentNullException>(() => Tpm2bIdObject.FromMarshaled(null!, 0), "TPM2B_ID_OBJECT must refuse a null buffer.");
         _ = Assert.ThrowsExactly<ArgumentNullException>(() => Tpm2bPrivate.FromMarshaled(null!, 0), "TPM2B_PRIVATE must refuse a null buffer.");
         _ = Assert.ThrowsExactly<ArgumentNullException>(
-            () => TpmtTkVerified.FromMarshaled(TpmiRhHierarchy.Owner, null!, 0), "TPMT_TK_VERIFIED must refuse a null digest buffer.");
+            () => TpmtTkVerified.FromMarshaled(TpmStConstants.TPM_ST_VERIFIED, TpmiRhHierarchy.Owner, null, null!, 0), "TPMT_TK_VERIFIED must refuse a null digest buffer.");
     }
 
     /// <summary>
     /// Every adopter refuses a declared length wider than the <c>UINT16</c> size field a <c>TPM2B</c> frames it
     /// through, and releases the buffer it was handed before the refusal leaves. The buffer is deliberately rented
     /// wide enough for the length, so the overrun check passes and the size-field bound is the one under proof
-    /// (TPM 2.0 Library Part 2, clause 10.5.3, Table 104; clause 11.4.3, Table 210; clause 12.3.7, Table 227;
-    /// clause 12.4.3, Table 229; clause 10.7.4, Table 110).
+    /// (TPM 2.0 Library Part 2, clause 10.4.3, Table 105; clause 11.4.3, Table 224; clause 12.3.7, Table 243;
+    /// clause 12.4.3, Table 245; clause 10.6.5, Table 113).
     /// </summary>
     [TestMethod]
     public void AdoptionOfALengthBeyondTheTpm2bSizeFieldIsRefusedAndReleasesTheStorage()
@@ -632,7 +633,7 @@ internal sealed class TpmInHouseSimulatorResponseStructureSlotTests
         _ = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => Tpm2bPrivate.FromMarshaled(privateStorage, OverWideLength));
 
         IMemoryOwner<byte> ticketStorage = trackingPool.Pool.Rent(OverWideLength);
-        _ = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => TpmtTkVerified.FromMarshaled(TpmiRhHierarchy.Owner, ticketStorage, OverWideLength));
+        _ = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => TpmtTkVerified.FromMarshaled(TpmStConstants.TPM_ST_VERIFIED, TpmiRhHierarchy.Owner, null, ticketStorage, OverWideLength));
 
         Assert.AreEqual(
             baseline, trackingPool.OutstandingCount,
@@ -642,7 +643,7 @@ internal sealed class TpmInHouseSimulatorResponseStructureSlotTests
     /// <summary>
     /// Adopting a <c>TPM2B_PRIVATE</c> whose declared length overruns the buffer it is handed releases that
     /// buffer before the refusal leaves — the same release-on-failure contract every adopter carries, taken here
-    /// over the blob the TPM's own opaque encoding rides in (TPM 2.0 Library Part 2, clause 12.3.7, Table 227).
+    /// over the blob the TPM's own opaque encoding rides in (TPM 2.0 Library Part 2, clause 12.3.7, Table 243).
     /// </summary>
     [TestMethod]
     public void PrivateAdoptionOfAnOverrunningLengthReleasesTheStorage()
@@ -663,7 +664,7 @@ internal sealed class TpmInHouseSimulatorResponseStructureSlotTests
     /// Adopting a zero-length <c>TPM2B_ID_OBJECT</c> yields the shared empty singleton, releases the buffer it
     /// was handed, and frames the bare <c>0x0000</c> size field: the singleton owns no storage, so holding the
     /// rental behind it would leak a segment no disposal ever reaches (TPM 2.0 Library Part 2, clause 12.4.3,
-    /// Table 229).
+    /// Table 245).
     /// </summary>
     [TestMethod]
     public void IdObjectAdoptionOfAZeroLengthValueYieldsTheEmptySingletonAndReleasesTheStorage()
@@ -700,7 +701,7 @@ internal sealed class TpmInHouseSimulatorResponseStructureSlotTests
     /// <summary>
     /// Adopting a zero-length <c>TPM2B_ENCRYPTED_SECRET</c> yields the shared empty singleton, releases the
     /// buffer it was handed, and frames the bare <c>0x0000</c> size field — the same dispose-immune sentinel
-    /// contract the other sized carriers hold (TPM 2.0 Library Part 2, clause 11.4.3, Table 210).
+    /// contract the other sized carriers hold (TPM 2.0 Library Part 2, clause 11.4.3, Table 224).
     /// </summary>
     [TestMethod]
     public void EncryptedSecretAdoptionOfAZeroLengthValueYieldsTheEmptySingletonAndReleasesTheStorage()
@@ -738,7 +739,7 @@ internal sealed class TpmInHouseSimulatorResponseStructureSlotTests
     /// Adopting a <c>TPM2B_NAME</c> carries exactly the declared prefix of a longer buffer and frames that
     /// prefix alone: the producer rents whatever width its own layout needs and declares how much of it is the
     /// Name, so the size field and the framed octets follow the declaration, not the rental (TPM 2.0 Library
-    /// Part 2, clause 10.5.3, Table 104).
+    /// Part 2, clause 10.4.3, Table 105).
     /// </summary>
     [TestMethod]
     public void NameAdoptionCarriesOnlyTheDeclaredPrefixOfALongerBuffer()
@@ -772,7 +773,7 @@ internal sealed class TpmInHouseSimulatorResponseStructureSlotTests
     /// <summary>
     /// Adopting a <c>TPM2B_ENCRYPTED_SECRET</c> carries exactly the declared prefix of a longer buffer and frames
     /// that prefix alone — the seed transport's own width is whatever the credential key's algorithm produced,
-    /// never the rental the producer happened to take (TPM 2.0 Library Part 2, clause 11.4.3, Table 210).
+    /// never the rental the producer happened to take (TPM 2.0 Library Part 2, clause 11.4.3, Table 224).
     /// </summary>
     [TestMethod]
     public void EncryptedSecretAdoptionCarriesOnlyTheDeclaredPrefixOfALongerBuffer()
@@ -805,7 +806,7 @@ internal sealed class TpmInHouseSimulatorResponseStructureSlotTests
 
     /// <summary>
     /// A completed <c>TPM2_GetRandom()</c> asking for zero octets frames the empty <c>TPM2B_DIGEST</c> — a bare
-    /// <c>0x0000</c> size field with no buffer behind it (Table 72 types <c>randomBytes</c>, TPM 2.0 Library
+    /// <c>0x0000</c> size field with no buffer behind it (Table 76 types <c>randomBytes</c>, TPM 2.0 Library
     /// Part 3, clause 16.1) — and rents nothing at all: the RNG effect hands back the dispose-immune shared
     /// empty digest, whose release at the serializer is a no-op, so the sentinel stays framable afterwards. This
     /// is the sentinel counterpart of
@@ -816,7 +817,7 @@ internal sealed class TpmInHouseSimulatorResponseStructureSlotTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-slots-getrandom-empty").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         using var recorder = new TpmRecorder();
         using IDisposable subscription = tpm.Subscribe(recorder);
         TpmResponseRegistry registry = CreateRegistry();
@@ -859,7 +860,7 @@ internal sealed class TpmInHouseSimulatorResponseStructureSlotTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool, "tpm-slots-activatecredential-empty").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         using var recorder = new TpmRecorder();
         using IDisposable subscription = tpm.Subscribe(recorder);
         TpmResponseRegistry registry = CreateRegistry();
@@ -909,7 +910,7 @@ internal sealed class TpmInHouseSimulatorResponseStructureSlotTests
     /// <returns>The operational simulator.</returns>
     private async Task<TpmSimulator> CreateOperationalAsync(BaseMemoryPool pool, string tpmId)
     {
-        var simulator = new TpmSimulator(tpmId, signingBackend: BouncyCastleTpmEccSigningBackend.Create());
+        var simulator = new TpmSimulator(tpmId, signingBackend: BouncyCastleTpmEccSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         var input = new StartupInput(TpmSuConstants.TPM_SU_CLEAR);

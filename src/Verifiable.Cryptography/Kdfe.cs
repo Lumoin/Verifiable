@@ -18,7 +18,7 @@ namespace Verifiable.Cryptography;
 /// <para>
 /// KDFe derives a value (for example the salt of a salted session, or the seed for a duplicated object) from a
 /// Diffie-Hellman shared value <c>Z</c> plus a use label and two party-info fields. It is defined in the TCG
-/// TPM 2.0 Library, Part 1, Section 9.4.10.3:
+/// TPM 2.0 Library Part 1, clause 8.4.10.3:
 /// </para>
 /// <code>
 /// KDFe(hashAlg, Z, label, partyUInfo, partyVInfo, bits):

@@ -6,7 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace Verifiable.Core.Model.SelectiveDisclosure;
 
-using JsonPointerType = JsonPointer.JsonPointer;
+using JsonPointerType = Lumoin.Veritas.JsonPointer.JsonPointer;
 
 /// <summary>
 /// Represents a path to an element in a credential, supporting multiple path representations.
@@ -47,9 +47,9 @@ using JsonPointerType = JsonPointer.JsonPointer;
 /// <strong>Design Decision:</strong>
 /// </para>
 /// <para>
-/// This type composes <see cref="JsonPointer.JsonPointer"/> rather than
+/// This type composes <see cref="Lumoin.Veritas.JsonPointer.JsonPointer"/> rather than
 /// duplicating its functionality. For pure JSON Pointer operations without N-Quad
-/// support, use <see cref="JsonPointer.JsonPointer"/> directly.
+/// support, use <see cref="Lumoin.Veritas.JsonPointer.JsonPointer"/> directly.
 /// </para>
 /// <para>
 /// <strong>Thread Safety:</strong> This type is immutable and thread-safe.
@@ -58,8 +58,8 @@ using JsonPointerType = JsonPointer.JsonPointer;
 [DebuggerDisplay("{ToString()}")]
 public readonly struct CredentialPath: IEquatable<CredentialPath>, IComparable<CredentialPath>
 {
-    private readonly JsonPointerType? jsonPointer;
-    private readonly int? nquadIndex;
+    private JsonPointerType? RawJsonPointer { get; }
+    private int? RawNQuadIndex { get; }
 
     /// <summary>
     /// The root path representing the credential document root.
@@ -83,17 +83,17 @@ public readonly struct CredentialPath: IEquatable<CredentialPath>, IComparable<C
     /// <summary>
     /// Whether this is a JSON-based path (can be expressed as JSON Pointer).
     /// </summary>
-    public bool IsJsonPath => jsonPointer.HasValue;
+    public bool IsJsonPath => RawJsonPointer.HasValue;
 
     /// <summary>
     /// Whether this is an N-Quad statement path.
     /// </summary>
-    public bool IsNQuadPath => nquadIndex.HasValue;
+    public bool IsNQuadPath => RawNQuadIndex.HasValue;
 
     /// <summary>
     /// Whether this is the root path.
     /// </summary>
-    public bool IsRoot => IsJsonPath && jsonPointer!.Value.IsRoot;
+    public bool IsRoot => IsJsonPath && RawJsonPointer!.Value.IsRoot;
 
     /// <summary>
     /// Depth in the credential tree (0 = root).
@@ -101,7 +101,16 @@ public readonly struct CredentialPath: IEquatable<CredentialPath>, IComparable<C
     /// <remarks>
     /// For N-Quad paths, depth is always 1 since they are flat references.
     /// </remarks>
-    public int Depth => IsJsonPath ? jsonPointer!.Value.Depth : 1;
+    public int Depth => IsJsonPath ? RawJsonPointer!.Value.Depth : 1;
+
+    /// <summary>
+    /// Whether this is a JSON path whose leaf (last) segment reads as an array index — a
+    /// non-negative integer position — rather than an object property name. <see langword="false"/>
+    /// for the root and for an N-Quad path. This lets a caller ask about the leaf's shape without
+    /// reaching through <see cref="JsonPointer"/> to the underlying pointer's segments, keeping this
+    /// type the single boundary over the JSON Pointer representation.
+    /// </summary>
+    public bool LeafIsArrayIndex => IsJsonPath && RawJsonPointer!.Value.LastSegment is { CanBeArrayIndex: true };
 
     /// <summary>
     /// The underlying JSON Pointer if this is a JSON path.
@@ -117,7 +126,7 @@ public readonly struct CredentialPath: IEquatable<CredentialPath>, IComparable<C
                     "Cannot get JSON Pointer from an N-Quad path. Check IsJsonPath first.");
             }
 
-            return jsonPointer!.Value;
+            return RawJsonPointer!.Value;
         }
     }
 
@@ -135,7 +144,7 @@ public readonly struct CredentialPath: IEquatable<CredentialPath>, IComparable<C
                     "Cannot get N-Quad index from a JSON path. Check IsNQuadPath first.");
             }
 
-            return nquadIndex!.Value;
+            return RawNQuadIndex!.Value;
         }
     }
 
@@ -145,15 +154,15 @@ public readonly struct CredentialPath: IEquatable<CredentialPath>, IComparable<C
     /// </summary>
     public CredentialPath(JsonPointerType pointer)
     {
-        jsonPointer = pointer;
-        nquadIndex = null;
+        RawJsonPointer = pointer;
+        RawNQuadIndex = null;
     }
 
 
     private CredentialPath(int nquadIndex)
     {
-        jsonPointer = null;
-        this.nquadIndex = nquadIndex;
+        RawJsonPointer = null;
+        this.RawNQuadIndex = nquadIndex;
     }
 
 
@@ -222,10 +231,10 @@ public readonly struct CredentialPath: IEquatable<CredentialPath>, IComparable<C
     {
         if(IsJsonPath)
         {
-            return jsonPointer!.Value.ToString();
+            return RawJsonPointer!.Value.ToString();
         }
 
-        return $"/_nquad:{nquadIndex}";
+        return $"/_nquad:{RawNQuadIndex}";
     }
 
 
@@ -241,7 +250,7 @@ public readonly struct CredentialPath: IEquatable<CredentialPath>, IComparable<C
                 return null;
             }
 
-            JsonPointerType? parent = jsonPointer!.Value.Parent;
+            JsonPointerType? parent = RawJsonPointer!.Value.Parent;
             return parent.HasValue ? new CredentialPath(parent.Value) : null;
         }
     }
@@ -254,7 +263,7 @@ public readonly struct CredentialPath: IEquatable<CredentialPath>, IComparable<C
     {
         if(IsJsonPath)
         {
-            foreach(JsonPointerType ancestor in jsonPointer!.Value.Ancestors())
+            foreach(JsonPointerType ancestor in RawJsonPointer!.Value.Ancestors())
             {
                 yield return new CredentialPath(ancestor);
             }
@@ -273,7 +282,7 @@ public readonly struct CredentialPath: IEquatable<CredentialPath>, IComparable<C
     {
         if(IsJsonPath)
         {
-            foreach(JsonPointerType ancestor in jsonPointer!.Value.SelfAndAncestors())
+            foreach(JsonPointerType ancestor in RawJsonPointer!.Value.SelfAndAncestors())
             {
                 yield return new CredentialPath(ancestor);
             }
@@ -297,7 +306,7 @@ public readonly struct CredentialPath: IEquatable<CredentialPath>, IComparable<C
             throw new InvalidOperationException("Cannot append to N-Quad path.");
         }
 
-        return new CredentialPath(jsonPointer!.Value.Append(propertyName));
+        return new CredentialPath(RawJsonPointer!.Value.Append(propertyName));
     }
 
 
@@ -312,7 +321,7 @@ public readonly struct CredentialPath: IEquatable<CredentialPath>, IComparable<C
             throw new InvalidOperationException("Cannot append to N-Quad path.");
         }
 
-        return new CredentialPath(jsonPointer!.Value.Append(index));
+        return new CredentialPath(RawJsonPointer!.Value.Append(index));
     }
 
 
@@ -326,7 +335,7 @@ public readonly struct CredentialPath: IEquatable<CredentialPath>, IComparable<C
             return false;
         }
 
-        return jsonPointer!.Value.IsAncestorOf(other.jsonPointer!.Value);
+        return RawJsonPointer!.Value.IsAncestorOf(other.RawJsonPointer!.Value);
     }
 
 
@@ -354,12 +363,12 @@ public readonly struct CredentialPath: IEquatable<CredentialPath>, IComparable<C
     {
         if(IsJsonPath && other.IsJsonPath)
         {
-            return jsonPointer!.Value.Equals(other.jsonPointer!.Value);
+            return RawJsonPointer!.Value.Equals(other.RawJsonPointer!.Value);
         }
 
         if(IsNQuadPath && other.IsNQuadPath)
         {
-            return nquadIndex == other.nquadIndex;
+            return RawNQuadIndex == other.RawNQuadIndex;
         }
 
         return false;
@@ -378,10 +387,10 @@ public readonly struct CredentialPath: IEquatable<CredentialPath>, IComparable<C
     {
         if(IsJsonPath)
         {
-            return HashCode.Combine(1, jsonPointer!.Value);
+            return HashCode.Combine(1, RawJsonPointer!.Value);
         }
 
-        return HashCode.Combine(2, nquadIndex);
+        return HashCode.Combine(2, RawNQuadIndex);
     }
 
 
@@ -392,7 +401,7 @@ public readonly struct CredentialPath: IEquatable<CredentialPath>, IComparable<C
         //JSON paths come before N-Quad paths.
         if(IsJsonPath && other.IsJsonPath)
         {
-            return jsonPointer!.Value.CompareTo(other.jsonPointer!.Value);
+            return RawJsonPointer!.Value.CompareTo(other.RawJsonPointer!.Value);
         }
 
         if(IsJsonPath)
@@ -405,7 +414,7 @@ public readonly struct CredentialPath: IEquatable<CredentialPath>, IComparable<C
             return 1;
         }
 
-        return nquadIndex!.Value.CompareTo(other.nquadIndex!.Value);
+        return RawNQuadIndex!.Value.CompareTo(other.RawNQuadIndex!.Value);
     }
 
 

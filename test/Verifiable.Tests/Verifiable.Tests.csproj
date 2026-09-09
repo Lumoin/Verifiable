@@ -31,7 +31,12 @@
   </PropertyGroup>
  
   <ItemGroup>
-    <PackageReference Include="dotNetRdf" />
+    <PackageReference Include="Lumoin.Veritas.Canonicalization" />
+    <PackageReference Include="Lumoin.Veritas.JsonLd" />
+    <PackageReference Include="Lumoin.Veritas.Json" />
+    <PackageReference Include="Lumoin.Veritas.Json.Stj" />
+    <PackageReference Include="Lumoin.Veritas.JsonSchema" />
+    <PackageReference Include="Lumoin.Veritas.Jsonata" />
     <PackageReference Include="CsCheck" />
     <!--
       An independent MessagePack codec used ONLY as a conformance oracle for the MGPK serialization the CESR

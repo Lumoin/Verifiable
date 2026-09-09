@@ -123,7 +123,11 @@ public static class OutgoingHeadersClientAuthExtensions
     }
 
 
-    /// <summary>The application/x-www-form-urlencoded unreserved octet set: ALPHA, DIGIT, <c>-</c>, <c>.</c>, <c>_</c>, <c>*</c>.</summary>
+    /// <summary>
+    /// The application/x-www-form-urlencoded unreserved octet set: ALPHA, DIGIT, <c>-</c>, <c>.</c>,
+    /// <c>_</c>, <c>*</c>. The boolean expression mirrors this set directly; a named predicate per
+    /// character class would only rename the citation, not simplify it.
+    /// </summary>
     private static bool IsUnreservedOctet(byte b) =>
         (b >= (byte)'A' && b <= (byte)'Z')
         || (b >= (byte)'a' && b <= (byte)'z')

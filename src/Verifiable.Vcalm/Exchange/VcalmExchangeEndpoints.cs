@@ -2,7 +2,9 @@ using System.Collections.Immutable;
 using System.Globalization;
 using System.Text;
 using Verifiable.Core;
+using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
+using Verifiable.Core.Transport;
 using Verifiable.JCose;
 
 using static Verifiable.Server.EndpointInput;
@@ -42,38 +44,34 @@ public static class VcalmExchangeEndpoints
     /// The endpoint builder delegate. Pass this to
     /// <see cref="Verifiable.Server.ServerConfiguration.EndpointBuilders"/>.
     /// </summary>
-    public static readonly EndpointBuilderDelegate Builder = static (registration, context, ct) =>
+    public static EndpointBuilderDelegate Builder { get; } = static (registration, context, ct) =>
     {
         List<EndpointCandidate> candidates = [];
 
         EndpointServer? server = context.Server;
-        if(registration.AllowedCapabilities.Contains(WellKnownVcalmCapabilities.VcalmExchange))
+
+        //The §3.6.4 / §3.6.6 reads need the exchange-id → flow-id resolver. The §3.6.3 create and
+        //§3.6.5 participate additionally need their parsers and (for §3.6.5) the step-decision seam.
+        //Fail-closed: an engine that cannot resolve, parse, or decide a step is a dead route. The
+        //property pattern both tests and captures vcalm non-null in one step, so every read below
+        //needs no null-conditional operator.
+        if(registration.AllowedCapabilities.Contains(WellKnownVcalmCapabilities.VcalmExchange)
+            && server?.Vcalm() is { ResolveVcalmExchangeFlowIdAsync: not null } vcalm)
         {
-            var vcalm = server?.Vcalm();
-
-            //The §3.6.4 / §3.6.6 reads need the exchange-id → flow-id resolver. The §3.6.3 create and
-            //§3.6.5 participate additionally need their parsers and (for §3.6.5) the step-decision seam.
-            //Fail-closed: an engine that cannot resolve, parse, or decide a step is a dead route.
-            bool canResolve = vcalm?.ResolveVcalmExchangeFlowIdAsync is not null;
-
-            if(canResolve && vcalm?.ParseVcalmCreateExchangeAsync is not null)
+            if(vcalm.ParseVcalmCreateExchangeAsync is not null)
             {
                 candidates.Add(BuildCreateExchange());
             }
 
-            if(canResolve)
-            {
-                candidates.Add(BuildGetExchangeProtocols());
-                candidates.Add(BuildGetExchangeState());
-            }
+            candidates.Add(BuildGetExchangeProtocols());
+            candidates.Add(BuildGetExchangeState());
 
             //§3.6.5: the participate endpoint needs the message parser and a step driver — either the
             //explicit step-decision seam (the single-step V-5b path) or the workflow resolver (the V-5c
             //config-driven step graph). One of the two suffices.
-            if(canResolve
-                && vcalm?.ParseVcalmExchangeMessageAsync is not null
-                && (vcalm?.ResolveVcalmExchangeStepAsync is not null
-                    || vcalm?.ResolveVcalmWorkflowForExchangeAsync is not null))
+            if(vcalm.ParseVcalmExchangeMessageAsync is not null
+                && (vcalm.ResolveVcalmExchangeStepAsync is not null
+                    || vcalm.ResolveVcalmWorkflowForExchangeAsync is not null))
             {
                 candidates.Add(BuildParticipateInExchange());
             }
@@ -181,7 +179,7 @@ public static class VcalmExchangeEndpoints
 
                 string? location = context.VcalmExchangeVcapiUrl;
 
-                return location is not null ? response.WithHeader("Location", location) : response;
+                return location is not null ? response.WithHeader(WellKnownHttpHeaderNames.Location, location) : response;
             }
         };
 
@@ -435,6 +433,36 @@ public static class VcalmExchangeEndpoints
                     ErrorDetail = problem.Detail!,
                     FailedAt = now
                 });
+            }
+
+            //§3.6.1 presentationSchema: when the active step declares one, the cryptographically
+            //verified presentation must ALSO validate against it before the exchange advances. The
+            //check is fail-closed: the step's schema is the workflow author demanding validation, so
+            //a malformed envelope, an unwired parser, an unregistered mechanism, or a Failure /
+            //Indeterminate evaluation all refuse the presentation rather than skipping the check.
+            if(workflow is not null
+                && workflow.Steps.TryGetValue(active.StepName, out VcalmWorkflowStep? schemaStep)
+                && schemaStep.PresentationSchemaJson is { } presentationSchemaJson)
+            {
+                VcalmProblemDetail? schemaProblem = await EvaluatePresentationSchemaAsync(
+                    vcalm,
+                    presentationSchemaJson,
+                    message.VerifiablePresentationJson ?? string.Empty,
+                    cancellationToken).ConfigureAwait(false);
+                if(schemaProblem is not null)
+                {
+                    context.SetVcalmExchangeReply(ProblemDetailsResponse(schemaProblem, 400));
+
+                    return Advance(new VcalmExchangeRejected
+                    {
+                        StepName = active.StepName,
+                        StepResults = active.StepResults,
+                        ErrorType = schemaProblem.Type,
+                        ErrorTitle = schemaProblem.Title!,
+                        ErrorDetail = schemaProblem.Detail!,
+                        FailedAt = now
+                    });
+                }
             }
 
             //§3.6.6: record the verified presentation under the step into variables.results.
@@ -778,6 +806,90 @@ public static class VcalmExchangeEndpoints
 
     //§3.6.6 variables.results step value: { verifiablePresentation : <the verified presentation> }. The
     //presentation JSON rides through verbatim so the §3.6.6 view is byte-faithful.
+    /// <summary>
+    /// Evaluates a §3.6.1 <c>presentationSchema</c> against the presented presentation, returning
+    /// <see langword="null"/> when the presentation passes and the refusing ProblemDetail otherwise.
+    /// </summary>
+    /// <remarks>
+    /// The §3.6.1 envelope is <c>{type, jsonSchema}</c> with <c>type</c> <c>JsonSchema</c> for the
+    /// JSON Schema mechanism, or an alternate mechanism <c>type</c> dispatched to whatever the
+    /// deployment registered for it. Fail closed: an unwired envelope parser, a malformed envelope,
+    /// an unregistered mechanism, a JSON Schema envelope with no inline <c>jsonSchema</c>, and a
+    /// Failure or Indeterminate evaluation
+    /// (<see href="https://www.w3.org/TR/vc-json-schema/#evaluation">VC JSON Schema §4.2</see>)
+    /// all refuse — a step that declares a schema requires the check to run and pass.
+    /// </remarks>
+    /// <param name="vcalm">The integration options carrying the parser and the validator registry.</param>
+    /// <param name="presentationSchemaJson">The step's verbatim <c>presentationSchema</c> JSON.</param>
+    /// <param name="presentationJson">The presented presentation's verbatim JSON.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns><see langword="null"/> on pass; the refusing ProblemDetail otherwise.</returns>
+    private static async ValueTask<VcalmProblemDetail?> EvaluatePresentationSchemaAsync(
+        VcalmIntegration vcalm,
+        string presentationSchemaJson,
+        string presentationJson,
+        CancellationToken cancellationToken)
+    {
+        if(vcalm.ParseVcalmPresentationSchema is not { } parseSchema)
+        {
+            return VcalmProblemDetail.Error(
+                VcalmProblemTypes.MalformedValueError,
+                "MALFORMED_VALUE_ERROR",
+                "The step declares a presentationSchema but no envelope parser is wired; the "
+                + "declared validation cannot run, so the presentation is refused.");
+        }
+
+        if(parseSchema(presentationSchemaJson) is not { } envelope)
+        {
+            return VcalmProblemDetail.Error(
+                VcalmProblemTypes.MalformedValueError,
+                "MALFORMED_VALUE_ERROR",
+                "The step's presentationSchema is not a JSON object carrying a string type (§3.6.1).");
+        }
+
+        if(!vcalm.VcalmSchemaValidators.IsRegistered(envelope.Type))
+        {
+            return VcalmProblemDetail.Error(
+                VcalmProblemTypes.MalformedValueError,
+                "MALFORMED_VALUE_ERROR",
+                $"The step's presentationSchema uses the schema mechanism '{envelope.Type}', for which "
+                + "no validator is registered; the declared validation cannot run, so the presentation "
+                + "is refused.");
+        }
+
+        if(envelope.Type == VcalmSchemaValidatorRegistry.JsonSchemaType && envelope.SchemaJson is null)
+        {
+            return VcalmProblemDetail.Error(
+                VcalmProblemTypes.MalformedValueError,
+                "MALFORMED_VALUE_ERROR",
+                "The step's presentationSchema is of type JsonSchema but carries no jsonSchema object (§3.6.1).");
+        }
+
+        CredentialSchemaValidationResult validation = await vcalm.VcalmSchemaValidators.ValidateAsync(
+            envelope.Type,
+            envelope.SchemaJson ?? string.Empty,
+            presentationJson,
+            cancellationToken).ConfigureAwait(false);
+
+        return validation.Outcome switch
+        {
+            CredentialSchemaValidationOutcome.Success => null,
+            CredentialSchemaValidationOutcome.Failure => VcalmProblemDetail.Error(
+                VcalmProblemTypes.MalformedValueError,
+                "MALFORMED_VALUE_ERROR",
+                validation.Errors.Count > 0
+                    ? $"The presented presentation does not conform to the step's presentationSchema: {validation.Errors[0].Message} (instance {validation.Errors[0].InstanceLocation}, keyword {validation.Errors[0].KeywordLocation})."
+                    : "The presented presentation does not conform to the step's presentationSchema."),
+            _ => VcalmProblemDetail.Error(
+                VcalmProblemTypes.MalformedValueError,
+                "MALFORMED_VALUE_ERROR",
+                "The step's presentationSchema could not be evaluated (an unsupported schema version "
+                + "or an unevaluable schema); the declared validation cannot assert conformance, so "
+                + "the presentation is refused.")
+        };
+    }
+
+
     private static string BuildPresentationResult(string? presentationJson) =>
         VcalmExchangeResponseWriter.BuildStepPresentationResult(presentationJson ?? "{}");
 

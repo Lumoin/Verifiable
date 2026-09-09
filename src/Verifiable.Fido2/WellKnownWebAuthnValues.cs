@@ -26,7 +26,7 @@ public static class WellKnownWebAuthnValues
     /// <see cref="Verifiable.JCose.WellKnownMediaTypes.Application.Json"/> constant, already reachable from
     /// this library.
     /// </remarks>
-    public static readonly string RelatedOriginsWellKnownPath = Utf8Constants.ToInternedString(RelatedOriginsWellKnownPathUtf8);
+    public static string RelatedOriginsWellKnownPath { get; } = Utf8Constants.ToInternedString(RelatedOriginsWellKnownPathUtf8);
 
 
     /// <summary>

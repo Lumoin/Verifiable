@@ -12,7 +12,7 @@ internal sealed class PartyTrustEngineTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly DateTimeOffset Now = new(2026, 6, 2, 12, 0, 0, TimeSpan.Zero);
+    private static DateTimeOffset Now { get; } = new(2026, 6, 2, 12, 0, 0, TimeSpan.Zero);
 
 
     private static TrustEvidence<string> Evidence() => new()

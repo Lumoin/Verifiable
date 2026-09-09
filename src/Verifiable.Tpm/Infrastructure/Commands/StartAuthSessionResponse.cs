@@ -15,7 +15,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// including both the response handle and response parameters.
 /// </para>
 /// <para>
-/// <b>Response handle (Part 3, Section 11.1):</b>
+/// <b>Response handle (Part 3, clause 11.1):</b>
 /// </para>
 /// <list type="bullet">
 ///   <item><description>sessionHandle (TPMI_SH_AUTH_SESSION) - handle for the newly created session.</description></item>

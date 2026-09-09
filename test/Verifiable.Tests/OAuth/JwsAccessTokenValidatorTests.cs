@@ -24,8 +24,8 @@ internal sealed class JwsAccessTokenValidatorTests
     private const string DefaultKid = "test-kid";
     private const string DefaultScope = "openid profile";
 
-    private static readonly DateTimeOffset NowInstant = TestClock.CanonicalEpoch.AddDays(-15);
-    private static readonly TimeSpan IatSkew = TimeSpan.FromSeconds(60);
+    private static DateTimeOffset NowInstant { get; } = TestClock.CanonicalEpoch.AddDays(-15);
+    private static TimeSpan IatSkew { get; } = TimeSpan.FromSeconds(60);
 
     private FakeTimeProvider TimeProvider { get; } = new(NowInstant);
 
@@ -861,7 +861,7 @@ internal sealed class JwsAccessTokenValidatorTests
             DefaultIssuer,
             DefaultAudience,
             resolver,
-            MicrosoftCryptographicFunctions.VerifyP256Async,
+            MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             JwsAccessTokenTestSupport.Parser,
             TestSetup.Base64UrlDecoder,
             TimeProvider,

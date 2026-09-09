@@ -37,10 +37,10 @@ internal sealed class AuthorizationServerResponseHeaderTests
     private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
     private const string ClientId = "https://client.example.com";
-    private static readonly Uri ClientBaseUri = new("https://client.example.com");
-    private static readonly Uri RegisteredRedirectUri =
+    private static Uri ClientBaseUri { get; } = new("https://client.example.com");
+    private static Uri RegisteredRedirectUri { get; } =
         new("https://client.example.com/callback");
-    private static readonly Uri UnregisteredRedirectUri =
+    private static Uri UnregisteredRedirectUri { get; } =
         new("https://attacker.example.com/callback");
 
     private static ImmutableHashSet<CapabilityIdentifier> ParCapabilities { get; } =
@@ -255,6 +255,20 @@ internal sealed class AuthorizationServerResponseHeaderTests
             WellKnownHttpHeaderNames.CacheControl, out string? cacheControl),
             "Registration response must emit Cache-Control header per OAuth 2.1 §3.2.3.");
         Assert.AreEqual(WellKnownCacheControlValues.NoStore, cacheControl);
+    }
+
+
+    [TestMethod]
+    public void ServerHttpResponseHeadersLookupIsCaseInsensitive()
+    {
+        //RFC 9110 §5.1: "Field names are case-insensitive". A header set under one casing
+        //and read back under another must resolve to the same value.
+        ServerHttpResponse response = ServerHttpResponse.Ok(string.Empty, string.Empty)
+            .WithHeader(WellKnownHttpHeaderNames.DPoPNonce, "abc");
+
+        Assert.IsTrue(response.Headers.TryGetValue("dpop-nonce", out string? value),
+            "RFC 9110 §5.1: a header composed under one casing must be found under a differing casing.");
+        Assert.AreEqual("abc", value);
     }
 
 

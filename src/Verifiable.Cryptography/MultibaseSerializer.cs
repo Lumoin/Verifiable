@@ -182,29 +182,12 @@ public static class MultibaseSerializer
 
 
     /// <summary>
-    /// Convenience overload that uses the default sensitive memory pool.
-    /// </summary>
-    /// <param name="data">The raw data to encode.</param>
-    /// <param name="codecHeader">The multicodec header to prepend to the data before encoding.</param>
-    /// <param name="multibasePrefix">The multibase prefix character from <see cref="MultibaseAlgorithms"/>.</param>
-    /// <param name="encoder">The encoder delegate that performs the actual encoding.</param>
-    /// <returns>The multibase encoded string with the specified prefix.</returns>
-    public static string Encode(
-        ReadOnlySpan<byte> data,
-        ReadOnlySpan<byte> codecHeader,
-        char multibasePrefix,
-        EncodeDelegate encoder)
-    {
-        return Encode(data, codecHeader, multibasePrefix, encoder, BaseMemoryPool.Shared);
-    }
-
-
-    /// <summary>
     /// Encodes a cryptographic key with the appropriate multicodec header for the specified algorithm.
     /// </summary>
     /// <param name="keyData">The raw key data to encode.</param>
     /// <param name="algorithm">The cryptographic algorithm of the key.</param>
     /// <param name="encoder">The encoder delegate to use for encoding.</param>
+    /// <param name="pool">The memory pool to use for temporary allocations.</param>
     /// <returns>The multibase encoded key string with base58btc prefix.</returns>
     /// <exception cref="InvalidOperationException">
     /// Thrown if <see cref="MulticodecHeaderRegistry"/> is not initialized.
@@ -218,12 +201,12 @@ public static class MultibaseSerializer
     /// and encodes the key using base58btc multibase encoding.
     /// </para>
     /// </remarks>
-    public static string EncodeKey(ReadOnlySpan<byte> keyData, CryptoAlgorithm algorithm, EncodeDelegate encoder)
+    public static string EncodeKey(ReadOnlySpan<byte> keyData, CryptoAlgorithm algorithm, EncodeDelegate encoder, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(encoder);
 
         var codecHeader = MulticodecHeaderRegistry.Resolve(algorithm);
-        return Encode(keyData, codecHeader, MultibaseAlgorithms.Base58Btc, encoder);
+        return Encode(keyData, codecHeader, MultibaseAlgorithms.Base58Btc, encoder, pool);
     }
 
 
@@ -232,6 +215,7 @@ public static class MultibaseSerializer
     /// </summary>
     /// <param name="publicKey">The public key memory with algorithm information in its tag.</param>
     /// <param name="encoder">The encoder delegate to use for encoding.</param>
+    /// <param name="pool">The memory pool to use for temporary allocations.</param>
     /// <returns>The multibase encoded key string with base58btc prefix.</returns>
     /// <exception cref="InvalidOperationException">
     /// Thrown if <see cref="MulticodecHeaderRegistry"/> is not initialized.
@@ -245,13 +229,13 @@ public static class MultibaseSerializer
     /// <see cref="SensitiveMemory.Tag"/> automatically.
     /// </para>
     /// </remarks>
-    public static string EncodeKey(PublicKeyMemory publicKey, EncodeDelegate encoder)
+    public static string EncodeKey(PublicKeyMemory publicKey, EncodeDelegate encoder, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(publicKey);
         ArgumentNullException.ThrowIfNull(encoder);
 
         var algorithm = publicKey.Tag.Get<CryptoAlgorithm>();
-        return EncodeKey(publicKey.AsReadOnlySpan(), algorithm, encoder);
+        return EncodeKey(publicKey.AsReadOnlySpan(), algorithm, encoder, pool);
     }
 
 
@@ -299,48 +283,25 @@ public static class MultibaseSerializer
         }
 
         var encodedPayload = encoded[1..];
-        var decodedBuffer = decoder(encodedPayload, pool);
+        using var decodedBuffer = decoder(encodedPayload, pool);
 
-        try
+        if(decodedBuffer.Memory.Length < codecHeaderLength)
         {
-            if(decodedBuffer.Memory.Length < codecHeaderLength)
-            {
-                throw new FormatException(
-                    $"Codec header length ({codecHeaderLength}) exceeds decoded Data length ({decodedBuffer.Memory.Length}).");
-            }
-
-            int resultLength = decodedBuffer.Memory.Length - codecHeaderLength;
-            var resultBuffer = pool.Rent(resultLength);
-
-            decodedBuffer.Memory.Span[codecHeaderLength..].CopyTo(resultBuffer.Memory.Span);
-
-            return resultBuffer;
+            throw new FormatException(
+                $"Codec header length ({codecHeaderLength}) exceeds decoded Data length ({decodedBuffer.Memory.Length}).");
         }
-        finally
-        {
-            decodedBuffer.Dispose();
-        }
+
+        int resultLength = decodedBuffer.Memory.Length - codecHeaderLength;
+        var resultBuffer = pool.Rent(resultLength);
+
+        decodedBuffer.Memory.Span[codecHeaderLength..].CopyTo(resultBuffer.Memory.Span);
+
+        return resultBuffer;
     }
 
 
     /// <summary>
-    /// Convenience overload that uses the default sensitive memory pool.
-    /// </summary>
-    /// <param name="encoded">The multibase encoded string to decode.</param>
-    /// <param name="codecHeaderLength">The length of the codec header to skip in the decoded data.</param>
-    /// <param name="decoder">The decoder delegate that performs the actual decoding.</param>
-    /// <returns>An owned memory buffer containing the decoded data without the codec header.</returns>
-    public static IMemoryOwner<byte> Decode(
-        ReadOnlySpan<char> encoded,
-        int codecHeaderLength,
-        DecodeDelegate decoder)
-    {
-        return Decode(encoded, codecHeaderLength, decoder, BaseMemoryPool.Shared);
-    }
-
-
-    /// <summary>
-    /// Convenience overload that accepts a simple decode function and memory pool.
+    /// Overload that accepts a simple decode function and memory pool.
     /// </summary>
     /// <param name="encoded">The multibase encoded string to decode.</param>
     /// <param name="codecHeaderLength">The length of the codec header to skip in the decoded data.</param>

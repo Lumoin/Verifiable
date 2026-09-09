@@ -1,4 +1,5 @@
-using System.Formats.Cbor;
+using System.Buffers;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Fido2;
 
@@ -58,7 +59,8 @@ public static class FidoU2fAttestationStatementCborWriter
             throw new ArgumentException($"The fido-u2f attestation statement's x5c must contain exactly one element, but {x5c.Count} were given.", nameof(x5c));
         }
 
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.Ctap2Canonical);
         writer.WriteStartMap(2);
 
         writer.WriteTextString(SigKey);
@@ -71,7 +73,7 @@ public static class FidoU2fAttestationStatementCborWriter
 
         writer.WriteEndMap();
 
-        byte[] encoded = writer.Encode();
+        byte[] encoded = buffer.WrittenSpan.ToArray();
 
         return new TaggedMemory<byte>(encoded, Fido2BufferTags.FidoU2fAttestationStatementPayload);
     }

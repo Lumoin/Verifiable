@@ -26,7 +26,7 @@ internal sealed class XAdESHostileDocumentFuzzTests
     /// <summary>The number of hostile documents generated and exercised.</summary>
     private const int DocumentCount = 400;
 
-    private static readonly string[] FragmentPool =
+    private static string[] FragmentPool { get; } =
     [
         //Valid-shaped SignedProperties with a SigningTime.
         """<SignedProperties Id="sp1"><SignedSignatureProperties><SigningTime>2024-01-01T00:00:00Z</SigningTime></SignedSignatureProperties></SignedProperties>""",
@@ -165,6 +165,8 @@ internal sealed class XAdESHostileDocumentFuzzTests
             byte[] documentOctets = Mutate(Encoding.UTF8.GetBytes(baseDocument), state);
 
             using var metered = new MeteredHousePool();
+            //table is declared null and assigned through TryParse's out parameter below; a using
+            //declaration cannot target a variable assigned after its declaration (CS1656).
             XmlNodeTable? table = null;
             try
             {
@@ -180,6 +182,8 @@ internal sealed class XAdESHostileDocumentFuzzTests
                             continue;
                         }
 
+                        //certificateValues is an out-parameter target; a using declaration cannot target a
+                        //variable assigned through an out parameter after declaration.
                         bool isCertificateValuesRead = XAdESCertificateValues.TryRead(table, nodeIndex, metered.Pool, out XAdESCertificateValues? certificateValues, out XAdESReadError _);
                         try
                         {

@@ -8,7 +8,7 @@ namespace Verifiable.Tpm.Automata;
 /// <summary>
 /// The rotatable seed the storage and endorsement hierarchy proofs (<c>shProof</c>, <c>ehProof</c>)
 /// derive from — the simulator's stand-in for the Storage Primary Seed a real TPM keeps in NV
-/// (TPM 2.0 Library Part 1, clauses 12.4.4 and 12.5), held in a pinned, zero-on-dispose carrier
+/// (TPM 2.0 Library Part 1, clauses 11.4.4 and 11.5), held in a pinned, zero-on-dispose carrier
 /// because every owner/endorsement-hierarchy proof, and therefore every outstanding
 /// creation/context-integrity ticket, is an HMAC keyed from it.
 /// </summary>

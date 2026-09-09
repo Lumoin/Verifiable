@@ -1,6 +1,7 @@
 using System;
 using System.Buffers;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
+using Verifiable.Cbor;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Cryptography;
 using Verifiable.Fido2;
@@ -267,13 +268,15 @@ internal sealed class CtapMakeCredentialRequestCborReaderTests
         using DigestValue clientDataHash = Fido2TestVectors.WrapRpIdHash(ClientDataHashBytes, BaseMemoryPool.Shared);
         using UserHandle userHandle = UserHandle.Create(UserHandleBytes, BaseMemoryPool.Shared);
 
-        var extensionsWriter = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var extensionsWriterBuffer = new ArrayBufferWriter<byte>();
+        var extensionsWriter = new CborWriter(extensionsWriterBuffer, CborOptions.Ctap2Canonical);
+
         extensionsWriter.WriteStartMap(1);
         extensionsWriter.WriteTextString(WellKnownWebAuthnExtensionIdentifiers.LargeBlobKey);
         extensionsWriter.WriteBoolean(true);
         extensionsWriter.WriteEndMap();
 
-        var written = BuildRequestWithExtensions(clientDataHash, userHandle, extensionsWriter.Encode());
+        var written = BuildRequestWithExtensions(clientDataHash, userHandle, extensionsWriterBuffer.WrittenSpan.ToArray());
 
         CtapMakeCredentialRequest decoded = CtapMakeCredentialRequestCborReader.Read(CtapMakeCredentialRequestCborWriter.Write(written).Memory, BaseMemoryPool.Shared);
 
@@ -302,13 +305,15 @@ internal sealed class CtapMakeCredentialRequestCborReaderTests
         using DigestValue clientDataHash = Fido2TestVectors.WrapRpIdHash(ClientDataHashBytes, BaseMemoryPool.Shared);
         using UserHandle userHandle = UserHandle.Create(UserHandleBytes, BaseMemoryPool.Shared);
 
-        var extensionsWriter = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var extensionsWriterBuffer = new ArrayBufferWriter<byte>();
+        var extensionsWriter = new CborWriter(extensionsWriterBuffer, CborOptions.Ctap2Canonical);
+
         extensionsWriter.WriteStartMap(1);
         extensionsWriter.WriteTextString(WellKnownWebAuthnExtensionIdentifiers.HmacSecret);
         extensionsWriter.WriteBoolean(true);
         extensionsWriter.WriteEndMap();
 
-        var written = BuildRequestWithExtensions(clientDataHash, userHandle, extensionsWriter.Encode());
+        var written = BuildRequestWithExtensions(clientDataHash, userHandle, extensionsWriterBuffer.WrittenSpan.ToArray());
 
         CtapMakeCredentialRequest decoded = CtapMakeCredentialRequestCborReader.Read(CtapMakeCredentialRequestCborWriter.Write(written).Memory, BaseMemoryPool.Shared);
 
@@ -337,13 +342,15 @@ internal sealed class CtapMakeCredentialRequestCborReaderTests
         using DigestValue clientDataHash = Fido2TestVectors.WrapRpIdHash(ClientDataHashBytes, BaseMemoryPool.Shared);
         using UserHandle userHandle = UserHandle.Create(UserHandleBytes, BaseMemoryPool.Shared);
 
-        var extensionsWriter = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var extensionsWriterBuffer = new ArrayBufferWriter<byte>();
+        var extensionsWriter = new CborWriter(extensionsWriterBuffer, CborOptions.Ctap2Canonical);
+
         extensionsWriter.WriteStartMap(1);
         extensionsWriter.WriteTextString(WellKnownWebAuthnExtensionIdentifiers.HmacSecret);
         extensionsWriter.WriteBoolean(false);
         extensionsWriter.WriteEndMap();
 
-        var written = BuildRequestWithExtensions(clientDataHash, userHandle, extensionsWriter.Encode());
+        var written = BuildRequestWithExtensions(clientDataHash, userHandle, extensionsWriterBuffer.WrittenSpan.ToArray());
 
         CtapMakeCredentialRequest decoded = CtapMakeCredentialRequestCborReader.Read(CtapMakeCredentialRequestCborWriter.Write(written).Memory, BaseMemoryPool.Shared);
 
@@ -371,13 +378,15 @@ internal sealed class CtapMakeCredentialRequestCborReaderTests
         using DigestValue clientDataHash = Fido2TestVectors.WrapRpIdHash(ClientDataHashBytes, BaseMemoryPool.Shared);
         using UserHandle userHandle = UserHandle.Create(UserHandleBytes, BaseMemoryPool.Shared);
 
-        var wrongTypeWriter = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var wrongTypeWriterBuffer = new ArrayBufferWriter<byte>();
+        var wrongTypeWriter = new CborWriter(wrongTypeWriterBuffer, CborOptions.Ctap2Canonical);
+
         wrongTypeWriter.WriteStartMap(1);
         wrongTypeWriter.WriteTextString(WellKnownWebAuthnExtensionIdentifiers.HmacSecret);
         wrongTypeWriter.WriteInt32(1);
         wrongTypeWriter.WriteEndMap();
 
-        var written = BuildRequestWithExtensions(clientDataHash, userHandle, wrongTypeWriter.Encode());
+        var written = BuildRequestWithExtensions(clientDataHash, userHandle, wrongTypeWriterBuffer.WrittenSpan.ToArray());
 
         Assert.ThrowsExactly<Fido2FormatException>(
             () => CtapMakeCredentialRequestCborReader.Read(CtapMakeCredentialRequestCborWriter.Write(written).Memory, BaseMemoryPool.Shared));
@@ -399,12 +408,14 @@ internal sealed class CtapMakeCredentialRequestCborReaderTests
         using DigestValue clientDataHash = Fido2TestVectors.WrapRpIdHash(ClientDataHashBytes, BaseMemoryPool.Shared);
         using UserHandle userHandle = UserHandle.Create(UserHandleBytes, BaseMemoryPool.Shared);
 
-        var unknownKeyExtensionsWriter = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var unknownKeyExtensionsWriterBuffer = new ArrayBufferWriter<byte>();
+        var unknownKeyExtensionsWriter = new CborWriter(unknownKeyExtensionsWriterBuffer, CborOptions.Ctap2Canonical);
+
         unknownKeyExtensionsWriter.WriteStartMap(1);
         unknownKeyExtensionsWriter.WriteTextString("credBlob");
         unknownKeyExtensionsWriter.WriteBoolean(true);
         unknownKeyExtensionsWriter.WriteEndMap();
-        byte[] unknownKeyExtensions = unknownKeyExtensionsWriter.Encode();
+        byte[] unknownKeyExtensions = unknownKeyExtensionsWriterBuffer.WrittenSpan.ToArray();
 
         var written = BuildRequestWithExtensions(clientDataHash, userHandle, unknownKeyExtensions);
 
@@ -437,13 +448,15 @@ internal sealed class CtapMakeCredentialRequestCborReaderTests
         using DigestValue clientDataHash = Fido2TestVectors.WrapRpIdHash(ClientDataHashBytes, BaseMemoryPool.Shared);
         using UserHandle userHandle = UserHandle.Create(UserHandleBytes, BaseMemoryPool.Shared);
 
-        var wrongTypeWriter = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var wrongTypeWriterBuffer = new ArrayBufferWriter<byte>();
+        var wrongTypeWriter = new CborWriter(wrongTypeWriterBuffer, CborOptions.Ctap2Canonical);
+
         wrongTypeWriter.WriteStartMap(1);
         wrongTypeWriter.WriteTextString(WellKnownWebAuthnExtensionIdentifiers.CredProtect);
         wrongTypeWriter.WriteTextString("not-an-integer");
         wrongTypeWriter.WriteEndMap();
 
-        var written = BuildRequestWithExtensions(clientDataHash, userHandle, wrongTypeWriter.Encode());
+        var written = BuildRequestWithExtensions(clientDataHash, userHandle, wrongTypeWriterBuffer.WrittenSpan.ToArray());
 
         Assert.ThrowsExactly<Fido2FormatException>(
             () => CtapMakeCredentialRequestCborReader.Read(CtapMakeCredentialRequestCborWriter.Write(written).Memory, BaseMemoryPool.Shared));
@@ -460,13 +473,15 @@ internal sealed class CtapMakeCredentialRequestCborReaderTests
         using DigestValue clientDataHash = Fido2TestVectors.WrapRpIdHash(ClientDataHashBytes, BaseMemoryPool.Shared);
         using UserHandle userHandle = UserHandle.Create(UserHandleBytes, BaseMemoryPool.Shared);
 
-        var wrongTypeWriter = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var wrongTypeWriterBuffer = new ArrayBufferWriter<byte>();
+        var wrongTypeWriter = new CborWriter(wrongTypeWriterBuffer, CborOptions.Ctap2Canonical);
+
         wrongTypeWriter.WriteStartMap(1);
         wrongTypeWriter.WriteTextString(WellKnownWebAuthnExtensionIdentifiers.MinPinLength);
         wrongTypeWriter.WriteInt32(1);
         wrongTypeWriter.WriteEndMap();
 
-        var written = BuildRequestWithExtensions(clientDataHash, userHandle, wrongTypeWriter.Encode());
+        var written = BuildRequestWithExtensions(clientDataHash, userHandle, wrongTypeWriterBuffer.WrittenSpan.ToArray());
 
         Assert.ThrowsExactly<Fido2FormatException>(
             () => CtapMakeCredentialRequestCborReader.Read(CtapMakeCredentialRequestCborWriter.Write(written).Memory, BaseMemoryPool.Shared));
@@ -529,7 +544,9 @@ internal sealed class CtapMakeCredentialRequestCborReaderTests
     [TestMethod]
     public void ThrowsWhenClientDataHashHasWrongCborType()
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(4);
         writer.WriteInt32(WellKnownCtapMakeCredentialRequestKeys.ClientDataHash);
         writer.WriteTextString("not-bytes");
@@ -549,7 +566,7 @@ internal sealed class CtapMakeCredentialRequestCborReaderTests
         writer.WriteEndMap();
 
         Assert.ThrowsExactly<Fido2FormatException>(
-            () => CtapMakeCredentialRequestCborReader.Read(writer.Encode(), BaseMemoryPool.Shared));
+            () => CtapMakeCredentialRequestCborReader.Read(writerBuffer.WrittenSpan.ToArray(), BaseMemoryPool.Shared));
     }
 
 
@@ -588,7 +605,9 @@ internal sealed class CtapMakeCredentialRequestCborReaderTests
     [TestMethod]
     public void IgnoresUnrecognizedTopLevelMemberKey()
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(5);
         writer.WriteInt32(WellKnownCtapMakeCredentialRequestKeys.ClientDataHash);
         writer.WriteByteString(ClientDataHashBytes);
@@ -609,7 +628,7 @@ internal sealed class CtapMakeCredentialRequestCborReaderTests
         writer.WriteBoolean(true);
         writer.WriteEndMap();
 
-        CtapMakeCredentialRequest decoded = CtapMakeCredentialRequestCborReader.Read(writer.Encode(), BaseMemoryPool.Shared);
+        CtapMakeCredentialRequest decoded = CtapMakeCredentialRequestCborReader.Read(writerBuffer.WrittenSpan.ToArray(), BaseMemoryPool.Shared);
 
         try
         {
@@ -645,7 +664,8 @@ internal sealed class CtapMakeCredentialRequestCborReaderTests
     /// </summary>
     private static byte[] BuildExtensionsMap(int? credProtect, bool? minPinLength)
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
 
         int memberCount = (credProtect is not null ? 1 : 0) + (minPinLength is not null ? 1 : 0);
         writer.WriteStartMap(memberCount);
@@ -664,14 +684,15 @@ internal sealed class CtapMakeCredentialRequestCborReaderTests
 
         writer.WriteEndMap();
 
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
     /// <summary>Builds a 3-entry request parameter map omitting <paramref name="missingKey"/> from the four Required members.</summary>
     private static byte[] BuildMapMissingKey(int missingKey)
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
 
         int[] allKeys = [WellKnownCtapMakeCredentialRequestKeys.ClientDataHash, WellKnownCtapMakeCredentialRequestKeys.Rp, WellKnownCtapMakeCredentialRequestKeys.User, WellKnownCtapMakeCredentialRequestKeys.PubKeyCredParams];
         int presentCount = 0;
@@ -718,6 +739,6 @@ internal sealed class CtapMakeCredentialRequestCborReaderTests
 
         writer.WriteEndMap();
 
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 }

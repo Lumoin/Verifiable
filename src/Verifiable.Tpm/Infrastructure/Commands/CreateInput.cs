@@ -33,7 +33,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// TPML_PCR_SELECTION     creationPCR     PCRs to include in creation data
 /// </code>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 3, Section 12.1 (Table 19).
+/// Specification reference: TPM 2.0 Library Part 3, clause 12.1 (Table 19).
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -47,7 +47,7 @@ public sealed class CreateInput: ITpmCommandInput, IDisposable
     /// <inheritdoc/>
     /// <remarks>
     /// <c>inSensitive</c> (<see cref="Tpm2bSensitiveCreate"/>) is a sized buffer and is the command's first
-    /// parameter, so it is eligible for session-based parameter encryption (TPM 2.0 Library Part 1, Section
+    /// parameter, so it is eligible for session-based parameter encryption (TPM 2.0 Library Part 1, clause
     /// 21.1). A session without the <c>decrypt</c> attribute is unaffected; this only enables a caller that
     /// attaches a decrypt session to actually request encryption.
     /// </remarks>

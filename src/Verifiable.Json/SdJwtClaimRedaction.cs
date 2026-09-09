@@ -129,6 +129,7 @@ public static class SdJwtClaimRedaction
                 computeDigest: null,
                 encoder: null,
                 hashAlgorithm: null,
+                pool: null,
                 payload,
                 allDisclosures,
                 digestsByParent);
@@ -177,6 +178,7 @@ public static class SdJwtClaimRedaction
     /// <param name="hashAlgorithm">
     /// The hash algorithm identifier in IANA format (e.g., <c>"sha-256"</c>).
     /// </param>
+    /// <param name="pool">The memory pool every disclosure digest is rented from.</param>
     /// <param name="decoyOptions">
     /// Optional decoy-digest configuration (count policy plus per-call state) per RFC 9901 §4.2.5,
     /// applied once per <c>_sd</c> location. <see cref="DecoyDigestOptions.None"/> (the default) means no decoys. A decoy is the same
@@ -198,6 +200,7 @@ public static class SdJwtClaimRedaction
         ComputeDisclosureDigestDelegate computeDigest,
         EncodeDelegate encoder,
         string hashAlgorithm,
+        BaseMemoryPool pool,
         DecoyDigestOptions decoyOptions = default)
     {
         ArgumentException.ThrowIfNullOrEmpty(credentialJson);
@@ -207,6 +210,7 @@ public static class SdJwtClaimRedaction
         ArgumentNullException.ThrowIfNull(computeDigest);
         ArgumentNullException.ThrowIfNull(encoder);
         ArgumentException.ThrowIfNullOrWhiteSpace(hashAlgorithm);
+        ArgumentNullException.ThrowIfNull(pool);
 
         DecoyDigestCountDelegate resolvedDecoyCount = decoyOptions.Count ?? DecoyDigestPolicy.None;
         object? decoyState = decoyOptions.State;
@@ -239,6 +243,7 @@ public static class SdJwtClaimRedaction
                 computeDigest,
                 encoder,
                 hashAlgorithm,
+                pool,
                 payload,
                 allDisclosures,
                 digestsByParent);
@@ -273,7 +278,7 @@ public static class SdJwtClaimRedaction
             using Salt decoySalt = generateSalt();
             string randomEncoded = encoder(decoySalt.AsReadOnlySpan());
 
-            return computeDigest(randomEncoded, hashAlgorithm, encoder);
+            return computeDigest(randomEncoded, hashAlgorithm, encoder, pool);
         }
     }
 
@@ -290,6 +295,7 @@ public static class SdJwtClaimRedaction
         ComputeDisclosureDigestDelegate? computeDigest,
         EncodeDelegate? encoder,
         string? hashAlgorithm,
+        BaseMemoryPool? pool,
         Dictionary<string, object> mandatoryOutput,
         List<SdDisclosure> allDisclosures,
         Dictionary<CredentialPath, List<string>> digestsByParent)
@@ -312,7 +318,7 @@ public static class SdJwtClaimRedaction
                 if(serializeDisclosure is not null && computeDigest is not null && encoder is not null)
                 {
                     string encoded = serializeDisclosure(disclosure, encoder);
-                    string digest = computeDigest(encoded, hashAlgorithm!, encoder);
+                    string digest = computeDigest(encoded, hashAlgorithm!, encoder, pool!);
 
                     if(!digestsByParent.TryGetValue(currentPath, out List<string>? digests))
                     {
@@ -340,6 +346,7 @@ public static class SdJwtClaimRedaction
                         computeDigest,
                         encoder,
                         hashAlgorithm,
+                        pool,
                         nestedOutput,
                         allDisclosures,
                         digestsByParent);

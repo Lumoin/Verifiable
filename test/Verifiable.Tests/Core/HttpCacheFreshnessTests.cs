@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Globalization;
 using Verifiable.Core.OutboundFetch;
 
@@ -320,6 +319,21 @@ internal sealed class HttpCacheFreshnessTests
 
 
     [TestMethod]
+    public void ANoStoreOnASecondCacheControlFieldLineIsNotStorable()
+    {
+        OutboundResponse response = Response(
+            ("Cache-Control", "max-age=600"),
+            ("Cache-Control", "no-store"));
+
+        HttpCacheFreshness result = HttpCacheFreshness.Compute(response);
+
+        Assert.IsFalse(result.IsStorable,
+            "RFC 9111 §5.2: \"Cache-Control = #cache-directive\" is a comma-separated LIST field (RFC 9110 §5.6.1's \"#rule\"), " +
+            "so a second Cache-Control field line's no-store is folded together with the first line's directives, not dropped.");
+    }
+
+
+    [TestMethod]
     public void DeltaSecondsOverflowClampsRatherThanRejects()
     {
         OutboundResponse response = Response(("Cache-Control", "max-age=99999999999999999999999999999999"));
@@ -331,18 +345,10 @@ internal sealed class HttpCacheFreshnessTests
     }
 
 
-    private static OutboundResponse Response(params (string Name, string Value)[] headers)
-    {
-        Dictionary<string, string> headerMap = new(StringComparer.OrdinalIgnoreCase);
-        foreach((string name, string value) in headers)
-        {
-            headerMap[name] = value;
-        }
-
-        return new OutboundResponse
+    private static OutboundResponse Response(params (string Name, string Value)[] headers) =>
+        new()
         {
             StatusCode = 200,
-            Headers = headerMap,
+            Headers = HttpHeaderSet.FromPairs(headers),
         };
-    }
 }

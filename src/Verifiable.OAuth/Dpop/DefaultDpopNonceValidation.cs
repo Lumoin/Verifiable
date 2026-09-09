@@ -58,10 +58,12 @@ public static class DefaultDpopNonceValidation
         }
         catch
         {
+            //presentedNonce is client-supplied wire input; any decode failure is a malformed nonce rather
+            //than an internal fault.
             return DpopNonceValidationResult.Failure(DpopNonceValidationFailureReason.Malformed);
         }
 
-        try
+        using(decodedOwner)
         {
             ReadOnlyMemory<byte> decoded = decodedOwner.Memory;
             int minimumLength = 1 + 0
@@ -179,10 +181,6 @@ public static class DefaultDpopNonceValidation
                 Kid = kid.Value,
                 IssuedAt = issuedAt
             });
-        }
-        finally
-        {
-            decodedOwner.Dispose();
         }
     }
 }

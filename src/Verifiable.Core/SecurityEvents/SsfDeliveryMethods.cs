@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography.Text;
 
 namespace Verifiable.Core.SecurityEvents;
@@ -18,7 +19,7 @@ public static class SsfDeliveryMethods
     /// Push delivery over HTTP (<c>urn:ietf:rfc:8935</c>) — the Transmitter POSTs each SET to
     /// the Receiver's <c>endpoint_url</c>. SSF §6.1.1 / RFC 8935.
     /// </summary>
-    public static readonly string PushHttp = Utf8Constants.ToInternedString(PushHttpUtf8);
+    public static string PushHttp { get; } = Utf8Constants.ToInternedString(PushHttpUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="PollHttp"/>.</summary>
     public static ReadOnlySpan<byte> PollHttpUtf8 => "urn:ietf:rfc:8936"u8;
@@ -27,7 +28,7 @@ public static class SsfDeliveryMethods
     /// Poll delivery over HTTP (<c>urn:ietf:rfc:8936</c>) — the Receiver polls the Transmitter's
     /// <c>endpoint_url</c> for SETs. SSF §6.1.2 / RFC 8936.
     /// </summary>
-    public static readonly string PollHttp = Utf8Constants.ToInternedString(PollHttpUtf8);
+    public static string PollHttp { get; } = Utf8Constants.ToInternedString(PollHttpUtf8);
 
 
     /// <summary>Whether <paramref name="method"/> is <see cref="PushHttp"/>.</summary>
@@ -65,7 +66,7 @@ public static class SsfDeliveryParameterNames
     public static ReadOnlySpan<byte> MethodUtf8 => "method"u8;
 
     /// <summary><c>method</c> — the delivery-method URI (see <see cref="SsfDeliveryMethods"/>).</summary>
-    public static readonly string Method = Utf8Constants.ToInternedString(MethodUtf8);
+    public static string Method { get; } = Utf8Constants.ToInternedString(MethodUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="EndpointUrl"/>.</summary>
     public static ReadOnlySpan<byte> EndpointUrlUtf8 => "endpoint_url"u8;
@@ -74,7 +75,9 @@ public static class SsfDeliveryParameterNames
     /// <c>endpoint_url</c> — for push, the Receiver-set URL events are POSTed to; for poll,
     /// the Transmitter-set URL events are retrieved from.
     /// </summary>
-    public static readonly string EndpointUrl = Utf8Constants.ToInternedString(EndpointUrlUtf8);
+    [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
+        Justification = "This member is the JSON claim NAME literal 'endpoint_url' (a wire key compared and serialised as a string), not a dereferenceable System.Uri.")]
+    public static string EndpointUrl { get; } = Utf8Constants.ToInternedString(EndpointUrlUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="AuthorizationHeader"/>.</summary>
     public static ReadOnlySpan<byte> AuthorizationHeaderUtf8 => "authorization_header"u8;
@@ -83,5 +86,5 @@ public static class SsfDeliveryParameterNames
     /// <c>authorization_header</c> — OPTIONAL (push) authorization header value the Transmitter
     /// MUST include on every POST to the Receiver's <c>endpoint_url</c>.
     /// </summary>
-    public static readonly string AuthorizationHeader = Utf8Constants.ToInternedString(AuthorizationHeaderUtf8);
+    public static string AuthorizationHeader { get; } = Utf8Constants.ToInternedString(AuthorizationHeaderUtf8);
 }

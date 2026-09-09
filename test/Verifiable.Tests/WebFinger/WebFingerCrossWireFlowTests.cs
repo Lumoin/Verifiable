@@ -97,11 +97,11 @@ internal sealed class WebFingerCrossWireFlowTests
             "WF-1/WF-14/WF-64/WF-65: the whole exchange MUST be https — Node A has no plaintext HTTP listener, so there is no http leg to fall back to.");
 
         Assert.IsNotNull(spy.LastResponse);
-        Assert.IsTrue(spy.LastResponse!.TryGetHeader("Content-Type", out string? contentType));
+        Assert.IsTrue(spy.LastResponse!.Headers.TryGetValue(WellKnownHttpHeaderNames.ContentType, out string? contentType));
         Assert.StartsWith(WellKnownWebFingerValues.JrdMediaType, contentType!,
             "The Content-Type over the wire MUST be application/jrd+json.");
         Assert.IsTrue(
-            spy.LastResponse.TryGetHeader(WellKnownWebFingerValues.AccessControlAllowOriginHeaderName, out string? corsHeader),
+            spy.LastResponse.Headers.TryGetValue(WellKnownWebFingerValues.AccessControlAllowOriginHeaderName, out string? corsHeader),
             "WF-46: the Access-Control-Allow-Origin header MUST be present over the wire.");
         Assert.AreEqual(WellKnownWebFingerValues.AccessControlAllowOriginWildcard, corsHeader,
             "WF-47: the default value is the wildcard.");
@@ -241,13 +241,13 @@ internal sealed class WebFingerCrossWireFlowTests
     /// </summary>
     private sealed class TransportSpy
     {
-        private readonly OutboundTransportDelegate inner;
+        private OutboundTransportDelegate Inner { get; }
 
 
         /// <summary>Wraps <paramref name="inner"/>, recording every request/response pair it drives.</summary>
         public TransportSpy(OutboundTransportDelegate inner)
         {
-            this.inner = inner;
+            this.Inner = inner;
         }
 
 
@@ -265,7 +265,7 @@ internal sealed class WebFingerCrossWireFlowTests
             OutboundRequest request, ExchangeContext context, CancellationToken cancellationToken)
         {
             LastRequest = request;
-            OutboundResponse response = await inner(request, context, cancellationToken).ConfigureAwait(false);
+            OutboundResponse response = await Inner(request, context, cancellationToken).ConfigureAwait(false);
             LastResponse = response;
 
             return response;

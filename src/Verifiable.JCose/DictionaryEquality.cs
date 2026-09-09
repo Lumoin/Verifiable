@@ -56,7 +56,7 @@ public static class DictionaryEquality
         }
 
         var hash = new HashCode();
-        foreach(KeyValuePair<string, object> kvp in dictionary.OrderBy(x => x.Key))
+        foreach(KeyValuePair<string, object> kvp in dictionary.OrderBy(x => x.Key, StringComparer.Ordinal))
         {
             hash.Add(kvp.Key);
             hash.Add(kvp.Value);

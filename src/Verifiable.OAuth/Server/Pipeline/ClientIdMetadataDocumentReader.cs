@@ -147,14 +147,14 @@ public static class ClientIdMetadataDocumentReader
     {
         ClientIdMetadataDocumentDefects defects = ClientIdMetadataDocumentDefects.None;
 
-        string? clientId = JwkJsonReader.ExtractStringValue(document, "client_id"u8);
+        string? clientId = JwkJsonReader.ExtractStringValue(document, ClientMetadataParameterNames.ClientIdUtf8);
         if(clientId is null)
         {
             defects |= ClientIdMetadataDocumentDefects.MissingClientId;
         }
 
-        if(JwkJsonReader.ContainsKey(document, "client_secret"u8)
-            || JwkJsonReader.ContainsKey(document, "client_secret_expires_at"u8))
+        if(JwkJsonReader.ContainsKey(document, ClientMetadataParameterNames.ClientSecretUtf8)
+            || JwkJsonReader.ContainsKey(document, ClientMetadataParameterNames.ClientSecretExpiresAtUtf8))
         {
             defects |= ClientIdMetadataDocumentDefects.ClientSecretFieldsPresent;
         }
@@ -163,20 +163,20 @@ public static class ClientIdMetadataDocumentReader
             ExtractTokenEndpointAuthMethod(document);
         defects |= authMethodDefect;
 
-        string? jwks = JwkJsonReader.ExtractObjectAsString(document, "jwks"u8);
+        string? jwks = JwkJsonReader.ExtractObjectAsString(document, ClientMetadataParameterNames.JwksUtf8);
         if(jwks is not null && JwksContainsPrivateOrSymmetricMember(Encoding.UTF8.GetBytes(jwks)))
         {
             defects |= ClientIdMetadataDocumentDefects.PrivateKeyMaterialInJwks;
         }
 
         (Uri? jwksUri, ClientIdMetadataDocumentDefects jwksUriDefect) =
-            ExtractStrictHttpsUri(document, "jwks_uri"u8, ClientIdMetadataDocumentDefects.InvalidJwksUri);
+            ExtractStrictHttpsUri(document, ClientMetadataParameterNames.JwksUriUtf8, ClientIdMetadataDocumentDefects.InvalidJwksUri);
         (Uri? logoUri, ClientIdMetadataDocumentDefects logoUriDefect) =
-            ExtractStrictHttpsUri(document, "logo_uri"u8, ClientIdMetadataDocumentDefects.InvalidLogoUri);
+            ExtractStrictHttpsUri(document, ClientMetadataParameterNames.LogoUriUtf8, ClientIdMetadataDocumentDefects.InvalidLogoUri);
         (Uri? clientUri, ClientIdMetadataDocumentDefects clientUriDefect) =
-            ExtractStrictHttpsUri(document, "client_uri"u8, ClientIdMetadataDocumentDefects.InvalidClientUri);
+            ExtractStrictHttpsUri(document, ClientMetadataParameterNames.ClientUriUtf8, ClientIdMetadataDocumentDefects.InvalidClientUri);
         (List<Uri> redirectUris, ClientIdMetadataDocumentDefects redirectUriDefect) =
-            ExtractAbsoluteUris(document, "redirect_uris"u8, ClientIdMetadataDocumentDefects.InvalidRedirectUri);
+            ExtractAbsoluteUris(document, ClientMetadataParameterNames.RedirectUrisUtf8, ClientIdMetadataDocumentDefects.InvalidRedirectUri);
         (List<Uri> postLogoutRedirectUris, _) =
             ExtractAbsoluteUris(document, "post_logout_redirect_uris"u8, ClientIdMetadataDocumentDefects.None);
 
@@ -184,7 +184,7 @@ public static class ClientIdMetadataDocumentReader
 
         ClientMetadata metadata = new()
         {
-            ClientName = JwkJsonReader.ExtractStringValue(document, "client_name"u8),
+            ClientName = JwkJsonReader.ExtractStringValue(document, ClientMetadataParameterNames.ClientNameUtf8),
             ClientUri = clientUri,
             LogoUri = logoUri,
             RedirectUris = redirectUris,
@@ -192,7 +192,7 @@ public static class ClientIdMetadataDocumentReader
             ResponseTypes = ExtractResponseTypes(document),
             TokenEndpointAuthMethod = tokenEndpointAuthMethod,
             TokenEndpointAuthSigningAlg = JwkJsonReader.ExtractStringValue(document, "token_endpoint_auth_signing_alg"u8),
-            Scope = JwkJsonReader.ExtractStringValue(document, "scope"u8),
+            Scope = JwkJsonReader.ExtractStringValue(document, ClientMetadataParameterNames.ScopeUtf8),
             AuthorizationDetailsTypes = JwkJsonReader.ExtractStringArrayProperty(
                 document, AuthorizationDetailsParameterNames.AuthorizationDetailsTypesUtf8),
             AuthorizationGrantProfilesSupported = JwkJsonReader.ExtractStringArrayProperty(
@@ -208,7 +208,7 @@ public static class ClientIdMetadataDocumentReader
             BackchannelLogoutSessionRequired = ExtractBoolean(document, "backchannel_logout_session_required"u8),
             FrontchannelLogoutUri = ExtractAbsoluteUri(document, "frontchannel_logout_uri"u8),
             FrontchannelLogoutSessionRequired = ExtractBoolean(document, "frontchannel_logout_session_required"u8),
-            SoftwareStatement = JwkJsonReader.ExtractStringValue(document, "software_statement"u8)
+            SoftwareStatement = JwkJsonReader.ExtractStringValue(document, ClientMetadataParameterNames.SoftwareStatementUtf8)
         };
 
         return new ClientIdMetadataDocumentReadResult
@@ -223,7 +223,7 @@ public static class ClientIdMetadataDocumentReader
     private static (ClientAuthenticationMethod? Method, ClientIdMetadataDocumentDefects Defect) ExtractTokenEndpointAuthMethod(
         ReadOnlySpan<byte> document)
     {
-        string? wireValue = JwkJsonReader.ExtractStringValue(document, "token_endpoint_auth_method"u8);
+        string? wireValue = JwkJsonReader.ExtractStringValue(document, ClientMetadataParameterNames.TokenEndpointAuthMethodUtf8);
         if(wireValue is null)
         {
             return (null, ClientIdMetadataDocumentDefects.None);
@@ -426,7 +426,7 @@ public static class ClientIdMetadataDocumentReader
 
     private static List<GrantType> ExtractGrantTypes(ReadOnlySpan<byte> document)
     {
-        List<string>? raw = JwkJsonReader.ExtractStringArrayProperty(document, "grant_types"u8);
+        List<string>? raw = JwkJsonReader.ExtractStringArrayProperty(document, ClientMetadataParameterNames.GrantTypesUtf8);
         if(raw is null)
         {
             return [];
@@ -447,7 +447,7 @@ public static class ClientIdMetadataDocumentReader
 
     private static List<ResponseType> ExtractResponseTypes(ReadOnlySpan<byte> document)
     {
-        List<string>? raw = JwkJsonReader.ExtractStringArrayProperty(document, "response_types"u8);
+        List<string>? raw = JwkJsonReader.ExtractStringArrayProperty(document, ClientMetadataParameterNames.ResponseTypesUtf8);
         if(raw is null)
         {
             return [];

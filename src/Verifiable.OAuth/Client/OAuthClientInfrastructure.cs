@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Security.Cryptography;
 using Verifiable.Cryptography;
 using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.Dpop;
@@ -46,15 +45,14 @@ public sealed class OAuthClientInfrastructure
 
 
     /// <summary>
-    /// UTC time source. Defaults to <see cref="TimeProvider.System"/>.
-    /// Inject <c>FakeTimeProvider</c> in tests for deterministic time control.
+    /// UTC time source. Deployments wire the process clock via <see cref="Create"/>;
+    /// tests inject <c>FakeTimeProvider</c> for deterministic time control.
     /// </summary>
-    public TimeProvider TimeProvider { get; private init; } = TimeProvider.System;
+    public required TimeProvider TimeProvider { get; init; }
 
     /// <summary>
     /// Memory pool used for sensitive allocations (PKCE verifiers, nonces,
-    /// JAR payload buffers). Defaults to
-    /// <see cref="BaseMemoryPool.Shared"/>.
+    /// JAR payload buffers). Supplied by the deployment via <see cref="Create"/>.
     /// </summary>
     public BaseMemoryPool MemoryPool { get; private init; } = null!;
 
@@ -67,12 +65,11 @@ public sealed class OAuthClientInfrastructure
     /// <summary>
     /// Fills a span with cryptographically-strong random bytes. Used at every
     /// client-side site that produces a CSRF state value or an OIDC nonce
-    /// for an outgoing request. Defaults to
-    /// <see cref="RandomNumberGenerator.Fill"/>; deployments wire a
-    /// hardware-entropy source or a deterministic replay source via
+    /// for an outgoing request. Deployments wire the platform CSPRNG (or a
+    /// hardware-entropy source, or a deterministic replay source) via
     /// <see cref="Create"/>.
     /// </summary>
-    public FillEntropyDelegate FillEntropy { get; private init; } = RandomNumberGenerator.Fill;
+    public required FillEntropyDelegate FillEntropy { get; init; }
 
     /// <summary>
     /// Generates an identifier for a stated <see cref="IdentifierPurpose"/>.
@@ -80,11 +77,13 @@ public sealed class OAuthClientInfrastructure
     /// <see cref="Server.AuthorizationServerIntegration.GenerateIdentifierAsync"/>
     /// slot: client-side identifier sites (today, the JAR JTI) route through
     /// here so audit and replay infrastructure can intercept on both sides
-    /// of the wire symmetrically. Defaults to
-    /// <see cref="DefaultIdentifierGenerator.ForTimeProvider"/> bound to
-    /// this infrastructure's <see cref="TimeProvider"/>.
+    /// of the wire symmetrically. A deployment that wants the library's own
+    /// generator names it explicitly at the <see cref="Create"/> call site as
+    /// <see cref="DefaultIdentifierGenerator.For"/> bound to its own
+    /// <see cref="TimeProvider"/>, <see cref="FillEntropy"/> and
+    /// <see cref="MemoryPool"/>.
     /// </summary>
-    public GenerateIdentifierDelegate GenerateIdentifierAsync { get; private init; } = null!;
+    public required GenerateIdentifierDelegate GenerateIdentifierAsync { get; init; }
 
 
     //Transport.
@@ -268,8 +267,10 @@ public sealed class OAuthClientInfrastructure
         ResolveAuthorizationServerMetadataDelegate resolveAuthorizationServerMetadataAsync,
         ResolveCallbackValidatorDelegate resolveCallbackValidator,
         EncodeDelegate base64UrlEncoder,
-        TimeProvider? timeProvider = null,
-        BaseMemoryPool? memoryPool = null,
+        BaseMemoryPool memoryPool,
+        TimeProvider timeProvider,
+        FillEntropyDelegate fillEntropy,
+        GenerateIdentifierDelegate generateIdentifierAsync,
         Oid4VpWalletConfiguration? defaultOid4VpWalletConfiguration = null,
         SendJsonPostDelegate? sendJsonPostAsync = null,
         SendJsonGetDelegate? sendJsonGetAsync = null,
@@ -280,9 +281,7 @@ public sealed class OAuthClientInfrastructure
         ConstructDpopProofDelegate? constructDpopProofAsync = null,
         DpopKey? dpopKey = null,
         DpopNonceLookupDelegate? lookupDpopNonce = null,
-        DpopNonceStoreDelegate? storeDpopNonce = null,
-        FillEntropyDelegate? fillEntropy = null,
-        GenerateIdentifierDelegate? generateIdentifierAsync = null)
+        DpopNonceStoreDelegate? storeDpopNonce = null)
     {
         ArgumentNullException.ThrowIfNull(sendFormPostAsync);
         ArgumentNullException.ThrowIfNull(saveStateAsync);
@@ -295,6 +294,10 @@ public sealed class OAuthClientInfrastructure
         ArgumentNullException.ThrowIfNull(resolveAuthorizationServerMetadataAsync);
         ArgumentNullException.ThrowIfNull(resolveCallbackValidator);
         ArgumentNullException.ThrowIfNull(base64UrlEncoder);
+        ArgumentNullException.ThrowIfNull(memoryPool);
+        ArgumentNullException.ThrowIfNull(timeProvider);
+        ArgumentNullException.ThrowIfNull(fillEntropy);
+        ArgumentNullException.ThrowIfNull(generateIdentifierAsync);
 
         if((constructDpopProofAsync is null) != (dpopKey is null))
         {
@@ -310,8 +313,6 @@ public sealed class OAuthClientInfrastructure
                 + "supply both or neither.");
         }
 
-        TimeProvider resolvedTimeProvider = timeProvider ?? TimeProvider.System;
-
         return new OAuthClientInfrastructure
         {
             SendFormPostAsync = sendFormPostAsync,
@@ -325,11 +326,10 @@ public sealed class OAuthClientInfrastructure
             ResolveAuthorizationServerMetadataAsync = resolveAuthorizationServerMetadataAsync,
             ResolveCallbackValidator = resolveCallbackValidator,
             Base64UrlEncoder = base64UrlEncoder,
-            TimeProvider = resolvedTimeProvider,
-            MemoryPool = memoryPool ?? BaseMemoryPool.Shared,
-            FillEntropy = fillEntropy ?? RandomNumberGenerator.Fill,
-            GenerateIdentifierAsync = generateIdentifierAsync
-                ?? DefaultIdentifierGenerator.ForTimeProvider(resolvedTimeProvider),
+            TimeProvider = timeProvider,
+            MemoryPool = memoryPool,
+            FillEntropy = fillEntropy,
+            GenerateIdentifierAsync = generateIdentifierAsync,
             DefaultOid4VpWalletConfiguration = defaultOid4VpWalletConfiguration,
             SendJsonPostAsync = sendJsonPostAsync,
             SendJsonGetAsync = sendJsonGetAsync,

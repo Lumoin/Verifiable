@@ -59,16 +59,16 @@ internal sealed class VcalmMultiTenantFlowTests
 
     //Both tenants allow the issuer and verifier roles so an issued credential can be driven straight
     //into a /credentials/verify endpoint — on its own tenant and on the other tenant.
-    private static readonly ImmutableHashSet<CapabilityIdentifier> IssuerAndVerifier =
+    private static ImmutableHashSet<CapabilityIdentifier> IssuerAndVerifier { get; } =
         ImmutableHashSet.Create(
             WellKnownVcalmCapabilities.VcalmIssuer, WellKnownVcalmCapabilities.VcalmVerifier);
 
-    private static readonly ImmutableHashSet<CapabilityIdentifier> IssuerOnly =
+    private static ImmutableHashSet<CapabilityIdentifier> IssuerOnly { get; } =
         ImmutableHashSet.Create(WellKnownVcalmCapabilities.VcalmIssuer);
 
     //The full showcase host gives every tenant the issuer, verifier, status, and holder roles so one
     //tenant can be driven across all of its signing surfaces.
-    private static readonly ImmutableHashSet<CapabilityIdentifier> ShowcaseCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> ShowcaseCapabilities { get; } =
         ImmutableHashSet.Create(
             WellKnownVcalmCapabilities.VcalmIssuer,
             WellKnownVcalmCapabilities.VcalmVerifier,
@@ -565,7 +565,7 @@ internal sealed class VcalmMultiTenantFlowTests
             SerializePresentation = presentation => JsonSerializerExtensions.Serialize(presentation, JsonOptions),
             SerializeProofOptions = SerializeProofOptions,
             Decoder = TestSetup.Base58Decoder,
-            ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             MemoryPool = Pool
         };
 
@@ -613,6 +613,7 @@ internal sealed class VcalmMultiTenantFlowTests
         DidDocument issuerDidDocument = await KeyDidBuilder.BuildAsync(
             issuerKeyPair.PublicKey,
             MultikeyVerificationMethodTypeInfo.Instance,
+            BaseMemoryPool.Shared,
             includeDefaultContext: false,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -645,7 +646,7 @@ internal sealed class VcalmMultiTenantFlowTests
             DeserializeCredential = DeserializeCredential,
             SerializeProofOptions = SerializeProofOptions,
             Encoder = TestSetup.Base58Encoder,
-            ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync
+            ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync
         };
 
 
@@ -723,6 +724,7 @@ internal sealed class VcalmMultiTenantFlowTests
         DidDocument issuerDidDocument = await KeyDidBuilder.BuildAsync(
             issuerPublic,
             MultikeyVerificationMethodTypeInfo.Instance,
+            BaseMemoryPool.Shared,
             includeDefaultContext: false,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -740,7 +742,7 @@ internal sealed class VcalmMultiTenantFlowTests
             DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             Pool,
             new ExchangeContext(),
             TestContext.CancellationToken).ConfigureAwait(false);
@@ -830,6 +832,7 @@ internal sealed class VcalmMultiTenantFlowTests
         DidDocument holderDidDocument = await KeyDidBuilder.BuildAsync(
             holderKeyPair.PublicKey,
             MultikeyVerificationMethodTypeInfo.Instance,
+            BaseMemoryPool.Shared,
             includeDefaultContext: false,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -852,7 +855,7 @@ internal sealed class VcalmMultiTenantFlowTests
             DeserializePresentation = DeserializePresentation,
             SerializeProofOptions = SerializeProofOptions,
             Encoder = TestSetup.Base58Encoder,
-            ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             MemoryPool = Pool
         };
 

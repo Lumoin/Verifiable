@@ -107,7 +107,7 @@ public static class DcqlPathResolver
         return new DisclosureMatch<TCredential>
         {
             Credential = dcqlMatch.Credential,
-            QueryRequirementId = dcqlMatch.CredentialQueryId,
+            QueryRequirementId = dcqlMatch.CredentialQueryId.Value,
             RequiredPaths = ResolveAll(dcqlMatch.RequiredDisclosurePatterns, allAvailablePaths),
             MatchedPaths = ResolveAll(dcqlMatch.MatchedPatterns, allAvailablePaths),
             AllAvailablePaths = allAvailablePaths,

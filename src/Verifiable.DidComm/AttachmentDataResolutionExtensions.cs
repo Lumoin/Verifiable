@@ -257,14 +257,9 @@ public static class AttachmentDataResolutionExtensions
         int payloadLength;
         try
         {
-            if(isBase64)
-            {
-                payload = base64UrlDecoder(inline!, memoryPool);
-            }
-            else
-            {
-                payload = jsonValueSerializer(attachmentData.Json!, memoryPool);
-            }
+            payload = isBase64
+                ? base64UrlDecoder(inline!, memoryPool)
+                : jsonValueSerializer(attachmentData.Json!, memoryPool);
         }
         catch(Exception exception) when(exception is FormatException or ArgumentException)
         {

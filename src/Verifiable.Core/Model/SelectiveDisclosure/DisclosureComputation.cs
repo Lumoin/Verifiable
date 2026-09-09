@@ -300,26 +300,20 @@ public sealed class DisclosureComputation<TCredential>
     /// the default additive model sums per-path entropy weights.
     /// </param>
     /// <param name="timeProvider">
-    /// Time provider for timestamps. Defaults to <see cref="TimeProvider.System"/>.
+    /// The clock every timestamp this computation stamps is read from.
     /// </param>
     public DisclosureComputation(
         IReadOnlyList<PolicyAssessorDelegate<TCredential>> policyAssessors,
+        TimeProvider timeProvider,
         IReadOnlyList<CrossCredentialOptimizerDelegate<TCredential>>? crossCredentialOptimizers = null,
-        EntropyComputeDelegate<TCredential>? entropyCompute = null,
-        TimeProvider? timeProvider = null)
+        EntropyComputeDelegate<TCredential>? entropyCompute = null)
     {
         ArgumentNullException.ThrowIfNull(policyAssessors);
+        ArgumentNullException.ThrowIfNull(timeProvider);
         PolicyAssessors = policyAssessors;
         CrossCredentialOptimizers = crossCredentialOptimizers ?? [];
         EntropyCompute = entropyCompute;
-        TimeProvider = timeProvider ?? TimeProvider.System;
-    }
-
-    /// <summary>
-    /// Creates a new disclosure computation with no policy assessors or optimizers.
-    /// </summary>
-    public DisclosureComputation() : this([])
-    {
+        TimeProvider = timeProvider;
     }
 
     /// <summary>

@@ -1,7 +1,7 @@
 using System;
 using System.Linq;
 using System.Collections.Generic;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 
 namespace Verifiable.Cbor.Converters;
 
@@ -35,35 +35,26 @@ namespace Verifiable.Cbor.Converters;
 public sealed class DictionaryStringObjectCborConverter: CborConverter<Dictionary<string, object>>
 {
     /// <inheritdoc/>
-    public override Dictionary<string, object>? Read(
-        ref CborReader reader,
-        Type typeToConvert,
-        CborSerializerOptions options)
+    public override Dictionary<string, object> Read(CborReader reader)
     {
-        if(reader.PeekState() == CborReaderState.Null)
-        {
-            reader.ReadNull();
-            return null;
-        }
+        ArgumentNullException.ThrowIfNull(reader);
 
         if(reader.PeekState() != CborReaderState.StartMap)
         {
             CborThrowHelper.ThrowUnexpectedCborType(CborReaderState.StartMap, reader.PeekState());
         }
 
-        return ReadStringKeyedMap(ref reader, options);
+        return ReadStringKeyedMap(reader, reader.Options);
     }
 
 
     /// <inheritdoc/>
-    public override void Write(
-        CborWriter writer,
-        Dictionary<string, object> value,
-        CborSerializerOptions options)
+    public override void Write(CborWriter writer, Dictionary<string, object> value)
     {
+        ArgumentNullException.ThrowIfNull(writer);
         ArgumentNullException.ThrowIfNull(value);
 
-        WriteStringKeyedMap(writer, value, options);
+        WriteStringKeyedMap(writer, value);
     }
 
 
@@ -71,7 +62,7 @@ public sealed class DictionaryStringObjectCborConverter: CborConverter<Dictionar
     /// Reads a CBOR map with string keys into a dictionary.
     /// </summary>
     private static Dictionary<string, object> ReadStringKeyedMap(
-        ref CborReader reader,
+        CborReader reader,
         CborSerializerOptions options)
     {
         int? length = reader.ReadStartMap();
@@ -97,28 +88,24 @@ public sealed class DictionaryStringObjectCborConverter: CborConverter<Dictionar
         }
 
         reader.ReadEndMap();
+
         return dictionary;
     }
 
 
     /// <summary>
-    /// Writes a string-keyed dictionary as a CBOR map.
+    /// Writes a string-keyed dictionary as a CBOR map, omitting entries whose value is
+    /// <see langword="null"/> — the only null-handling behavior this converter's callers exercise.
     /// </summary>
-    private static void WriteStringKeyedMap(
-        CborWriter writer,
-        Dictionary<string, object> value,
-        CborSerializerOptions options)
+    private static void WriteStringKeyedMap(CborWriter writer, Dictionary<string, object> value)
     {
-        //Count non-null entries if we're not writing nulls.
-        int count = options.WriteNullValues
-            ? value.Count
-            : value.Count(kvp => kvp.Value is not null);
+        int count = value.Count(kvp => kvp.Value is not null);
 
         writer.WriteStartMap(count);
 
         foreach(KeyValuePair<string, object> kvp in value)
         {
-            if(kvp.Value is null && !options.WriteNullValues)
+            if(kvp.Value is null)
             {
                 continue;
             }

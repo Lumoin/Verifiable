@@ -36,7 +36,7 @@ namespace Verifiable.Cryptography;
 /// against an attacker running inside the same process.
 /// </para>
 /// <para>
-/// <strong>Bound is reference-payload-only (A6).</strong> <see cref="BoundProvenance.Witnesses(object)"/> is an
+/// <strong>Bound is reference-payload-only.</strong> <see cref="BoundProvenance.Witnesses(object)"/> is an
 /// instance-identity (<c>ReferenceEquals</c>) check, so <see cref="TryCreateBound"/> can only ever succeed for a
 /// reference-typed <typeparamref name="T"/> — a value-type <typeparamref name="T"/> boxes fresh at every
 /// boundary crossing, so no witness could ever match, and <see cref="TryCreateBound"/> refuses it explicitly
@@ -46,7 +46,7 @@ namespace Verifiable.Cryptography;
 /// <see cref="string"/> is a label, not a payload, so it is never the subject a gate witnesses.
 /// </para>
 /// <para>
-/// <strong>Instance identity, not content identity (A5, accepted residual).</strong> The witness ties a
+/// <strong>Instance identity, not content identity.</strong> The witness ties a
 /// <see cref="BoundProvenance"/> to a specific object instance, not to that instance's content at mint time — a
 /// shared mutable payload mutated after minting still satisfies the witness. This library treats
 /// <see cref="Verified{T}"/> as an immutable POST-VERIFICATION SNAPSHOT boundary by convention: a mint site
@@ -99,9 +99,9 @@ namespace Verifiable.Cryptography;
 [DebuggerDisplay("{DebuggerDisplayText,nq}")]
 public readonly record struct Verified<T> where T : notnull
 {
-    private readonly T? mintedValue;
+    private T? MintedValue { get; }
 
-    private readonly bool isVerified;
+    private bool WasVerified { get; }
 
 
     /// <summary>
@@ -114,8 +114,8 @@ public readonly record struct Verified<T> where T : notnull
     /// This instance was never minted by an internal verification path (<see cref="IsVerified"/> is
     /// <see langword="false"/>).
     /// </exception>
-    public T Value => isVerified
-        ? mintedValue!
+    public T Value => WasVerified
+        ? MintedValue!
         : throw new InvalidOperationException(
             "This Verified<T> carries no proof of verification -- it is the type's own default value " +
             "(default(Verified<T>), an uninitialized field, or a skipped array element), never minted by " +
@@ -147,17 +147,17 @@ public readonly record struct Verified<T> where T : notnull
     /// <see cref="Value"/> is safe to read; <see langword="false"/> for the type's own default value —
     /// see the type remarks.
     /// </summary>
-    public bool IsVerified => isVerified;
+    public bool IsVerified => WasVerified;
 
 
     private Verified(T value, VerificationProvenance provenance)
     {
         ArgumentNullException.ThrowIfNull(value);
         ArgumentNullException.ThrowIfNull(provenance);
-        mintedValue = value;
+        MintedValue = value;
         Provenance = provenance;
         Context = BuildContext(provenance);
-        isVerified = true;
+        WasVerified = true;
     }
 
 
@@ -171,8 +171,8 @@ public readonly record struct Verified<T> where T : notnull
     /// <returns>
     /// The minted instance, or <see langword="null"/> when <paramref name="provenance"/> was established for a
     /// different value (<see cref="BoundProvenance.Witnesses(object)"/> fails), or when <typeparamref name="T"/>
-    /// is a value type (A6: a <see cref="BoundProvenance"/> witness is instance identity, which a value type can
-    /// never satisfy — refused explicitly rather than left to fail incidentally on every call's fresh boxing).
+    /// is a value type — a <see cref="BoundProvenance"/> witness is instance identity, which a value type can
+    /// never satisfy — refused explicitly rather than left to fail incidentally on every call's fresh boxing.
     /// </returns>
     internal static Verified<T>? TryCreateBound(T value, BoundProvenance provenance)
     {
@@ -217,5 +217,5 @@ public readonly record struct Verified<T> where T : notnull
     }
 
 
-    private string DebuggerDisplayText => isVerified ? $"Verified: {mintedValue}" : "Verified: <default, unverified>";
+    private string DebuggerDisplayText => WasVerified ? $"Verified: {MintedValue}" : "Verified: <default, unverified>";
 }

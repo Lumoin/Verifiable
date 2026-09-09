@@ -41,14 +41,14 @@ internal sealed class Oid4VciLocationsAndTokenProtectionTests
     private FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch);
 
     private const string ClientId = "https://wallet.client.test";
-    private static readonly Uri ClientBaseUri = new("https://wallet.client.test");
-    private static readonly Uri RedirectUri = new("https://client.example.com/callback");
+    private static Uri ClientBaseUri { get; } = new("https://wallet.client.test");
+    private static Uri RedirectUri { get; } = new("https://client.example.com/callback");
     private const string SubjectId = "urn:uuid:end-user-42";
     private const string DegreeConfigurationId = "UniversityDegree_dc_sd_jwt";
 
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
-    private static readonly ImmutableHashSet<CapabilityIdentifier> AuthCodeCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> AuthCodeCapabilities { get; } =
         ImmutableHashSet.Create(
             WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
             WellKnownCapabilityIdentifiers.OAuthPushedAuthorization);

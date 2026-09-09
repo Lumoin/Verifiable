@@ -1,7 +1,8 @@
 using System;
 using System.Buffers;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using System.Threading.Tasks;
+using Verifiable.Cbor;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
@@ -31,11 +32,11 @@ internal sealed class CtapAuthenticatorDecodeBoundaryTests
 
     /// <summary>
     /// A CBOR map header declaring 2 entries followed by only one key byte and no value at all —
-    /// truncated mid-structure, so the buffer runs out before the declared shape can be satisfied. The
-    /// BCL's <see cref="System.Formats.Cbor.CborReader"/> raises <see cref="CborContentException"/> for
-    /// this shape (verified directly against the shipped <c>System.Formats.Cbor</c> package: "Declared
-    /// definite length of CBOR data item exceeds available buffer size"), the exact failure class this suite
-    /// classifies <see cref="Fido2FormatFailureKind.MalformedCbor"/> — reused verbatim from
+    /// truncated mid-structure, so the buffer runs out before the declared shape can be satisfied.
+    /// <see cref="CborReader"/> raises <see cref="CborContentException"/> for this shape — a declared
+    /// definite length exceeding the bytes that remain, one of the causes that type's own doc comment
+    /// names — the exact failure class this suite classifies <see cref="Fido2FormatFailureKind.MalformedCbor"/>
+    /// — reused verbatim from
     /// <see cref="CtapLargeBlobsRequestCborReaderTests.ThrowsOnMalformedCbor"/>'s own vector, since every
     /// command reader's decode boundary shares this exact syntax-level failure mode.
     /// </summary>
@@ -56,11 +57,13 @@ internal sealed class CtapAuthenticatorDecodeBoundaryTests
     /// <summary>Builds a genuinely empty CBOR map (<c>{}</c>) — the shared "subCommand absent" shape the config/credMgmt fence tests also use.</summary>
     private static byte[] BuildEmptyMap()
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(0);
         writer.WriteEndMap();
 
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -68,7 +71,7 @@ internal sealed class CtapAuthenticatorDecodeBoundaryTests
     [TestMethod]
     public async Task MakeCredentialMalformedCborReturnsInvalidCbor()
     {
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("boundary-mc-malformed");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("boundary-mc-malformed",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using PooledMemory response = await simulator.TransceiveAsync(
@@ -82,7 +85,7 @@ internal sealed class CtapAuthenticatorDecodeBoundaryTests
     [TestMethod]
     public async Task GetAssertionMalformedCborReturnsInvalidCbor()
     {
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("boundary-ga-malformed");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("boundary-ga-malformed",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using PooledMemory response = await simulator.TransceiveAsync(
@@ -96,7 +99,7 @@ internal sealed class CtapAuthenticatorDecodeBoundaryTests
     [TestMethod]
     public async Task ClientPinMalformedCborReturnsInvalidCbor()
     {
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("boundary-clientpin-malformed");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("boundary-clientpin-malformed",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using PooledMemory response = await simulator.TransceiveAsync(
@@ -110,7 +113,7 @@ internal sealed class CtapAuthenticatorDecodeBoundaryTests
     [TestMethod]
     public async Task BioEnrollmentMalformedCborReturnsInvalidCbor()
     {
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("boundary-bio-malformed");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("boundary-bio-malformed",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using PooledMemory response = await simulator.TransceiveAsync(
@@ -124,7 +127,7 @@ internal sealed class CtapAuthenticatorDecodeBoundaryTests
     [TestMethod]
     public async Task LargeBlobsMalformedCborReturnsInvalidCbor()
     {
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("boundary-lb-malformed");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("boundary-lb-malformed",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using PooledMemory response = await simulator.TransceiveAsync(
@@ -144,7 +147,7 @@ internal sealed class CtapAuthenticatorDecodeBoundaryTests
     [TestMethod]
     public async Task AuthenticatorConfigMalformedCborReturnsInvalidCbor()
     {
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("boundary-config-malformed");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("boundary-config-malformed",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using PooledMemory response = await simulator.TransceiveAsync(
@@ -162,7 +165,7 @@ internal sealed class CtapAuthenticatorDecodeBoundaryTests
     [TestMethod]
     public async Task CredentialManagementMalformedCborReturnsInvalidCbor()
     {
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("boundary-credmgmt-malformed");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("boundary-credmgmt-malformed",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using PooledMemory response = await simulator.TransceiveAsync(
@@ -176,10 +179,12 @@ internal sealed class CtapAuthenticatorDecodeBoundaryTests
     [TestMethod]
     public async Task MakeCredentialClientDataHashAbsentReturnsMissingParameter()
     {
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("boundary-mc-clientdatahash-absent");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("boundary-mc-clientdatahash-absent",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(3);
         writer.WriteInt32(WellKnownCtapMakeCredentialRequestKeys.Rp);
         writer.WriteStartMap(1);
@@ -197,7 +202,7 @@ internal sealed class CtapAuthenticatorDecodeBoundaryTests
         writer.WriteEndMap();
 
         using PooledMemory response = await simulator.TransceiveAsync(
-            BuildEnvelope(WellKnownCtapCommands.MakeCredential, writer.Encode()), pool, TestContext.CancellationToken);
+            BuildEnvelope(WellKnownCtapCommands.MakeCredential, writerBuffer.WrittenSpan.ToArray()), pool, TestContext.CancellationToken);
 
         Assert.AreEqual(WellKnownCtapStatusCodes.MissingParameter, response.AsReadOnlySpan()[0]);
     }
@@ -207,17 +212,19 @@ internal sealed class CtapAuthenticatorDecodeBoundaryTests
     [TestMethod]
     public async Task GetAssertionRpIdAbsentReturnsMissingParameter()
     {
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("boundary-ga-rpid-absent");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("boundary-ga-rpid-absent",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(1);
         writer.WriteInt32(WellKnownCtapGetAssertionRequestKeys.ClientDataHash);
         writer.WriteByteString(CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(32, 0x30));
         writer.WriteEndMap();
 
         using PooledMemory response = await simulator.TransceiveAsync(
-            BuildEnvelope(WellKnownCtapCommands.GetAssertion, writer.Encode()), pool, TestContext.CancellationToken);
+            BuildEnvelope(WellKnownCtapCommands.GetAssertion, writerBuffer.WrittenSpan.ToArray()), pool, TestContext.CancellationToken);
 
         Assert.AreEqual(WellKnownCtapStatusCodes.MissingParameter, response.AsReadOnlySpan()[0]);
     }
@@ -232,7 +239,7 @@ internal sealed class CtapAuthenticatorDecodeBoundaryTests
     [TestMethod]
     public async Task ClientPinSubCommandAbsentReturnsMissingParameter()
     {
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("boundary-clientpin-subcommand-absent");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("boundary-clientpin-subcommand-absent",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using PooledMemory response = await simulator.TransceiveAsync(
@@ -251,10 +258,12 @@ internal sealed class CtapAuthenticatorDecodeBoundaryTests
     [TestMethod]
     public async Task MakeCredentialRpEntityWithoutIdReturnsCborUnexpectedType()
     {
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("boundary-mc-rp-without-id");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("boundary-mc-rp-without-id",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(4);
         writer.WriteInt32(WellKnownCtapMakeCredentialRequestKeys.ClientDataHash);
         writer.WriteByteString(CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(32, 0x31));
@@ -274,7 +283,7 @@ internal sealed class CtapAuthenticatorDecodeBoundaryTests
         writer.WriteEndMap();
 
         using PooledMemory response = await simulator.TransceiveAsync(
-            BuildEnvelope(WellKnownCtapCommands.MakeCredential, writer.Encode()), pool, TestContext.CancellationToken);
+            BuildEnvelope(WellKnownCtapCommands.MakeCredential, writerBuffer.WrittenSpan.ToArray()), pool, TestContext.CancellationToken);
 
         Assert.AreEqual(WellKnownCtapStatusCodes.CborUnexpectedType, response.AsReadOnlySpan()[0]);
     }
@@ -293,17 +302,19 @@ internal sealed class CtapAuthenticatorDecodeBoundaryTests
     [TestMethod]
     public async Task TaggedCborIsRejectedByTheReaderAndAsInvalidCborAtTheBoundary()
     {
-        var writer = new CborWriter(CborConformanceMode.Lax);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Lax);
+
         writer.WriteStartMap(1);
         writer.WriteInt32(WellKnownCtapMakeCredentialRequestKeys.ClientDataHash);
-        writer.WriteTag((CborTag)0);
+        writer.WriteTag(new CborTag(0));
         writer.WriteTextString("2013-03-21T20:04:00Z");
         writer.WriteEndMap();
-        byte[] taggedParametersCbor = writer.Encode();
+        byte[] taggedParametersCbor = writerBuffer.WrittenSpan.ToArray();
 
         Assert.ThrowsExactly<Fido2FormatException>(() => CtapMakeCredentialRequestCborReader.Read(taggedParametersCbor, BaseMemoryPool.Shared));
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("boundary-mc-tagged");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("boundary-mc-tagged",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using PooledMemory response = await simulator.TransceiveAsync(
@@ -325,7 +336,7 @@ internal sealed class CtapAuthenticatorDecodeBoundaryTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         var cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("boundary-realwire-malformed");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("boundary-realwire-malformed",BaseMemoryPool.Shared);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken);
 
         using PooledMemory response = await harness.Transceive(
@@ -352,7 +363,7 @@ internal sealed class CtapAuthenticatorDecodeBoundaryTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         var cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("boundary-1024-realwire");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("boundary-1024-realwire",BaseMemoryPool.Shared);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken);
 
         var excludeList = new System.Collections.Generic.List<PublicKeyCredentialDescriptor>();

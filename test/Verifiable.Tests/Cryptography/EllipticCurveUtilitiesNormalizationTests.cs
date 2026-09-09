@@ -16,7 +16,7 @@ namespace Verifiable.Tests.Cryptography
     [TestClass]
     internal sealed class EllipticCurveUtilitiesNormalizationTests
     {
-        private static readonly BaseMemoryPool Pool = BaseMemoryPool.Shared;
+        private static BaseMemoryPool Pool { get; } = BaseMemoryPool.Shared;
 
 
         /// <summary>A generated P-256 point round-trips uncompressed -> compress -> normalize back to the original 0x04||X||Y bytes.</summary>

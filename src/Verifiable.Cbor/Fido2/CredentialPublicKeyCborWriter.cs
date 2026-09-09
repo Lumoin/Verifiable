@@ -1,4 +1,5 @@
-using System.Formats.Cbor;
+using System.Buffers;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Fido2;
 using Verifiable.JCose;
 
@@ -23,7 +24,7 @@ namespace Verifiable.Cbor.Fido2;
 /// parameters) rather than pre-sorted — <see cref="CborConformanceMode.Ctap2Canonical"/> itself sorts
 /// the map's entries into canonical order when the map is closed, exactly as
 /// <see cref="Verifiable.Cbor.Mdoc.MdocCborCoseKeyWriter"/> already relies on for its own
-/// <see cref="CborConformanceMode.Canonical"/> map.
+/// <see cref="CborConformanceMode.RfcCanonical"/> map.
 /// </para>
 /// </remarks>
 public static class CredentialPublicKeyCborWriter
@@ -42,7 +43,8 @@ public static class CredentialPublicKeyCborWriter
     {
         ArgumentNullException.ThrowIfNull(coseKey);
 
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.Ctap2Canonical);
         writer.WriteStartMap(CountEntries(coseKey));
 
         writer.WriteInt32(CoseKeyParameters.Kty);
@@ -64,7 +66,7 @@ public static class CredentialPublicKeyCborWriter
 
         writer.WriteEndMap();
 
-        byte[] encoded = writer.Encode();
+        byte[] encoded = buffer.WrittenSpan.ToArray();
 
         return new TaggedMemory<byte>(encoded, Fido2BufferTags.CredentialPublicKeyPayload);
 

@@ -25,12 +25,12 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// <para>
 /// A successful write sets the Index's <c>TPMA_NV_WRITTEN</c> attribute, after which the data can be read back
 /// with TPM2_NV_Read. This command is authorized, so it is sent with <c>TPM_ST_SESSIONS</c>. See TPM 2.0 Library
-/// Part 3, Section 31.7 (Table 232).
+/// Part 3, clause 31.7 (Table 253).
 /// </para>
 /// </remarks>
 /// <param name="AuthHandle">The authorization handle (the Index itself for Index authorization).</param>
 /// <param name="NvIndex">The NV Index to write.</param>
-/// <param name="Data">The data to write (<c>TPM2B_MAX_NV_BUFFER</c>, TPM 2.0 Library Part 2, clause 10.4.9, Table 99) in a pooled carrier this input BORROWS: the caller owns it and releases it once the command has been framed.</param>
+/// <param name="Data">The data to write (<c>TPM2B_MAX_NV_BUFFER</c>, TPM 2.0 Library Part 2, clause 10.3.9, Table 97) in a pooled carrier this input BORROWS: the caller owns it and releases it once the command has been framed.</param>
 /// <param name="Offset">The octet offset into the NV area at which to write.</param>
 public readonly record struct NvWriteInput(uint AuthHandle, uint NvIndex, Tpm2bMaxNvBuffer Data, ushort Offset): ITpmCommandInput
 {

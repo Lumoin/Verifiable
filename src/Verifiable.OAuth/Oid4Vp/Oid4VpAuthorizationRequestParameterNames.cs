@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using Verifiable.Cryptography.Text;
 
@@ -44,21 +45,23 @@ public static class Oid4VpAuthorizationRequestParameterNames
 
     /// <summary>The <c>response_uri</c> parameter — the endpoint to POST the response to.</summary>
     /// <remarks>See <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-7.2">OID4VP 1.0 §7.2</see>.</remarks>
-    public static readonly string ResponseUri = Utf8Constants.ToInternedString(ResponseUriUtf8);
+    [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
+        Justification = "This member is the wire parameter NAME 'response_uri' (compared and serialised as a string), not a dereferenceable System.Uri.")]
+    public static string ResponseUri { get; } = Utf8Constants.ToInternedString(ResponseUriUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="DcqlQuery"/>.</summary>
     public static ReadOnlySpan<byte> DcqlQueryUtf8 => "dcql_query"u8;
 
     /// <summary>The <c>dcql_query</c> parameter carrying the DCQL query object.</summary>
     /// <remarks>See <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-6">OID4VP 1.0 §6</see>.</remarks>
-    public static readonly string DcqlQuery = Utf8Constants.ToInternedString(DcqlQueryUtf8);
+    public static string DcqlQuery { get; } = Utf8Constants.ToInternedString(DcqlQueryUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="ClientMetadata"/>.</summary>
     public static ReadOnlySpan<byte> ClientMetadataUtf8 => "client_metadata"u8;
 
     /// <summary>The <c>client_metadata</c> parameter carrying inline verifier metadata.</summary>
     /// <remarks>See <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-5.11">OID4VP 1.0 §5.11</see>.</remarks>
-    public static readonly string ClientMetadata = Utf8Constants.ToInternedString(ClientMetadataUtf8);
+    public static string ClientMetadata { get; } = Utf8Constants.ToInternedString(ClientMetadataUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="TransactionData"/>.</summary>
     public static ReadOnlySpan<byte> TransactionDataUtf8 => "transaction_data"u8;
@@ -66,7 +69,7 @@ public static class Oid4VpAuthorizationRequestParameterNames
     /// <summary>The <c>transaction_data</c> parameter carrying base64url-encoded
     /// transaction-data descriptors the Wallet must bind into the KB-JWT.</summary>
     /// <remarks>See <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-8.4">OID4VP 1.0 §8.4</see>.</remarks>
-    public static readonly string TransactionData = Utf8Constants.ToInternedString(TransactionDataUtf8);
+    public static string TransactionData { get; } = Utf8Constants.ToInternedString(TransactionDataUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="RequestUriMethod"/>.</summary>
     public static ReadOnlySpan<byte> RequestUriMethodUtf8 => "request_uri_method"u8;
@@ -75,7 +78,9 @@ public static class Oid4VpAuthorizationRequestParameterNames
     /// or <c>"post"</c> — that signals which HTTP method the Wallet uses to
     /// fetch the JAR from the <c>request_uri</c>.</summary>
     /// <remarks>See <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-5.10">OID4VP 1.0 §5.10</see>.</remarks>
-    public static readonly string RequestUriMethod = Utf8Constants.ToInternedString(RequestUriMethodUtf8);
+    [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
+        Justification = "This member is the wire parameter NAME 'request_uri_method' (compared and serialised as a string), not a dereferenceable System.Uri.")]
+    public static string RequestUriMethod { get; } = Utf8Constants.ToInternedString(RequestUriMethodUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="WalletNonce"/>.</summary>
     public static ReadOnlySpan<byte> WalletNonceUtf8 => "wallet_nonce"u8;
@@ -84,7 +89,7 @@ public static class Oid4VpAuthorizationRequestParameterNames
     /// its POST to <c>request_uri</c>, and that the Verifier echoes as a
     /// claim in the signed JAR for replay-binding.</summary>
     /// <remarks>See <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-5.10.1">OID4VP 1.0 §5.10.1</see>.</remarks>
-    public static readonly string WalletNonce = Utf8Constants.ToInternedString(WalletNonceUtf8);
+    public static string WalletNonce { get; } = Utf8Constants.ToInternedString(WalletNonceUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="WalletMetadata"/>.</summary>
     public static ReadOnlySpan<byte> WalletMetadataUtf8 => "wallet_metadata"u8;
@@ -94,7 +99,7 @@ public static class Oid4VpAuthorizationRequestParameterNames
     /// the Verifier can tailor the JAR (e.g. choose supported formats /
     /// algorithms).</summary>
     /// <remarks>See <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-5.10.1">OID4VP 1.0 §5.10.1</see>.</remarks>
-    public static readonly string WalletMetadata = Utf8Constants.ToInternedString(WalletMetadataUtf8);
+    public static string WalletMetadata { get; } = Utf8Constants.ToInternedString(WalletMetadataUtf8);
 
 
     /// <summary>Returns <see langword="true"/> when <paramref name="value"/> is

@@ -6,7 +6,7 @@ using Verifiable.Tpm.Spec.Structures;
 namespace Verifiable.Tests.Tpm;
 
 /// <summary>
-/// Wire-format tests for <see cref="TpmtSymDef"/> (TPM 2.0 Library Part 2, Section 11.1.6, Table 159).
+/// Wire-format tests for <see cref="TpmtSymDef"/> (TPM 2.0 Library Part 2, clause 11.1.6, Table 162).
 /// </summary>
 /// <remarks>
 /// The union members collapse on the wire, so the encoded length and field set depend on the algorithm:

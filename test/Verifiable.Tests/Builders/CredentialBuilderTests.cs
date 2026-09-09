@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Text.Json;
 using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core.Model.Credentials;
@@ -287,6 +288,9 @@ internal sealed class CredentialBuilderTests
     {
         var issuer = new Issuer { Id = IssuerDidWeb };
 
+        //The (CredentialSubjectInput) cast selects the single-subject BuildAsync overload: CredentialBuilder
+        //also overloads BuildAsync over IEnumerable<CredentialSubjectInput>, and a bare null argument here
+        //is ambiguous between the two.
         await Assert.ThrowsAsync<ArgumentNullException>(async () =>
             await CredentialBuilder.BuildAsync(issuer, (CredentialSubjectInput)null!, TestValidFrom, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
     }
@@ -359,8 +363,7 @@ internal sealed class CredentialBuilderTests
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(credential.Context);
-        Assert.IsNotNull(credential.Context.Contexts);
-        Assert.Contains(CredentialConstants.CredentialsV2Context, credential.Context.Contexts);
+        Assert.Contains(CredentialConstants.CredentialsV2Context, credential.Context.Entries.Select(static entry => entry.Iri).ToArray());
     }
 
 

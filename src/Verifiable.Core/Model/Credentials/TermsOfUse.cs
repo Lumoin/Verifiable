@@ -72,7 +72,14 @@ public class TermsOfUse: IEquatable<TermsOfUse>
     public IDictionary<string, object>? AdditionalData { get; set; }
 
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Determines whether these terms are equal to <paramref name="other"/> by comparing
+    /// <see cref="Id"/> and <see cref="Type"/>. Equality is exact-type, not polymorphic over
+    /// subtypes: a derived type adding further identity-bearing members is never equal to a
+    /// same-valued instance of this type.
+    /// </summary>
+    /// <param name="other">The terms of use to compare against.</param>
+    /// <returns><see langword="true"/> if the terms of use are equal; otherwise <see langword="false"/>.</returns>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public bool Equals(TermsOfUse? other)
     {
@@ -86,6 +93,11 @@ public class TermsOfUse: IEquatable<TermsOfUse>
             return true;
         }
 
+        if(GetType() != other.GetType())
+        {
+            return false;
+        }
+
         return string.Equals(Id, other.Id, StringComparison.Ordinal)
             && string.Equals(Type, other.Type, StringComparison.Ordinal);
     }
@@ -93,7 +105,8 @@ public class TermsOfUse: IEquatable<TermsOfUse>
 
     /// <inheritdoc/>
     [EditorBrowsable(EditorBrowsableState.Never)]
-    public override bool Equals([NotNullWhen(true)] object? obj) => obj is TermsOfUse other && Equals(other);
+    public override bool Equals([NotNullWhen(true)] object? obj) =>
+        obj is TermsOfUse other && Equals(other);
 
 
     /// <inheritdoc/>

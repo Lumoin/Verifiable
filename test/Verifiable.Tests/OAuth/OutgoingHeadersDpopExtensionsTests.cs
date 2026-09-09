@@ -48,4 +48,17 @@ internal sealed class OutgoingHeadersDpopExtensionsTests
             WellKnownHttpHeaderNames.Authorization, out string? authValue));
         Assert.AreEqual($"{WellKnownAuthenticationSchemes.DPoP} at.abc", authValue);
     }
+
+
+    [TestMethod]
+    public void ValuesLookupIsCaseInsensitive()
+    {
+        //RFC 9110 §5.1: "Field names are case-insensitive". A header composed under one
+        //casing must be found under a differing casing.
+        OutgoingHeaders headers = OutgoingHeaders.Empty.With("X-Custom", "value");
+
+        Assert.IsTrue(headers.Values.TryGetValue("x-custom", out string? value),
+            "RFC 9110 §5.1: a header composed under one casing must be found under a differing casing.");
+        Assert.AreEqual("value", value);
+    }
 }

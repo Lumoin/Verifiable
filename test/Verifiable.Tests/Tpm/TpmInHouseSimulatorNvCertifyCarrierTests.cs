@@ -16,13 +16,14 @@ using Verifiable.Tpm.Spec.Attributes;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
 /// <summary>
 /// Proves the pooled-carrier ownership of <c>TPM2_NV_Certify()</c>'s parse-rented values — the two
 /// authorization slots' supplied credentials and the <c>qualifyingData</c> parameter (<c>TPM2B_DATA</c>, TPM 2.0
-/// Library Part 2, clause 10.4.3, Table 93; the command is Part 3, clause 31.16.2, Table 254) — against the
+/// Library Part 2, clause 10.3.3, Table 91; the command is Part 3, clause 31.16.2, Table 271) — against the
 /// in-house behavioural <see cref="TpmSimulator"/>: each value rides a carrier the parser rents, and every
 /// carrier reaches the pool again on every path the command can leave by — refused at the entry transition,
 /// refused for a wrong Index password, refused at the session continuation, refused for a mismatched command
@@ -38,7 +39,7 @@ namespace Verifiable.Tests.Tpm;
 /// </para>
 /// <para>
 /// <c>TPM2_NV_Certify()</c> is the only member of the attest family whose session-authorized request travels
-/// through the Index-Name computation before its command HMACs are verified (Part 1, clause 16.7 equation 15
+/// through the Index-Name computation before its command HMACs are verified (Part 1, clause 15.7 equation 15
 /// needs the Index's Name as a cpHash term), so its carriers must survive an extra effect round trip that the
 /// other attest commands do not have. The session-arm cases below all cross that hop, and the two mismatch cases
 /// additionally cross the verification queue's own round trips: the sign slot is queued at session index 0 and
@@ -46,7 +47,7 @@ namespace Verifiable.Tests.Tpm;
 /// </para>
 /// <para>
 /// Every balance is taken with the client-side <see cref="TpmSession"/> already disposed, because a session
-/// adopts the nonceTPM carrier its response entry carries (Part 1, clause 16.6.1) and holds it until the session
+/// adopts the nonceTPM carrier its response entry carries (Part 1, clause 15.6.1) and holds it until the session
 /// itself is released — a balance read while the session is alive is one rental high.
 /// </para>
 /// </remarks>
@@ -71,11 +72,11 @@ internal sealed class TpmInHouseSimulatorNvCertifyCarrierTests
     /// <summary>
     /// The attributes every Index here is defined with: readable and writable by its own authValue, and exempt
     /// from dictionary-attack protection (<c>TPMA_NV_NO_DA</c>), so a deliberately wrong credential is a plain
-    /// <c>TPM_RC_BAD_AUTH</c> that moves no lockout counter (TPM 2.0 Library Part 1, clause 17.8.1).
+    /// <c>TPM_RC_BAD_AUTH</c> that moves no lockout counter (TPM 2.0 Library Part 1, clause 16.8.1).
     /// </summary>
     private const TpmaNv NoDaIndexAttributes = TpmaNv.TPMA_NV_AUTHREAD | TpmaNv.TPMA_NV_AUTHWRITE | TpmaNv.TPMA_NV_NO_DA;
 
-    /// <summary>The signing key's authValue for the all-password fixtures, inside the SHA-256 nameAlg's 32-octet bound (Part 1, clause 17.6.4.2).</summary>
+    /// <summary>The signing key's authValue for the all-password fixtures, inside the SHA-256 nameAlg's 32-octet bound (Part 1, clause 16.6.4.2).</summary>
     private const string SignKeyPassword = "nvcertify-carrier-sign-auth";
 
     /// <summary>
@@ -106,7 +107,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyCarrierTests
 
     /// <summary>
     /// The width of an Index Name under <see cref="DefaultNameAlg"/>: the 2-octet nameAlg prefix plus a SHA-256
-    /// digest (TPM 2.0 Library Part 1, clause 14, Table 6). The Index-Name hop is the only step in a session-authorized
+    /// digest (TPM 2.0 Library Part 1, clause 13, Table 9). The Index-Name hop is the only step in a session-authorized
     /// <c>TPM2_NV_Certify()</c> that rents a buffer of exactly this width — the signing key's Name was rented
     /// long before, and this file's own expected-Name recomputation frames its result on the managed heap — so a
     /// rent of this size across the command identifies the hop's <c>TPM2B_NAME</c> carrier.
@@ -117,19 +118,20 @@ internal sealed class TpmInHouseSimulatorNvCertifyCarrierTests
     public TestContext TestContext { get; set; } = null!;
 
     /// <summary>
-    /// An all-password <c>TPM2_NV_Certify()</c> refused by the entry transition — the signHandle resolves to no
-    /// loaded object, so TPM 2.0 Library Part 3, clause 31.16's handle check answers <c>TPM_RC_HANDLE</c> before
-    /// either slot's credential is compared and before any parameter is looked at — returns every carrier the
-    /// parser rented: both slots' supplied passwords and the qualifying data. The refusing arm reaches them
-    /// through the request record's own <c>IDisposable.Dispose</c>, which is the only owner they ever had,
-    /// because a handle refusal transfers nothing into an action.
+    /// An all-password <c>TPM2_NV_Certify()</c> refused by the entry transition — the signHandle (the 1st handle
+    /// in the handle area, index 0) is transient-range but resolves to no loaded object, so TPM 2.0 Library Part
+    /// 3, clause 5.4 step 2.1 answers <c>TPM_RC_REFERENCE_H0</c> before either slot's credential is compared and
+    /// before any parameter is looked at — returns every carrier the parser rented: both slots' supplied
+    /// passwords and the qualifying data. The refusing arm reaches them through the request record's own
+    /// <c>IDisposable.Dispose</c>, which is the only owner they ever had, because a handle refusal transfers
+    /// nothing into an action.
     /// </summary>
     [TestMethod]
     public async Task RefusedNvCertifyAtTheEntryTransitionReturnsTheParseRentedCarriersToPool()
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         await DefineAndWriteNvIndexAsync(tpm, registry, trackingPool.Pool, PasswordArmNvIndexHandle).ConfigureAwait(false);
@@ -147,8 +149,8 @@ internal sealed class TpmInHouseSimulatorNvCertifyCarrierTests
             TpmResult<NvCertifyResponse> result = await TpmCommandExecutor.ExecuteAsync<NvCertifyResponse>(
                 tpm, nvCertifyInput, [signAuth, indexAuth], null, trackingPool.Pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
             Assert.AreEqual(
-                TpmRcConstants.TPM_RC_HANDLE, result.ResponseCode,
-                "A signHandle that resolves to no loaded object is a bare TPM_RC_HANDLE (TPM 2.0 Library Part 3, clause 31.16).");
+                TpmRcConstants.TPM_RC_REFERENCE_H0, result.ResponseCode,
+                "A transient-range signHandle (the 1st handle in the handle area) that resolves to no loaded object is TPM_RC_REFERENCE_H0 (TPM 2.0 Library Part 3, clause 5.4, step 2.1).");
 
             Assert.IsGreaterThan(
                 qualifyingRentsBefore, trackingPool.RentedCountOfSize(CarrierProofNonce.Length),
@@ -163,7 +165,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyCarrierTests
     /// <summary>
     /// An all-password <c>TPM2_NV_Certify()</c> whose Index-slot password does not match the Index's own
     /// authValue is refused with <c>TPM_RC_BAD_AUTH</c> (the Index is <c>TPMA_NV_NO_DA</c>, so the mismatch moves
-    /// no counter — TPM 2.0 Library Part 1, clause 17.8.1) on the one refusing arm whose rejection helper takes
+    /// no counter — TPM 2.0 Library Part 1, clause 16.8.1) on the one refusing arm whose rejection helper takes
     /// no in-flight input: it releases the request's carriers itself before framing. This is the arm that proves
     /// the Index slot's own supplied-password carrier is owned and returned, since it is the only path where the
     /// sign-slot compare has already succeeded and the Index compare is what fails.
@@ -173,7 +175,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyCarrierTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         await DefineAndWriteNvIndexAsync(tpm, registry, trackingPool.Pool, PasswordArmNvIndexHandle).ConfigureAwait(false);
@@ -193,8 +195,8 @@ internal sealed class TpmInHouseSimulatorNvCertifyCarrierTests
             TpmResult<NvCertifyResponse> result = await TpmCommandExecutor.ExecuteAsync<NvCertifyResponse>(
                 tpm, nvCertifyInput, [signAuth, indexAuth], null, trackingPool.Pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
             Assert.AreEqual(
-                TpmRcConstants.TPM_RC_BAD_AUTH, result.ResponseCode,
-                "A wrong authValue against a dictionary-attack-exempt Index is a plain TPM_RC_BAD_AUTH (TPM 2.0 Library Part 1, clause 17.8.1).");
+                HmacKeyHarness.SessionEncodedRc(TpmRcConstants.TPM_RC_BAD_AUTH, 1), result.ResponseCode,
+                "A wrong authValue against a dictionary-attack-exempt Index is a plain TPM_RC_BAD_AUTH (TPM 2.0 Library Part 1, clause 16.8.1).");
 
             Assert.IsGreaterThan(
                 qualifyingRentsBefore, trackingPool.RentedCountOfSize(CarrierProofNonce.Length),
@@ -218,7 +220,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyCarrierTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         await DefineAndWriteNvIndexAsync(tpm, registry, trackingPool.Pool, PasswordArmNvIndexHandle).ConfigureAwait(false);
@@ -262,7 +264,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyCarrierTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateHmacArmRegistry();
 
         await DefineAndWriteNvIndexAsync(tpm, registry, trackingPool.Pool, SessionArmNvIndexHandle).ConfigureAwait(false);
@@ -295,7 +297,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyCarrierTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateHmacArmRegistry();
 
         await DefineAndWriteNvIndexAsync(tpm, registry, trackingPool.Pool, SessionArmNvIndexHandle).ConfigureAwait(false);
@@ -328,7 +330,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyCarrierTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateHmacArmRegistry();
 
         await DefineAndWriteNvIndexAsync(tpm, registry, trackingPool.Pool, SessionArmNvIndexHandle).ConfigureAwait(false);
@@ -352,7 +354,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyCarrierTests
     /// <summary>
     /// The Index-Name hop's own carrier is returned when the command it serves is refused. A session-authorized
     /// <c>TPM2_NV_Certify()</c> computes the Index's Name in an effect before either command HMAC is verified,
-    /// because TPM 2.0 Library Part 1, clause 16.7 equation 15 needs that Name as a cpHash term; the computed
+    /// because TPM 2.0 Library Part 1, clause 15.7 equation 15 needs that Name as a cpHash term; the computed
     /// Name rides an owned <c>TPM2B_NAME</c> carrier back through the effect feedback, and the resuming
     /// transition is its terminal owner on every arm — including the arm where the sign slot's command HMAC then
     /// fails and the command is abandoned (Part 2, clause 6.6.2). The rent of exactly the Index Name's width is
@@ -364,7 +366,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyCarrierTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateHmacArmRegistry();
 
         await DefineAndWriteNvIndexAsync(tpm, registry, trackingPool.Pool, SessionArmNvIndexHandle).ConfigureAwait(false);
@@ -395,14 +397,14 @@ internal sealed class TpmInHouseSimulatorNvCertifyCarrierTests
     /// the parser rented once the response has been consumed: the continuation releases both slots' supplied
     /// HMACs as their terminal owner, and the qualifying data transferred out of the request into the NV-certify
     /// action, so it is the attesting effect that releases it (TPM 2.0 Library Part 3, clause 31.16; Part 1,
-    /// clause 16.6.1 for the response entries).
+    /// clause 15.6.1 for the response entries).
     /// </summary>
     [TestMethod]
     public async Task SuccessfulNvCertifyOverSessionReturnsTheParseRentedCarriersToPool()
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateHmacArmRegistry();
 
         await DefineAndWriteNvIndexAsync(tpm, registry, trackingPool.Pool, SessionArmNvIndexHandle).ConfigureAwait(false);
@@ -439,7 +441,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyCarrierTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         await DefineAndWriteNvIndexAsync(tpm, registry, trackingPool.Pool, PasswordArmNvIndexHandle).ConfigureAwait(false);
@@ -480,7 +482,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyCarrierTests
     /// <para>
     /// A password authorization has no nonce: the reference settles it while unmarshaling the session area — "the
     /// nonce size must be zero", answered <c>TPM_RCS_NONCE + errorIndex</c> — and the response side of the same
-    /// fact is TPM 2.0 Library Part 1, clause 16.6.2.2, Table 11's "will be zero for a password authorization".
+    /// fact is TPM 2.0 Library Part 1, clause 15.6.2.2, Table 14's "will be zero for a password authorization".
     /// The refusal is structural, so it precedes every authorization check (Part 3, clause 5.5 precedes clause
     /// 5.6) and the planted octets are never keyed into anything.
     /// </para>
@@ -504,7 +506,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyCarrierTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateHmacArmRegistry();
 
         await DefineAndWriteNvIndexAsync(tpm, registry, trackingPool.Pool, MixedArmNvIndexHandle).ConfigureAwait(false);
@@ -522,7 +524,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyCarrierTests
                 WithPasswordSlotNonce(command.Span, handleCount: 3, PasswordSlotNonce), commandPool, cancellationToken).ConfigureAwait(false);
         }
 
-        using TpmDevice plantingTpm = TpmDevice.Create(PlantPasswordSlotNonceAsync);
+        using TpmDevice plantingTpm = TpmDevice.Create(PlantPasswordSlotNonceAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         long baseline = trackingPool.OutstandingCount;
         long nonceRentsBefore = trackingPool.RentedCountOfSize(PasswordSlotNonce.Length);
@@ -551,8 +553,8 @@ internal sealed class TpmInHouseSimulatorNvCertifyCarrierTests
 
     /// <summary>
     /// A <c>qualifyingData</c> wider than <c>TPM2B_DATA</c>'s declared bound — <c>sizeof(TPMT_HA)</c>, the
-    /// 2-octet algorithm identifier plus the largest supported digest (TPM 2.0 Library Part 2, clause 10.4.3,
-    /// Table 93) — is refused with <c>TPM_RC_SIZE</c> while the frame is still being parsed, so the parse rents
+    /// 2-octet algorithm identifier plus the largest supported digest (TPM 2.0 Library Part 2, clause 10.3.3,
+    /// Table 91) — is refused with <c>TPM_RC_SIZE</c> while the frame is still being parsed, so the parse rents
     /// nothing at all: the pool balance does not move, and the refusal is a response code rather than an
     /// exception escaping the command surface.
     /// </summary>
@@ -561,7 +563,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyCarrierTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         await DefineAndWriteNvIndexAsync(tpm, registry, trackingPool.Pool, PasswordArmNvIndexHandle).ConfigureAwait(false);
@@ -599,8 +601,8 @@ internal sealed class TpmInHouseSimulatorNvCertifyCarrierTests
             TpmResult<NvCertifyResponse> overBoundResult = await TpmCommandExecutor.ExecuteAsync<NvCertifyResponse>(
                 tpm, overBoundInput, [overBoundSignAuth, overBoundIndexAuth], null, trackingPool.Pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
             Assert.AreEqual(
-                TpmRcConstants.TPM_RC_SIZE, overBoundResult.ResponseCode,
-                "A qualifyingData wider than sizeof(TPMT_HA) is TPM_RC_SIZE (TPM 2.0 Library Part 2, clause 10.4.3, Table 93).");
+                HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SIZE, 0), overBoundResult.ResponseCode,
+                "A qualifyingData wider than sizeof(TPMT_HA) is TPM_RC_SIZE at qualifyingData, parameter 1 of Table 271 (TPM 2.0 Library Part 3, clause 31.16.2; Part 2, clause 10.3.3, Table 91).");
 
             Assert.AreEqual(
                 overBoundRentsBefore, trackingPool.RentedCountOfSize(overBound.Length),
@@ -616,7 +618,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyCarrierTests
     /// Certifies <see cref="SessionArmNvIndexHandle"/> with <paramref name="ak"/> over two fresh, real, unbound
     /// and unsalted HMAC sessions — one per authorization slot, in handle order — flushing both on the way out.
     /// The sessions live entirely inside this call, so the nonce carriers they adopt from the response entries
-    /// (TPM 2.0 Library Part 1, clause 16.6.1) are released before a caller reads the pool balance.
+    /// (TPM 2.0 Library Part 1, clause 15.6.1) are released before a caller reads the pool balance.
     /// </summary>
     /// <param name="tpm">The TPM device.</param>
     /// <param name="registry">The response codec registry.</param>
@@ -638,13 +640,13 @@ internal sealed class TpmInHouseSimulatorNvCertifyCarrierTests
 
         try
         {
-            using TpmSession signSession = new(new TpmHandle(signSessionHandle), signStarted.NonceTPM, HmacSessionAlg, trackingPool.Pool);
+            using TpmSession signSession = new(new TpmHandle(signSessionHandle), signStarted.NonceTPM, HmacSessionAlg, TestEntropy.NewCounterStream(), trackingPool.Pool);
             if(!signSlotAuthValue.IsEmpty)
             {
                 signSession.SetAuthValue(signSlotAuthValue.Span, trackingPool.Pool);
             }
 
-            using TpmSession indexSession = new(new TpmHandle(indexSessionHandle), indexStarted.NonceTPM, HmacSessionAlg, trackingPool.Pool);
+            using TpmSession indexSession = new(new TpmHandle(indexSessionHandle), indexStarted.NonceTPM, HmacSessionAlg, TestEntropy.NewCounterStream(), trackingPool.Pool);
             indexSession.SetAuthValue(indexSlotAuthValue.Span, trackingPool.Pool);
 
             using NvCertifyInput nvCertifyInput = NvCertifyInput.ForEcdsa(
@@ -673,7 +675,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyCarrierTests
     /// a <c>TPM_RS_PW</c> sign slot and one fresh, real, unbound and unsalted HMAC session authorizing the Index —
     /// issuing the command through <paramref name="plantingTpm"/> so the password slot arrives carrying a
     /// non-empty <c>nonceCaller</c>, and flushing the session on the way out. The session lives entirely inside
-    /// this call, so the nonce carrier it adopts from its response entry (TPM 2.0 Library Part 1, clause 16.6.1)
+    /// this call, so the nonce carrier it adopts from its response entry (TPM 2.0 Library Part 1, clause 15.6.1)
     /// is released before a caller reads the pool balance.
     /// </summary>
     /// <param name="plainTpm">The untouched TPM device, used for the session lifecycle commands.</param>
@@ -691,7 +693,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyCarrierTests
         try
         {
             using TpmPasswordSession signAuth = TpmPasswordSession.CreateEmpty(trackingPool.Pool);
-            using TpmSession indexSession = new(new TpmHandle(indexSessionHandle), indexStarted.NonceTPM, HmacSessionAlg, trackingPool.Pool);
+            using TpmSession indexSession = new(new TpmHandle(indexSessionHandle), indexStarted.NonceTPM, HmacSessionAlg, TestEntropy.NewCounterStream(), trackingPool.Pool);
             indexSession.SetAuthValue(IndexAuth, trackingPool.Pool);
 
             using NvCertifyInput nvCertifyInput = NvCertifyInput.ForEcdsa(
@@ -795,7 +797,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyCarrierTests
     /// <returns>The StartAuthSession response.</returns>
     private async Task<StartAuthSessionResponse> StartHmacSessionAsync(TpmDevice tpm, TpmResponseRegistry registry, MeteredHousePool trackingPool)
     {
-        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(HmacSessionAlg);
+        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(HmacSessionAlg, TestEntropy.NewCounterStream(), BaseMemoryPool.Shared);
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             tpm, startInput, [], null, trackingPool.Pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession failed: '{startResult.ResponseCode}'.");
@@ -888,7 +890,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyCarrierTests
     /// <summary>
     /// Recomputes an NV Index's Name independently: <c>nameAlg || H_nameAlg(nvIndex || nameAlg || attributes ||
     /// authPolicy || dataSize)</c> — the whole marshaled TPMS_NV_PUBLIC these tests defined the Index with (TPM
-    /// 2.0 Library Part 2, clause 13.6) hashed per Part 1, clause 14, Table 6 — through the registered digest
+    /// 2.0 Library Part 2, clause 13.6) hashed per Part 1, clause 13, Table 9 — through the registered digest
     /// seam. Every Index here is defined with an empty access policy, so the policy field marshals as a
     /// zero-length TPM2B.
     /// </summary>
@@ -958,7 +960,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyCarrierTests
         var simulator = new TpmSimulator(
             "tpm-in-house-nv-certify-carriers",
             signingBackend: BouncyCastleTpmEccSigningBackend.Create(),
-            rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create());
+            rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await BringOperationalAsync(simulator, pool).ConfigureAwait(false);
 

@@ -7,6 +7,7 @@ using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.AuthCode.States;
 using Verifiable.OAuth.Client;
 using Verifiable.Core.Assessment;
+using Verifiable.OAuth.Server.Pipeline;
 using Verifiable.OAuth.Validation;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -20,7 +21,15 @@ internal sealed class AuthCodeFlowTests
 
     private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
-    private static readonly Uri DefaultRedirectUri = new("https://client.example.com/callback");
+    /// <summary>
+    /// The entropy source every <see cref="OAuthClientInfrastructure"/> this class constructs draws its
+    /// state/nonce/PKCE bytes from — ONE continuously-advancing counter stream per test-class instance
+    /// (MSTest constructs a fresh instance per test method), so two infrastructures built within the SAME
+    /// test draw different byte sequences.
+    /// </summary>
+    private FillEntropyDelegate ClientEntropy { get; } = TestEntropy.NewCounterStream();
+
+    private static Uri DefaultRedirectUri { get; } = new("https://client.example.com/callback");
 
 
     [TestMethod]
@@ -40,7 +49,10 @@ internal sealed class AuthCodeFlowTests
         Assert.IsNotNull(result.RedirectUri);
         Assert.Contains("request_uri", result.RedirectUri.ToString(), StringComparison.Ordinal);
         Assert.HasCount(1, store, "PAR success must persist exactly one flow state.");
-        Assert.IsInstanceOfType<ParCompletedState>(TestDictionaryHelpers.GetFirstValue(store));
+        ParCompletedState state = Assert.IsInstanceOfType<ParCompletedState>(TestDictionaryHelpers.GetFirstValue(store));
+        Assert.AreEqual(TimeProvider.GetUtcNow(), state.EnteredAt,
+            "ParCompletedState.EnteredAt is infrastructure.TimeProvider.GetUtcNow() at the PAR call — the " +
+            "OAuthClientInfrastructure's own injected clock, never the system clock.");
     }
 
 
@@ -60,6 +72,31 @@ internal sealed class AuthCodeFlowTests
 
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.InternalError, result.Outcome);
         Assert.AreEqual("server_error", result.ErrorCode);
+    }
+
+
+    /// <summary>
+    /// A transport-delegate <see cref="OperationCanceledException"/> thrown while sending the pushed
+    /// authorization request propagates as-is instead of being folded into a
+    /// <c>server_error</c> <see cref="AuthCodeFlowEndpointResult"/>: the PAR-send catch arms rethrow
+    /// cancellation before the generic exception arm that produces the server-error outcome runs.
+    /// </summary>
+    [TestMethod]
+    public async Task HandleParAsyncSurfacesCancellationInsteadOfServerError()
+    {
+        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(
+            store: [],
+            httpException: new OperationCanceledException());
+
+        await Assert.ThrowsExactlyAsync<OperationCanceledException>(async () =>
+        {
+            _ = await AuthCodeFlowHandlers.HandleParAsync(
+                new Dictionary<string, string>(),
+                DefaultRedirectUri,
+                infrastructure,
+                registration,
+                TestContext.CancellationToken).ConfigureAwait(false);
+        }).ConfigureAwait(false);
     }
 
 
@@ -141,7 +178,10 @@ internal sealed class AuthCodeFlowTests
                 ValueTask.FromResult(metadata),
             resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,
             base64UrlEncoder: TestSetup.Base64UrlEncoder,
-            timeProvider: TimeProvider);
+            memoryPool: BaseMemoryPool.Shared,
+            timeProvider: TimeProvider,
+            fillEntropy: ClientEntropy,
+            generateIdentifierAsync: DefaultIdentifierGenerator.For(TimeProvider, ClientEntropy, BaseMemoryPool.Shared));
 
         ClientRegistration registration = new()
         {
@@ -576,7 +616,10 @@ internal sealed class AuthCodeFlowTests
                     ValidationProfiles.CallbackHaip10Rules(),
                     timeProvider),
             base64UrlEncoder: TestSetup.Base64UrlEncoder,
-            timeProvider: TimeProvider);
+            memoryPool: BaseMemoryPool.Shared,
+            timeProvider: TimeProvider,
+            fillEntropy: ClientEntropy,
+            generateIdentifierAsync: DefaultIdentifierGenerator.For(TimeProvider, ClientEntropy, BaseMemoryPool.Shared));
 
         ClientRegistration registration = new()
         {

@@ -109,8 +109,7 @@ public static class SdJwtVerificationExtensions
             //Bind each holder-selected disclosure to its path. extractPaths parses the payload
             //from token.IssuerSigned and matches its _sd digests against token.Disclosures (the
             //selected set); the compact form carries no original full set to leak.
-            IReadOnlyDictionary<SdDisclosure, CredentialPath> boundPaths =
-                extractPaths(token, decoder, encoder, pool, hashAlgorithm);
+            var boundPaths = new SdDisclosurePaths(extractPaths(token, decoder, encoder, pool, hashAlgorithm));
 
             //Decode the redacted payload segment to expose it as a verbose intermediate. The
             //compact form verified above, so it has exactly three parts. The returned context
@@ -122,7 +121,7 @@ public static class SdJwtVerificationExtensions
             bool allBound = true;
             foreach(SdDisclosure disclosure in token.Disclosures)
             {
-                if(boundPaths.TryGetValue(disclosure, out CredentialPath path))
+                if(boundPaths.TryGetPath(disclosure, out CredentialPath path))
                 {
                     claimResults.Add(SdClaimVerificationResult.Success(path));
                 }

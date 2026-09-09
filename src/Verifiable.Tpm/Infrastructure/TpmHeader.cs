@@ -12,7 +12,7 @@ namespace Verifiable.Tpm.Infrastructure;
 /// define a named structure for them.
 /// </para>
 /// <para>
-/// <b>Command header layout</b> (TPM 2.0 Part 1, Section 16.9):
+/// <b>Command header layout</b> (TPM 2.0 Library Part 1, clause 15.9):
 /// </para>
 /// <list type="bullet">
 ///   <item><description>Offset 0-1: TPMI_ST_COMMAND_TAG (TPM_ST_SESSIONS or TPM_ST_NO_SESSIONS).</description></item>
@@ -20,7 +20,7 @@ namespace Verifiable.Tpm.Infrastructure;
 ///   <item><description>Offset 6-9: TPM_CC commandCode.</description></item>
 /// </list>
 /// <para>
-/// <b>Response header layout</b> (TPM 2.0 Part 1, Section 16.10):
+/// <b>Response header layout</b> (TPM 2.0 Library Part 1, clause 15.10):
 /// </para>
 /// <list type="bullet">
 ///   <item><description>Offset 0-1: TPM_ST tag.</description></item>
@@ -28,7 +28,7 @@ namespace Verifiable.Tpm.Infrastructure;
 ///   <item><description>Offset 6-9: TPM_RC responseCode.</description></item>
 /// </list>
 /// <para>
-/// See TPM 2.0 Part 3, Section 5.2 "Command Header Validation" for the TPM's
+/// See TPM 2.0 Library Part 3, clause 5.2 "Command Header Validation" for the TPM's
 /// processing of command headers.
 /// </para>
 /// </remarks>

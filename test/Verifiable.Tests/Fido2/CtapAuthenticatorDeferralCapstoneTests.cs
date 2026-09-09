@@ -48,8 +48,8 @@ internal sealed class CtapAuthenticatorDeferralCapstoneTests
     /// response is compared against the SAME request run synchronously on a fresh, always-granting
     /// simulator sharing the same AAGUID — agreement is asserted on every DETERMINISTIC field only
     /// (status, <c>fmt</c>, <c>attStmt</c> presence, <c>rpIdHash</c>, authData flags, <c>signCount</c>,
-    /// <c>aaguid</c>, credential <c>kty</c>/<c>alg</c>), per the 2026-07-20 post-verify adjudication that
-    /// literal byte-identity is unsatisfiable (mc mints a fresh per-run keypair) — mirroring
+    /// <c>aaguid</c>, credential <c>kty</c>/<c>alg</c>), because literal byte-identity is unsatisfiable
+    /// (mc mints a fresh per-run keypair) — mirroring
     /// <c>CtapUserPresenceTests.PollDeferredTransceiveResumesOnGrantedDecisionMatchingSynchronousResponseStructurally</c>'s
     /// own assertion set, now proven end to end over the wire instead of against the simulator directly.
     /// </summary>
@@ -69,7 +69,7 @@ internal sealed class CtapAuthenticatorDeferralCapstoneTests
         }
 
         using CtapAuthenticatorSimulator deferredSimulator = CreateSimulator(
-            "capstone-deferred-success", aaguid: sharedAaguid, simulateUserPresence: GrantOnFourthConsultProvider);
+            "capstone-deferred-success", BaseMemoryPool.Shared, aaguid: sharedAaguid, simulateUserPresence: GrantOnFourthConsultProvider);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateWithDeferralAsync(deferredSimulator, pool, cancellationToken);
 
         CtapMakeCredentialRequest deferredRequest = BuildMakeCredentialRequest(pool);
@@ -111,7 +111,7 @@ internal sealed class CtapAuthenticatorDeferralCapstoneTests
         Assert.IsGreaterThan(0, pendingPollCount, "the provider's fourth-consult grant must be preceded by at least one still-pending poll.");
         Assert.AreEqual(WellKnownCtapStatusCodes.Ok, resumedEnvelopeBytes[0]);
 
-        using CtapAuthenticatorSimulator syncSimulator = CreateSimulator("capstone-deferred-success-sync", aaguid: sharedAaguid);
+        using CtapAuthenticatorSimulator syncSimulator = CreateSimulator("capstone-deferred-success-sync", BaseMemoryPool.Shared, aaguid: sharedAaguid);
         CtapMakeCredentialRequest syncRequest = BuildMakeCredentialRequest(pool);
         using PooledMemory syncResponse = await SendMakeCredentialAsync(syncSimulator, syncRequest, pool, cancellationToken);
         Assert.AreEqual(WellKnownCtapStatusCodes.Ok, syncResponse.AsReadOnlySpan()[0]);
@@ -151,7 +151,7 @@ internal sealed class CtapAuthenticatorDeferralCapstoneTests
             return CtapUserPresenceDecision.Pending;
         }
 
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("capstone-cancel", simulateUserPresence: CancelDuringFirstConsultProvider);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("capstone-cancel", BaseMemoryPool.Shared, simulateUserPresence: CancelDuringFirstConsultProvider);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateWithDeferralAsync(simulator, pool, TestContext.CancellationToken);
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool);
@@ -195,7 +195,7 @@ internal sealed class CtapAuthenticatorDeferralCapstoneTests
         }
 
         using CtapAuthenticatorSimulator simulator = CreateSimulator(
-            "capstone-timeout", timeProvider: timeProvider, simulateUserPresence: NeverGrantingAdvancingProvider);
+            "capstone-timeout", BaseMemoryPool.Shared, timeProvider: timeProvider, simulateUserPresence: NeverGrantingAdvancingProvider);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateWithDeferralAsync(simulator, pool, cancellationToken);
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool);
@@ -229,7 +229,7 @@ internal sealed class CtapAuthenticatorDeferralCapstoneTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("capstone-p1gate", simulateUserPresence: AlwaysPending);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("capstone-p1gate", BaseMemoryPool.Shared, simulateUserPresence: AlwaysPending);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateWithDeferralAsync(simulator, pool, cancellationToken);
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool);
@@ -263,7 +263,7 @@ internal sealed class CtapAuthenticatorDeferralCapstoneTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("capstone-algorithms");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("capstone-algorithms",BaseMemoryPool.Shared);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken);
 
         CtapGetInfoResponse response = await CtapAuthenticatorGetInfoClient.GetInfoAsync(
@@ -293,7 +293,7 @@ internal sealed class CtapAuthenticatorDeferralCapstoneTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("capstone-config-sync");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("capstone-config-sync",BaseMemoryPool.Shared);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateWithDeferralAsync(simulator, pool, cancellationToken);
 
         TaggedMemory<byte> configParameters = CtapAuthenticatorConfigRequestCborWriter.Write(

@@ -75,12 +75,12 @@ public enum TpmHt: byte
     TPM_HT_AC = 0x90,
 
     /// <summary>
-    /// TPM_HT_EXTERNAL_NV (0x11): External NV Index handles, assigned by the caller (Part 2, clause 7.2, Table 35).
+    /// TPM_HT_EXTERNAL_NV (0x11): External NV Index handles, assigned by the caller (Part 2, clause 7.2, Table 33).
     /// </summary>
     TPM_HT_EXTERNAL_NV = 0x11,
 
     /// <summary>
-    /// TPM_HT_PERMANENT_NV (0x12): Permanent NV Index handles, assigned by a platform-specific specification (Part 2, clause 7.2, Table 35).
+    /// TPM_HT_PERMANENT_NV (0x12): Permanent NV Index handles, assigned by a platform-specific specification (Part 2, clause 7.2, Table 33).
     /// </summary>
     TPM_HT_PERMANENT_NV = 0x12,
 }

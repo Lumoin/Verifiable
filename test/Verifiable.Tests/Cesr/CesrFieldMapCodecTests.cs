@@ -491,23 +491,23 @@ internal sealed class CesrFieldMapCodecTests
     //An ASCII serialization carried in a pooled buffer the test owns and disposes.
     private sealed class AsciiText: IDisposable
     {
-        private readonly IMemoryOwner<byte> owner;
-        private readonly int length;
+        private IMemoryOwner<byte> Owner { get; }
+        private int Length { get; }
 
         /// <summary>Initializes the carrier over a pooled buffer holding the given number of ASCII bytes.</summary>
         /// <param name="owner">The pooled buffer.</param>
         /// <param name="length">The number of valid bytes at the start of the buffer.</param>
         public AsciiText(IMemoryOwner<byte> owner, int length)
         {
-            this.owner = owner;
-            this.length = length;
+            this.Owner = owner;
+            this.Length = length;
         }
 
         /// <summary>The serialization's ASCII bytes.</summary>
-        public ReadOnlyMemory<byte> Memory => owner.Memory[..length];
+        public ReadOnlyMemory<byte> Memory => Owner.Memory[..Length];
 
         /// <summary>Returns the pooled buffer to its pool.</summary>
-        public void Dispose() => owner.Dispose();
+        public void Dispose() => Owner.Dispose();
     }
 
 

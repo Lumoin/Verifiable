@@ -48,6 +48,7 @@ public delegate IReadOnlyDictionary<TDisclosure, CredentialPath> ExtractDisclosu
 /// <param name="encodedDisclosure">The encoded disclosure string.</param>
 /// <param name="algorithmName">The hash algorithm name in IANA format (e.g., <c>"sha-256"</c>).</param>
 /// <param name="encoder">Delegate for encoding the hash result.</param>
+/// <param name="pool">The memory pool the digest is rented from.</param>
 /// <returns>The computed digest as a string.</returns>
 /// <remarks>
 /// <para>
@@ -68,7 +69,8 @@ public delegate IReadOnlyDictionary<TDisclosure, CredentialPath> ExtractDisclosu
 public delegate string ComputeDisclosureDigestDelegate(
     string encodedDisclosure,
     string algorithmName,
-    EncodeDelegate encoder);
+    EncodeDelegate encoder,
+    BaseMemoryPool pool);
 
 
 /// <summary>

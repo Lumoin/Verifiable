@@ -1,13 +1,14 @@
 using System;
-using System.Linq;
-using System.Reflection;
+using System.IO;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Time.Testing;
 using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
+using Verifiable.Tests.Foundation;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tests.X509;
 
@@ -18,10 +19,10 @@ namespace Verifiable.Tests.Cryptography;
 /// shape to the mint-only carrier-class discipline <see cref="CAdESVerificationResult"/>/<see
 /// cref="PAdESSignatureValidationResult"/>/<see cref="PAdESValidationResult"/> share (a private constructor plus
 /// non-public static factories, rather than <c>Verified&lt;T&gt;</c>'s own generic wrapper — PAdES composes <see
-/// cref="CAdESVerification"/>'s carrier shape unchanged, RP-3). Compile-time forgeability is checked by reflection over
-/// every minting surface; runtime forgeability is checked by proving a parsed-but-cryptographically-invalid signature
-/// never reaches <see cref="PAdESSignatureStatus.Valid"/> while its decoded (Unverified) facts stay reachable, and the
-/// mirror-image success case.
+/// cref="CAdESVerification"/>'s carrier shape unchanged, RP-3). Compile-time forgeability is checked by a source
+/// scan over every minting surface's own declaration; runtime forgeability is checked by proving a
+/// parsed-but-cryptographically-invalid signature never reaches <see cref="PAdESSignatureStatus.Valid"/> while
+/// its decoded (Unverified) facts stay reachable, and the mirror-image success case.
 /// </summary>
 [TestClass]
 internal sealed class PAdESPromotionDisciplineTests
@@ -36,37 +37,38 @@ internal sealed class PAdESPromotionDisciplineTests
     public required TestContext TestContext { get; set; }
 
 
-    /// <summary><see cref="PAdESSignatureValidationResult"/> has no public constructor -- an external caller cannot wrap arbitrary decoded data into a "valid" result even by direct construction.</summary>
+    /// <summary>
+    /// <see cref="PAdESSignatureValidationResult"/> declares no public constructor and its
+    /// <see cref="PAdESSignatureValidationResult.Valid"/>/<see cref="PAdESSignatureValidationResult.Failed"/>
+    /// minting factories stay non-public -- an external caller cannot wrap arbitrary decoded data into a
+    /// "valid" result even by direct construction; minting one is <see cref="PAdESSignatureValidation"/>'s
+    /// exclusive responsibility. Proved as a source scan of the declaring file's own constructor and factory
+    /// declaration lines, since the compiler already enforces whatever accessibility the source states.
+    /// </summary>
     [TestMethod]
-    public void SignatureValidationResultConstructorIsNotPublic()
+    public void SignatureValidationResultConstructorAndFactoriesAreNotPublic()
     {
-        AssertNoPublicConstructor(typeof(PAdESSignatureValidationResult));
+        string repositoryRoot = SourceHygieneScanner.FindRepositoryRoot();
+
+        AssertConstructorIsNotPublicInSource(repositoryRoot, PkiPath, "PAdESSignatureValidationResult");
+        AssertStaticFactoryIsNotPublicInSource(repositoryRoot, PkiPath, "Valid");
+        AssertStaticFactoryIsNotPublicInSource(repositoryRoot, PkiPath, "Failed");
     }
 
 
-    /// <summary><see cref="PAdESSignatureValidationResult.Valid"/>/<see cref="PAdESSignatureValidationResult.Failed"/> are the only routes to an instance and both are non-public -- minting one is <see cref="PAdESSignatureValidation"/>'s exclusive responsibility.</summary>
+    /// <summary>
+    /// <see cref="PAdESValidationResult"/> -- the whole-document result -- declares no public constructor, and
+    /// its <see cref="PAdESValidationResult.Success"/>/<see cref="PAdESValidationResult.Failure"/> minting
+    /// factories stay non-public. Proved as a source scan of the declaring file's own declaration lines.
+    /// </summary>
     [TestMethod]
-    public void SignatureValidationResultMintingFactoriesAreNotPublic()
+    public void ValidationResultConstructorAndFactoriesAreNotPublic()
     {
-        AssertNoPublicStaticFactory(typeof(PAdESSignatureValidationResult), "Valid");
-        AssertNoPublicStaticFactory(typeof(PAdESSignatureValidationResult), "Failed");
-    }
+        string repositoryRoot = SourceHygieneScanner.FindRepositoryRoot();
 
-
-    /// <summary><see cref="PAdESValidationResult"/> -- the whole-document result -- has no public constructor either.</summary>
-    [TestMethod]
-    public void ValidationResultConstructorIsNotPublic()
-    {
-        AssertNoPublicConstructor(typeof(PAdESValidationResult));
-    }
-
-
-    /// <summary><see cref="PAdESValidationResult.Success"/>/<see cref="PAdESValidationResult.Failure"/> are the only routes to an instance and both are non-public.</summary>
-    [TestMethod]
-    public void ValidationResultMintingFactoriesAreNotPublic()
-    {
-        AssertNoPublicStaticFactory(typeof(PAdESValidationResult), "Success");
-        AssertNoPublicStaticFactory(typeof(PAdESValidationResult), "Failure");
+        AssertConstructorIsNotPublicInSource(repositoryRoot, PkiPath, "PAdESValidationResult");
+        AssertStaticFactoryIsNotPublicInSource(repositoryRoot, PkiPath, "Success");
+        AssertStaticFactoryIsNotPublicInSource(repositoryRoot, PkiPath, "Failure");
     }
 
 
@@ -75,14 +77,16 @@ internal sealed class PAdESPromotionDisciplineTests
     /// composes the shipped CAdES verification carrier unchanged) carries the identical mint-only shape one layer
     /// down -- checked here too, since a public constructor or factory on the COMPOSED type would let a caller
     /// fabricate the cryptographic outcome <see cref="PAdESSignatureValidationResult.CryptographicResult"/> wraps,
-    /// even with every PAdES-side factory locked down.
+    /// even with every PAdES-side factory locked down. Proved as a source scan of that type's own declaring file.
     /// </summary>
     [TestMethod]
     public void ComposedCAdESVerificationResultConstructorAndFactoriesAreNotPublic()
     {
-        AssertNoPublicConstructor(typeof(CAdESVerificationResult));
-        AssertNoPublicStaticFactory(typeof(CAdESVerificationResult), "Valid");
-        AssertNoPublicStaticFactory(typeof(CAdESVerificationResult), "Failed");
+        string repositoryRoot = SourceHygieneScanner.FindRepositoryRoot();
+
+        AssertConstructorIsNotPublicInSource(repositoryRoot, CAdESVerificationPath, "CAdESVerificationResult");
+        AssertStaticFactoryIsNotPublicInSource(repositoryRoot, CAdESVerificationPath, "Valid");
+        AssertStaticFactoryIsNotPublicInSource(repositoryRoot, CAdESVerificationPath, "Failed");
     }
 
 
@@ -132,21 +136,54 @@ internal sealed class PAdESPromotionDisciplineTests
     }
 
 
-    private static void AssertNoPublicConstructor(Type type)
+    /// <summary>The repository-relative path declaring <see cref="PAdESSignatureValidationResult"/> and <see cref="PAdESValidationResult"/>.</summary>
+    private const string PkiPath = "src/Verifiable.Cryptography/Pki/PAdESSignatureValidation.cs";
+
+    /// <summary>The repository-relative path declaring <see cref="CAdESVerificationResult"/>.</summary>
+    private const string CAdESVerificationPath = "src/Verifiable.Cryptography/Pki/CAdESVerification.cs";
+
+
+    /// <summary>
+    /// Asserts <paramref name="typeName"/>'s declaring file at <paramref name="relativePath"/> carries a
+    /// non-public constructor declaration and no public one -- a source-text check, since the compiler already
+    /// enforces whatever accessibility the declaration states.
+    /// </summary>
+    /// <param name="repositoryRoot">The repository root <paramref name="relativePath"/> is relative to.</param>
+    /// <param name="relativePath">The declaring file's repository-relative path.</param>
+    /// <param name="typeName">The type whose constructor is checked.</param>
+    private static void AssertConstructorIsNotPublicInSource(string repositoryRoot, string relativePath, string typeName)
     {
-        ConstructorInfo[] constructors = type.GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-        Assert.IsGreaterThan(0, constructors.Length, $"{type.Name} must declare at least one constructor.");
-        Assert.IsTrue(constructors.All(static c => !c.IsPublic), $"{type.Name}'s constructor must stay non-public -- a public one would let any caller mint a result carrying arbitrary data.");
+        string text = File.ReadAllText(Path.Combine(repositoryRoot, relativePath));
+        string escapedName = Regex.Escape(typeName);
+
+        Assert.IsFalse(
+            Regex.IsMatch(text, $@"(?m)^\s*public\s+{escapedName}\s*\("),
+            $"{relativePath}: {typeName} must declare no public constructor -- a public one would let any caller mint a result carrying arbitrary data.");
+        Assert.IsTrue(
+            Regex.IsMatch(text, $@"(?m)^\s*(?:private|internal|protected)\s+{escapedName}\s*\("),
+            $"{relativePath}: {typeName} must declare a non-public constructor.");
     }
 
 
-    private static void AssertNoPublicStaticFactory(Type type, string methodName)
+    /// <summary>
+    /// Asserts the static method named <paramref name="methodName"/> in the file at
+    /// <paramref name="relativePath"/> is declared non-public and never also declared public -- a source-text
+    /// check of the minting factory's own accessibility modifier.
+    /// </summary>
+    /// <param name="repositoryRoot">The repository root <paramref name="relativePath"/> is relative to.</param>
+    /// <param name="relativePath">The declaring file's repository-relative path.</param>
+    /// <param name="methodName">The static factory method's name.</param>
+    private static void AssertStaticFactoryIsNotPublicInSource(string repositoryRoot, string relativePath, string methodName)
     {
-        MethodInfo? factory = type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)
-            .FirstOrDefault(m => string.Equals(m.Name, methodName, StringComparison.Ordinal));
+        string text = File.ReadAllText(Path.Combine(repositoryRoot, relativePath));
+        string escapedName = Regex.Escape(methodName);
 
-        Assert.IsNotNull(factory, $"{type.Name}.{methodName} must exist.");
-        Assert.IsFalse(factory!.IsPublic, $"{type.Name}.{methodName} must stay non-public -- minting one is the validation surface's exclusive responsibility.");
+        Assert.IsFalse(
+            Regex.IsMatch(text, $@"(?m)^\s*public\s+static\s+\S.*\b{escapedName}\s*\("),
+            $"{relativePath}: {methodName} must stay non-public -- minting one is the validation surface's exclusive responsibility.");
+        Assert.IsTrue(
+            Regex.IsMatch(text, $@"(?m)^\s*(?:private|internal|protected)\s+static\s+\S.*\b{escapedName}\s*\("),
+            $"{relativePath}: {methodName} must exist and stay non-public.");
     }
 
 

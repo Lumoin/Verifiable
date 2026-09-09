@@ -3,6 +3,7 @@ using System.Globalization;
 using Microsoft.Extensions.Time.Testing;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Sd;
+using Verifiable.Cbor.StatusList;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Core.Model.SelectiveDisclosure;
@@ -34,8 +35,10 @@ internal static class SdCwtVpFixture
     /// <summary>The issuer identifier the SD-CWT is issued under (its <c>iss</c> / CWT claim 1).</summary>
     public const string IssuerId = "https://issuer.example.com";
 
+    /// <summary>The DCQL credential query identifier the SD-CWT presentation answers.</summary>
+    public const string EmployeeCwtCredentialQueryId = "employee_cwt";
+
     private const string IssuerKeyId = "did:web:issuer.example.com#key-1";
-    private const string CredentialQueryId = "employee_cwt";
 
     private const int ClaimKeyGivenName = 100;
     private const int ClaimKeyFamilyName = 101;
@@ -47,6 +50,12 @@ internal static class SdCwtVpFixture
     private const string EmailPath = "/103";
 
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
+
+    /// <summary>The position of the CWT <c>iss</c> claim (<see cref="WellKnownCwtClaimNames.Iss"/>) in the issuer-signed claims map.</summary>
+    public static CredentialPath IssuerPath => CredentialPath.FromJsonPointer($"/{WellKnownCwtClaimNames.Iss}");
+
+    /// <summary>The position of the CWT <c>vct</c> claim (<see cref="WellKnownCwtClaimNames.Vct"/>) in the issuer-signed claims map.</summary>
+    public static CredentialPath CredentialTypePath => CredentialPath.FromJsonPointer($"/{WellKnownCwtClaimNames.Vct}");
 
 
     /// <summary>The SD-CWT matrix-format row: name plus the per-run <see cref="FormatRun"/> factory.</summary>
@@ -89,14 +98,15 @@ internal static class SdCwtVpFixture
 
     private static void AssertClaims(PresentationVerifiedState verified)
     {
-        Assert.IsTrue(verified.Claims.TryGetValue(CredentialQueryId,
-            out IReadOnlyDictionary<string, string>? claims),
-            "Verified claims must be keyed by the DCQL credential query id.");
-        Assert.AreEqual("Erika", claims![ClaimKeyGivenName.ToString(CultureInfo.InvariantCulture)],
+        Assert.IsTrue(verified.Credentials.TryGetValue(new CredentialQueryId(EmployeeCwtCredentialQueryId),
+            out VpCredentialClaims? credential),
+            "Verified credentials must be keyed by the DCQL credential query id.");
+        IReadOnlyDictionary<CredentialPath, string> claims = credential!.Extracted;
+        Assert.AreEqual("Erika", claims[CredentialPath.FromJsonPointer(GivenNamePath)],
             "The disclosed given_name must round-trip through the full flow.");
-        Assert.AreEqual("Mustermann", claims[ClaimKeyFamilyName.ToString(CultureInfo.InvariantCulture)],
+        Assert.AreEqual("Mustermann", claims[CredentialPath.FromJsonPointer(FamilyNamePath)],
             "The disclosed family_name must round-trip through the full flow.");
-        Assert.IsFalse(claims.ContainsKey(ClaimKeyEmail.ToString(CultureInfo.InvariantCulture)),
+        Assert.IsFalse(claims.ContainsKey(CredentialPath.FromJsonPointer(EmailPath)),
             "The withheld email claim must not appear in the verified set.");
     }
 
@@ -109,9 +119,39 @@ internal static class SdCwtVpFixture
             [
                 new CredentialQuery
                 {
-                    Id = CredentialQueryId,
+                    Id = EmployeeCwtCredentialQueryId,
                     Format = DcqlCredentialFormats.SdCwt,
                     Meta = new CredentialQueryMeta { VctValues = [EudiPid.SdJwtVct] },
+                    Claims =
+                    [
+                        ClaimsQuery.ForPath([ClaimKeyGivenName.ToString(CultureInfo.InvariantCulture)]),
+                        ClaimsQuery.ForPath([ClaimKeyFamilyName.ToString(CultureInfo.InvariantCulture)])
+                    ]
+                }
+            ]
+        };
+
+        return DcqlPreparer.Prepare(dcqlQuery);
+    }
+
+
+    /// <summary>
+    /// A typed query whose <c>vct_values</c> names a credential type the issued SD-CWT does not declare, so a
+    /// holder releasing the queried claims still fails the DCQL type match (OID4VP 1.0 §6.1.1). The verifier
+    /// refuses the presentation, exercising the <c>direct_post</c> refusal answered as RFC 6749 §4.1.2.1
+    /// <c>invalid_request</c> (HTTP 400).
+    /// </summary>
+    public static PreparedDcqlQuery BuildSdCwtTypeMismatchPreparedQuery()
+    {
+        var dcqlQuery = new DcqlQuery
+        {
+            Credentials =
+            [
+                new CredentialQuery
+                {
+                    Id = EmployeeCwtCredentialQueryId,
+                    Format = DcqlCredentialFormats.SdCwt,
+                    Meta = new CredentialQueryMeta { VctValues = ["https://credentials.example.com/unmatched_type"] },
                     Claims =
                     [
                         ClaimsQuery.ForPath([ClaimKeyGivenName.ToString(CultureInfo.InvariantCulture)]),
@@ -140,7 +180,7 @@ internal static class SdCwtVpFixture
             [
                 new CredentialQuery
                 {
-                    Id = CredentialQueryId,
+                    Id = EmployeeCwtCredentialQueryId,
                     Format = DcqlCredentialFormats.SdCwt,
                     Meta = new CredentialQueryMeta { VctValues = [EudiPid.SdJwtVct] },
                     TrustedAuthorities =
@@ -188,21 +228,14 @@ internal static class SdCwtVpFixture
                 //DcqlEvaluator.EvaluateSingle -> DisclosureComputation.ComputeAsync over the
                 //parsed SD-CWT token via SdTokenDcqlAdapter. SD-CWT has no always-visible
                 //mandatory paths, so the lattice bottom is empty.
-                DisclosureStrategyGraph<SdToken<ReadOnlyMemory<byte>>> graph = (await DcqlDisclosure.ComputeStrategyAsync(
-                    query,
-                    storedCredential,
-                    SdTokenDcqlAdapter.CreateMetadataExtractor<ReadOnlyMemory<byte>>(DcqlCredentialFormats.SdCwt),
-                    SdTokenDcqlAdapter.ClaimExtractor<ReadOnlyMemory<byte>>,
-                    cancellationToken: cancellationToken).ConfigureAwait(false)).Graph;
+                DisclosureStrategyGraph<SdToken<ReadOnlyMemory<byte>>> graph = (await DcqlDisclosure.ComputeStrategyAsync(query, storedCredential, SdTokenDcqlAdapter.CreateMetadataExtractor<ReadOnlyMemory<byte>>(DcqlCredentialFormats.SdCwt), SdTokenDcqlAdapter.ClaimExtractor<ReadOnlyMemory<byte>>, new FakeTimeProvider(TestClock.CanonicalEpoch), cancellationToken: cancellationToken).ConfigureAwait(false)).Graph;
 
-                HashSet<string> selectedClaimNames = graph.Decisions[0].SelectedPaths
-                    .Select(path => path.ToString().TrimStart('/'))
-                    .ToHashSet(StringComparer.Ordinal);
+                IReadOnlySet<CredentialPath> selectedPaths = graph.Decisions.Count > 0
+                    ? graph.Decisions[0].SelectedPaths
+                    : new HashSet<CredentialPath>();
 
-                using SdToken<ReadOnlyMemory<byte>> selected = storedCredential.SelectDisclosures(
-                    disclosure => disclosure.ClaimName is not null
-                        && selectedClaimNames.Contains(disclosure.ClaimName),
-                    Pool);
+                using SdToken<ReadOnlyMemory<byte>> selected =
+                    storedCredential.SelectDisclosures(selectedPaths, Pool).Token;
 
                 using EncodedCoseSign1 kbt = await KbCwtIssuance.IssueAsync(
                     selected, holderKey,
@@ -224,15 +257,72 @@ internal static class SdCwtVpFixture
     }
 
 
-    private static SdCwtVpVerificationSeams BuildSeams(PublicKeyMemory issuerKey) =>
+    /// <summary>
+    /// Wallet side without the flow around it: selects the two claims
+    /// <see cref="BuildSdCwtPreparedQuery"/> asks for, signs the SD-CWT Key Binding Token over that
+    /// selection, and base64url-packages it as the <c>vp_token</c> value a presentation carries — the
+    /// recipe a caller verifying at the parse boundary reuses, beside the engine-driven
+    /// <see cref="BuildSdCwtProduceDelegate"/> the full flows run.
+    /// </summary>
+    /// <param name="storedCredential">The issued SD-CWT the wallet holds.</param>
+    /// <param name="holderKey">The holder's signing key, matching the credential's <c>cnf</c> COSE_Key.</param>
+    /// <param name="verifierAud">The Verifier identifier bound into the Key Binding Token's <c>aud</c>.</param>
+    /// <param name="verifierCnonce">The Verifier's nonce bound into the Key Binding Token's <c>cnonce</c>.</param>
+    /// <param name="iat">The instant the Key Binding Token is issued at.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The base64url <c>vp_token</c> value.</returns>
+    public static async ValueTask<string> ProduceVpTokenValueAsync(
+        SdToken<ReadOnlyMemory<byte>> storedCredential,
+        PrivateKeyMemory holderKey,
+        string verifierAud,
+        string verifierCnonce,
+        DateTimeOffset iat,
+        CancellationToken cancellationToken)
+    {
+        var selectedPaths = new HashSet<CredentialPath>
+        {
+            CredentialPath.FromJsonPointer(GivenNamePath),
+            CredentialPath.FromJsonPointer(FamilyNamePath)
+        };
+
+        using SdToken<ReadOnlyMemory<byte>> selected =
+            storedCredential.SelectDisclosures(selectedPaths, Pool).Token;
+
+        using EncodedCoseSign1 kbt = await KbCwtIssuance.IssueAsync(
+            selected, holderKey,
+            verifierAud: verifierAud,
+            verifierCnonce: verifierCnonce,
+            iat: iat,
+            SdKbtIssuance.BuildProtectedHeader,
+            SdKbtIssuance.BuildPayload,
+            CoseSerialization.BuildSigStructure,
+            CoseSerialization.SerializeCoseSign1,
+            Pool,
+            cancellationToken).ConfigureAwait(false);
+
+        return TestSetup.Base64UrlEncoder(kbt.AsReadOnlyMemory().Span);
+    }
+
+
+    /// <summary>
+    /// Builds the <see cref="SdCwtVpVerificationSeams"/> wired to the concrete
+    /// <c>Verifiable.Cbor.Sd</c> implementations, with the issuer key resolved out of band to
+    /// <paramref name="issuerKey"/> — the seam set <see cref="StartAsync"/>, the parse-boundary
+    /// tests, and a caller composing its own <see cref="TestHostShell"/> registration all reuse.
+    /// </summary>
+    /// <param name="issuerKey">The issuer public key <see cref="SdCwtVpVerificationSeams.ResolveIssuerKey"/> resolves to.</param>
+    /// <returns>The wired seam set.</returns>
+    public static SdCwtVpVerificationSeams BuildSeams(PublicKeyMemory issuerKey) =>
         new()
         {
             ParseCoseSign1 = CoseSerialization.ParseCoseSign1,
             ExtractKcwt = SdCwtVpParsing.ExtractKcwt,
-            ParseSdCwt = bytes => SdCwtVpParsing.ParseEmbeddedSdCwt(bytes, TestSalts.TestSaltTag, Pool),
+            ParseSdCwt = bytes => SdCwtVpParsing.ParseEmbeddedSdCwt(bytes, TestSalts.TestSaltTag, Pool, TestSetup.Base64UrlEncoder),
             ExtractHolderKey = SdCwtVpParsing.ExtractHolderKey,
             ReadKbtClaims = SdCwtVpParsing.ReadKbtClaims,
             ExtractIssuer = SdCwtVpParsing.ExtractIssuer,
+            ExtractCredentialType = SdCwtVpParsing.ExtractCredentialType,
+            ExtractStatus = SdCwtVpParsing.ExtractStatus,
             ResolveIssuerKey = _ => issuerKey,
             VerifyCredential = async (token, key, pool, ct) =>
             {
@@ -248,18 +338,64 @@ internal static class SdCwtVpFixture
         };
 
 
-    private static async ValueTask<SdToken<ReadOnlyMemory<byte>>> IssueSdCwtTokenAsync(
-        FakeTimeProvider tp, PrivateKeyMemory privateKey, PublicKeyMemory holderPublic, CancellationToken cancellationToken)
+    /// <summary>
+    /// Issues an SD-CWT carrying <see cref="IssuerId"/>, the shared <c>given_name</c>/
+    /// <c>family_name</c>/<c>email</c> claims and the holder's <c>cnf</c> COSE_Key, then rebuilds
+    /// and re-parses the full wire form so the returned token carries real
+    /// <see cref="SdToken{TEnvelope}.DisclosurePaths"/> evidence — the recipe both
+    /// <see cref="StartAsync"/> and a caller building its own presentation reuse.
+    /// </summary>
+    /// <param name="tp">The clock the <c>iat</c> claim is read from.</param>
+    /// <param name="privateKey">The issuer's signing key.</param>
+    /// <param name="holderPublic">The holder's public key, embedded in the <c>cnf</c> claim.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The issued, re-parsed token; the caller owns and disposes it.</returns>
+    public static ValueTask<SdToken<ReadOnlyMemory<byte>>> IssueSdCwtTokenAsync(
+        FakeTimeProvider tp, PrivateKeyMemory privateKey, PublicKeyMemory holderPublic, CancellationToken cancellationToken) =>
+        IssueSdCwtTokenAsync(tp, privateKey, holderPublic, status: null, cancellationToken);
+
+
+    /// <summary>
+    /// <see cref="IssueSdCwtTokenAsync(FakeTimeProvider, PrivateKeyMemory, PublicKeyMemory, CancellationToken)"/>
+    /// with a Token Status List Status structure placed in the issuer-signed claims under CWT claim key
+    /// <see cref="StatusListCborConstants.Status"/>, the placement
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list-21#section-6.3">Token
+    /// Status List, Section 6.3</see> gives a CWT Referenced Token: "If the Referenced Token is a CWT, the
+    /// following content applies to the CWT Claims Set: 65535 (status): REQUIRED. The status claim contains
+    /// the Status CBOR structure as described in this section." The structure rides the always-visible part
+    /// of the payload, so it survives disclosure selection and reaches the verifier on every presentation.
+    /// </summary>
+    /// <param name="tp">The clock the <c>iat</c> claim is read from.</param>
+    /// <param name="privateKey">The issuer's signing key.</param>
+    /// <param name="holderPublic">The holder's public key, embedded in the <c>cnf</c> claim.</param>
+    /// <param name="status">
+    /// The Status structure the issuer states, assembled by the <c>SdCwtWireFixtures.BuildStatusWith*</c>
+    /// wire helpers, or <see langword="null"/> for a credential whose issuer published no status at all.
+    /// </param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The issued, re-parsed token; the caller owns and disposes it.</returns>
+    public static async ValueTask<SdToken<ReadOnlyMemory<byte>>> IssueSdCwtTokenAsync(
+        FakeTimeProvider tp,
+        PrivateKeyMemory privateKey,
+        PublicKeyMemory holderPublic,
+        IReadOnlyDictionary<string, object>? status,
+        CancellationToken cancellationToken)
     {
         var claims = new Dictionary<int, object>
         {
             [WellKnownCwtClaimNames.Iss] = IssuerId,
             [WellKnownCwtClaimNames.Iat] = tp.GetUtcNow().ToUnixTimeSeconds(),
+            [WellKnownCwtClaimNames.Vct] = EudiPid.SdJwtVct,
             [WellKnownCwtClaimNames.Cnf] = SdCwtWireFixtures.BuildCnfWithHolderKey(holderPublic, CnfCoseKeyMember),
             [ClaimKeyGivenName] = "Erika",
             [ClaimKeyFamilyName] = "Mustermann",
             [ClaimKeyEmail] = "erika@example.de"
         };
+
+        if(status is not null)
+        {
+            claims[StatusListCborConstants.Status] = status;
+        }
 
         var disclosablePaths = new HashSet<CredentialPath>
         {
@@ -268,10 +404,26 @@ internal static class SdCwtVpFixture
             CredentialPath.FromJsonPointer(EmailPath)
         };
 
-        return await claims.IssueSdCwtTokenAsync(
+        SdToken<ReadOnlyMemory<byte>> issued = await claims.IssueSdCwtTokenAsync(
             SdCwtWireFixtures.SerializeCwtClaimMap, SdCwtIssuance.IssueVerboseAsync, disclosablePaths,
             TestSalts.DefaultGenerator(),
             privateKey, IssuerKeyId, Pool,
             cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        //Issuance carries no parsed DisclosurePaths/IssuerSignedClaims (SdToken's plain
+        //constructor defaults both to empty), and issued.IssuerSigned alone carries no sd_claims
+        //(the unprotected header entry lives beside the token, not embedded in it, until
+        //serialized as a full SdCwtMessage). Rebuilding the full wire form and parsing it back —
+        //what a wallet does once it stores an issued credential — is what gives the DCQL adapter
+        //(both the verifier's and the wallet's own SdTokenDcqlAdapter selection step) real
+        //evidence to match against.
+        using(issued)
+        {
+            SdCwtMessage bare = SdCwtSerializer.Parse(issued.IssuerSigned, TestSalts.TestSaltTag, Pool);
+            var full = new SdCwtMessage(bare.Payload, bare.ProtectedHeader, bare.Signature, issued.Disclosures);
+            byte[] wireBytes = SdCwtSerializer.Serialize(full);
+
+            return SdCwtSerializer.ParseToken(wireBytes, TestSalts.TestSaltTag, Pool, TestSetup.Base64UrlEncoder);
+        }
     }
 }

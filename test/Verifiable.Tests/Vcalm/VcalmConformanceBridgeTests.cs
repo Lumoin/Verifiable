@@ -56,7 +56,13 @@ namespace Verifiable.Tests.Vcalm;
 ///   </description></item>
 /// </list>
 /// <para>
-/// The Kestrel listener contends for sockets with the other HTTP lifecycle tests under Workers=4; it
+/// The Kestrel listener contends for sockets with the other HTTP lifecycle tests under the assembly's
+/// in-force <see cref="Microsoft.VisualStudio.TestTools.UnitTesting.ParallelizeAttribute"/> defaults
+/// (the bare <c>[assembly: Parallelize]</c> in <c>Properties/AssemblyProperties.cs</c>): <c>Workers</c>
+/// resolves to <see cref="System.Environment.ProcessorCount"/> and <c>Scope</c> is
+/// <see cref="Microsoft.VisualStudio.TestTools.UnitTesting.ExecutionScope.ClassLevel"/> — the
+/// <c>config.runsettings</c> file's own <c>Workers</c>/<c>Scope</c> values are not in force under the
+/// direct <c>Microsoft.Testing.Platform</c> runner this suite uses. It
 /// passes in isolation like <see cref="Verifiable.Tests.OAuth.MultiHostHttpLifecycleTests"/>. The
 /// VCALM signing / verification seams are the same library primitives the dispatch-level
 /// <see cref="VcalmIssuerEndpointTests"/> uses — the bridge COMPOSES them over real HTTPS, it does not
@@ -74,12 +80,12 @@ internal sealed class VcalmConformanceBridgeTests
 
     private const string ClientId = "https://conformance.client.test";
     private const string ClientSecret = "vcalm-conformance-client-secret";
-    private static readonly Uri ClientBaseUri = new("https://conformance.client.test");
+    private static Uri ClientBaseUri { get; } = new("https://conformance.client.test");
 
     //The conformance tenant carries every capability the bridge exercises: the VCALM issuer / verifier
     //roles AND the OAuth grants the protection path needs. The RFC 9068 access-token producer is gated
     //on OAuthAuthorizationCode, so it rides alongside OAuthClientCredentials.
-    private static readonly ImmutableHashSet<CapabilityIdentifier> ConformanceCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> ConformanceCapabilities { get; } =
         ImmutableHashSet.Create(
             WellKnownVcalmCapabilities.VcalmIssuer,
             WellKnownVcalmCapabilities.VcalmVerifier,
@@ -249,6 +255,7 @@ internal sealed class VcalmConformanceBridgeTests
         DidDocument issuerDidDocument = await KeyDidBuilder.BuildAsync(
             issuerKeyPair.PublicKey,
             MultikeyVerificationMethodTypeInfo.Instance,
+            BaseMemoryPool.Shared,
             includeDefaultContext: false,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -275,7 +282,7 @@ internal sealed class VcalmConformanceBridgeTests
                     DeserializeCredential = DeserializeCredential,
                     SerializeProofOptions = SerializeProofOptions,
                     Encoder = TestSetup.Base58Encoder,
-                    ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync
+                    ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync
                 }
             ],
             ExistingProofHandling = VcalmExistingProofHandling.Error,
@@ -302,7 +309,7 @@ internal sealed class VcalmConformanceBridgeTests
             SerializePresentation = presentation => JsonSerializerExtensions.Serialize(presentation, JsonOptions),
             SerializeProofOptions = SerializeProofOptions,
             Decoder = TestSetup.Base58Decoder,
-            ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             MemoryPool = Pool
         };
 

@@ -109,7 +109,7 @@ public readonly struct GrantType: IEquatable<GrantType>
     public static GrantType PreAuthorizedCode { get; } = new(9);
 
 
-    private static List<GrantType> grantTypes { get; } =
+    private static List<GrantType> RegisteredGrantTypes { get; } =
     [
         AuthorizationCode,
         RefreshToken,
@@ -124,7 +124,7 @@ public readonly struct GrantType: IEquatable<GrantType>
     ];
 
     /// <summary>Gets all registered grant type values including any custom ones.</summary>
-    public static IReadOnlyList<GrantType> GrantTypes => grantTypes.AsReadOnly();
+    public static IReadOnlyList<GrantType> GrantTypes => RegisteredGrantTypes.AsReadOnly();
 
 
     /// <summary>
@@ -137,9 +137,9 @@ public readonly struct GrantType: IEquatable<GrantType>
     /// <exception cref="ArgumentException">Thrown when <paramref name="code"/> is already registered.</exception>
     public static GrantType Create(int code)
     {
-        for(int i = 0; i < grantTypes.Count; ++i)
+        for(int i = 0; i < RegisteredGrantTypes.Count; ++i)
         {
-            if(grantTypes[i].Code == code)
+            if(RegisteredGrantTypes[i].Code == code)
             {
                 throw new ArgumentException(
                     $"A grant type with code {code} is already registered.", nameof(code));
@@ -147,7 +147,7 @@ public readonly struct GrantType: IEquatable<GrantType>
         }
 
         GrantType newGrantType = new(code);
-        grantTypes.Add(newGrantType);
+        RegisteredGrantTypes.Add(newGrantType);
         return newGrantType;
     }
 

@@ -220,6 +220,9 @@ public static class Hkdf
     {
         ArgumentNullException.ThrowIfNull(pool);
 
+        //Not a using declaration: prk holds the pseudorandom key, which the finally must zero before
+        //Dispose returns the buffer to the pool, on every exit path including a thrown exception —
+        //a using declaration only calls Dispose(), with no hook to clear the span first.
         IMemoryOwner<byte> prk = await ExtractAsync(hashAlgorithm, salt, ikm, pool, cancellationToken).ConfigureAwait(false);
         try
         {

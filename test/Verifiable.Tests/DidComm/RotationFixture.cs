@@ -32,20 +32,20 @@ namespace Verifiable.Tests.DidComm;
 internal sealed class RotationFixture: IAsyncDisposable
 {
     //The protected-header serializer the JWE / authcrypt layer hands a Dictionary<string, object> to.
-    private static readonly JwtHeaderSerializer JweHeaderSerializer =
+    private static JwtHeaderSerializer JweHeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)header,
             TestSetup.DefaultSerializationOptions);
 
     //A fixed rotation datetime injected as iat — the clock seam, not DateTime.UtcNow.
-    private static readonly DateTimeOffset RotationTime = DateTimeOffset.FromUnixTimeSeconds(1516239022);
+    private static DateTimeOffset RotationTime { get; } = DateTimeOffset.FromUnixTimeSeconds(1516239022);
 
-    private readonly ExchangeContext context = new();
-    private readonly BaseMemoryPool pool;
-    private readonly PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> priorKeys;
-    private readonly PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> newSignKeys;
-    private readonly DidDocument priorDocument;
-    private readonly string newSignKid;
+    private ExchangeContext Context { get; } = new();
+    private BaseMemoryPool Pool { get; }
+    private PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> PriorKeys { get; }
+    private PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> NewSignKeys { get; }
+    private DidDocument PriorDocument { get; }
+    private string NewSignKid { get; }
 
 
     private RotationFixture(
@@ -58,11 +58,11 @@ internal sealed class RotationFixture: IAsyncDisposable
         string newDid,
         string newSignKid)
     {
-        this.pool = pool;
-        this.priorKeys = priorKeys;
-        this.newSignKeys = newSignKeys;
-        this.priorDocument = priorDocument;
-        this.newSignKid = newSignKid;
+        this.Pool = pool;
+        this.PriorKeys = priorKeys;
+        this.NewSignKeys = newSignKeys;
+        this.PriorDocument = priorDocument;
+        this.NewSignKid = newSignKid;
         PriorDid = priorDid;
         PriorKid = priorKid;
         NewDid = newDid;
@@ -75,7 +75,7 @@ internal sealed class RotationFixture: IAsyncDisposable
 
     public string NewDid { get; }
 
-    public PrivateKeyMemory PriorSigningKey => priorKeys.PrivateKey;
+    public PrivateKeyMemory PriorSigningKey => PriorKeys.PrivateKey;
 
 
     public static async ValueTask<RotationFixture> CreateAsync(BaseMemoryPool pool, CancellationToken cancellationToken)
@@ -84,10 +84,10 @@ internal sealed class RotationFixture: IAsyncDisposable
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> newSignKeys = TestKeyMaterialProvider.CreateFreshEd25519KeyMaterial();
 
         DidDocument priorDocument = await new KeyDidBuilder().BuildAsync(
-            priorKeys.PublicKey, MultikeyVerificationMethodTypeInfo.Instance, cancellationToken: cancellationToken).ConfigureAwait(false);
+            priorKeys.PublicKey, MultikeyVerificationMethodTypeInfo.Instance, BaseMemoryPool.Shared, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         DidDocument newSignDocument = await new KeyDidBuilder().BuildAsync(
-            newSignKeys.PublicKey, MultikeyVerificationMethodTypeInfo.Instance, cancellationToken: cancellationToken).ConfigureAwait(false);
+            newSignKeys.PublicKey, MultikeyVerificationMethodTypeInfo.Instance, BaseMemoryPool.Shared, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         string priorDid = priorDocument.Id!.Id;
         string priorKid = AuthenticationKid(priorDocument, priorDid);
@@ -110,7 +110,7 @@ internal sealed class RotationFixture: IAsyncDisposable
             JwtClaimsJson.HeaderSerializer,
             JwtClaimsJson.PayloadSerializer,
             TestSetup.Base64UrlEncoder,
-            pool,
+            Pool,
             cancellationToken);
     }
 
@@ -148,7 +148,7 @@ internal sealed class RotationFixture: IAsyncDisposable
             JwtClaimsJson.HeaderSerializer,
             JwtClaimsJson.PayloadSerializer,
             TestSetup.Base64UrlEncoder,
-            pool,
+            Pool,
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return JwsSerialization.SerializeCompact(jws, TestSetup.Base64UrlEncoder);
@@ -167,7 +167,7 @@ internal sealed class RotationFixture: IAsyncDisposable
         using PublicKeyMemory recipientPublic = recipientKeys.PublicKey;
         using PrivateKeyMemory recipientPrivate = recipientKeys.PrivateKey;
 
-        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> ephemeral = BouncyCastleKeyMaterialCreator.CreateX25519Keys(pool);
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> ephemeral = BouncyCastleKeyMaterialCreator.CreateX25519Keys(Pool);
         using PublicKeyMemory ephemeralPublic = ephemeral.PublicKey;
         using PrivateKeyMemory ephemeralPrivate = ephemeral.PrivateKey;
 
@@ -182,8 +182,8 @@ internal sealed class RotationFixture: IAsyncDisposable
             JweHeaderSerializer,
             TestSetup.Base64UrlEncoder,
             CryptoFormatConversions.DefaultTagToEpkCrvConverter,
-            MicrosoftEntropyFunctions.GenerateNonce,
-            pool,
+            MicrosoftEntropyFunctionsAdapter.GenerateNonce,
+            Pool,
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
         DidResolver resolver = resolverOverride ?? BuildResolver(useFailingResolver);
@@ -192,12 +192,12 @@ internal sealed class RotationFixture: IAsyncDisposable
             recipientKid,
             recipientPrivate,
             resolver,
-            context,
+            Context,
             DidCommMessageJson.Parser,
             DidCommSignedMessageJson.Parser,
             TestSetup.Base64UrlDecoder,
             TestSetup.Base64UrlEncoder,
-            pool,
+            Pool,
             JwtClaimsJson.PayloadDeserializer,
             JwtClaimsJson.HeaderDeserializer,
             cancellationToken: cancellationToken);
@@ -227,7 +227,7 @@ internal sealed class RotationFixture: IAsyncDisposable
         using PublicKeyMemory recipientPublic = recipientKeys.PublicKey;
         using PrivateKeyMemory recipientPrivate = recipientKeys.PrivateKey;
 
-        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> ephemeral = BouncyCastleKeyMaterialCreator.CreateX25519Keys(pool);
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> ephemeral = BouncyCastleKeyMaterialCreator.CreateX25519Keys(Pool);
         using PublicKeyMemory ephemeralPublic = ephemeral.PublicKey;
         using PrivateKeyMemory ephemeralPrivate = ephemeral.PrivateKey;
 
@@ -244,12 +244,12 @@ internal sealed class RotationFixture: IAsyncDisposable
             JweHeaderSerializer,
             TestSetup.Base64UrlEncoder,
             CryptoFormatConversions.DefaultTagToEpkCrvConverter,
-            MicrosoftEntropyFunctions.GenerateNonce,
+            MicrosoftEntropyFunctionsAdapter.GenerateNonce,
             BouncyCastleKeyAgreementFunctions.Ecdh1PuMultiRecipientAgreementEncryptX25519Async,
             ConcatKdf.DefaultAuthenticatedKeyDerivationDelegate,
             MicrosoftKeyAgreementFunctions.AesKeyWrapAsync,
             MicrosoftKeyAgreementFunctions.AesCbcHmacSha512EncryptAsync,
-            pool,
+            Pool,
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
         DidResolver resolver = BuildResolver(useFailingResolver: false);
@@ -258,12 +258,12 @@ internal sealed class RotationFixture: IAsyncDisposable
             recipientKid,
             recipientPrivate,
             resolver,
-            context,
+            Context,
             DidCommMessageJson.Parser,
             DidCommSignedMessageJson.Parser,
             TestSetup.Base64UrlDecoder,
             TestSetup.Base64UrlEncoder,
-            pool,
+            Pool,
             JwtClaimsJson.PayloadDeserializer,
             JwtClaimsJson.HeaderDeserializer,
             cancellationToken: cancellationToken);
@@ -278,13 +278,13 @@ internal sealed class RotationFixture: IAsyncDisposable
     public async ValueTask<DidCommSignedVerificationResult> PackAndUnpackSignedAsync(DidCommMessage message, CancellationToken cancellationToken)
     {
         using DidCommSignedMessage signed = await message.PackSignedAsync(
-            newSignKeys.PrivateKey,
-            newSignKid,
+            NewSignKeys.PrivateKey,
+            NewSignKid,
             DidCommMessageJson.Serializer,
             DidCommSignedMessageJson.ProtectedHeaderEncoder,
             DidCommSignedMessageJson.Serializer,
             TestSetup.Base64UrlEncoder,
-            pool,
+            Pool,
             JoseSerializationFormat.GeneralJson,
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
@@ -292,12 +292,12 @@ internal sealed class RotationFixture: IAsyncDisposable
 
         return await signed.UnpackSignedAsync(
             resolver,
-            context,
+            Context,
             DidCommMessageJson.Parser,
             DidCommSignedMessageJson.Parser,
             TestSetup.Base64UrlDecoder,
             TestSetup.Base64UrlEncoder,
-            pool,
+            Pool,
             JwtClaimsJson.PayloadDeserializer,
             JwtClaimsJson.HeaderDeserializer,
             cancellationToken: cancellationToken);
@@ -319,17 +319,17 @@ internal sealed class RotationFixture: IAsyncDisposable
         innerMessage.To = [recipientDocument.Id!.Id];
 
         using DidCommSignedMessage signed = await innerMessage.PackSignedAsync(
-            newSignKeys.PrivateKey,
-            newSignKid,
+            NewSignKeys.PrivateKey,
+            NewSignKid,
             DidCommMessageJson.Serializer,
             DidCommSignedMessageJson.ProtectedHeaderEncoder,
             DidCommSignedMessageJson.Serializer,
             TestSetup.Base64UrlEncoder,
-            pool,
+            Pool,
             JoseSerializationFormat.GeneralJson,
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
-        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> ephemeral = BouncyCastleKeyMaterialCreator.CreateX25519Keys(pool);
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> ephemeral = BouncyCastleKeyMaterialCreator.CreateX25519Keys(Pool);
         using PublicKeyMemory ephemeralPublic = ephemeral.PublicKey;
         using PrivateKeyMemory ephemeralPrivate = ephemeral.PrivateKey;
 
@@ -343,12 +343,12 @@ internal sealed class RotationFixture: IAsyncDisposable
             JweHeaderSerializer,
             TestSetup.Base64UrlEncoder,
             CryptoFormatConversions.DefaultTagToEpkCrvConverter,
-            MicrosoftEntropyFunctions.GenerateNonce,
+            MicrosoftEntropyFunctionsAdapter.GenerateNonce,
             BouncyCastleKeyAgreementFunctions.EcdhEsMultiRecipientAgreementEncryptX25519Async,
             ConcatKdf.DefaultKeyDerivationDelegate,
             MicrosoftKeyAgreementFunctions.AesKeyWrapAsync,
             MicrosoftKeyAgreementFunctions.AesCbcHmacSha512EncryptAsync,
-            pool,
+            Pool,
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
         DidResolver resolver = BuildResolver(useFailingResolver: false);
@@ -357,7 +357,7 @@ internal sealed class RotationFixture: IAsyncDisposable
             recipientKid,
             recipientPrivate,
             resolver,
-            context,
+            Context,
             DidCommMessageJson.Parser,
             DidCommSignedMessageJson.Parser,
             TestSetup.Base64UrlDecoder,
@@ -366,7 +366,7 @@ internal sealed class RotationFixture: IAsyncDisposable
             ConcatKdf.DefaultKeyDerivationDelegate,
             MicrosoftKeyAgreementFunctions.AesKeyUnwrapAsync,
             MicrosoftKeyAgreementFunctions.AesCbcHmacSha512DecryptAsync,
-            pool,
+            Pool,
             JwtClaimsJson.PayloadDeserializer,
             JwtClaimsJson.HeaderDeserializer,
             cancellationToken: cancellationToken).ConfigureAwait(false);
@@ -376,7 +376,7 @@ internal sealed class RotationFixture: IAsyncDisposable
     //Whether the resolved prior-DID document authorizes the prior kid for the authentication relationship.
     public bool IsPriorKidAuthorizedForAuthentication()
     {
-        foreach(VerificationMethod method in priorDocument.GetLocalAuthenticationMethods())
+        foreach(VerificationMethod method in PriorDocument.GetLocalAuthenticationMethods())
         {
             string kid = method.Id!.StartsWith('#') ? PriorDid + method.Id : method.Id;
             if(string.Equals(kid, PriorKid, StringComparison.Ordinal))
@@ -401,7 +401,7 @@ internal sealed class RotationFixture: IAsyncDisposable
         }
 
         return new DidResolver(DidMethodSelectors.FromResolvers(
-            (WellKnownDidMethodPrefixes.KeyDidMethodPrefix, KeyDidResolver.Build(pool))));
+            (WellKnownDidMethodPrefixes.KeyDidMethodPrefix, KeyDidResolver.Build(Pool))));
     }
 
 
@@ -414,13 +414,13 @@ internal sealed class RotationFixture: IAsyncDisposable
     {
         var assertionOnlyDocument = new DidDocument
         {
-            Id = priorDocument.Id,
-            Context = priorDocument.Context,
-            VerificationMethod = priorDocument.VerificationMethod,
-            AssertionMethod = priorDocument.AssertionMethod
+            Id = PriorDocument.Id,
+            Context = PriorDocument.Context,
+            VerificationMethod = PriorDocument.VerificationMethod,
+            AssertionMethod = PriorDocument.AssertionMethod
         };
 
-        DidMethodResolverDelegate keyResolver = KeyDidResolver.Build(pool);
+        DidMethodResolverDelegate keyResolver = KeyDidResolver.Build(Pool);
 
         return new DidResolver(DidMethodSelectors.FromResolvers(
             (WellKnownDidMethodPrefixes.KeyDidMethodPrefix,
@@ -435,10 +435,10 @@ internal sealed class RotationFixture: IAsyncDisposable
     //the built document.
     private async ValueTask<(string Kid, PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> Keys, DidDocument Document)> CreateX25519DidAsync(CancellationToken cancellationToken)
     {
-        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys = BouncyCastleKeyMaterialCreator.CreateX25519Keys(pool);
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys = BouncyCastleKeyMaterialCreator.CreateX25519Keys(Pool);
 
         DidDocument document = await new KeyDidBuilder().BuildAsync(
-            keys.PublicKey, MultikeyVerificationMethodTypeInfo.Instance, cancellationToken: cancellationToken).ConfigureAwait(false);
+            keys.PublicKey, MultikeyVerificationMethodTypeInfo.Instance, BaseMemoryPool.Shared, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         string did = document.Id!.Id;
         string kid = KeyAgreementKid(document, did);
@@ -467,10 +467,10 @@ internal sealed class RotationFixture: IAsyncDisposable
 
     public ValueTask DisposeAsync()
     {
-        priorKeys.PublicKey.Dispose();
-        priorKeys.PrivateKey.Dispose();
-        newSignKeys.PublicKey.Dispose();
-        newSignKeys.PrivateKey.Dispose();
+        PriorKeys.PublicKey.Dispose();
+        PriorKeys.PrivateKey.Dispose();
+        NewSignKeys.PublicKey.Dispose();
+        NewSignKeys.PrivateKey.Dispose();
 
         return ValueTask.CompletedTask;
     }

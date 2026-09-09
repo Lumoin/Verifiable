@@ -41,7 +41,7 @@ public static class TpmDeviceExtensions
         TpmDevice device,
         CancellationToken cancellationToken)
     {
-        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = device.Pool;
         var registry = new TpmResponseRegistry();
 
         _ = registry.Register(TpmCcConstants.TPM_CC_GetCapability, TpmResponseCodec.GetCapability);

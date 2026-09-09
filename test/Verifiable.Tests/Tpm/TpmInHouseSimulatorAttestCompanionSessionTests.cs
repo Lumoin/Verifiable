@@ -13,14 +13,15 @@ using Verifiable.Tpm.Spec.Attributes;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
 /// <summary>
 /// Drives the attest family's THIRD kind of authorization slot against the in-house behavioural
 /// <see cref="TpmSimulator"/>: a companion session that authorizes no entity and rides the area only to carry
-/// <c>decrypt</c>, <c>encrypt</c>, or <c>audit</c> (TPM 2.0 Library Part 1, clause 16.6.1 — an authorization area
-/// holds "at least one but no more than three" blocks — and Table 9, whose position after the authorization
+/// <c>decrypt</c>, <c>encrypt</c>, or <c>audit</c> (TPM 2.0 Library Part 1, clause 15.6.1 — an authorization area
+/// holds "at least one but no more than three" blocks — and Table 12, whose position after the authorization
 /// sessions may be "encryption, decryption, or audit" only).
 /// </summary>
 /// <remarks>
@@ -60,7 +61,7 @@ internal sealed class TpmInHouseSimulatorAttestCompanionSessionTests
     /// <summary>
     /// The attributes that Index is defined with: readable and writable by its own authValue, and exempt from
     /// dictionary-attack protection (<c>TPMA_NV_NO_DA</c>), so nothing these tests do can move a lockout counter
-    /// (TPM 2.0 Library Part 1, clause 17.8.1).
+    /// (TPM 2.0 Library Part 1, clause 16.8.1).
     /// </summary>
     private const TpmaNv NoDaIndexAttributes = TpmaNv.TPMA_NV_AUTHREAD | TpmaNv.TPMA_NV_AUTHWRITE | TpmaNv.TPMA_NV_NO_DA;
 
@@ -108,7 +109,7 @@ internal sealed class TpmInHouseSimulatorAttestCompanionSessionTests
     /// <summary>
     /// A companion slot that authorizes nothing and claims NONE of decrypt, encrypt, or audit is refused with
     /// <c>TPM_RC_ATTRIBUTES</c> encoded to its own index: "If a session is not being used for authorization, at
-    /// least one of decrypt, encrypt, or audit must be SET" (TPM 2.0 Library Part 1, clause 16.6.4), blamed on
+    /// least one of decrypt, encrypt, or audit must be SET" (TPM 2.0 Library Part 1, clause 15.6.4), blamed on
     /// the offending slot (Part 2, clause 6.6.2). The refusal is also what proves the parser READ the slot at
     /// all: an area whose trailing octets went unread would answer <c>TPM_RC_AUTHSIZE</c> instead.
     /// </summary>
@@ -121,7 +122,7 @@ internal sealed class TpmInHouseSimulatorAttestCompanionSessionTests
 
         Assert.AreEqual(
             TpmRcConstants.TPM_RC_ATTRIBUTES, baseError,
-            "A session authorizing no entity must claim at least one of decrypt, encrypt, or audit (Part 1, clause 16.6.4).");
+            "A session authorizing no entity must claim at least one of decrypt, encrypt, or audit (Part 1, clause 15.6.4).");
         Assert.AreEqual(
             SessionEncodedRc(TpmRcConstants.TPM_RC_ATTRIBUTES, sessionIndex: 1), responseCode,
             "The refusal names the companion slot, so the wire code carries its session-index modifier.");
@@ -131,32 +132,34 @@ internal sealed class TpmInHouseSimulatorAttestCompanionSessionTests
     }
 
     /// <summary>
-    /// A companion slot claiming <c>audit</c> is refused with <c>TPM_RC_ATTRIBUTES</c> encoded to its own index:
-    /// the attest arms model no command audit, so a session claiming the command is being audited is refused
-    /// rather than accepted and echoed back auditing nothing (TPM 2.0 Library Part 2, clause 8.4, Table 40).
-    /// Audit is the one attribute a companion may carry that names no parameter, which makes it the proof that
-    /// the audit gate still refuses categorically after the two parameter-encryption gates opened.
+    /// A companion slot claiming <c>audit</c> is admitted as an attribute (TPM 2.0 Library Part 1, clause 17.1)
+    /// and then owes a command HMAC of its own, exactly as a companion claiming <c>decrypt</c> or <c>encrypt</c>
+    /// does — a slot planted on the wire with an arbitrary <c>hmac</c> is refused for THAT, never for the
+    /// attribute.
     /// </summary>
     [TestMethod]
-    public async Task QuoteCompanionSessionClaimingAuditIsRefusedWithAttributesAtItsOwnIndex()
+    public async Task QuoteCompanionSessionClaimingAuditOwesItsOwnCommandHmac()
     {
         using var trackingPool = new MeteredHousePool();
         (TpmRcConstants responseCode, TpmRcConstants baseError) = await QuoteWithPlantedCompanionAsync(
             trackingPool.Pool, TpmtSymDef.Xor(HmacSessionAlg), TpmaSession.CONTINUE_SESSION | TpmaSession.AUDIT).ConfigureAwait(false);
 
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_ATTRIBUTES, baseError,
-            "TPM2_Quote() models no command audit, so a companion claiming AUDIT must be refused with TPM_RC_ATTRIBUTES.");
+            TpmRcConstants.TPM_RC_BAD_AUTH, baseError,
+            "A companion carrying audit is admitted for the attribute and refused for the HMAC it could not supply.");
         Assert.AreEqual(
-            SessionEncodedRc(TpmRcConstants.TPM_RC_ATTRIBUTES, sessionIndex: 1), responseCode,
+            SessionEncodedRc(TpmRcConstants.TPM_RC_BAD_AUTH, sessionIndex: 1), responseCode,
             "The refusal names the companion slot, so the wire code carries its session-index modifier.");
+        Assert.AreNotEqual(
+            SessionEncodedRc(TpmRcConstants.TPM_RC_ATTRIBUTES, sessionIndex: 1), responseCode,
+            "TPM_RC_ATTRIBUTES would mean the audit attribute itself was refused rather than admitted.");
     }
 
     /// <summary>
     /// A companion slot claiming <c>decrypt</c> is admitted as an attribute and then owes a command HMAC of its
     /// own, so a slot planted on the wire with an arbitrary <c>hmac</c> is refused for THAT — session-encoded to
     /// its own index — and never for the attribute. <c>qualifyingData</c> is an encryption-eligible first command
-    /// parameter (TPM 2.0 Library Part 3, clause 18.4, Table 93; Part 1, clause 16.4: the first parameter and a
+    /// parameter (TPM 2.0 Library Part 3, clause 18.4, Table 101; Part 1, clause 15.4: the first parameter and a
     /// TPM2B), and a session that authorizes no entity still presents a real HMAC keyed on its session key with
     /// no authValue term (Part 3, clause 5.6 applies to every session in the area).
     /// </summary>
@@ -181,7 +184,7 @@ internal sealed class TpmInHouseSimulatorAttestCompanionSessionTests
     /// <summary>
     /// A companion slot claiming <c>encrypt</c> is admitted the same way and refused at the same index for the
     /// same reason as one claiming <c>decrypt</c>: <c>TPM2B_ATTEST</c> is an encryption-eligible first response
-    /// parameter (TPM 2.0 Library Part 3, clause 18.4, Table 94), so the response-side gate admits the claim and
+    /// parameter (TPM 2.0 Library Part 3, clause 18.4, Table 102), so the response-side gate admits the claim and
     /// what is left to fail is the companion's own command HMAC.
     /// </summary>
     [TestMethod]
@@ -206,7 +209,7 @@ internal sealed class TpmInHouseSimulatorAttestCompanionSessionTests
     /// A companion slot claiming <c>decrypt</c> over a session that negotiated <c>TPM_ALG_NULL</c> is refused
     /// with <c>TPM_RC_SYMMETRIC</c>, not <c>TPM_RC_ATTRIBUTES</c>: "If the symmetric algorithm is TPM_ALG_NULL
     /// and encryption or decryption is specified, the TPM returns TPM_RC_SYMMETRIC" (TPM 2.0 Library Part 1,
-    /// clause 19.1). The two codes are what separate a command that cannot encrypt the parameter at all from a
+    /// clause 18.1). The two codes are what separate a command that cannot encrypt the parameter at all from a
     /// session that negotiated no cipher to encrypt it with, so this test is the one that proves the command's
     /// own encryption gate is OPEN — with it closed, the attribute alone would answer first.
     /// </summary>
@@ -219,7 +222,7 @@ internal sealed class TpmInHouseSimulatorAttestCompanionSessionTests
 
         Assert.AreEqual(
             TpmRcConstants.TPM_RC_SYMMETRIC, baseError,
-            "A decrypt claim over a session that negotiated TPM_ALG_NULL is TPM_RC_SYMMETRIC (Part 1, clause 19.1).");
+            "A decrypt claim over a session that negotiated TPM_ALG_NULL is TPM_RC_SYMMETRIC (Part 1, clause 18.1).");
         Assert.AreEqual(
             SessionEncodedRc(TpmRcConstants.TPM_RC_SYMMETRIC, sessionIndex: 1), responseCode,
             "The refusal names the claiming slot, so the wire code carries its session-index modifier.");
@@ -229,7 +232,7 @@ internal sealed class TpmInHouseSimulatorAttestCompanionSessionTests
     /// A companion slot naming <c>TPM_RS_PW</c> and claiming <c>decrypt</c> is refused with
     /// <c>TPM_RC_ATTRIBUTES</c>, never <c>TPM_RC_SYMMETRIC</c>: a password authorization carries no session key
     /// and so can key no keystream, which is why <c>decrypt</c> is "required to be CLEAR in a password session"
-    /// (TPM 2.0 Library Part 1, clause 16.6.4, Table 12). The error is about the attribute the slot may not carry,
+    /// (TPM 2.0 Library Part 1, clause 15.6.4, Table 15). The error is about the attribute the slot may not carry,
     /// not about the cipher it never negotiated, and the difference is the whole point: a password slot has no
     /// negotiated symmetric either, so the two rules answer the same input with different codes.
     /// </summary>
@@ -255,7 +258,7 @@ internal sealed class TpmInHouseSimulatorAttestCompanionSessionTests
     /// <summary>
     /// A companion slot whose handle REPEATS a real authorization slot's is refused with <c>TPM_RC_HANDLE</c>
     /// encoded to the companion's own index: "For a given command, the handle associated with a specific HMAC or
-    /// policy session can occur only once in the Authorization Area" (TPM 2.0 Library Part 1, clause 16.6.3).
+    /// policy session can occur only once in the Authorization Area" (TPM 2.0 Library Part 1, clause 15.6.3).
     /// Part 1 names no response code for the violation; the reference does, its <c>RetrieveSessionData</c>
     /// comparing each slot against every earlier one and answering <c>TPM_RCS_HANDLE + errorIndex</c>, so the
     /// repetition is reported as a handle error blamed on the second occurrence. Driven on
@@ -271,7 +274,7 @@ internal sealed class TpmInHouseSimulatorAttestCompanionSessionTests
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         TpmResponseRegistry registry = CreateRegistry();
 
-        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         using CreatePrimaryResponse subject = await CreateSigningPrimaryAsync(plainDevice, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
         using CreatePrimaryResponse ak = await CreateSigningPrimaryAsync(plainDevice, registry, pool, TpmRh.TPM_RH_ENDORSEMENT).ConfigureAwait(false);
 
@@ -294,7 +297,7 @@ internal sealed class TpmInHouseSimulatorAttestCompanionSessionTests
             using TpmDevice rewritingDevice = CreateRewritingDevice(simulator, TpmCcConstants.TPM_CC_Certify, Rewrite);
 
             using TpmPasswordSession objectAuth = TpmPasswordSession.CreateEmpty(pool);
-            using TpmSession signSession = new(new TpmHandle(signSessionHandle), started.NonceTPM, HmacSessionAlg, pool)
+            using TpmSession signSession = new(new TpmHandle(signSessionHandle), started.NonceTPM, HmacSessionAlg, TestEntropy.NewCounterStream(), pool)
             {
                 SessionAttributes = TpmaSession.CONTINUE_SESSION
             };
@@ -311,7 +314,7 @@ internal sealed class TpmInHouseSimulatorAttestCompanionSessionTests
 
             Assert.AreEqual(
                 TpmRcConstants.TPM_RC_HANDLE, result.BaseError,
-                "A repeated real session handle in one authorization area is refused structurally as a handle error (Part 1, clause 16.6.3; the reference's RetrieveSessionData answers TPM_RCS_HANDLE).");
+                "A repeated real session handle in one authorization area is refused structurally as a handle error (Part 1, clause 15.6.3; the reference's RetrieveSessionData answers TPM_RCS_HANDLE).");
             Assert.AreEqual(
                 SessionEncodedRc(TpmRcConstants.TPM_RC_HANDLE, sessionIndex: 2), result.ResponseCode,
                 "The repetition is blamed on the SECOND occurrence — the companion at index 2 — not on the slot that named the handle first.");
@@ -324,11 +327,11 @@ internal sealed class TpmInHouseSimulatorAttestCompanionSessionTests
     }
 
     /// <summary>
-    /// An authorization area carrying a FOURTH session is refused with the bare <c>TPM_RC_AUTHSIZE</c>: an area
-    /// holds "at least one but no more than three" authorization/session blocks (TPM 2.0 Library Part 1, clause
-    /// 16.6.1), so the fourth block's octets are surplus against the declared <c>authorizationSize</c> the parser
-    /// brackets the area with. Driven on <c>TPM2_Certify()</c>, whose two authorizing slots plus one companion
-    /// already fill the three the clause allows.
+    /// An authorization area carrying a FOURTH session is refused with <c>TPM_RC_AUTHSIZE</c> naming no slot: an
+    /// area holds "at least one but no more than three" authorization/session blocks (TPM 2.0 Library Part 1,
+    /// clause 16.6.1), so the fourth block's octets are surplus against the declared <c>authorizationSize</c> the
+    /// parser brackets the area with. Driven on <c>TPM2_Certify()</c>, whose two authorizing slots plus one
+    /// companion already fill the three the clause allows.
     /// </summary>
     [TestMethod]
     public async Task CertifyAreaCarryingAFourthSessionIsRefusedWithAuthSize()
@@ -338,7 +341,7 @@ internal sealed class TpmInHouseSimulatorAttestCompanionSessionTests
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         TpmResponseRegistry registry = CreateRegistry();
 
-        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         using CreatePrimaryResponse subject = await CreateSigningPrimaryAsync(plainDevice, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
         using CreatePrimaryResponse ak = await CreateSigningPrimaryAsync(plainDevice, registry, pool, TpmRh.TPM_RH_ENDORSEMENT).ConfigureAwait(false);
 
@@ -370,7 +373,7 @@ internal sealed class TpmInHouseSimulatorAttestCompanionSessionTests
 
             Assert.AreEqual(
                 TpmRcConstants.TPM_RC_AUTHSIZE, result.ResponseCode,
-                "A fourth session's octets are surplus against the declared authorizationSize, which is a bare TPM_RC_AUTHSIZE naming no slot.");
+                "A fourth session's octets are surplus against the declared authorizationSize, so TPM_RC_AUTHSIZE names no slot.");
         }
         finally
         {
@@ -381,7 +384,7 @@ internal sealed class TpmInHouseSimulatorAttestCompanionSessionTests
 
     /// <summary>
     /// A companion refused by the session-area check that a session authorizing nothing must claim at least one
-    /// of decrypt, encrypt, or audit (TPM 2.0 Library Part 1, clause 16.6.4) returns the two carriers its slot
+    /// of decrypt, encrypt, or audit (TPM 2.0 Library Part 1, clause 15.6.4) returns the two carriers its slot
     /// made the parser rent — the companion's own <c>nonceCaller</c> (<c>TPM2B_NONCE</c>) and <c>hmac</c>
     /// (<c>TPM2B_AUTH</c>) — to the pool: the refusing arm reaches them through the request record's own
     /// <c>IDisposable.Dispose</c>, which is the only owner they ever had, because a session-area refusal
@@ -416,7 +419,7 @@ internal sealed class TpmInHouseSimulatorAttestCompanionSessionTests
     /// <remarks>
     /// <para>
     /// Zero is not a session handle: <c>TPMI_SH_AUTH_SESSION</c> admits an HMAC session handle, a policy session
-    /// handle, or <c>TPM_RS_PW</c> and nothing else (TPM 2.0 Library Part 2, clause 9.8, Table 55), and Part 3,
+    /// handle, or <c>TPM_RS_PW</c> and nothing else (TPM 2.0 Library Part 2, clause 9.8, Table 54), and Part 3,
     /// clause 5.5, step 4.1 answers exactly that case: "If the session handle is not a handle for an HMAC
     /// session, a handle for a policy session, or, TPM_RS_PW then the TPM shall return TPM_RC_HANDLE." It is a
     /// structural fact about the octets, so it is settled before the handle is looked up and before step 4.2's
@@ -480,7 +483,7 @@ internal sealed class TpmInHouseSimulatorAttestCompanionSessionTests
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         TpmResponseRegistry registry = CreateRegistry();
 
-        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         using CreatePrimaryResponse ak = await CreateSigningPrimaryAsync(plainDevice, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
 
         using StartAuthSessionResponse companion = await StartHmacSessionAsync(
@@ -557,12 +560,12 @@ internal sealed class TpmInHouseSimulatorAttestCompanionSessionTests
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         TpmResponseRegistry registry = CreateRegistry();
 
-        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         using CreatePrimaryResponse ak = await CreateSigningPrimaryAsync(plainDevice, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
 
         long baseline = trackingPool.OutstandingCount;
 
-        //The first persistent-object handle (TPM_HT_PERSISTENT, Part 2, clause 7.4, Table 34): a well-formed
+        //The first persistent-object handle (TPM_HT_PERSISTENT, Part 2, clause 7.2, Table 33): a well-formed
         //handle of a kind no authorization slot may name.
         const uint PersistentObjectHandle = 0x81000000u;
         byte[] Rewrite(byte[] command) => WithSessionHandle(command, handleCount: 1, sessionIndex: 0, PersistentObjectHandle);
@@ -612,7 +615,7 @@ internal sealed class TpmInHouseSimulatorAttestCompanionSessionTests
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         TpmResponseRegistry registry = CreateRegistry();
 
-        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         using CreatePrimaryResponse subject = await CreateSigningPrimaryAsync(plainDevice, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
         using CreatePrimaryResponse ak = await CreateSigningPrimaryAsync(plainDevice, registry, pool, TpmRh.TPM_RH_ENDORSEMENT).ConfigureAwait(false);
 
@@ -657,7 +660,7 @@ internal sealed class TpmInHouseSimulatorAttestCompanionSessionTests
     /// position.
     /// </summary>
     /// <remarks>
-    /// This command is the attest family's only two-authorization member (Part 3, clause 31.16.2, Table 254 gives
+    /// This command is the attest family's only two-authorization member (Part 3, clause 31.16.2, Table 271 gives
     /// <c>@signHandle</c> Auth Index 1 and <c>@authHandle</c> Auth Index 2, both USER role), so it is where the
     /// rule has two authorizing slots to be pinned at rather than one. Answering a wrong-TYPE handle with
     /// <c>TPM_RC_REFERENCE_S0</c> would tell a caller a session had been flushed when no session was ever named.
@@ -670,13 +673,13 @@ internal sealed class TpmInHouseSimulatorAttestCompanionSessionTests
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         TpmResponseRegistry registry = CreateRegistry();
 
-        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         await DefineAndWriteNvIndexAsync(plainDevice, registry, pool).ConfigureAwait(false);
         using CreatePrimaryResponse ak = await CreateSigningPrimaryAsync(plainDevice, registry, pool, TpmRh.TPM_RH_ENDORSEMENT).ConfigureAwait(false);
 
         long baseline = trackingPool.OutstandingCount;
 
-        //The first persistent-object handle (TPM_HT_PERSISTENT, Part 2, clause 7.4, Table 34): a well-formed
+        //The first persistent-object handle (TPM_HT_PERSISTENT, Part 2, clause 7.2, Table 33): a well-formed
         //handle of a kind no authorization slot may name.
         const uint PersistentObjectHandle = 0x81000000u;
         byte[] Rewrite(byte[] command) => WithSessionHandle(command, handleCount: 3, sessionIndex: 0, PersistentObjectHandle);
@@ -721,7 +724,7 @@ internal sealed class TpmInHouseSimulatorAttestCompanionSessionTests
     /// the rule is pinned at an authorizing slot that is neither the first nor a companion.
     /// </summary>
     /// <remarks>
-    /// Zero is not a value <c>TPMI_SH_AUTH_SESSION</c> admits at all (Part 2, clause 9.8, Table 55), so the slot
+    /// Zero is not a value <c>TPMI_SH_AUTH_SESSION</c> admits at all (Part 2, clause 9.8, Table 54), so the slot
     /// is answered on its handle's type before any session table is consulted and before either credential is
     /// compared (Part 3, clause 5.5 precedes clause 5.6). What the index pins is that the blame stays on the slot
     /// the caller got wrong rather than sliding to the sign slot ahead of it.
@@ -734,7 +737,7 @@ internal sealed class TpmInHouseSimulatorAttestCompanionSessionTests
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         TpmResponseRegistry registry = CreateRegistry();
 
-        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         await DefineAndWriteNvIndexAsync(plainDevice, registry, pool).ConfigureAwait(false);
         using CreatePrimaryResponse ak = await CreateSigningPrimaryAsync(plainDevice, registry, pool, TpmRh.TPM_RH_ENDORSEMENT).ConfigureAwait(false);
 
@@ -806,7 +809,7 @@ internal sealed class TpmInHouseSimulatorAttestCompanionSessionTests
     /// <summary>
     /// A lone <c>TPM_RS_PW</c> sign slot claiming <c>audit</c> is refused with <c>TPM_RC_ATTRIBUTES</c> encoded
     /// to its own index: audit "has no meaning for a password authorization and is required to be CLEAR" (TPM 2.0
-    /// Library Part 1, clause 16.6.4, Table 12), because a password authorization keeps no session context in
+    /// Library Part 1, clause 15.6.4, Table 15), because a password authorization keeps no session context in
     /// which an audit digest could live.
     /// </summary>
     /// <remarks>
@@ -843,8 +846,8 @@ internal sealed class TpmInHouseSimulatorAttestCompanionSessionTests
     /// A lone <c>TPM_RS_PW</c> sign slot carrying a non-empty <c>nonceCaller</c> is refused with
     /// <c>TPM_RC_NONCE</c> encoded to its own index: a password authorization carries no nonce at all, which the
     /// reference states outright while unmarshaling the session area — "the nonce size must be zero", answered
-    /// <c>TPM_RCS_NONCE + errorIndex</c> — and whose response side is TPM 2.0 Library Part 1, clause 16.6.2.2,
-    /// Table 11's "will be zero for a password authorization".
+    /// <c>TPM_RCS_NONCE + errorIndex</c> — and whose response side is TPM 2.0 Library Part 1, clause 15.6.2.2,
+    /// Table 14's "will be zero for a password authorization".
     /// </summary>
     /// <remarks>
     /// This is the same rule the mixed-area cases pin at the attest family's other commands, here on the LONE
@@ -875,13 +878,13 @@ internal sealed class TpmInHouseSimulatorAttestCompanionSessionTests
     /// A lone <c>TPM_RS_PW</c> sign slot whose attributes octet sets a bit in <c>TPMA_SESSION</c>'s reserved 4:3
     /// field is refused with <c>TPM_RC_ATTRIBUTES</c> encoded to its own index: an octet carrying a bit the table
     /// defines no meaning for is malformed before any attribute in it can be read (TPM 2.0 Library Part 2, clause
-    /// 8.4, Table 40's reserved field "shall be CLEAR").
+    /// 8.4, Table 38's reserved field "shall be CLEAR").
     /// </summary>
     /// <remarks>
-    /// A password slot reaches this rule at the wire reader rather than at the area check, so pinning it here is
-    /// what keeps the two statements of the reserved field — the reader's and
-    /// <c>ValidateSessionArea</c>'s — from drifting apart: both derive the reserved mask as the complement of the
-    /// bits Table 40 names, so neither can admit a bit the other refuses.
+    /// A password slot reaches this rule at the wire reader rather than at the session-area gate, so pinning it
+    /// here is what keeps the two statements of the reserved field — the reader's and the session-area gate's —
+    /// from drifting apart: both derive the reserved mask as the complement of the bits Table 38 names, so
+    /// neither can admit a bit the other refuses.
     /// </remarks>
     [TestMethod]
     public async Task QuotePasswordSlotSettingAReservedAttributeBitIsRefusedWithAttributesAtItsOwnIndex()
@@ -915,9 +918,9 @@ internal sealed class TpmInHouseSimulatorAttestCompanionSessionTests
     /// on the slot that carries the attribute rather than on the session ahead of it.
     /// </summary>
     /// <remarks>
-    /// <c>auditReset</c> is one of the three attributes Table 12 does not name for a password slot outright — it
+    /// <c>auditReset</c> is one of the three attributes Table 9 does not name for a password slot outright — it
     /// is a claim about an audit digest, "only allowed if the audit attribute is SET" (TPM 2.0 Library Part 2,
-    /// clause 8.4, Table 40) — and a password authorization keeps no such digest, so the reference refuses all
+    /// clause 8.4, Table 38) — and a password authorization keeps no such digest, so the reference refuses all
     /// five of decrypt, encrypt, audit, auditExclusive, and auditReset together at the offending slot's own error
     /// index. Driving it at index 1 is what proves the rule is parameterised by the slot rather than pinned to
     /// index 0. This claim is one the audit-family gate would also catch, so
@@ -950,7 +953,7 @@ internal sealed class TpmInHouseSimulatorAttestCompanionSessionTests
     /// <remarks>
     /// This is the discriminating case at a non-zero index. <c>encrypt</c> is "required to be CLEAR in a password
     /// session" because "there is no session key for the encrypt operation" (TPM 2.0 Library Part 1, clause
-    /// 16.6.4, Table 12), and this command's first response parameter IS encryptable, so without that rule the
+    /// 15.6.4, Table 15), and this command's first response parameter IS encryptable, so without that rule the
     /// per-attribute gate would reach the slot's symmetric definition — which a password slot never negotiated —
     /// and answer <c>TPM_RC_SYMMETRIC</c> about a cipher instead of <c>TPM_RC_ATTRIBUTES</c> about the attribute
     /// the slot may not carry. The two codes on the same input are what make this case, unlike the auditReset one
@@ -992,7 +995,7 @@ internal sealed class TpmInHouseSimulatorAttestCompanionSessionTests
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         TpmResponseRegistry registry = CreateRegistry();
 
-        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         using CreatePrimaryResponse subject = await CreateSigningPrimaryAsync(plainDevice, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
         using CreatePrimaryResponse ak = await CreateSigningPrimaryAsync(plainDevice, registry, pool, TpmRh.TPM_RH_ENDORSEMENT).ConfigureAwait(false);
 
@@ -1002,10 +1005,10 @@ internal sealed class TpmInHouseSimulatorAttestCompanionSessionTests
 
         try
         {
-            //The client session adopts the started session's nonceTPM carrier (Part 1, clause 16.6.1) and holds
+            //The client session adopts the started session's nonceTPM carrier (Part 1, clause 15.6.1) and holds
             //it for its own lifetime, so it is created BEFORE the baseline is taken: a balance read across that
             //adoption would move by the adopted rental rather than by anything the command did.
-            using TpmSession objectSession = new(new TpmHandle(objectSessionHandle), objectStarted.NonceTPM, HmacSessionAlg, pool);
+            using TpmSession objectSession = new(new TpmHandle(objectSessionHandle), objectStarted.NonceTPM, HmacSessionAlg, TestEntropy.NewCounterStream(), pool);
 
             long baseline = trackingPool.OutstandingCount;
             TpmRcConstants responseCode;
@@ -1062,7 +1065,7 @@ internal sealed class TpmInHouseSimulatorAttestCompanionSessionTests
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         TpmResponseRegistry registry = CreateRegistry();
 
-        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         using CreatePrimaryResponse ak = await CreateSigningPrimaryAsync(plainDevice, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
 
         long baseline = trackingPool.OutstandingCount;
@@ -1175,7 +1178,7 @@ internal sealed class TpmInHouseSimulatorAttestCompanionSessionTests
     /// </summary>
     /// <remarks>
     /// A LONE password slot would parse to the plain password form, so the planted companion is also what routes
-    /// the command to the session-authorized arm — the shape Part 1, clause 16.6.1 describes when a caller adds a
+    /// the command to the session-authorized arm — the shape Part 1, clause 15.6.1 describes when a caller adds a
     /// session "for the single purpose of decrypting a command parameter" to an otherwise password-authorized
     /// command.
     /// </remarks>
@@ -1190,7 +1193,7 @@ internal sealed class TpmInHouseSimulatorAttestCompanionSessionTests
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         TpmResponseRegistry registry = CreateRegistry();
 
-        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         using CreatePrimaryResponse ak = await CreateSigningPrimaryAsync(plainDevice, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
 
         using StartAuthSessionResponse companion = await StartHmacSessionAsync(plainDevice, registry, pool, companionSymmetric).ConfigureAwait(false);
@@ -1242,10 +1245,10 @@ internal sealed class TpmInHouseSimulatorAttestCompanionSessionTests
             }
 
             return await simulator.SubmitAsync(bytes, commandPool, cancellationToken).ConfigureAwait(false);
-        });
+        }, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
     }
 
-    /// <summary>Reads a framed command's commandCode field (TPM 2.0 Library Part 1, clause 18.2's command header).</summary>
+    /// <summary>Reads a framed command's commandCode field (TPM 2.0 Library Part 1, clause 15.2.3's commandCode header field).</summary>
     /// <param name="command">The framed command.</param>
     /// <returns>The command code.</returns>
     private static TpmCcConstants ReadCommandCode(ReadOnlySpan<byte> command) =>
@@ -1330,7 +1333,7 @@ internal sealed class TpmInHouseSimulatorAttestCompanionSessionTests
     private async Task<StartAuthSessionResponse> StartHmacSessionAsync(
         TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, TpmtSymDef symmetric)
     {
-        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(HmacSessionAlg, symmetric);
+        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(HmacSessionAlg, TestEntropy.NewCounterStream(), pool, symmetric);
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             tpm, startInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession failed: '{startResult.ResponseCode}'.");
@@ -1372,7 +1375,7 @@ internal sealed class TpmInHouseSimulatorAttestCompanionSessionTests
     {
         var simulator = new TpmSimulator(
             "tpm-in-house-attest-companion",
-            signingBackend: BouncyCastleTpmEccSigningBackend.Create());
+            signingBackend: BouncyCastleTpmEccSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await BringOperationalAsync(simulator, pool).ConfigureAwait(false);
 

@@ -11,7 +11,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>Response handle (Part 3, Section 12.2):</b>
+/// <b>Response handle (Part 3, clause 12.2):</b>
 /// </para>
 /// <list type="bullet">
 ///   <item><description>objectHandle (TPMI_DH_OBJECT) - the transient handle of the loaded object.</description></item>

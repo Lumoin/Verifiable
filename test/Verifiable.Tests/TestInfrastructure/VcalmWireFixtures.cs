@@ -24,14 +24,7 @@ internal static class VcalmWireFixtures
     internal static VerifiableCredential BuildCredential(string issuerDid, string? credentialId) =>
         new()
         {
-            Context = new Context
-            {
-                Contexts =
-                [
-                    Context.Credentials20,
-                    CanonicalizationTestUtilities.CredentialsExamplesV2ContextUrl
-                ]
-            },
+            Context = Context.FromIris(Context.Credentials20, CanonicalizationTestUtilities.CredentialsExamplesV2ContextUrl),
             Id = credentialId,
             Type = ["VerifiableCredential", "ExampleAlumniCredential"],
             Issuer = new Issuer { Id = issuerDid },
@@ -71,7 +64,7 @@ internal static class VcalmWireFixtures
     internal static string SerializeUnproofedPresentation(string holderDid, PresentationSerializeDelegate serializePresentation, string? presentationId = null) =>
         serializePresentation(new VerifiablePresentation
         {
-            Context = new Context { Contexts = [Context.Credentials20] },
+            Context = Context.FromIris(Context.Credentials20),
             Id = presentationId,
             Type = ["VerifiablePresentation"],
             Holder = holderDid

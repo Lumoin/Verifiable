@@ -30,6 +30,9 @@ namespace Verifiable.OAuth.Server.Keys;
 [DebuggerDisplay("InProcessKeySet Incoming={set.Incoming.Count} Current={set.Current.Count} Retiring={set.Retiring.Count} Historical={set.Historical.Count}")]
 public sealed class InProcessKeySet: IDisposable
 {
+    /// <summary>
+    /// A field, not a property: a lock target must be one instance that no accessor can re-mint.
+    /// </summary>
     private readonly Lock transitionLock = new();
     private KeySet set;
     private ImmutableDictionary<KeyId, SymmetricKey> materials =

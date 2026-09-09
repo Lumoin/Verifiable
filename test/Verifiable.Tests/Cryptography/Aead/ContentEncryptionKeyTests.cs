@@ -22,54 +22,33 @@ internal sealed class ContentEncryptionKeyTests
     [TestMethod]
     public void UseKeyTransfersOwnershipAndIncrementsCount()
     {
-        ContentEncryptionKey cek = BuildCek();
-        try
-        {
-            using SymmetricKeyMemory key = cek.UseKey();
-            Assert.IsNotNull(key);
-            Assert.AreEqual(1, cek.UseCount);
-        }
-        finally
-        {
-            cek.Dispose();
-        }
+        using ContentEncryptionKey cek = BuildCek();
+        using SymmetricKeyMemory key = cek.UseKey();
+        Assert.IsNotNull(key);
+        Assert.AreEqual(1, cek.UseCount);
     }
 
 
     [TestMethod]
     public void SecondUseKeyThrowsAndIncrementsCount()
     {
-        ContentEncryptionKey cek = BuildCek();
-        try
-        {
-            using SymmetricKeyMemory consumed = cek.UseKey();
+        using ContentEncryptionKey cek = BuildCek();
+        using SymmetricKeyMemory consumed = cek.UseKey();
 
-            Assert.ThrowsExactly<InvalidOperationException>(() => cek.UseKey());
-            Assert.AreEqual(2, cek.UseCount);
-            Assert.IsNotNull(consumed);
-        }
-        finally
-        {
-            cek.Dispose();
-        }
+        Assert.ThrowsExactly<InvalidOperationException>(() => cek.UseKey());
+        Assert.AreEqual(2, cek.UseCount);
+        Assert.IsNotNull(consumed);
     }
 
 
     [TestMethod]
     public void TagAccessAfterUseKeyThrows()
     {
-        ContentEncryptionKey cek = BuildCek();
-        try
-        {
-            using SymmetricKeyMemory consumed = cek.UseKey();
+        using ContentEncryptionKey cek = BuildCek();
+        using SymmetricKeyMemory consumed = cek.UseKey();
 
-            Assert.ThrowsExactly<InvalidOperationException>(() => _ = cek.Tag);
-            Assert.IsNotNull(consumed);
-        }
-        finally
-        {
-            cek.Dispose();
-        }
+        Assert.ThrowsExactly<InvalidOperationException>(() => _ = cek.Tag);
+        Assert.IsNotNull(consumed);
     }
 
 
@@ -82,10 +61,13 @@ internal sealed class ContentEncryptionKeyTests
     }
 
 
+    /// <summary>Disposing the same key twice is safe; the two calls below are explicit (in addition to the
+    /// <see langword="using"/> declaration's own release at scope exit) because the repeated call is itself
+    /// the behaviour under test.</summary>
     [TestMethod]
     public void DisposeIsIdempotent()
     {
-        ContentEncryptionKey cek = BuildCek();
+        using ContentEncryptionKey cek = BuildCek();
         cek.Dispose();
         cek.Dispose();
     }
@@ -101,41 +83,34 @@ internal sealed class ContentEncryptionKeyTests
     [TestMethod]
     public async Task ConcurrentUseKeyAdmitsExactlyOneCaller()
     {
-        ContentEncryptionKey cek = BuildCek();
-        try
-        {
-            using System.Threading.Barrier barrier = new(2);
-            int successes = 0;
-            int failures = 0;
+        using ContentEncryptionKey cek = BuildCek();
+        using System.Threading.Barrier barrier = new(2);
+        int successes = 0;
+        int failures = 0;
 
-            void Body()
+        void Body()
+        {
+            barrier.SignalAndWait(TestContext.CancellationToken);
+            try
             {
-                barrier.SignalAndWait(TestContext.CancellationToken);
-                try
-                {
-                    using SymmetricKeyMemory consumed = cek.UseKey();
-                    Assert.IsNotNull(consumed);
-                    System.Threading.Interlocked.Increment(ref successes);
-                }
-                catch(InvalidOperationException)
-                {
-                    System.Threading.Interlocked.Increment(ref failures);
-                }
+                using SymmetricKeyMemory consumed = cek.UseKey();
+                Assert.IsNotNull(consumed);
+                System.Threading.Interlocked.Increment(ref successes);
             }
-
-            Task t1 = Task.Run(Body, TestContext.CancellationToken);
-            Task t2 = Task.Run(Body, TestContext.CancellationToken);
-
-            await Task.WhenAll(t1, t2).WaitAsync(TestContext.CancellationToken).ConfigureAwait(false);
-
-            Assert.AreEqual(1, successes);
-            Assert.AreEqual(1, failures);
-            Assert.AreEqual(2, cek.UseCount);
+            catch(InvalidOperationException)
+            {
+                System.Threading.Interlocked.Increment(ref failures);
+            }
         }
-        finally
-        {
-            cek.Dispose();
-        }
+
+        Task t1 = Task.Run(Body, TestContext.CancellationToken);
+        Task t2 = Task.Run(Body, TestContext.CancellationToken);
+
+        await Task.WhenAll(t1, t2).WaitAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(1, successes);
+        Assert.AreEqual(1, failures);
+        Assert.AreEqual(2, cek.UseCount);
     }
 
 

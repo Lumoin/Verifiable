@@ -1,5 +1,6 @@
 using System;
-using System.Formats.Cbor;
+using System.Buffers;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
 
@@ -36,7 +37,8 @@ public static class CtapCredentialManagementRequestCborWriter
 
         bool hasSubCommandParams = request.RpIdHash is not null || request.CredentialId is not null || request.User is not null;
 
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.Ctap2Canonical);
 
         int memberCount = 1
             + (hasSubCommandParams ? 1 : 0)
@@ -67,7 +69,7 @@ public static class CtapCredentialManagementRequestCborWriter
 
         writer.WriteEndMap();
 
-        byte[] encoded = writer.Encode();
+        byte[] encoded = buffer.WrittenSpan.ToArray();
 
         return new TaggedMemory<byte>(encoded, Fido2BufferTags.CtapCredentialManagementRequestPayload);
     }
@@ -87,7 +89,8 @@ public static class CtapCredentialManagementRequestCborWriter
     public static TaggedMemory<byte> WriteSubCommandParams(
         ReadOnlyMemory<byte>? rpIdHash, PublicKeyCredentialDescriptor? credentialId, CtapPublicKeyCredentialUserEntity? user)
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.Ctap2Canonical);
 
         int memberCount = (rpIdHash is not null ? 1 : 0) + (credentialId is not null ? 1 : 0) + (user is not null ? 1 : 0);
         writer.WriteStartMap(memberCount);
@@ -112,7 +115,7 @@ public static class CtapCredentialManagementRequestCborWriter
 
         writer.WriteEndMap();
 
-        byte[] encoded = writer.Encode();
+        byte[] encoded = buffer.WrittenSpan.ToArray();
 
         return new TaggedMemory<byte>(encoded, Fido2BufferTags.CtapCredentialManagementSubCommandParamsPayload);
     }

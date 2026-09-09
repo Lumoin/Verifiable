@@ -226,14 +226,14 @@ public static class SdCwtVerificationExtensions
             //The returned context takes ownership of the message; the caller disposes the context.
             CoseSign1Message message = parseCoseSign1(token.IssuerSigned, pool);
 
-            IReadOnlyDictionary<SdDisclosure, CredentialPath> boundPaths =
-                extractPaths(message.Payload, token.Disclosures, encoder, pool, hashAlgorithm);
+            var boundPaths = new SdDisclosurePaths(
+                extractPaths(message.Payload, token.Disclosures, encoder, pool, hashAlgorithm));
 
             var claimResults = new List<SdClaimVerificationResult>(token.Disclosures.Count);
             bool allBound = true;
             foreach(SdDisclosure disclosure in token.Disclosures)
             {
-                if(boundPaths.TryGetValue(disclosure, out CredentialPath path))
+                if(boundPaths.TryGetPath(disclosure, out CredentialPath path))
                 {
                     claimResults.Add(SdClaimVerificationResult.Success(path));
                 }

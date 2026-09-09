@@ -14,6 +14,8 @@ using Verifiable.Tpm.Infrastructure.Sessions;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
+using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -23,7 +25,7 @@ namespace Verifiable.Tests.Tpm;
 /// <see cref="TpmDeviceExtensions"/> policy commands, <see cref="TpmCommandExecutor"/>, and the real
 /// command/response codecs). Each test builds a session's digest to a known "approved" value, has an authority
 /// key sign off on it through the production <c>TPM2_Sign()</c>/<c>TPM2_VerifySignature()</c> wire path, and
-/// drives <c>TPM2_PolicyAuthorize()</c> itself over the wire (TPM 2.0 Library Part 3, Section 23.16).
+/// drives <c>TPM2_PolicyAuthorize()</c> itself over the wire (TPM 2.0 Library Part 3, clause 23.16).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -34,7 +36,7 @@ namespace Verifiable.Tests.Tpm;
 /// and the simulator's on-device fold agree end to end, not merely that the two happen to call the same formula.
 /// </para>
 /// <para>
-/// The negative tests each isolate one rung of the check ladder (TPM 2.0 Library Part 3, Section 23.16): a
+/// The negative tests each isolate one rung of the check ladder (TPM 2.0 Library Part 3, clause 23.16): a
 /// tampered <c>approvedPolicy</c>, a forged <c>checkTicket</c>, a <c>checkTicket</c> claiming the wrong hierarchy,
 /// an unrecognized <c>keySign</c> hash algorithm, and a <c>keySign</c> whose remainder is the wrong length. A
 /// trial session with a NULL ticket exercises the reset-and-fold without any real verification. The builder
@@ -79,7 +81,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -95,14 +97,14 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
         byte[] approvedPolicy = new byte[size];
         Span<byte> zero = stackalloc byte[size];
         zero.Clear();
-        _ = TpmPolicyDigest.ExtendForCommandCode(zero, TpmCcConstants.TPM_CC_Unseal, SessionAlg, approvedPolicy);
+        _ = TpmPolicyDigest.ExtendForCommandCode(zero, TpmCcConstants.TPM_CC_Unseal, SessionAlg, approvedPolicy, pool);
 
         //The FIXED authPolicy the sealed object is created under: depends only on keySign + policyRef (Part 3,
-        //Section 23.16, equation 35) — predicted BEFORE the sealed object exists, independent of approvedPolicy.
+        //clause 23.16, equation 35) — predicted BEFORE the sealed object exists, independent of approvedPolicy.
         byte[] authPolicy = new byte[size];
-        _ = TpmPolicyDigest.ExtendForAuthorize(keySign, policyRef, SessionAlg, authPolicy);
+        _ = TpmPolicyDigest.ExtendForAuthorize(keySign, policyRef, SessionAlg, authPolicy, pool);
 
-        //The authority signs aHash = H(approvedPolicy || policyRef) (Part 3, Section 23.16, equation 33) via the
+        //The authority signs aHash = H(approvedPolicy || policyRef) (Part 3, clause 23.16, equation 33) via the
         //production TPM2_Sign() wire path, then TPM2_VerifySignature() mints the real TPMT_TK_VERIFIED
         //TPM2_PolicyAuthorize() re-verifies.
         byte[] aHash = ComputeAuthorizeAHash(approvedPolicy, policyRef);
@@ -181,7 +183,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
                 digest.PolicyDigest.AsReadOnlySpan().SequenceEqual(authPolicy),
                 "The simulator's policyDigest after PolicyAuthorize must match the independently predicted ExtendForAuthorize value.");
 
-            using TpmPolicySession policySession = TpmPolicySession.ForSession(policyHandle, SessionAlg, pool);
+            using TpmPolicySession policySession = TpmPolicySession.ForSession(policyHandle, SessionAlg, TestEntropy.NewCounterStream(), pool);
             UnsealInput unsealInput = UnsealInput.ForItem(loaded.ObjectHandle);
 
             TpmResult<UnsealResponse> unsealResult = await TpmCommandExecutor.ExecuteAsync<UnsealResponse>(
@@ -205,14 +207,14 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
     /// <summary>
     /// Verifies a tampered <c>approvedPolicy</c> (not equal to the session's actual digest) is rejected with
     /// <c>TPM_RC_VALUE</c>, ahead of the (placeholder, never-reached) ticket re-verification (TPM 2.0 Library
-    /// Part 3, Section 23.16).
+    /// Part 3, clause 23.16).
     /// </summary>
     [TestMethod]
     public async Task PolicyAuthorizeWithTamperedApprovedPolicyReturnsValue()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse authorityKey = await CreateEccAuthorityKeyAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -244,7 +246,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
                 sessionHandle, tamperedApprovedPolicy, policyRef, keySign, placeholderTicket, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsFalse(authorizeResult.IsSuccess, "A tampered approvedPolicy must be rejected.");
-            Assert.AreEqual(TpmRcConstants.TPM_RC_VALUE, authorizeResult.ResponseCode);
+            Assert.AreEqual(HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_VALUE, 0), authorizeResult.ResponseCode, "Table 170: approvedPolicy is TPM2_PolicyAuthorize()'s first parameter (parameter 1); a tampered policy digest is parameter-encoded TPM_RC_VALUE at index 0.");
         }
         finally
         {
@@ -254,15 +256,16 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
 
     /// <summary>
     /// Verifies a forged <c>checkTicket</c> digest (approvedPolicy matches, but the ticket does not reproduce) is
-    /// rejected with <c>TPM_RC_VALUE</c> — never <c>TPM_RC_TICKET</c>, never <c>TPM_RC_POLICY</c> (TPM 2.0
-    /// Library Part 3, Section 23.16).
+    /// rejected with <c>TPM_RC_POLICY</c>: "If the ticket is not valid, the TPM shall return TPM_RC_POLICY" —
+    /// distinct from the approvedPolicy mismatch, which "shall return TPM_RC_VALUE" (TPM 2.0 Library Part 3,
+    /// clause 23.16.1).
     /// </summary>
     [TestMethod]
-    public async Task PolicyAuthorizeWithForgedCheckTicketReturnsValue()
+    public async Task PolicyAuthorizeWithForgedCheckTicketReturnsPolicy()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse authorityKey = await CreateEccAuthorityKeyAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -276,7 +279,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
         byte[] approvedPolicy = new byte[size];
         Span<byte> zero = stackalloc byte[size];
         zero.Clear();
-        _ = TpmPolicyDigest.ExtendForCommandCode(zero, TpmCcConstants.TPM_CC_Unseal, SessionAlg, approvedPolicy);
+        _ = TpmPolicyDigest.ExtendForCommandCode(zero, TpmCcConstants.TPM_CC_Unseal, SessionAlg, approvedPolicy, pool);
 
         uint sessionHandle = 0;
         try
@@ -296,7 +299,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
                 sessionHandle, approvedPolicy, policyRef, keySign, forgedTicket, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsFalse(authorizeResult.IsSuccess, "A forged checkTicket must be rejected.");
-            Assert.AreEqual(TpmRcConstants.TPM_RC_VALUE, authorizeResult.ResponseCode);
+            Assert.AreEqual(TpmRcConstants.TPM_RC_POLICY, authorizeResult.ResponseCode, "An invalid ticket answers TPM_RC_POLICY (TPM 2.0 Library Part 3, clause 23.16.1).");
         }
         finally
         {
@@ -306,16 +309,16 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
 
     /// <summary>
     /// Verifies a genuine ticket digest re-submitted under the WRONG claimed hierarchy is rejected with
-    /// <c>TPM_RC_VALUE</c>: the proof re-derives from the caller-supplied hierarchy, so a mismatched hierarchy
-    /// claim produces a non-matching HMAC even though the digest bytes are otherwise authentic (TPM 2.0 Library
-    /// Part 3, Section 23.16).
+    /// <c>TPM_RC_POLICY</c>: the proof re-derives from the caller-supplied hierarchy, so a mismatched hierarchy
+    /// claim produces a non-matching HMAC even though the digest bytes are otherwise authentic — an invalid
+    /// ticket, "the TPM shall return TPM_RC_POLICY" (TPM 2.0 Library Part 3, clause 23.16.1).
     /// </summary>
     [TestMethod]
-    public async Task PolicyAuthorizeWithWrongHierarchyCheckTicketReturnsValue()
+    public async Task PolicyAuthorizeWithWrongHierarchyCheckTicketReturnsPolicy()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse authorityKey = await CreateEccAuthorityKeyAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -326,7 +329,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
         byte[] approvedPolicy = new byte[size];
         Span<byte> zero = stackalloc byte[size];
         zero.Clear();
-        _ = TpmPolicyDigest.ExtendForCommandCode(zero, TpmCcConstants.TPM_CC_Unseal, SessionAlg, approvedPolicy);
+        _ = TpmPolicyDigest.ExtendForCommandCode(zero, TpmCcConstants.TPM_CC_Unseal, SessionAlg, approvedPolicy, pool);
 
         byte[] aHash = ComputeAuthorizeAHash(approvedPolicy, policyRef);
 
@@ -350,7 +353,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
 
         //The genuine digest re-claimed under TPM_RH_ENDORSEMENT rather than the authority key's own
         //TPM_RH_OWNER — the re-derived proof differs, so the recomputed HMAC no longer matches.
-        using TpmtTkVerified wrongHierarchyTicket = MintTicket(TpmRh.TPM_RH_ENDORSEMENT, verified.Validation.Digest, pool);
+        using TpmtTkVerified wrongHierarchyTicket = MintTicket(TpmRh.TPM_RH_ENDORSEMENT, verified.Validation.Hmac, pool);
 
         uint sessionHandle = 0;
         try
@@ -370,7 +373,80 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
                 sessionHandle, approvedPolicy, policyRef, keySign, wrongHierarchyTicket, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsFalse(authorizeResult.IsSuccess, "A checkTicket claiming the wrong hierarchy must be rejected.");
-            Assert.AreEqual(TpmRcConstants.TPM_RC_VALUE, authorizeResult.ResponseCode);
+            Assert.AreEqual(TpmRcConstants.TPM_RC_POLICY, authorizeResult.ResponseCode, "An invalid ticket answers TPM_RC_POLICY (TPM 2.0 Library Part 3, clause 23.16.1).");
+        }
+        finally
+        {
+            await FlushIfPresentAsync(tpm, sessionHandle).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Verifies a genuine <c>checkTicket</c> — produced by a real <c>TPM2_VerifySignature()</c> over the correct
+    /// authority key — is rejected when <c>keySign</c> names a DIFFERENT key's Name: Equation (5) (TPM 2.0
+    /// Library Part 2, clause 10.6.5) folds <c>keySign</c> into the ticket HMAC, so a ticket minted for one key's
+    /// Name never reproduces under another's, even though the underlying signature is authentic — "If the ticket
+    /// is not valid, the TPM shall return TPM_RC_POLICY" (TPM 2.0 Library Part 3, clause 23.16.1).
+    /// </summary>
+    [TestMethod]
+    public async Task PolicyAuthorizeWithCheckTicketForAnotherKeysNameReturnsPolicy()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryResponse authorityKey = await CreateEccAuthorityKeyAsync(tpm, registry, pool).ConfigureAwait(false);
+        using CreatePrimaryResponse otherKey = await CreateEccAuthorityKeyAsync(tpm, registry, pool).ConfigureAwait(false);
+        byte[] otherKeySign = otherKey.Name.Span.ToArray();
+        byte[] policyRef = "another-keys-name-ref"u8.ToArray();
+
+        int size = TpmPolicyDigest.Size(SessionAlg);
+        byte[] approvedPolicy = new byte[size];
+        Span<byte> zero = stackalloc byte[size];
+        zero.Clear();
+        _ = TpmPolicyDigest.ExtendForCommandCode(zero, TpmCcConstants.TPM_CC_Unseal, SessionAlg, approvedPolicy, pool);
+
+        byte[] aHash = ComputeAuthorizeAHash(approvedPolicy, policyRef);
+
+        using TpmPasswordSession signAuth = TpmPasswordSession.CreateEmpty(pool);
+        using SignInput signInput = SignInput.ForEcdsa(authorityKey.ObjectHandle, aHash, TpmAlgIdConstants.TPM_ALG_SHA256, pool);
+        TpmResult<SignResponse> signResult = await TpmCommandExecutor.ExecuteAsync<SignResponse>(
+            tpm, signInput, [signAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(signResult.IsSuccess, $"TPM2_Sign (authority over aHash) failed: '{signResult.ResponseCode}'.");
+
+        using SignResponse signature = signResult.Value;
+        using Signature p1363Signature = ConcatenateP1363(signature.Signature.SignatureR!.AsReadOnlySpan(), signature.Signature.SignatureS!.AsReadOnlySpan(), pool);
+
+        //Genuinely verified over the AUTHORITY key, so the ticket is authentic — just not for otherKeySign.
+        using VerifySignatureInput verifyInput = VerifySignatureInput.ForEcdsa(authorityKey.ObjectHandle, aHash, p1363Signature.AsReadOnlySpan(), TpmAlgIdConstants.TPM_ALG_SHA256, pool);
+        TpmResult<VerifySignatureResponse> verifyResult = await TpmCommandExecutor.ExecuteAsync<VerifySignatureResponse>(
+            tpm, verifyInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(verifyResult.IsSuccess, $"TPM2_VerifySignature (authority ticket) failed: '{verifyResult.ResponseCode}'.");
+
+        using VerifySignatureResponse verified = verifyResult.Value;
+        Assert.IsFalse(verified.Validation.IsNull, "A real-hierarchy authority key must produce a usable (non-NULL) ticket.");
+
+        uint sessionHandle = 0;
+        try
+        {
+            TpmResult<StartAuthSessionResponse> startResult = await tpm.StartPolicySessionAsync(
+                SessionAlg, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession (policy) failed: '{startResult.ResponseCode}'.");
+
+            using StartAuthSessionResponse session = startResult.Value;
+            sessionHandle = session.SessionHandle.Value;
+
+            TpmResult<PolicyCommandCodeResponse> commandCodeResult = await tpm.PolicyCommandCodeAsync(
+                sessionHandle, TpmCcConstants.TPM_CC_Unseal, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(commandCodeResult.IsSuccess, $"PolicyCommandCode failed: '{commandCodeResult.ResponseCode}'.");
+
+            //keySign names otherKey, not the authority key the ticket was actually verified against.
+            TpmResult<PolicyAuthorizeResponse> authorizeResult = await tpm.PolicyAuthorizeAsync(
+                sessionHandle, approvedPolicy, policyRef, otherKeySign, verified.Validation, TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.IsFalse(authorizeResult.IsSuccess, "A checkTicket for another key's Name must be rejected.");
+            Assert.AreEqual(TpmRcConstants.TPM_RC_POLICY, authorizeResult.ResponseCode, "An invalid ticket answers TPM_RC_POLICY (TPM 2.0 Library Part 3, clause 23.16.1).");
         }
         finally
         {
@@ -380,7 +456,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
 
     /// <summary>
     /// Verifies an unrecognized <c>keySign</c> hash algorithm (its first two octets) is rejected with
-    /// <c>TPM_RC_HASH</c>, ahead of any other check (TPM 2.0 Library Part 3, Section 23.16) — this check runs
+    /// <c>TPM_RC_HASH</c>, ahead of any other check (TPM 2.0 Library Part 3, clause 23.16) — this check runs
     /// even for what would otherwise look like a trial-session shortcut, since it precedes the trial/real split.
     /// </summary>
     [TestMethod]
@@ -388,7 +464,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         byte[] keySignWithUnrecognizedHashAlg = new byte[sizeof(ushort) + 32];
         BinaryPrimitives.WriteUInt16BigEndian(keySignWithUnrecognizedHashAlg, (ushort)TpmAlgIdConstants.TPM_ALG_NULL);
@@ -410,7 +486,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
                 placeholderTicket, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsFalse(authorizeResult.IsSuccess, "An unrecognized keySign hash algorithm must be rejected.");
-            Assert.AreEqual(TpmRcConstants.TPM_RC_HASH, authorizeResult.ResponseCode);
+            Assert.AreEqual(HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_HASH, 2), authorizeResult.ResponseCode, "Table 170: keySign is TPM2_PolicyAuthorize()'s third parameter (parameter 3); an unrecognized hash algorithm in keySign's Name is parameter-encoded TPM_RC_HASH at index 2.");
         }
         finally
         {
@@ -420,14 +496,14 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
 
     /// <summary>
     /// Verifies a <c>keySign</c> whose remainder is not exactly the width of the hash algorithm its first two
-    /// octets select is rejected with <c>TPM_RC_SIZE</c> (TPM 2.0 Library Part 3, Section 23.16).
+    /// octets select is rejected with <c>TPM_RC_SIZE</c> (TPM 2.0 Library Part 3, clause 23.16).
     /// </summary>
     [TestMethod]
     public async Task PolicyAuthorizeWithKeySignLengthMismatchReturnsSize()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         //SHA-256's nameAlg tag, but only 16 digest octets (SHA-256 needs 32).
         byte[] keySignWithWrongLength = new byte[sizeof(ushort) + 16];
@@ -450,7 +526,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
                 placeholderTicket, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsFalse(authorizeResult.IsSuccess, "A keySign whose remainder is the wrong length must be rejected.");
-            Assert.AreEqual(TpmRcConstants.TPM_RC_SIZE, authorizeResult.ResponseCode);
+            Assert.AreEqual(HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SIZE, 2), authorizeResult.ResponseCode, "Table 170: keySign is TPM2_PolicyAuthorize()'s third parameter (parameter 3); a keySign whose remainder is the wrong length is parameter-encoded TPM_RC_SIZE at index 2.");
         }
         finally
         {
@@ -461,14 +537,14 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
     /// <summary>
     /// Verifies a trial session with a NULL checkTicket folds the digest identically to the host
     /// <see cref="TpmPolicyDigest.ExtendForAuthorize"/> prediction, without checking approvedPolicy or the ticket
-    /// (TPM 2.0 Library Part 3, Section 23.16, Note 2: "A NULL ticket is useful in a trial policy").
+    /// (TPM 2.0 Library Part 3, clause 23.16, Note 2: "A NULL ticket is useful in a trial policy").
     /// </summary>
     [TestMethod]
     public async Task PolicyAuthorizeTrialSessionWithNullTicketFoldsCorrectlyAndMatchesHostPrediction()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse authorityKey = await CreateEccAuthorityKeyAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -498,7 +574,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
 
             int size = TpmPolicyDigest.Size(SessionAlg);
             byte[] predicted = new byte[size];
-            _ = TpmPolicyDigest.ExtendForAuthorize(keySign, policyRef, SessionAlg, predicted);
+            _ = TpmPolicyDigest.ExtendForAuthorize(keySign, policyRef, SessionAlg, predicted, pool);
 
             Assert.IsTrue(
                 digest.PolicyDigest.AsReadOnlySpan().SequenceEqual(predicted),
@@ -521,7 +597,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse authorityKey = await CreateEccAuthorityKeyAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -535,7 +611,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
         byte[] approvedPolicy = new byte[size];
         Span<byte> zero = stackalloc byte[size];
         zero.Clear();
-        _ = TpmPolicyDigest.ExtendForSigned(zero, authorityName, signedPolicyRef, SessionAlg, approvedPolicy);
+        _ = TpmPolicyDigest.ExtendForSigned(zero, authorityName, signedPolicyRef, SessionAlg, approvedPolicy, pool);
 
         byte[] aHash = ComputeAuthorizeAHash(approvedPolicy, authorizeRef);
 
@@ -565,7 +641,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
             .Build();
 
         byte[] predicted = new byte[size];
-        int written = policy.ComputeDigest(SessionAlg, predicted);
+        int written = policy.ComputeDigest(SessionAlg, predicted, pool);
         Assert.AreEqual(size, written);
 
         uint sessionHandle = 0;
@@ -627,7 +703,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
 
     /// <summary>
     /// Builds TPM2_PolicyAuthorize's <c>aHash = H(approvedPolicy || policyRef)</c> (TPM 2.0 Library Part 3,
-    /// Section 23.16, equation 33) as an in-test SHA-256 oracle, independent of the simulator's own effect
+    /// clause 23.16, equation 33) as an in-test SHA-256 oracle, independent of the simulator's own effect
     /// computation.
     /// </summary>
     /// <param name="approvedPolicy">The policy digest being approved.</param>
@@ -686,7 +762,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
 
     /// <summary>
     /// Composes a TPMT_TK_VERIFIED value claiming <paramref name="hierarchy"/> over <paramref name="digest"/>
-    /// exactly as an attacker would submit one on the wire (TPM 2.0 Library Part 2, Section 10.7.4), parsed back
+    /// exactly as an attacker would submit one on the wire (TPM 2.0 Library Part 2, clause 10.6.5), parsed back
     /// through the production wire shape so the result is a genuine ticket value with a caller-chosen claim.
     /// </summary>
     /// <param name="hierarchy">The hierarchy the ticket claims.</param>
@@ -820,7 +896,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
     {
         var simulator = new TpmSimulator(
             "tpm-in-house-policyauthorize",
-            signingBackend: BouncyCastleTpmEccSigningBackend.Create());
+            signingBackend: BouncyCastleTpmEccSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await BringOperationalAsync(simulator, pool).ConfigureAwait(false);
 

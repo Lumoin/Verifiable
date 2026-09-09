@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Cbor;
@@ -36,7 +36,7 @@ public static class KeriEventCbor
     /// <exception cref="CborContentException">The bytes are not a CBOR map.</exception>
     public static MessageFieldMap DecodeFieldMap(ReadOnlyMemory<byte> cbor)
     {
-        var reader = new CborReader(cbor);
+        var reader = new CborReader(cbor, CborOptions.Strict);
         if(reader.PeekState() != CborReaderState.StartMap)
         {
             throw new CborContentException("A KERI message body MUST be a CBOR map.");

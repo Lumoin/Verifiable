@@ -33,7 +33,7 @@ namespace Verifiable.Tests.Keri;
 internal sealed class KeriKeyEventStreamTests
 {
     /// <summary>The SAID derivation code the minter uses (Blake3-256).</summary>
-    private static readonly string Code = CesrDigestCodes.Blake3Bits256;
+    private static string Code { get; } = CesrDigestCodes.Blake3Bits256;
 
     /// <summary>The version string with a zeroed size, used to measure a serialization before its size is stamped.</summary>
     private const string ProbeVersion = "KERI10JSON000000_";
@@ -49,13 +49,13 @@ internal sealed class KeriKeyEventStreamTests
     /// An algorithm-agile digest oracle for the SAID and pre-rotation digests: Blake3 routes to BouncyCastle,
     /// every other request to Microsoft. Constructed in the test, independent of the production registry.
     /// </summary>
-    private static readonly ComputeDigestDelegate AgileDigest = (input, outputByteLength, tag, pool, context, cancellationToken) =>
+    private static ComputeDigestDelegate AgileDigest { get; } = (input, outputByteLength, tag, pool, context, cancellationToken) =>
         tag.TryGet<CryptoAlgorithm>(out CryptoAlgorithm algorithm) && algorithm == CryptoAlgorithm.Blake3
-            ? BouncyCastleCryptographicFunctions.ComputeBlake3DigestAsync(input, outputByteLength, tag, pool, context, cancellationToken)
-            : MicrosoftCryptographicFunctions.ComputeDigestAsync(input, outputByteLength, tag, pool, context, cancellationToken);
+            ? BouncyCastleCryptographicFunctions.ComputeBlake3DigestAsync(input, outputByteLength, tag, pool, new FakeTimeProvider(TestClock.CanonicalEpoch), context, cancellationToken)
+            : MicrosoftCryptographicFunctions.ComputeDigestAsync(input, outputByteLength, tag, pool, new FakeTimeProvider(TestClock.CanonicalEpoch), context, cancellationToken);
 
     /// <summary>Decodes a KERI event's JSON bytes into a neutral field map — the per-serialization seam the stream replay is parameterized by.</summary>
-    private static readonly KeriEventFieldMapDecoder JsonDecoder = (serialization, serializationKind) => KeriEventJson.DecodeFieldMap(serialization);
+    private static KeriEventFieldMapDecoder JsonDecoder { get; } = (serialization, serializationKind) => KeriEventJson.DecodeFieldMap(serialization);
 
 
     /// <summary>

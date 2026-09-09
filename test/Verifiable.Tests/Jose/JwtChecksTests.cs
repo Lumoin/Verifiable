@@ -391,7 +391,7 @@ internal sealed class JwtChecksTests
         DateTimeOffset now = TimeProvider.GetUtcNow();
         var payload = new JwtPayload
         {
-            [WellKnownJwtClaimNames.Exp] = (long)(now.AddMinutes(5).ToUnixTimeSeconds())
+            [WellKnownJwtClaimNames.Exp] = now.AddMinutes(5).ToUnixTimeSeconds()
         };
 
         Assert.IsFalse(payload.IsExpired(now, TimeSpan.Zero),
@@ -404,7 +404,7 @@ internal sealed class JwtChecksTests
         DateTimeOffset now = TimeProvider.GetUtcNow();
         var payload = new JwtPayload
         {
-            [WellKnownJwtClaimNames.Exp] = (long)(now.AddMinutes(-1).ToUnixTimeSeconds())
+            [WellKnownJwtClaimNames.Exp] = now.AddMinutes(-1).ToUnixTimeSeconds()
         };
 
         Assert.IsTrue(payload.IsExpired(now, TimeSpan.Zero),
@@ -427,7 +427,7 @@ internal sealed class JwtChecksTests
         DateTimeOffset now = TimeProvider.GetUtcNow();
         var payload = new JwtPayload
         {
-            [WellKnownJwtClaimNames.Exp] = (long)(now.AddSeconds(-30).ToUnixTimeSeconds())
+            [WellKnownJwtClaimNames.Exp] = now.AddSeconds(-30).ToUnixTimeSeconds()
         };
 
         Assert.IsFalse(payload.IsExpired(now, TimeSpan.FromSeconds(60)),
@@ -440,7 +440,7 @@ internal sealed class JwtChecksTests
         DateTimeOffset now = TimeProvider.GetUtcNow();
         var payload = new JwtPayload
         {
-            [WellKnownJwtClaimNames.Nbf] = (long)(now.AddMinutes(5).ToUnixTimeSeconds())
+            [WellKnownJwtClaimNames.Nbf] = now.AddMinutes(5).ToUnixTimeSeconds()
         };
 
         Assert.IsTrue(payload.IsNotYetValid(now, TimeSpan.Zero),
@@ -453,7 +453,7 @@ internal sealed class JwtChecksTests
         DateTimeOffset now = TimeProvider.GetUtcNow();
         var payload = new JwtPayload
         {
-            [WellKnownJwtClaimNames.Nbf] = (long)(now.AddMinutes(-1).ToUnixTimeSeconds())
+            [WellKnownJwtClaimNames.Nbf] = now.AddMinutes(-1).ToUnixTimeSeconds()
         };
 
         Assert.IsFalse(payload.IsNotYetValid(now, TimeSpan.Zero),
@@ -476,7 +476,7 @@ internal sealed class JwtChecksTests
         DateTimeOffset now = TimeProvider.GetUtcNow();
         var payload = new JwtPayload
         {
-            [WellKnownJwtClaimNames.Iat] = (long)(now.AddMinutes(5).ToUnixTimeSeconds())
+            [WellKnownJwtClaimNames.Iat] = now.AddMinutes(5).ToUnixTimeSeconds()
         };
 
         Assert.IsTrue(payload.IsIssuedInFuture(now, TimeSpan.Zero),
@@ -489,7 +489,7 @@ internal sealed class JwtChecksTests
         DateTimeOffset now = TimeProvider.GetUtcNow();
         var payload = new JwtPayload
         {
-            [WellKnownJwtClaimNames.Iat] = (long)now.ToUnixTimeSeconds()
+            [WellKnownJwtClaimNames.Iat] = now.ToUnixTimeSeconds()
         };
 
         Assert.IsFalse(payload.IsIssuedInFuture(now, TimeSpan.Zero));
@@ -501,8 +501,8 @@ internal sealed class JwtChecksTests
         DateTimeOffset now = TimeProvider.GetUtcNow();
         var payload = new JwtPayload
         {
-            [WellKnownJwtClaimNames.Nbf] = (long)now.ToUnixTimeSeconds(),
-            [WellKnownJwtClaimNames.Exp] = (long)now.AddSeconds(120).ToUnixTimeSeconds()
+            [WellKnownJwtClaimNames.Nbf] = now.ToUnixTimeSeconds(),
+            [WellKnownJwtClaimNames.Exp] = now.AddSeconds(120).ToUnixTimeSeconds()
         };
 
         Assert.IsTrue(payload.LifetimeExceeds(TimeSpan.FromSeconds(60)),
@@ -515,8 +515,8 @@ internal sealed class JwtChecksTests
         DateTimeOffset now = TimeProvider.GetUtcNow();
         var payload = new JwtPayload
         {
-            [WellKnownJwtClaimNames.Nbf] = (long)now.ToUnixTimeSeconds(),
-            [WellKnownJwtClaimNames.Exp] = (long)now.AddSeconds(60).ToUnixTimeSeconds()
+            [WellKnownJwtClaimNames.Nbf] = now.ToUnixTimeSeconds(),
+            [WellKnownJwtClaimNames.Exp] = now.AddSeconds(60).ToUnixTimeSeconds()
         };
 
         Assert.IsFalse(payload.LifetimeExceeds(TimeSpan.FromSeconds(60)),
@@ -529,8 +529,8 @@ internal sealed class JwtChecksTests
         DateTimeOffset now = TimeProvider.GetUtcNow();
         var payload = new JwtPayload
         {
-            [WellKnownJwtClaimNames.Iat] = (long)now.ToUnixTimeSeconds(),
-            [WellKnownJwtClaimNames.Exp] = (long)now.AddSeconds(120).ToUnixTimeSeconds()
+            [WellKnownJwtClaimNames.Iat] = now.ToUnixTimeSeconds(),
+            [WellKnownJwtClaimNames.Exp] = now.AddSeconds(120).ToUnixTimeSeconds()
         };
 
         Assert.IsTrue(payload.LifetimeExceeds(TimeSpan.FromSeconds(60)),
@@ -543,8 +543,8 @@ internal sealed class JwtChecksTests
         DateTimeOffset now = TimeProvider.GetUtcNow();
         var payload = new JwtPayload
         {
-            [WellKnownJwtClaimNames.Nbf] = (long)now.AddSeconds(60).ToUnixTimeSeconds(),
-            [WellKnownJwtClaimNames.Exp] = (long)now.ToUnixTimeSeconds()
+            [WellKnownJwtClaimNames.Nbf] = now.AddSeconds(60).ToUnixTimeSeconds(),
+            [WellKnownJwtClaimNames.Exp] = now.ToUnixTimeSeconds()
         };
 
         Assert.IsTrue(payload.IsExpBeforeNbf(),
@@ -557,8 +557,8 @@ internal sealed class JwtChecksTests
         DateTimeOffset now = TimeProvider.GetUtcNow();
         var payload = new JwtPayload
         {
-            [WellKnownJwtClaimNames.Nbf] = (long)now.ToUnixTimeSeconds(),
-            [WellKnownJwtClaimNames.Exp] = (long)now.AddSeconds(60).ToUnixTimeSeconds()
+            [WellKnownJwtClaimNames.Nbf] = now.ToUnixTimeSeconds(),
+            [WellKnownJwtClaimNames.Exp] = now.AddSeconds(60).ToUnixTimeSeconds()
         };
 
         Assert.IsFalse(payload.IsExpBeforeNbf(),

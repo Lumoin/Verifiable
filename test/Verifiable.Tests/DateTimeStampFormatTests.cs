@@ -5,8 +5,8 @@ namespace Verifiable.Tests;
 [TestClass]
 internal sealed class DateTimeStampFormatTests
 {
-    private static readonly DateTimeOffset SampleUtc = new(2024, 1, 15, 10, 30, 45, 123, TimeSpan.Zero);
-    private static readonly DateTimeOffset SampleWithOffset = new(2024, 1, 15, 10, 30, 45, 123, TimeSpan.FromHours(2));
+    private static DateTimeOffset SampleUtc { get; } = new(2024, 1, 15, 10, 30, 45, 123, TimeSpan.Zero);
+    private static DateTimeOffset SampleWithOffset { get; } = new(2024, 1, 15, 10, 30, 45, 123, TimeSpan.FromHours(2));
 
     [TestMethod]
     public void FormatUtcProducesExpectedOutput()

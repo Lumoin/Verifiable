@@ -189,6 +189,12 @@ public static class XmlReferenceProcessing
     /// <param name="digestInput">The digest input octets on success; the caller owns and must dispose them.</param>
     /// <param name="error">The refusal on failure.</param>
     /// <returns><see langword="true"/> when the digest input was computed.</returns>
+    /// <remarks>
+    /// <strong>Manual disposal, not <see langword="using"/> declarations.</strong> <c>currentOctets</c> is
+    /// bound through <see cref="TryRunReferenceTransformChain"/>'s <see langword="out"/> parameter, and
+    /// <c>reparsedTables</c> accumulates one table per same-document XPointer transform the chain runs — a
+    /// list, not one disposable value; both are disposed in the <see langword="finally"/> below.
+    /// </remarks>
     internal static bool TryComputeDigestInputForReference(XmlNodeTable table, XmlReference reference, XmlReferenceResolver? resolver, BaseMemoryPool pool, [NotNullWhen(true)] out PooledMemory? digestInput, out XmlSignatureProcessingError error)
     {
         digestInput = null;
@@ -341,6 +347,13 @@ public static class XmlReferenceProcessing
     /// <see cref="XmlSignatureProcessingFailure.InvalidCanonicalizationParameter"/> for a malformed or
     /// over-length <paramref name="prefixList"/>.</param>
     /// <returns><see langword="true"/> when the contribution was computed.</returns>
+    /// <remarks>
+    /// <strong>Manual disposal, not <see langword="using"/> declarations.</strong> Same shape as
+    /// <see cref="TryComputeDigestInputForReference"/>: <c>currentOctets</c> is bound through
+    /// <see cref="TryRunReferenceTransformChain"/>'s <see langword="out"/> parameter, and
+    /// <c>reparsedTables</c> is a per-transform list, not one disposable value; both are disposed in the
+    /// <see langword="finally"/> below.
+    /// </remarks>
     internal static bool TryComputeMessageImprintContributionForReference(
         XmlNodeTable table,
         XmlReference reference,
@@ -418,6 +431,12 @@ public static class XmlReferenceProcessing
     /// <see cref="TryComputeMessageImprintContributionForReference"/> refusal, for the first reference that
     /// fails.</param>
     /// <returns><see langword="true"/> when the imprint input was computed.</returns>
+    /// <remarks>
+    /// <strong>Manual disposal, not a <see langword="using"/> declaration.</strong> <c>contribution</c> is
+    /// bound through <see cref="TryComputeMessageImprintContributionForReference"/>'s <see langword="out"/>
+    /// parameter inside the per-reference loop, so it is declared <see langword="null"/> and disposed once
+    /// per iteration in the loop's own <see langword="finally"/>.
+    /// </remarks>
     internal static bool TryComputeMessageImprintInputForReferences(
         XmlNodeTable table,
         IReadOnlyList<XmlReference> references,
@@ -521,7 +540,11 @@ public static class XmlReferenceProcessing
     /// Dispatches one <c>Transform</c> to its family: the six canonicalization algorithms
     /// (<see cref="TryApplyCanonicalizationTransform"/>), base64 (<see cref="TryApplyBase64Transform"/>),
     /// enveloped-signature (<see cref="TryApplyEnvelopedSignatureTransform"/>), or one of the recognized
-    /// but unexecuted dispositions.
+    /// but unexecuted dispositions. The four <see langword="ref"/> parameters are the transform chain's
+    /// running state (the reparse budget, whether the current value is still a node-set, the node-set
+    /// itself, and the octet form once a transform has produced one) threaded unchanged through every
+    /// sibling in this family; bundling them into a carrier type would be a wider refactor than this
+    /// method's own shape, touching every sibling's signature and every call site.
     /// </summary>
     private static bool TryApplyTransform(XmlTransform transform, BaseMemoryPool pool, List<XmlNodeTable> reparsedTables, ref int reparseCount, ref bool isNodeSet, ref XmlNodeSet currentNodeSet, ref PooledMemory? currentOctets, out XmlSignatureProcessingError error)
     {
@@ -574,7 +597,8 @@ public static class XmlReferenceProcessing
     /// a node-set first (the generic section 4.3.3.2 default, counted toward <see cref="MaximumReparseDepth"/>),
     /// then the (possibly just-reparsed) node-set canonicalizes with the transform's own algorithm and
     /// <c>InclusiveNamespaces PrefixList</c>. The chain's data stays octets afterwards — canonicalization
-    /// always produces octets.
+    /// always produces octets. See <see cref="TryApplyTransform"/>'s remark on the shared
+    /// <see langword="ref"/> parameters.
     /// </summary>
     private static bool TryApplyCanonicalizationTransform(XmlTransform transform, XmlCanonicalizationAlgorithm algorithm, BaseMemoryPool pool, List<XmlNodeTable> reparsedTables, ref int reparseCount, ref bool isNodeSet, ref XmlNodeSet currentNodeSet, ref PooledMemory? currentOctets, out XmlSignatureProcessingError error)
     {
@@ -609,7 +633,8 @@ public static class XmlReferenceProcessing
     /// converts to octets by the transform's own rule — "applying an XPath transform with expression
     /// <c>self::text()</c>, then taking the string-value of the node-set" — NEVER by canonicalization.
     /// Either way the result then base64-decodes per the XSD <c>base64Binary</c> lexical
-    /// space.
+    /// space. See <see cref="TryApplyTransform"/>'s remark on the shared <see langword="ref"/> parameters
+    /// (this transform needs no reparse budget, so it carries three of the four).
     /// </summary>
     private static bool TryApplyBase64Transform(BaseMemoryPool pool, ref bool isNodeSet, ref XmlNodeSet currentNodeSet, ref PooledMemory? currentOctets, out XmlSignatureProcessingError error)
     {
@@ -661,7 +686,8 @@ public static class XmlReferenceProcessing
     /// in an error if the containing XPath expression does not appear in the same XML document against
     /// which the XPath expression is being evaluated" — exactly this shape, since the <c>Transform</c>
     /// element (where the expression "appears") lives in the signature's original document while the
-    /// current node-set is now over the re-parsed one.
+    /// current node-set is now over the re-parsed one. See <see cref="TryApplyTransform"/>'s remark on the
+    /// shared <see langword="ref"/> parameters.
     /// </remarks>
     private static bool TryApplyEnvelopedSignatureTransform(XmlTransform transform, BaseMemoryPool pool, List<XmlNodeTable> reparsedTables, ref int reparseCount, ref bool isNodeSet, ref XmlNodeSet currentNodeSet, ref PooledMemory? currentOctets, out XmlSignatureProcessingError error)
     {
@@ -701,6 +727,11 @@ public static class XmlReferenceProcessing
     /// are disposed immediately; the new table is added to <paramref name="reparsedTables"/> for the
     /// engine's caller to dispose once the whole chain completes.
     /// </summary>
+    /// <remarks>
+    /// <strong>Manual disposal, not a <see langword="using"/> declaration.</strong> <c>reparsedTable</c>
+    /// transfers ownership into <paramref name="reparsedTables"/> on success — nulled just before the return
+    /// so the <see langword="finally"/> disposes it only when the parse itself failed.
+    /// </remarks>
     private static bool TryReparse(BaseMemoryPool pool, List<XmlNodeTable> reparsedTables, ref int reparseCount, ref PooledMemory? currentOctets, out XmlNodeSet reparsedNodeSet, out XmlSignatureProcessingError error)
     {
         reparsedNodeSet = default;

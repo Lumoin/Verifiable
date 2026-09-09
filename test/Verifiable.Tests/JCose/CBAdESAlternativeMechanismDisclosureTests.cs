@@ -1,5 +1,6 @@
 using System;
-using System.Formats.Cbor;
+using System.Buffers;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Cbor;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Foundation;
@@ -229,12 +230,13 @@ internal sealed class CBAdESAlternativeMechanismDisclosureTests
     /// <returns>The encoded <c>uHeaders</c> array bytes.</returns>
     private static byte[] BuildSingleElementUnsignedHeadersBytes(byte[] elementContentBytes)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartArray(1);
         writer.WriteByteString(elementContentBytes);
         writer.WriteEndArray();
 
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -244,13 +246,14 @@ internal sealed class CBAdESAlternativeMechanismDisclosureTests
     /// <returns>The encoded one-entry map bytes.</returns>
     private static byte[] EncodeUnknownIntElement(int label, int value)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(label);
         writer.WriteInt32(value);
         writer.WriteEndMap();
 
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -259,9 +262,10 @@ internal sealed class CBAdESAlternativeMechanismDisclosureTests
     /// <returns>The encoded value-only bytes.</returns>
     private static byte[] EncodeIntValue(int value)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteInt32(value);
 
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 }

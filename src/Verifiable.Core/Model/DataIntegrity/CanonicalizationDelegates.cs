@@ -85,23 +85,20 @@ public sealed class CanonicalizationResult
     public required string CanonicalForm { get; init; }
 
     /// <summary>
-    /// The RDFC label map mapping canonical blank node identifiers (e.g., <c>"_:c14n0"</c>)
-    /// to original blank node identifiers (e.g., <c>"_:b0"</c>) from the input document.
+    /// The RDFC label map mapping canonical blank node identifiers (e.g., <c>"c14n0"</c>)
+    /// to original blank node identifiers (e.g., <c>"b0"</c>) from the input document,
+    /// as bare identifiers without the <c>"_:"</c> prefix.
     /// </summary>
     /// <remarks>
     /// <para>
     /// This is <see langword="null"/> for JCS canonicalization which does not perform
     /// blank node relabeling. For RDFC-1.0, this is the issued identifiers map from
-    /// the canonicalization algorithm output.
+    /// the canonicalization algorithm output, inverted to canonical-to-original
+    /// orientation.
     /// </para>
     /// <para>
-    /// Per the RDFC specification (W3C Recommendation §4.3), identifiers include the
-    /// <c>"_:"</c> blank node prefix (e.g., <c>"_:c14n0"</c>, not <c>"c14n0"</c>).
-    /// </para>
-    /// <para>
-    /// Note that <see cref="BlankNodeRelabeling"/> uses bare identifiers without the
-    /// <c>"_:"</c> prefix for its HMAC label maps. Consumers joining RDFC and HMAC label
-    /// maps must account for this difference.
+    /// The bare form matches the identifiers <see cref="BlankNodeRelabeling"/> uses for its
+    /// HMAC label maps, so RDFC and HMAC label maps join without prefix adjustment.
     /// </para>
     /// </remarks>
     public IReadOnlyDictionary<string, string>? LabelMap { get; init; }

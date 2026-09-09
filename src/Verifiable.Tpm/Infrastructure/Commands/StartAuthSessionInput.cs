@@ -34,7 +34,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// convenient factory methods like <c>CreateUnboundUnsaltedHmacSession</c>.
 /// </para>
 /// <para>
-/// See TPM 2.0 Part 3, Section 11.1 - TPM2_StartAuthSession.
+/// See TPM 2.0 Library Part 3, clause 11.1 - TPM2_StartAuthSession.
 /// </para>
 /// </remarks>
 public readonly record struct StartAuthSessionInput: ITpmCommandInput
@@ -86,10 +86,26 @@ public readonly record struct StartAuthSessionInput: ITpmCommandInput
         init => symmetric = value;
     }
 
+    /// <summary>
+    /// The backing store <see cref="Symmetric"/>'s <c>init</c> accessor assigns. A field because an
+    /// <c>init</c> accessor may assign a sibling field of its own declaring type outside a constructor
+    /// (the object-initialization allowance C# extends to <c>readonly</c> fields), but never a get-only
+    /// auto-property's compiler-generated backing field, which only a constructor of the declaring type
+    /// may assign — <see cref="Symmetric"/>'s <c>init => symmetric = value;</c> requires the true field.
+    /// </summary>
     private readonly TpmtSymDef symmetric;
 
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_StartAuthSession;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <c>tpmKey</c> carries Auth Index None (TPM 2.0 Library Part 3, clause 11.1.2, Table 14; <c>bind</c>, the
+    /// second handle, is Auth Index None too) — the first session in an authorization area over this command is
+    /// a companion, never an authorizer, so a decrypt or encrypt session's own <c>nonceTPM</c> never folds into
+    /// session 0's command HMAC (TPM 2.0 Library Part 1, clause 16.6.5).
+    /// </remarks>
+    public bool IsFirstHandleAuthorized => false;
 
     /// <inheritdoc/>
     public int GetSerializedSize()

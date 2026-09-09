@@ -47,7 +47,7 @@ internal static class BouncyCastleTpmEccSigningBackend
     /// models NIST P-256 (<see cref="TpmEccCurveConstants.TPM_ECC_NIST_P256"/>); any other curve throws.
     /// </summary>
     /// <returns>The signing backend to inject into a <see cref="TpmSimulator"/>.</returns>
-    public static TpmEccSigningBackend Create() => new(GenerateKeyAsync, SignDigestAsync, ComputeSharedSecretAsync, VerifyDigestAsync);
+    public static TpmEccSigningBackend Create() => new(GenerateKeyAsync, SignDigestAsync, ComputeSharedSecretAsync, VerifyDigestAsync, DerivePublicPointAsync);
 
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the rented scalar and point buffers transfers to the returned carriers, which the simulator disposes.")]
@@ -84,7 +84,9 @@ internal static class BouncyCastleTpmEccSigningBackend
         X9ECParameters parameters = ResolveCurve(curve);
         var domain = new ECDomainParameters(parameters.Curve, parameters.G, parameters.N, parameters.H, parameters.GetSeed());
 
-        var key = new ECPrivateKeyParameters(new BigInteger(1, privateScalar.ToArray()), domain);
+        byte[] scalarBytes = privateScalar.ToArray();
+        var key = new ECPrivateKeyParameters(new BigInteger(1, scalarBytes), domain);
+        Array.Clear(scalarBytes);
         var signer = new ECDsaSigner();
         signer.Init(forSigning: true, new ParametersWithRandom(key, new SecureRandom()));
 
@@ -105,7 +107,7 @@ internal static class BouncyCastleTpmEccSigningBackend
 
     /// <summary>
     /// Verifies an IEEE P1363 ECDSA signature over a pre-computed digest against a public point, modelling the
-    /// public-key operation <c>TPM2_VerifySignature()</c> performs (TPM 2.0 Library Part 3, clause 20.1). Never
+    /// public-key operation <c>TPM2_VerifySignature()</c> performs (TPM 2.0 Library Part 3, clause 20.2). Never
     /// re-hashes the digest, mirroring <see cref="SignDigestAsync"/>.
     /// </summary>
     /// <param name="publicPoint">The verifying key's public point, SEC1 uncompressed (<c>0x04 ‖ X ‖ Y</c>).</param>
@@ -143,9 +145,48 @@ internal static class BouncyCastleTpmEccSigningBackend
     }
 
     /// <summary>
+    /// Derives the public point <c>scalar · G</c> a private scalar carries, modelling <c>TPM2_LoadExternal()</c>'s
+    /// public/private key pair consistency check over an ECC sensitive area (TPM 2.0 Library Part 3, clause
+    /// 12.3.1; clause 12.2.1: "For an ECC key, the public point shall be <c>f(x)</c> where <c>x</c> is the
+    /// private key"). Answers <see langword="null"/> for a scalar outside <c>[1, n − 1]</c> (Part 4's
+    /// <c>CryptEccIsValidPrivateKey</c>) rather than throwing, so the caller maps it to <c>TPM_RC_KEY_SIZE</c>.
+    /// </summary>
+    /// <param name="privateScalar">The candidate private scalar, unsigned big-endian.</param>
+    /// <param name="curve">The ECC curve the scalar is claimed to lie on.</param>
+    /// <param name="pool">The memory pool backing the returned point.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The derived public point, SEC1 uncompressed; <see langword="null"/> for an out-of-range scalar.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the rented point buffer transfers to the returned EncodedEcPoint, which the caller disposes.")]
+    private static ValueTask<EncodedEcPoint?> DerivePublicPointAsync(
+        ReadOnlyMemory<byte> privateScalar, TpmEccCurveConstants curve, BaseMemoryPool pool, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(pool);
+
+        X9ECParameters parameters = ResolveCurve(curve);
+        byte[] scalarBytes = privateScalar.ToArray();
+        var scalar = new BigInteger(1, scalarBytes);
+        Array.Clear(scalarBytes);
+
+        //CryptEccIsValidPrivateKey: a private scalar is valid only in [1, n - 1] (Part 4).
+        if(scalar.SignValue <= 0 || scalar.CompareTo(parameters.N) >= 0)
+        {
+            return ValueTask.FromResult<EncodedEcPoint?>(null);
+        }
+
+        var domain = new ECDomainParameters(parameters.Curve, parameters.G, parameters.N, parameters.H, parameters.GetSeed());
+        Org.BouncyCastle.Math.EC.ECPoint publicPoint = domain.G.Multiply(scalar).Normalize();
+        byte[] uncompressedPoint = publicPoint.GetEncoded(compressed: false);
+
+        var result = new EncodedEcPoint(CopyToPooled(uncompressedPoint, pool), CryptoTags.P256ExchangePublicKey);
+
+        return ValueTask.FromResult<EncodedEcPoint?>(result);
+    }
+
+    /// <summary>
     /// Computes the ECDH shared value <c>Z</c> — the affine x-coordinate of <c>privateScalar · peerPublicPoint</c>,
     /// left-padded to the P-256 field width — modelling the seed exchange of the TPM's credential protection (TPM
-    /// 2.0 Library Part 1, clause 24). The modelled curve has cofactor one, so the plain multiplication yields the
+    /// 2.0 Library Part 1, clause 21). The modelled curve has cofactor one, so the plain multiplication yields the
     /// same shared point both the make and activate sides compute.
     /// </summary>
     /// <param name="privateScalar">The local party's private scalar, unsigned big-endian.</param>
@@ -162,7 +203,9 @@ internal static class BouncyCastleTpmEccSigningBackend
         ArgumentNullException.ThrowIfNull(pool);
 
         X9ECParameters parameters = ResolveCurve(curve);
-        var scalar = new BigInteger(1, privateScalar.ToArray());
+        byte[] scalarBytes = privateScalar.ToArray();
+        var scalar = new BigInteger(1, scalarBytes);
+        Array.Clear(scalarBytes);
         Org.BouncyCastle.Math.EC.ECPoint peer = parameters.Curve.DecodePoint(peerPublicPoint.ToArray());
 
         //Z = the affine x-coordinate of scalar · peer (the standard ECDH product for a cofactor-one curve).

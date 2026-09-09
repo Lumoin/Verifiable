@@ -1,4 +1,5 @@
-using System.Formats.Cbor;
+using System.Buffers;
+using Lumoin.Veritas.Cbor;
 using CsCheck;
 using Verifiable.Cbor;
 
@@ -29,11 +30,12 @@ internal sealed class EncodedCborItemPropertyTests
             {
                 EncodedCborItem original = EncodedCborItem.Wrap(innerBytes);
 
-                var writer = new CborWriter();
+                var buffer = new ArrayBufferWriter<byte>();
+                var writer = new CborWriter(buffer, CborOptions.Strict);
                 original.Write(writer);
-                byte[] emitted = writer.Encode();
+                byte[] emitted = buffer.WrittenSpan.ToArray();
 
-                var reader = new CborReader(emitted);
+                var reader = new CborReader(emitted, CborOptions.Strict);
                 EncodedCborItem reparsed = EncodedCborItem.Read(reader);
 
                 if(!original.WireBytes.Span.SequenceEqual(reparsed.WireBytes.Span))
@@ -54,16 +56,18 @@ internal sealed class EncodedCborItemPropertyTests
         {
             EncodedCborItem wrapped = EncodedCborItem.Wrap(innerBytes);
 
-            var writer = new CborWriter();
+            var buffer = new ArrayBufferWriter<byte>();
+            var writer = new CborWriter(buffer, CborOptions.Strict);
             wrapped.Write(writer);
-            byte[] wireFromWrap = writer.Encode();
+            byte[] wireFromWrap = buffer.WrittenSpan.ToArray();
 
-            var reader = new CborReader(wireFromWrap);
+            var reader = new CborReader(wireFromWrap, CborOptions.Strict);
             EncodedCborItem readBack = EncodedCborItem.Read(reader);
 
-            var writer2 = new CborWriter();
+            var buffer2 = new ArrayBufferWriter<byte>();
+            var writer2 = new CborWriter(buffer2, CborOptions.Strict);
             readBack.Write(writer2);
-            byte[] wireFromRead = writer2.Encode();
+            byte[] wireFromRead = buffer2.WrittenSpan.ToArray();
 
             if(!wireFromWrap.AsSpan().SequenceEqual(wireFromRead))
             {
@@ -75,18 +79,19 @@ internal sealed class EncodedCborItemPropertyTests
 
     //Generators — produce raw inner-CBOR byte arrays for the three regions.
 
-    private static readonly Gen<byte[]> GenInnerScalar =
+    private static Gen<byte[]> GenInnerScalar { get; } =
         Gen.Int[0, 0xFFFF].Select(n =>
         {
-            var w = new CborWriter();
+            var buffer = new ArrayBufferWriter<byte>();
+            var w = new CborWriter(buffer, CborOptions.Strict);
             w.WriteInt32(n);
-            return w.Encode();
+            return buffer.WrittenSpan.ToArray();
         });
 
     //Int-keyed map — mdoc uses these in COSE structures (IssuerSigned map
     //keys are integers per ISO 18013-5 §9.1.2). Generator produces maps
     //of 1..4 entries with int keys and mixed scalar values.
-    private static readonly Gen<byte[]> GenInnerIntKeyedMap =
+    private static Gen<byte[]> GenInnerIntKeyedMap { get; } =
         Gen.Dictionary(
             Gen.Int[0, 50],
             Gen.OneOf<object>(
@@ -96,7 +101,8 @@ internal sealed class EncodedCborItemPropertyTests
         [1, 4]
         .Select(dict =>
         {
-            var w = new CborWriter();
+            var buffer = new ArrayBufferWriter<byte>();
+            var w = new CborWriter(buffer, CborOptions.Strict);
             w.WriteStartMap(dict.Count);
             foreach(var kvp in dict)
             {
@@ -116,37 +122,40 @@ internal sealed class EncodedCborItemPropertyTests
             }
             w.WriteEndMap();
 
-            return w.Encode();
+            return buffer.WrittenSpan.ToArray();
         });
 
     //Tag 24 of a tagged value (Tag 1004 ISO 8601 date wrapping a string,
     //or Tag 0 standard date-time string, etc.) — exercises the "tagged
     //value nested inside Tag-24" coverage region.
-    private static readonly Gen<byte[]> GenInnerTaggedValue =
+    private static Gen<byte[]> GenInnerTaggedValue { get; } =
         Gen.Int[1, 5000].Select(tagNumber =>
         {
-            var w = new CborWriter();
-            w.WriteTag((CborTag)tagNumber);
+            var buffer = new ArrayBufferWriter<byte>();
+            var w = new CborWriter(buffer, CborOptions.Strict);
+            w.WriteTag(new CborTag((ulong)tagNumber));
             w.WriteTextString("inner-payload");
 
-            return w.Encode();
+            return buffer.WrittenSpan.ToArray();
         });
 
     //Recursive Tag-24: an outer Tag-24 wrapper that contains a CBOR map
     //one of whose values is itself another Tag-24 wrapper. Exercises the
     //"Tag-24 contains Tag-24" recursive coverage region.
-    private static readonly Gen<byte[]> GenInnerRecursiveTag24 =
+    private static Gen<byte[]> GenInnerRecursiveTag24 { get; } =
         Gen.Int[0, 100].Select(payloadValue =>
         {
             //Build a nested Tag 24 wrapper first.
-            var innerWriter = new CborWriter();
+            var innerBuffer = new ArrayBufferWriter<byte>();
+            var innerWriter = new CborWriter(innerBuffer, CborOptions.Strict);
             innerWriter.WriteInt32(payloadValue);
-            byte[] innermost = innerWriter.Encode();
+            byte[] innermost = innerBuffer.WrittenSpan.ToArray();
 
             EncodedCborItem nested = EncodedCborItem.Wrap(innermost);
 
             //Wrap the nested Tag 24 inside a CBOR map.
-            var w = new CborWriter();
+            var buffer = new ArrayBufferWriter<byte>();
+            var w = new CborWriter(buffer, CborOptions.Strict);
             w.WriteStartMap(2);
             w.WriteInt32(0);
             w.WriteInt32(payloadValue);
@@ -154,6 +163,6 @@ internal sealed class EncodedCborItemPropertyTests
             w.WriteEncodedValue(nested.WireBytes.Span);
             w.WriteEndMap();
 
-            return w.Encode();
+            return buffer.WrittenSpan.ToArray();
         });
 }

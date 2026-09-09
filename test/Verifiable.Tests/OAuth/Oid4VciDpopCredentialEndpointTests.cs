@@ -32,18 +32,18 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly DateTimeOffset NowInstant = TestClock.CanonicalEpoch;
+    private static DateTimeOffset NowInstant { get; } = TestClock.CanonicalEpoch;
     private FakeTimeProvider TimeProvider { get; } = new(NowInstant);
 
     private const string ClientId = "https://wallet.client.test";
-    private static readonly Uri ClientBaseUri = new("https://wallet.client.test");
+    private static Uri ClientBaseUri { get; } = new("https://wallet.client.test");
     //RegisterDpopClient registers exactly this callback as the client's redirect URI.
-    private static readonly Uri RedirectUri = new("https://client.example.com/callback");
+    private static Uri RedirectUri { get; } = new("https://client.example.com/callback");
     private const string TestSubject = "subject-1";
     private const string ConfigurationId = "UniversityDegree_dc_sd_jwt";
     private const string IssuedCredential = "eyJhbGciOiJFUzI1NiJ9.body.sig";
 
-    private static readonly ImmutableHashSet<CapabilityIdentifier> Capabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> Capabilities { get; } =
         ImmutableHashSet.Create(
             WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
             WellKnownCapabilityIdentifiers.OAuthPushedAuthorization,
@@ -248,7 +248,7 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
 
         return await DpopProofConstruction.BuildAsync(
             claims, freshKey ?? ctx.Fixture.DpopKey, TestHostShell.Base64UrlEncoder,
-            DpopTestSupport.Serializer, MicrosoftCryptographicFunctions.SignP256Async,
+            DpopTestSupport.Serializer, MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             TestHostShell.MemoryPool, TestContext.CancellationToken).ConfigureAwait(false);
     }
 

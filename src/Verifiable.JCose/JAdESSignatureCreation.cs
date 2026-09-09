@@ -397,9 +397,8 @@ public static class JAdESSignatureCreation
             //b64 header parameter's own whole-payload RFC 7797 §3 encoding on top of that would encode the
             //stream a second time, producing a Signing Input no conformant peer building it from the clause
             //text would reproduce -- see JAdESSignatureValidation's identical reasoning on its own verify side.
-            bool base64UrlPayload = effectiveHeaders.SigD is JAdESObjectIdByUriReference or JAdESObjectIdByUriHashReference
-                ? false
-                : effectiveHeaders.B64 is null || effectiveHeaders.B64.Value;
+            bool base64UrlPayload = effectiveHeaders.SigD is not (JAdESObjectIdByUriReference or JAdESObjectIdByUriHashReference)
+                && (effectiveHeaders.B64 is null || effectiveHeaders.B64.Value);
 
             using IMemoryOwner<byte> signingInputOwner = Jws.RentSigningInput(
                 protectedSegment, resolution.SigningPayload.Span, base64UrlPayload, base64UrlEncoder, pool, out int signingInputLength);

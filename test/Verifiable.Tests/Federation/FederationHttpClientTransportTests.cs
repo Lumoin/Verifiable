@@ -116,23 +116,26 @@ internal sealed class FederationHttpClientTransportTests
     /// </summary>
     private sealed class CannedJwsHandler: HttpMessageHandler
     {
-        private readonly string compactJws;
+        private string CompactJws { get; }
 
         public CannedJwsHandler(string compactJws)
         {
-            this.compactJws = compactJws;
+            this.CompactJws = compactJws;
         }
 
+        //Content-Type at the HTTP level is application/entity-statement+jwt
+        //per §8.1. The parser does not enforce the HTTP media type — it
+        //relies on the JWT 'typ' header for cross-JWT confusion defense
+        //per RFC 8725 — so this canned handler is content-type agnostic.
+        //Ownership of the returned HttpResponseMessage transfers to the caller
+        //through the HttpMessageHandler pipeline, the standard shape for this
+        //override — the pipeline disposes it, not this method.
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            //Content-Type at the HTTP level is application/entity-statement+jwt
-            //per §8.1. The parser does not enforce the HTTP media type — it
-            //relies on the JWT 'typ' header for cross-JWT confusion defense
-            //per RFC 8725 — so this canned handler is content-type agnostic.
             HttpResponseMessage response = new(HttpStatusCode.OK)
             {
-                Content = new StringContent(compactJws, System.Text.Encoding.UTF8),
+                Content = new StringContent(CompactJws, System.Text.Encoding.UTF8),
             };
             return Task.FromResult(response);
         }
@@ -141,6 +144,9 @@ internal sealed class FederationHttpClientTransportTests
 
     private sealed class NotFoundHandler: HttpMessageHandler
     {
+        //Ownership of the returned HttpResponseMessage transfers to the caller
+        //through the HttpMessageHandler pipeline, the standard shape for this
+        //override — the pipeline disposes it, not this method.
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
@@ -156,15 +162,18 @@ internal sealed class FederationHttpClientTransportTests
     /// </summary>
     private sealed class RedirectHandler: HttpMessageHandler
     {
-        private readonly Uri location;
+        private Uri Location { get; }
 
         public RedirectHandler(Uri location)
         {
-            this.location = location;
+            this.Location = location;
         }
 
         public int RequestCount { get; private set; }
 
+        //Ownership of the returned HttpResponseMessage transfers to the caller
+        //through the HttpMessageHandler pipeline, the standard shape for this
+        //override — the pipeline disposes it, not this method.
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
@@ -173,7 +182,7 @@ internal sealed class FederationHttpClientTransportTests
             {
                 Content = new StringContent(string.Empty),
             };
-            response.Headers.Location = location;
+            response.Headers.Location = Location;
             return Task.FromResult(response);
         }
     }

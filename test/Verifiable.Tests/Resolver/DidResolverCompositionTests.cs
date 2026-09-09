@@ -30,7 +30,7 @@ internal sealed class DidResolverCompositionTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly BaseMemoryPool Pool = BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool { get; } = BaseMemoryPool.Shared;
 
     private const string KeyDid = "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK";
     private const string CheqdDid = "did:cheqd:mainnet:zF7rhDBfUt9d1gJPjx7s1JXfUY7oVWkY";
@@ -175,10 +175,7 @@ internal sealed class DidResolverCompositionTests
     {
         var document = new DidDocument
         {
-            Context = new Verifiable.Core.Model.Common.Context
-            {
-                Contexts = [Verifiable.Core.Model.Common.Context.DidCore10]
-            },
+            Context = Verifiable.Core.Model.Common.Context.FromIris(Verifiable.Core.Model.Common.Context.DidCore10),
             Id = new GenericDidMethod(did)
         };
 

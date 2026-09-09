@@ -24,7 +24,7 @@ public static class JarmResponseModes
     /// with response types containing <c>token</c> or <c>id_token</c> unless the
     /// response JWT is encrypted.
     /// </summary>
-    public static readonly string QueryJwt = Utf8Constants.ToInternedString(QueryJwtUtf8);
+    public static string QueryJwt { get; } = Utf8Constants.ToInternedString(QueryJwtUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="FragmentJwt"/>.</summary>
     public static ReadOnlySpan<byte> FragmentJwtUtf8 => "fragment.jwt"u8;
@@ -33,7 +33,7 @@ public static class JarmResponseModes
     /// The <c>fragment.jwt</c> response mode — the response JWT rides the
     /// <c>response</c> parameter in the fragment component of the redirect URI (§2.3.2).
     /// </summary>
-    public static readonly string FragmentJwt = Utf8Constants.ToInternedString(FragmentJwtUtf8);
+    public static string FragmentJwt { get; } = Utf8Constants.ToInternedString(FragmentJwtUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="FormPostJwt"/>.</summary>
     public static ReadOnlySpan<byte> FormPostJwtUtf8 => "form_post.jwt"u8;
@@ -42,7 +42,7 @@ public static class JarmResponseModes
     /// The <c>form_post.jwt</c> response mode — the response JWT is auto-submitted from
     /// the User Agent as an HTML form value POSTed to the redirect URI (§2.3.3).
     /// </summary>
-    public static readonly string FormPostJwt = Utf8Constants.ToInternedString(FormPostJwtUtf8);
+    public static string FormPostJwt { get; } = Utf8Constants.ToInternedString(FormPostJwtUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Jwt"/>.</summary>
     public static ReadOnlySpan<byte> JwtUtf8 => "jwt"u8;
@@ -53,7 +53,7 @@ public static class JarmResponseModes
     /// <see cref="FragmentJwt"/> for <c>token</c> and the OIDC response types except
     /// <c>none</c>.
     /// </summary>
-    public static readonly string Jwt = Utf8Constants.ToInternedString(JwtUtf8);
+    public static string Jwt { get; } = Utf8Constants.ToInternedString(JwtUtf8);
 
 
     /// <summary>Returns <see langword="true"/> when <paramref name="value"/> is

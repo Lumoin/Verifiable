@@ -1,6 +1,9 @@
 using System.Diagnostics;
 using System.Text;
 using Verifiable.Core;
+using Verifiable.Cryptography;
+using Verifiable.JCose;
+using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Server.Keys;
 
 namespace Verifiable.OAuth.Server;
@@ -61,6 +64,13 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// validation sites. Defaults to <see cref="TimingPolicy.Default"/>.
     /// </summary>
     public TimingPolicy Timings { get; set; } = TimingPolicy.Default;
+
+    /// <summary>
+    /// The memory pool every OAuth/OpenID endpoint handler rents its transient
+    /// signing/verification/parsing buffers from. Required at construction: the
+    /// compiler enforces its presence, and <see cref="Validate"/> checks the delegates only.
+    /// </summary>
+    public required BaseMemoryPool MemoryPool { get; init; }
 
 
     /// <summary>
@@ -469,6 +479,40 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// the application owns credential storage and the authentication method.
     /// </summary>
     public ValidateClientCredentialsDelegate? ValidateClientCredentialsAsync { get; set; }
+
+    /// <summary>
+    /// The client authentication methods this token endpoint actually judges — the
+    /// declaration <c>token_endpoint_auth_methods_supported</c> (RFC 8414, Section 2)
+    /// is emitted from. Defaults to <c>[</c><see cref="ClientAuthenticationMethod.None"/><c>]</c>:
+    /// the library's token endpoint accepts PKCE-only public clients per OAuth 2.1 and
+    /// judges no other method unless the deployment declares it here AND wires
+    /// <see cref="ValidateClientCredentialsAsync"/> to actually check the presented
+    /// credential (<see cref="Validate"/> refuses a declaration the wiring cannot
+    /// honour). A registration whose <see cref="ClientRecord.TokenEndpointAuthMethod"/>
+    /// names a method outside this set is refused before any validator runs — the
+    /// advertisement and the endpoint's judgment are the one set the deployment
+    /// declares, never two independently maintained facts.
+    /// </summary>
+    public IReadOnlyCollection<ClientAuthenticationMethod> ClientAuthenticationMethodsSupported { get; set; } =
+        [ClientAuthenticationMethod.None];
+
+    /// <summary>
+    /// The JWA <c>alg</c> names (<see cref="WellKnownJwaValues"/>) this token endpoint
+    /// accepts on the client-assertion JWT for <see cref="ClientAuthenticationMethod.PrivateKeyJwt"/>
+    /// and <see cref="ClientAuthenticationMethod.ClientSecretJwt"/> — the declaration
+    /// <c>token_endpoint_auth_signing_alg_values_supported</c> (RFC 8414, Section 2) is
+    /// emitted from whenever it is non-empty. RFC 8414, Section 2: "Servers SHOULD
+    /// support "RS256"." — which algorithms to declare beyond that SHOULD is the
+    /// deployment's own choice; the algorithm set is not itself validated against the
+    /// presented assertion's <c>alg</c> here, only advertised. Empty by default; a
+    /// deployment that declares <see cref="ClientAuthenticationMethod.PrivateKeyJwt"/> or
+    /// <see cref="ClientAuthenticationMethod.ClientSecretJwt"/> on
+    /// <see cref="ClientAuthenticationMethodsSupported"/> must populate this with at
+    /// least one algorithm, and never with <see cref="WellKnownJwaValues.None"/> (RFC
+    /// 8414, Section 2: "The value "none" MUST NOT be used.") — <see cref="Validate"/>
+    /// enforces both.
+    /// </summary>
+    public IReadOnlyCollection<string> ClientAssertionSigningAlgorithmsSupported { get; set; } = [];
 
     /// <summary>
     /// Validates a Token Exchange <c>subject_token</c> (RFC 8693 §2.1) and returns its accepted
@@ -910,7 +954,88 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
             throw new InvalidOperationException(sb.ToString());
         }
 
+        ValidateClientAuthenticationDeclaration();
+
         IsValidated = true;
+    }
+
+
+    /// <summary>
+    /// Enforces that <see cref="ClientAuthenticationMethodsSupported"/> and
+    /// <see cref="ClientAssertionSigningAlgorithmsSupported"/> describe a token
+    /// endpoint the library can actually operate — CIMD -02 §8.2 and RFC 8414
+    /// Section 2's rules on the pair of declarations. Every failure here is a
+    /// composition defect (a deployment declaring something the wiring cannot
+    /// honour), not a runtime condition, so each is thrown rather than folded
+    /// into the missing-delegates report.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// <see cref="ClientAuthenticationMethodsSupported"/> is empty; it declares a
+    /// method other than <see cref="ClientAuthenticationMethod.None"/> while
+    /// <see cref="ValidateClientCredentialsAsync"/> is unwired; it declares
+    /// <see cref="ClientAuthenticationMethod.PrivateKeyJwt"/> or
+    /// <see cref="ClientAuthenticationMethod.ClientSecretJwt"/> while
+    /// <see cref="ClientAssertionSigningAlgorithmsSupported"/> is empty; or
+    /// <see cref="ClientAssertionSigningAlgorithmsSupported"/> contains
+    /// <see cref="WellKnownJwaValues.None"/>.
+    /// </exception>
+    private void ValidateClientAuthenticationDeclaration()
+    {
+        if(ClientAuthenticationMethodsSupported.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "AuthorizationServerIntegration.ClientAuthenticationMethodsSupported is empty. "
+                + "RFC 8414, Section 2 defaults an omitted declaration to \"client_secret_basic\", "
+                + "a method this library never judges by default; declare at least "
+                + $"{nameof(ClientAuthenticationMethod)}.{nameof(ClientAuthenticationMethod.None)} "
+                + "for a token endpoint that accepts only PKCE-only public clients.");
+        }
+
+        bool declaresNonNoneMethod = false;
+        bool declaresJwtAssertionMethod = false;
+        foreach(ClientAuthenticationMethod method in ClientAuthenticationMethodsSupported)
+        {
+            if(method != ClientAuthenticationMethod.None)
+            {
+                declaresNonNoneMethod = true;
+            }
+
+            if(method == ClientAuthenticationMethod.PrivateKeyJwt || method == ClientAuthenticationMethod.ClientSecretJwt)
+            {
+                declaresJwtAssertionMethod = true;
+            }
+        }
+
+        if(declaresNonNoneMethod && ValidateClientCredentialsAsync is null)
+        {
+            throw new InvalidOperationException(
+                "AuthorizationServerIntegration.ClientAuthenticationMethodsSupported declares a "
+                + $"method other than {nameof(ClientAuthenticationMethod)}.{nameof(ClientAuthenticationMethod.None)}, "
+                + $"but {nameof(ValidateClientCredentialsAsync)} is not wired to judge it. A "
+                + "declaration the wiring cannot honour would advertise client authentication "
+                + "this token endpoint never actually checks.");
+        }
+
+        if(declaresJwtAssertionMethod && ClientAssertionSigningAlgorithmsSupported.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"AuthorizationServerIntegration.{nameof(ClientAuthenticationMethodsSupported)} declares "
+                + $"{nameof(ClientAuthenticationMethod.PrivateKeyJwt)} or "
+                + $"{nameof(ClientAuthenticationMethod.ClientSecretJwt)}, but "
+                + $"{nameof(ClientAssertionSigningAlgorithmsSupported)} is empty. RFC 8414, Section 2: "
+                + "\"This metadata entry MUST be present if either of these authentication methods "
+                + "are specified in the 'token_endpoint_auth_methods_supported' entry.\"");
+        }
+
+        foreach(string algorithm in ClientAssertionSigningAlgorithmsSupported)
+        {
+            if(WellKnownJwaValues.IsNone(algorithm))
+            {
+                throw new InvalidOperationException(
+                    $"AuthorizationServerIntegration.{nameof(ClientAssertionSigningAlgorithmsSupported)} "
+                    + "contains \"none\". RFC 8414, Section 2: \"The value 'none' MUST NOT be used.\"");
+            }
+        }
     }
 
 
@@ -928,12 +1053,12 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     }
 
 
-    private readonly EventSubject eventSubject = new();
+    private EventSubject ClientRegistrationEventSubject { get; } = new();
 
     /// <summary>
     /// The instance-scoped event stream for client registration lifecycle events.
     /// </summary>
-    public IObservable<ClientRegistrationEvent> Events => eventSubject;
+    public IObservable<ClientRegistrationEvent> Events => ClientRegistrationEventSubject;
 
 
     /// <summary>Emits a <see cref="ClientRegistered"/> event.</summary>
@@ -947,7 +1072,7 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
-        eventSubject.Emit(new ClientRegistered
+        ClientRegistrationEventSubject.Emit(new ClientRegistered
         {
             ClientId = registration.ClientId,
             TenantId = registration.TenantId,
@@ -971,7 +1096,7 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
-        eventSubject.Emit(new ClientUpdated
+        ClientRegistrationEventSubject.Emit(new ClientUpdated
         {
             ClientId = current.ClientId,
             TenantId = current.TenantId,
@@ -995,7 +1120,7 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
-        eventSubject.Emit(new ClientDeregistered
+        ClientRegistrationEventSubject.Emit(new ClientDeregistered
         {
             ClientId = registration.ClientId,
             TenantId = registration.TenantId,
@@ -1017,7 +1142,7 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
-        eventSubject.Emit(new CapabilityGranted
+        ClientRegistrationEventSubject.Emit(new CapabilityGranted
         {
             ClientId = registration.ClientId,
             TenantId = registration.TenantId,
@@ -1041,7 +1166,7 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
-        eventSubject.Emit(new CapabilityRevoked
+        ClientRegistrationEventSubject.Emit(new CapabilityRevoked
         {
             ClientId = registration.ClientId,
             TenantId = registration.TenantId,
@@ -1057,6 +1182,10 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     private sealed class EventSubject: IObservable<ClientRegistrationEvent>
     {
         private volatile IObserver<ClientRegistrationEvent>[] observers = [];
+
+        /// <summary>
+        /// A field, not a property: a lock target must be one instance that no accessor can re-mint.
+        /// </summary>
         private readonly object gate = new();
 
 

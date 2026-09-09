@@ -4,9 +4,9 @@
     "net10.0": {
       "Lumoin.Base": {
         "type": "Direct",
-        "requested": "[0.0.9, )",
-        "resolved": "0.0.9",
-        "contentHash": "B0ItIYFv2+iDPC3eFXYzE/8662UYFE8yBTyYYZjkCgbsFCCZ4aKDLhB4sANXxTLwV0oIABhZStiuxr7ytVfScA=="
+        "requested": "[0.0.12, )",
+        "resolved": "0.0.12",
+        "contentHash": "XA9cqzp/hU7UgaoIm9W/83JUiTTbeibFE6d9COdd8SNz2ftwX3rembmGvyIwVJJXgQ2mr1nDf/Yek5pl/JlJPA=="
       },
       "Microsoft.CodeAnalysis.BannedApiAnalyzers": {
         "type": "Direct",
@@ -31,6 +31,7 @@
         "dependencies": {
           "Lumoin.Veridical.Backends.Managed": "[0.0.6, )",
           "Lumoin.Veridical.Bbs": "[0.0.6, )",
+          "Lumoin.Veritas.JsonPointer": "[0.0.2-local.be47a9ff, )",
           "Verifiable.Foundation": "[0.0.0, )",
           "Verifiable.JCose": "[0.0.0, )",
           "Verifiable.JsonPointer": "[0.0.0, )"
@@ -39,14 +40,14 @@
       "verifiable.cryptography": {
         "type": "Project",
         "dependencies": {
-          "Lumoin.Base": "[0.0.9, )",
+          "Lumoin.Base": "[0.0.12, )",
           "Verifiable.Foundation": "[0.0.0, )"
         }
       },
       "verifiable.foundation": {
         "type": "Project",
         "dependencies": {
-          "Lumoin.Base": "[0.0.9, )"
+          "Lumoin.Base": "[0.0.12, )"
         }
       },
       "verifiable.jcose": {
@@ -97,6 +98,15 @@
         "dependencies": {
           "Lumoin.Base": "0.0.9",
           "Lumoin.Veridical.Core": "0.0.6"
+        }
+      },
+      "Lumoin.Veritas.JsonPointer": {
+        "type": "CentralTransitive",
+        "requested": "[0.0.2-local.be47a9ff, )",
+        "resolved": "0.0.2-local.be47a9ff",
+        "contentHash": "HECRatfPq8USqLLNTN01AAhrIcvKsScXSDHnZ9fNpP+X4UVzcnx00MYmqw8QMmXjU21oFuSirl/TJXG0wzicFA==",
+        "dependencies": {
+          "Lumoin.Base": "0.0.12"
         }
       }
     }

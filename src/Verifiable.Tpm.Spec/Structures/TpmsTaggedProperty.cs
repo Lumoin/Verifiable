@@ -34,7 +34,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 ///   TPM operation.</description></item>
 /// </list>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, section 10.8.2, Table 114.
+/// Specification reference: TPM 2.0 Library Part 2, clause 10.7.2, Table 117.
 /// </para>
 /// </remarks>
 /// <param name="Property">A property identifier (TPM_PT).</param>

@@ -499,14 +499,14 @@ internal sealed class CAdESMultiServerWireFlowTests
     /// </summary>
     private sealed class BinaryTsaHostAdapter
     {
-        private readonly FetchTimestampResponseAsyncDelegate responder;
+        private FetchTimestampResponseAsyncDelegate Responder { get; }
 
 
         /// <summary>Initializes a new <see cref="BinaryTsaHostAdapter"/> over a responder.</summary>
         /// <param name="responder">The RFC 3161 responder this host answers every request through.</param>
         internal BinaryTsaHostAdapter(FetchTimestampResponseAsyncDelegate responder)
         {
-            this.responder = responder;
+            this.Responder = responder;
         }
 
 
@@ -517,7 +517,7 @@ internal sealed class CAdESMultiServerWireFlowTests
         internal async Task<BinaryHttpResponse> HandleAsync(BinaryHttpRequest request, CancellationToken cancellationToken)
         {
             using PkiCertificateMemory requestCarrier = ToCarrier(request.Body, PkiCertificateTags.TimestampRequest);
-            PkiCertificateMemory? response = await responder(
+            PkiCertificateMemory? response = await Responder(
                 new TimestampFetchContext { TsaUri = request.Path, Request = requestCarrier },
                 BaseMemoryPool.Shared, cancellationToken).ConfigureAwait(false);
 
@@ -598,14 +598,14 @@ internal sealed class CAdESMultiServerWireFlowTests
     /// </summary>
     private sealed class WireTimestampTransport
     {
-        private readonly HttpClient httpClient;
+        private HttpClient WireClient { get; }
 
 
         /// <summary>Initializes a new <see cref="WireTimestampTransport"/> over a pinned client.</summary>
         /// <param name="httpClient">The client, already pinned to the Time-Stamping Authority host's certificate.</param>
         internal WireTimestampTransport(HttpClient httpClient)
         {
-            this.httpClient = httpClient;
+            this.WireClient = httpClient;
         }
 
 
@@ -622,7 +622,7 @@ internal sealed class CAdESMultiServerWireFlowTests
             HttpResponseMessage httpResponse;
             try
             {
-                httpResponse = await httpClient.PostAsync(new Uri(context.TsaUri), content, cancellationToken).ConfigureAwait(false);
+                httpResponse = await WireClient.PostAsync(new Uri(context.TsaUri), content, cancellationToken).ConfigureAwait(false);
             }
             catch(HttpRequestException)
             {
@@ -652,14 +652,14 @@ internal sealed class CAdESMultiServerWireFlowTests
     /// </summary>
     private sealed class WireOcspTransport
     {
-        private readonly HttpClient httpClient;
+        private HttpClient WireClient { get; }
 
 
         /// <summary>Initializes a new <see cref="WireOcspTransport"/> over a pinned client.</summary>
         /// <param name="httpClient">The client, already pinned to the OCSP responder host's certificate.</param>
         internal WireOcspTransport(HttpClient httpClient)
         {
-            this.httpClient = httpClient;
+            this.WireClient = httpClient;
         }
 
 
@@ -676,7 +676,7 @@ internal sealed class CAdESMultiServerWireFlowTests
             HttpResponseMessage httpResponse;
             try
             {
-                httpResponse = await httpClient.PostAsync(new Uri(context.ResponderUri), content, cancellationToken).ConfigureAwait(false);
+                httpResponse = await WireClient.PostAsync(new Uri(context.ResponderUri), content, cancellationToken).ConfigureAwait(false);
             }
             catch(HttpRequestException)
             {
@@ -708,14 +708,14 @@ internal sealed class CAdESMultiServerWireFlowTests
     /// </summary>
     private sealed class ReplayOcspTransport
     {
-        private readonly byte[] response;
+        private byte[] Response { get; }
 
 
         /// <summary>Initializes a new <see cref="ReplayOcspTransport"/> over the archived response's octets.</summary>
         /// <param name="response">The DER-encoded <c>OCSPResponse</c> this transport replays.</param>
         internal ReplayOcspTransport(ReadOnlySpan<byte> response)
         {
-            this.response = response.ToArray();
+            this.Response = response.ToArray();
         }
 
 
@@ -727,8 +727,8 @@ internal sealed class CAdESMultiServerWireFlowTests
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the response carrier transfers to the caller via the returned ValueTask.")]
         internal ValueTask<PkiCertificateMemory?> FetchAsync(OcspFetchContext context, BaseMemoryPool pool, CancellationToken cancellationToken)
         {
-            IMemoryOwner<byte> owner = pool.Rent(response.Length);
-            response.CopyTo(owner.Memory.Span);
+            IMemoryOwner<byte> owner = pool.Rent(Response.Length);
+            Response.CopyTo(owner.Memory.Span);
 
             return ValueTask.FromResult<PkiCertificateMemory?>(new PkiCertificateMemory(owner, PkiCertificateTags.OcspResponse));
         }
@@ -750,9 +750,9 @@ internal sealed class CAdESMultiServerWireFlowTests
         /// </summary>
         private static byte[] WrongImprint { get; } = new byte[32];
 
-        private readonly X509ChainTestRingNode authority;
-        private readonly IReadOnlyList<X509ChainTestRingNode> embeddedCertificates;
-        private readonly DateTimeOffset generationTime;
+        private X509ChainTestRingNode Authority { get; }
+        private IReadOnlyList<X509ChainTestRingNode> EmbeddedCertificates { get; }
+        private DateTimeOffset GenerationTime { get; }
 
 
         /// <summary>Initializes a new <see cref="MismatchedImprintTsaResponder"/>.</summary>
@@ -764,9 +764,9 @@ internal sealed class CAdESMultiServerWireFlowTests
             IReadOnlyList<X509ChainTestRingNode> embeddedCertificates,
             DateTimeOffset generationTime)
         {
-            this.authority = authority;
-            this.embeddedCertificates = embeddedCertificates;
-            this.generationTime = generationTime;
+            this.Authority = authority;
+            this.EmbeddedCertificates = embeddedCertificates;
+            this.GenerationTime = generationTime;
         }
 
 
@@ -779,7 +779,7 @@ internal sealed class CAdESMultiServerWireFlowTests
         internal ValueTask<PkiCertificateMemory?> FetchAsync(TimestampFetchContext context, BaseMemoryPool pool, CancellationToken cancellationToken)
         {
             using PkiCertificateMemory token = X509ChainTestRingTimestamping.MintTimestampTokenOverImprint(
-                authority, embeddedCertificates, WrongImprint, generationTime);
+                Authority, EmbeddedCertificates, WrongImprint, GenerationTime);
 
             return ValueTask.FromResult<PkiCertificateMemory?>(WrapGrantedResponse(token.AsReadOnlySpan(), pool));
         }

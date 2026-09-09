@@ -485,9 +485,10 @@ public static class HaipProfile
         }
 
         //Select the enc algorithm from the Verifier's advertised set per HAIP 1.0 §5.1.
-        //Prefer A256GCM when both are advertised; fall back to A128GCM otherwise.
+        //Prefer A256GCM when both are advertised; fall back to A128GCM otherwise. ClientMetadata
+        //is already known non-null here — the jwksJson guard above throws when it is null.
         IReadOnlyList<string>? supportedEnc =
-            requestObject.ClientMetadata?.EncryptedResponseEncValuesSupported;
+            requestObject.ClientMetadata.EncryptedResponseEncValuesSupported;
 
         string selectedEnc = WellKnownJweEncryptionAlgorithms.A128Gcm;
         if(supportedEnc is not null)

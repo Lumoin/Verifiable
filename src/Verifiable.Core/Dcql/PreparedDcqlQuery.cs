@@ -77,13 +77,13 @@ public record PreparedDcqlQuery
     /// </summary>
     /// <param name="credentialQueryId">The credential query ID.</param>
     /// <returns>The coarse predicates, or null if not found.</returns>
-    public DcqlCoarsePredicates? GetPredicatesFor(string credentialQueryId)
+    public DcqlCoarsePredicates? GetPredicatesFor(CredentialQueryId credentialQueryId)
     {
         ArgumentNullException.ThrowIfNull(credentialQueryId);
 
         foreach(var predicates in CoarsePredicates)
         {
-            if(string.Equals(predicates.CredentialQueryId, credentialQueryId, StringComparison.Ordinal))
+            if(predicates.CredentialQueryId == credentialQueryId)
             {
                 return predicates;
             }
@@ -101,16 +101,28 @@ public static class DcqlPreparer
     /// <summary>
     /// Prepares a DCQL query for evaluation.
     /// </summary>
+    /// <remarks>
+    /// Preparation is the step that REPORTS what is wrong with a query, so a credential query
+    /// identifier that leaves
+    /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-6.1">
+    /// OID4VP 1.0 §6.1</see>'s "The value MUST be a non-empty string consisting of alphanumeric,
+    /// underscore (_), or hyphen (-) characters" is recorded in
+    /// <see cref="PreparedDcqlQuery.ValidationIssues"/> rather than raised: the query reaching here
+    /// can come off the wire, and a caller that asks what is wrong with it is answered, not thrown
+    /// at. Validation therefore runs first and the coarse predicates are extracted only for the
+    /// credential queries whose identifier holds — <see cref="DcqlCoarsePredicates.Extract"/> refuses
+    /// an invalid identifier, which is the API-misuse boundary evaluation sits behind.
+    /// </remarks>
     /// <param name="query">The DCQL query to prepare.</param>
     /// <returns>A prepared query ready for evaluation.</returns>
     public static PreparedDcqlQuery Prepare(DcqlQuery query)
     {
         ArgumentNullException.ThrowIfNull(query);
 
-        var coarsePredicates = DcqlCoarsePredicates.ExtractAll(query);
+        var validationIssues = query.Validate();
+        var coarsePredicates = ExtractCoarsePredicatesForValidIdentifiers(query);
         var allPatterns = query.GetAllRequestedPatterns();
         var requestedFormats = query.GetRequestedFormats();
-        var validationIssues = query.Validate();
 
         return new PreparedDcqlQuery
         {
@@ -120,5 +132,33 @@ public static class DcqlPreparer
             RequestedFormats = requestedFormats,
             ValidationIssues = validationIssues
         };
+    }
+
+
+    /// <summary>
+    /// Extracts the coarse predicates of every credential query whose <c>id</c> meets OID4VP 1.0
+    /// §6.1, skipping the ones whose identifier was already recorded as an issue. A partially
+    /// invalid query still reports every issue it has and still offers the storage-level predicates
+    /// of the credential queries that are well formed.
+    /// </summary>
+    /// <param name="query">The DCQL query being prepared.</param>
+    /// <returns>The coarse predicates of the credential queries carrying a valid identifier.</returns>
+    private static List<DcqlCoarsePredicates> ExtractCoarsePredicatesForValidIdentifiers(DcqlQuery query)
+    {
+        if(query.Credentials is null)
+        {
+            return [];
+        }
+
+        var predicates = new List<DcqlCoarsePredicates>(query.Credentials.Count);
+        foreach(var credentialQuery in query.Credentials)
+        {
+            if(CredentialQueryId.TryCreate(credentialQuery.Id, out _))
+            {
+                predicates.Add(DcqlCoarsePredicates.Extract(credentialQuery));
+            }
+        }
+
+        return predicates;
     }
 }

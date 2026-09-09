@@ -15,11 +15,11 @@ internal sealed class FederationClientAuthenticationTests
     private const string EndpointEntityId = "https://op.example.com";
     private const string RequesterEntityId = "https://rp.example.com";
 
-    private static readonly DateTimeOffset Now = DateTimeOffset.FromUnixTimeSeconds(1_700_000_000);
-    private static readonly TimeSpan Skew = TimeSpan.FromSeconds(60);
+    private static DateTimeOffset Now { get; } = DateTimeOffset.FromUnixTimeSeconds(1_700_000_000);
+    private static TimeSpan Skew { get; } = TimeSpan.FromSeconds(60);
 
-    private static readonly EntityIdentifier Endpoint = new(EndpointEntityId);
-    private static readonly EntityIdentifier Requester = new(RequesterEntityId);
+    private static EntityIdentifier Endpoint { get; } = new(EndpointEntityId);
+    private static EntityIdentifier Requester { get; } = new(RequesterEntityId);
 
 
     private static JwtPayload ValidPayload() =>

@@ -111,4 +111,67 @@ internal sealed class DidDocumentSerializationRegressionTests
         Assert.IsNotNull(deserialized.Id);
         Assert.AreEqual("did:web:example.com", (string)deserialized.Id);
     }
+
+
+    /// <summary>
+    /// A did:key document with a scalar-string <c>@context</c> (<see cref="Verifiable.Json.Converters.DidDocumentConverter"/>
+    /// delegates <c>@context</c> to the same <see cref="Verifiable.Json.Converters.JsonLdContextConverter"/> regardless of DID
+    /// method, so this proves the converter's scalar form survives a <see cref="DidDocument"/>-level
+    /// roundtrip, not just a bare <see cref="Verifiable.Core.Model.Common.Context"/> roundtrip).
+    /// </summary>
+    private const string DidKeyScalarContextDocument =
+        """
+        {
+          "@context": "https://www.w3.org/ns/did/v1",
+          "id": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"
+        }
+        """;
+
+    /// <summary>
+    /// A did:webvh document whose <c>@context</c> array mixes an IRI with an inline definition,
+    /// proving that shape survives a <see cref="DidDocument"/>-level roundtrip through the same converter.
+    /// </summary>
+    private const string DidWebvhArrayWithInlineDefinitionContextDocument =
+        """
+        {
+          "@context": [
+            "https://www.w3.org/ns/did/v1",
+            {
+              "@vocab": "https://example.com/"
+            }
+          ],
+          "id": "did:webvh:QmExample:example.com"
+        }
+        """;
+
+
+    /// <summary>
+    /// A did:key document's scalar-string <c>@context</c> survives a deserialize→serialize cycle unchanged.
+    /// </summary>
+    [TestMethod]
+    public void DidKeyScalarContextRoundtripsStructurally()
+    {
+        var (deserialized, reserialized) = JsonSerializationUtilities.PerformSerializationCycle<DidDocument>(DidKeyScalarContextDocument, Options);
+
+        Assert.IsNotNull(deserialized);
+        Assert.IsTrue(
+            JsonSerializationUtilities.CompareJsonElements(DidKeyScalarContextDocument, reserialized),
+            $"did:key scalar @context roundtrip changed structure. Reserialized: {reserialized}");
+    }
+
+
+    /// <summary>
+    /// A did:webvh document's array <c>@context</c> mixing an IRI and an inline definition survives a
+    /// deserialize→serialize cycle unchanged.
+    /// </summary>
+    [TestMethod]
+    public void DidWebvhArrayWithInlineDefinitionContextRoundtripsStructurally()
+    {
+        var (deserialized, reserialized) = JsonSerializationUtilities.PerformSerializationCycle<DidDocument>(DidWebvhArrayWithInlineDefinitionContextDocument, Options);
+
+        Assert.IsNotNull(deserialized);
+        Assert.IsTrue(
+            JsonSerializationUtilities.CompareJsonElements(DidWebvhArrayWithInlineDefinitionContextDocument, reserialized),
+            $"did:webvh array-with-inline-definition @context roundtrip changed structure. Reserialized: {reserialized}");
+    }
 }

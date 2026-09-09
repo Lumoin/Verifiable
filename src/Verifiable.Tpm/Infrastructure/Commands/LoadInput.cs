@@ -27,7 +27,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// TPM2B_PUBLIC         inPublic        The public area
 /// </code>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 3, Section 12.2 (Table 22).
+/// Specification reference: TPM 2.0 Library Part 3, clause 12.3 (Table 22).
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]

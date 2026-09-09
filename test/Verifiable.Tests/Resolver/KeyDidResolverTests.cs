@@ -4,10 +4,12 @@ using System.Linq;
 using System.Threading.Tasks;
 using Verifiable.BouncyCastle;
 using Verifiable.Core;
+using Verifiable.Core.Assessment;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Did.Methods.Key;
 using Verifiable.Core.Resolvers;
+using Verifiable.Core.Validation;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Foundation;
@@ -28,7 +30,7 @@ internal sealed class KeyDidResolverTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly ExchangeContext EmptyContext = new();
+    private static ExchangeContext EmptyContext { get; } = new();
 
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
@@ -44,7 +46,8 @@ internal sealed class KeyDidResolverTests
             algorithm,
             purpose,
             publicKey.AsReadOnlySpan(),
-            DefaultCoderSelector.SelectEncoder(typeof(PublicKeyMultibase)));
+            DefaultCoderSelector.SelectEncoder(typeof(PublicKeyMultibase)),
+            BaseMemoryPool.Shared);
 
         return $"{KeyDidMethod.Prefix}{multibase}";
     }
@@ -130,9 +133,14 @@ internal sealed class KeyDidResolverTests
         DidResolutionResult result = await ResolveAsync(ToDidKey(publicKey)).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccessful);
-        var contexts = result.Document!.Context!.Contexts!;
-        Assert.AreEqual("https://www.w3.org/ns/did/v1", contexts[0], "The first @context MUST be the DID v1 context.");
-        Assert.Contains("https://w3id.org/security/multikey/v1", contexts, "A Multikey VM MUST carry the multikey suite context.");
+        var contexts = result.Document!.Context!.Entries;
+        Assert.AreEqual("https://www.w3.org/ns/did/v1", contexts[0].Iri, "The first @context MUST be the DID v1 context.");
+        Assert.Contains("https://w3id.org/security/multikey/v1", contexts.Select(static entry => entry.Iri).ToArray(), "A Multikey VM MUST carry the multikey suite context.");
+
+        //Every IRI a did:key document resolves with is on this library's own DID Core allowlist —
+        //proving WellKnownContextAllowlists.DidCore is not just a stub against a resolver's own output.
+        Claim allowlistClaim = ContextValidationRules.ValidateKnownContexts(result.Document.Context, WellKnownContextAllowlists.DidCore, isInlineDefinitionAllowed: false);
+        Assert.AreEqual(ClaimOutcome.Success, allowlistClaim.Outcome, "A resolved did:key document's context must pass the DidCore allowlist.");
     }
 
 
@@ -413,7 +421,7 @@ internal sealed class KeyDidResolverTests
 
     private static void AssertHasDidContext(DidDocument document)
     {
-        Assert.IsNotNull(document.Context?.Contexts, "A resolved did:key document MUST carry @context.");
-        Assert.AreEqual("https://www.w3.org/ns/did/v1", document.Context!.Contexts![0], "The first @context MUST be the DID v1 context.");
+        Assert.IsTrue(document.Context?.Entries is { Count: > 0 }, "A resolved did:key document MUST carry @context.");
+        Assert.AreEqual("https://www.w3.org/ns/did/v1", document.Context!.Entries[0].Iri, "The first @context MUST be the DID v1 context.");
     }
 }

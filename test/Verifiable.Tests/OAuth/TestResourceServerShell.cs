@@ -1,7 +1,6 @@
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Linq;
-using System.Net;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -153,16 +152,19 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
             return;
         }
 
-        X509Certificate2 certificate = LoopbackTls.CreateServerCertificate("resource-server-loopback-test-host");
+        //A test can stand up several resource-server shells side by side (RS1 and RS2 in a
+        //multi-resource topology), so each shell needs a genuinely distinct TLS identity rather
+        //than the process-wide shared leaf.
+        X509Certificate2 certificate = LoopbackTls.CreateDistinctServerCertificate("resource-server-loopback-test-host");
 
         global::Microsoft.AspNetCore.Builder.WebApplicationBuilder builder =
             global::Microsoft.AspNetCore.Builder.WebApplication.CreateSlimBuilder();
-        builder.Logging.ClearProviders();
+        LoopbackKestrel.ConfigureLoopbackLogging(builder.Logging);
 
         //A single explicit HTTPS Listen call — no UseUrls — so there is no plaintext fallback on
         //this host at all.
         builder.WebHost.ConfigureKestrel(options =>
-            options.Listen(IPAddress.Loopback, port: 0, listenOptions => listenOptions.UseHttps(certificate)));
+            LoopbackKestrel.ConfigureLoopbackListener(options, certificate));
 
         global::Microsoft.AspNetCore.Builder.WebApplication app = builder.Build();
 
@@ -242,6 +244,9 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
             //are wired because Validate requires them for any host.
             SaveFlowStateAsync = (tenantId, flowId, state, stepCount, ctx, ct) =>
                 ValueTask.CompletedTask,
+            //The (FlowState?) cast is load-bearing: ValueTask.FromResult<TResult> infers TResult from
+            //the argument alone, and a bare null here has no natural type to give the tuple a
+            //(FlowState?, int) shape at all.
             LoadFlowStateAsync = (tenantId, flowId, ctx, ct) =>
                 ValueTask.FromResult(((FlowState?)null, 0)),
 
@@ -249,7 +254,7 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
                 PolicyProfiles.DefaultResolvePolicyAsync((ClientRecord)reg, ctx, ct),
             ResolveCapabilitiesAsync = DefaultCapabilityResolver.ResolveAsync,
             InspectAsync = DefaultInspector.NoOpAsync,
-            GenerateIdentifierAsync = DefaultIdentifierGenerator.ForTimeProvider(Integration.TimeProvider),
+            GenerateIdentifierAsync = DefaultIdentifierGenerator.For(Integration.TimeProvider, TestEntropy.NewCounterStream(), BaseMemoryPool.Shared),
             ResolveSubjectIdentifierAsync = DefaultSubjectIdentifierResolver.PublicAsync,
 
             //RFC 9728 §3: the metadata URL is formed by inserting the
@@ -267,7 +272,8 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
                     AuthorizationServers = advertisedAuthorizationServers,
                     ScopesSupported = requiredScope is not null ? [requiredScope] : null,
                     BearerMethodsSupported = [BearerMethodValues.Header]
-                })
+                }),
+            MemoryPool = BaseMemoryPool.Shared
         };
 
         EndpointServer server = new()

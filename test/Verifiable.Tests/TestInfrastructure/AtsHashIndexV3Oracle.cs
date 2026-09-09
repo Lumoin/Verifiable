@@ -4,6 +4,8 @@ using System.Formats.Asn1;
 using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
+using Microsoft.Extensions.Time.Testing;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.TestInfrastructure;
 
@@ -18,7 +20,7 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// <see cref="CmsStructureOracle"/> — the hand-written tag and length walker of the augmentation tests — rather
 /// than through the production walker, the hash-index encoding is written by an <see cref="AsnWriter"/> in this
 /// file, and every hash value is taken through the BouncyCastle digest implementation
-/// (<see cref="BouncyCastleCryptographicFunctions.ComputeDigest"/>), which is a different implementation from
+/// (<see cref="BouncyCastleCryptographicFunctionsAdapter.ComputeDigest"/>), which is a different implementation from
 /// the one the test host registers for the SHA family and therefore an independent answer to the same question.
 /// Digests are library carriers, never hand-rolled hashing.
 /// </para>
@@ -223,7 +225,7 @@ internal static class AtsHashIndexV3Oracle
     /// <param name="algorithm">The algorithm to hash under.</param>
     /// <returns>The digest carrier; the caller disposes it.</returns>
     internal static DigestValue Hash(ReadOnlySpan<byte> input, PkiDigestAlgorithm algorithm) =>
-        BouncyCastleCryptographicFunctions.ComputeDigest(input, algorithm.OutputByteLength, algorithm.DigestTag, BaseMemoryPool.Shared).Result;
+        BouncyCastleCryptographicFunctions.ComputeDigest(input, algorithm.OutputByteLength, algorithm.DigestTag, BaseMemoryPool.Shared, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch)).Result;
 
 
     /// <summary>

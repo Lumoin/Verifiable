@@ -81,6 +81,9 @@ internal sealed class AesSecureMessagingSessionTests
     }
 
 
+    /// <summary>Encrypts <paramref name="plaintext"/> and returns a plain byte copy; <c>result</c> is
+    /// disposed in the <see langword="finally"/> block because a <see langword="using"/> declaration cannot
+    /// target a tuple-deconstruction assignment.</summary>
     private async Task<byte[]> EncryptAsync(byte[] plaintext, string keyHex, byte[] iv)
     {
         SymmetricEncryptDelegate encrypt = Resolve<SymmetricEncryptDelegate>();
@@ -98,6 +101,9 @@ internal sealed class AesSecureMessagingSessionTests
     }
 
 
+    /// <summary>Decrypts <paramref name="ciphertext"/> and returns a plain byte copy; <c>result</c> is
+    /// disposed in the <see langword="finally"/> block because a <see langword="using"/> declaration cannot
+    /// target a tuple-deconstruction assignment.</summary>
     private async Task<byte[]> DecryptAsync(byte[] ciphertext, string keyHex, byte[] iv)
     {
         SymmetricDecryptDelegate decrypt = Resolve<SymmetricDecryptDelegate>();
@@ -115,6 +121,9 @@ internal sealed class AesSecureMessagingSessionTests
     }
 
 
+    /// <summary>Computes the CMAC over <paramref name="message"/> and returns a plain byte copy; <c>result</c>
+    /// is disposed in the <see langword="finally"/> block because a <see langword="using"/> declaration
+    /// cannot target a tuple-deconstruction assignment.</summary>
     private async Task<byte[]> ComputeMacAsync(byte[] message, string keyHex)
     {
         ComputeBlockCipherMacDelegate compute = Resolve<ComputeBlockCipherMacDelegate>();

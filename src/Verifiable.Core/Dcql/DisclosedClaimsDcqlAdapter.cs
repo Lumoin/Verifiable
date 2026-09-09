@@ -32,17 +32,24 @@ public static class DisclosedClaimsDcqlAdapter
     /// Builds a metadata extractor whose <see cref="DcqlCredentialMetadata.AvailablePaths"/>
     /// are exactly the disclosed paths. <see cref="DcqlCredentialMetadata.Format"/> /
     /// <see cref="DcqlCredentialMetadata.CredentialType"/> /
-    /// <see cref="DcqlCredentialMetadata.Issuer"/> come from the supplied values — the
-    /// verifier knows them from the per-format parse and trust resolution. The format
+    /// <see cref="DcqlCredentialMetadata.AdditionalTypes"/> /
+    /// <see cref="DcqlCredentialMetadata.TrustedAuthorityEvidence"/> come from the supplied values —
+    /// the verifier knows them from the per-format parse and trust resolution. The format
     /// MUST equal the credential query's <c>format</c> or the evaluator reports a
-    /// format mismatch.
+    /// format mismatch. There are no optional strings here: a credential the parse
+    /// found no type evidence for supplies <see langword="null"/>/empty, and one the trust
+    /// resolution surfaced none for supplies <see langword="null"/> evidence, and
+    /// <see cref="DcqlEvaluator"/> fails the corresponding constraint closed rather than
+    /// being told to skip it.
     /// </summary>
     public static DcqlMetadataExtractor<IReadOnlyDictionary<CredentialPath, object?>> CreateMetadataExtractor(
         string format,
-        string? credentialType = null,
-        string? issuer = null)
+        string? credentialType,
+        IReadOnlySet<string> additionalTypes,
+        TrustedAuthorityEvidence? trustedAuthorityEvidence)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(format);
+        ArgumentNullException.ThrowIfNull(additionalTypes);
 
         return disclosed =>
         {
@@ -52,7 +59,8 @@ public static class DisclosedClaimsDcqlAdapter
             {
                 Format = format,
                 CredentialType = credentialType,
-                Issuer = issuer,
+                AdditionalTypes = additionalTypes,
+                TrustedAuthorityEvidence = trustedAuthorityEvidence,
                 AvailablePaths = new HashSet<CredentialPath>(disclosed.Keys)
             };
         };

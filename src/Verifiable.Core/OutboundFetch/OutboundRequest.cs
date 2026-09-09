@@ -1,5 +1,5 @@
 using System;
-using System.Collections.Generic;
+using Verifiable.Core.Transport;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Core.OutboundFetch;
@@ -30,10 +30,6 @@ namespace Verifiable.Core.OutboundFetch;
 /// </remarks>
 public sealed record OutboundRequest
 {
-    internal static IReadOnlyDictionary<string, string> EmptyHeaders { get; } =
-        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-
     /// <summary>The absolute URL to contact. Validated against the policy before each hop.</summary>
     public required Uri Target { get; init; }
 
@@ -43,8 +39,8 @@ public sealed record OutboundRequest
     /// </summary>
     public required string Method { get; init; }
 
-    /// <summary>Request headers (case-insensitive). Defaults to none.</summary>
-    public IReadOnlyDictionary<string, string> Headers { get; init; } = EmptyHeaders;
+    /// <summary>Request headers. Defaults to <see cref="HttpHeaderSet.Empty"/>.</summary>
+    public HttpHeaderSet Headers { get; init; } = HttpHeaderSet.Empty;
 
     /// <summary>
     /// The request body for methods that carry one (e.g. <c>POST</c>), or

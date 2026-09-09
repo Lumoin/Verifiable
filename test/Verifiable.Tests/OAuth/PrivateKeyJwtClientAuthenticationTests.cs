@@ -32,8 +32,8 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
     private const string Issuer = "https://issuer.test/tenant-a";
     private const string SigningKeyId = "test-client-key-1";
 
-    private static readonly DateTimeOffset Now = DateTimeOffset.FromUnixTimeSeconds(1_311_280_970);
-    private static readonly TimeSpan Skew = TimeSpan.FromSeconds(60);
+    private static DateTimeOffset Now { get; } = DateTimeOffset.FromUnixTimeSeconds(1_311_280_970);
+    private static TimeSpan Skew { get; } = TimeSpan.FromSeconds(60);
 
     public TestContext TestContext { get; set; } = null!;
 

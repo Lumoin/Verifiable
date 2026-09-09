@@ -973,7 +973,7 @@ public static class OcspResponseVerification
             WellKnownOids.MlDsa44 => (CryptoAlgorithm.MlDsa44, MlDsa44PublicKeyLength),
             WellKnownOids.MlDsa65 => (CryptoAlgorithm.MlDsa65, MlDsa65PublicKeyLength),
             WellKnownOids.MlDsa87 => (CryptoAlgorithm.MlDsa87, MlDsa87PublicKeyLength),
-            _ => ((CryptoAlgorithm, int)?)null
+            _ => null
         };
 
         if(resolved is null)
@@ -1041,7 +1041,7 @@ public static class OcspResponseVerification
             WellKnownOids.Sha256WithRsaEncryption => CryptoAlgorithm.RsaSha256,
             WellKnownOids.Sha384WithRsaEncryption => CryptoAlgorithm.RsaSha384,
             WellKnownOids.Sha512WithRsaEncryption => CryptoAlgorithm.RsaSha512,
-            _ => (CryptoAlgorithm?)null
+            _ => null
         };
 
         if(algorithm is null)

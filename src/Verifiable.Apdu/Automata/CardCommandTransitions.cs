@@ -14,11 +14,11 @@ namespace Verifiable.Apdu.Automata;
 /// <remarks>
 /// <para>
 /// The function performs no I/O, reads no time, and uses no randomness — the only buffer-touching work
-/// (parsing commands, framing responses) happens in <see cref="CardSimulator"/>. This slice serves the
-/// plaintext read path: SELECT chooses the current elementary file, and READ BINARY returns octets from
-/// it. Access-control gating (refusing protected files until BAC/PACE has established Secure Messaging)
-/// is layered in here when those responders are added, the way the TPM simulator gates on its lifecycle
-/// phase. The automaton never halts in this slice — a transition is defined for every input — so a
+/// (parsing commands, framing responses) happens in <see cref="CardSimulator"/>. Only the plaintext read
+/// path is modelled: SELECT chooses the current elementary file, and READ BINARY returns octets from
+/// it; access-control gating (refusing protected files until BAC/PACE has established Secure Messaging)
+/// is not modelled, the way the TPM simulator instead gates on its lifecycle phase. The automaton never
+/// halts — a transition is defined for every input — so a
 /// returned <see langword="null"/> would signal a genuinely unexpected input.
 /// </para>
 /// </remarks>
@@ -610,7 +610,7 @@ public static class CardCommandTransitions
 
 
     /// <summary>
-    /// Rejects a command whose instruction this slice does not model.
+    /// Rejects a command whose instruction the simulator does not model.
     /// </summary>
     private static TransitionResult<CardSimulatorState, CardStackSymbol> OnUnsupportedCommand(CardSimulatorState state, byte instruction) =>
         Reject(state, StatusWord.InstructionNotSupported, $"Unsupported:0x{instruction:X2}");
@@ -624,7 +624,7 @@ public static class CardCommandTransitions
 
 
     /// <summary>
-    /// Builds a transition that leaves the stack unchanged (this slice uses only the sentinel).
+    /// Builds a transition that leaves the stack unchanged (only the sentinel is used).
     /// </summary>
     private static TransitionResult<CardSimulatorState, CardStackSymbol> Transition(CardSimulatorState nextState, string label) =>
         new(nextState, StackAction<CardStackSymbol>.None, label);

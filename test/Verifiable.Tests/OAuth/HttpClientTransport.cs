@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.Net.Http;
 using System.Text;
 using Verifiable.JCose;
@@ -200,22 +199,28 @@ internal static class HttpClientTransport
         string body = await response.Content
             .ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
 
-        ImmutableDictionary<string, string>.Builder headerBuilder =
-            ImmutableDictionary.CreateBuilder<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        //Both response.Headers and response.Content.Headers carry headers
-        //the OAuth client may want to read — Cache-Control and DPoP-Nonce
-        //come back on response.Headers; Content-Type comes back on
-        //response.Content.Headers. Iterate both and merge; duplicate keys
-        //take last-write-wins (rare in practice for OAuth flows).
+        //Both response.Headers and response.Content.Headers carry headers the OAuth client may want to
+        //read — Cache-Control and DPoP-Nonce come back on response.Headers; Content-Type comes back on
+        //response.Content.Headers. Both are flattened into one ordered pair list and grouped by
+        //HttpHeaderSet.FromReceived, so a repeated field line (RFC 9110 §5.3) is kept as multiple values
+        //in received order rather than comma-joined, and a hostile line is sanitized rather than thrown.
+        List<(string Name, string Value)> pairs = [];
         foreach(KeyValuePair<string, IEnumerable<string>> header in response.Headers)
         {
-            headerBuilder[header.Key] = string.Join(", ", header.Value);
+            foreach(string value in header.Value)
+            {
+                pairs.Add((header.Key, value));
+            }
         }
         foreach(KeyValuePair<string, IEnumerable<string>> header in response.Content.Headers)
         {
-            headerBuilder[header.Key] = string.Join(", ", header.Value);
+            foreach(string value in header.Value)
+            {
+                pairs.Add((header.Key, value));
+            }
         }
+
+        HttpHeaderSet headers = HttpHeaderSet.FromReceived(pairs);
 
         //W3C Trace Context response headers are lifted into TransportMetadata under
         //the documented HttpResponseDataKeys constants so that
@@ -224,7 +229,7 @@ internal static class HttpClientTransport
         //headers only when its deployment chooses to echo trace context on
         //responses; when absent, TransportMetadata stays null.
         Dictionary<string, string>? transportMetadata = null;
-        if(headerBuilder.TryGetValue(TraceParentHeaderName, out string? traceParent))
+        if(headers.TryGetValue(TraceParentHeaderName, out string? traceParent))
         {
             transportMetadata = new Dictionary<string, string>(StringComparer.Ordinal)
             {
@@ -232,7 +237,7 @@ internal static class HttpClientTransport
             };
         }
 
-        if(headerBuilder.TryGetValue(TraceStateHeaderName, out string? traceState))
+        if(headers.TryGetValue(TraceStateHeaderName, out string? traceState))
         {
             transportMetadata ??= new Dictionary<string, string>(StringComparer.Ordinal);
             transportMetadata[HttpResponseDataKeys.TraceState] = traceState;
@@ -243,7 +248,7 @@ internal static class HttpClientTransport
             Body = body,
             StatusCode = (int)response.StatusCode,
             TransportMetadata = transportMetadata,
-            Headers = new ResponseHeaders { Values = headerBuilder.ToImmutable() }
+            Headers = new ResponseHeaders { Headers = headers }
         };
     }
 }

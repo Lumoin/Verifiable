@@ -14,7 +14,7 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// Value-type wrapper around the prefix string (e.g. <c>x509_san_dns</c>,
 /// <c>openid_federation</c>). Canonical identity is ordinal-string
 /// equality on <see cref="Value"/>. Same shape as
-/// <see cref="Verifiable.OAuth.Federation.EntityIdentifier"/>,
+/// <see cref="Verifiable.Core.Model.Federation.EntityIdentifier"/>,
 /// <see cref="Verifiable.OAuth.Federation.EntityTypeIdentifier"/>,
 /// <see cref="Verifiable.OAuth.Server.CapabilityIdentifier"/>, and
 /// <see cref="Verifiable.OAuth.Federation.MetadataPolicyOperator"/> —

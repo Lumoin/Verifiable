@@ -545,6 +545,13 @@ public static class CAdESSignatureFacts
     /// create (clause 6.3, an opt-in attribute) and is reached through the signed-attribute-value admission above,
     /// so it is not among the over-strict placements.
     /// </para>
+    /// <para>
+    /// <strong>Manual disposal, not a <see langword="using"/> declaration.</strong> <c>hashIndex</c> is declared
+    /// <see langword="null"/> ahead of the try body so <see cref="ArchiveTimestampV3.ReadHashIndexFromToken"/>'s
+    /// own malformed-input exceptions are caught by this method's <see langword="catch"/> clauses (a
+    /// <see langword="using"/> declaration's initializer runs outside any enclosing try); the
+    /// <see langword="finally"/> below disposes it on every exit path.
+    /// </para>
     /// </remarks>
     private static async ValueTask<bool> StateArchiveTimestampProtectsObjectAsync(
         TimestampProtectedObjectContext context,

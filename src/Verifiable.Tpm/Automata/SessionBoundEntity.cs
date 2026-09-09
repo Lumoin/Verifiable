@@ -11,15 +11,15 @@ namespace Verifiable.Tpm.Automata;
 /// value (trailing zeros stripped) XORed into the tail, computed once at
 /// <c>TPM2_StartAuthSession()</c> and held for the session's whole life — the simulator's model of
 /// the reference implementation's <c>SESSION.u1.boundEntity</c> member (TPM 2.0 Library Part 4,
-/// <c>SessionComputeBoundEntity()</c>; Part 1, clause 17.6.10: "the authorization value is combined
+/// <c>SessionComputeBoundEntity()</c>; Part 1, clause 16.6.10: "the authorization value is combined
 /// with the Name and stored in the SESSION boundEntity member").
 /// </summary>
 /// <remarks>
 /// <para>
 /// Folding the authValue into the recorded value — rather than recording the Name alone — is what
-/// makes the bind-omission decision (Part 1, clause 17.6.10 equations 21/22) sensitive to the bound
+/// makes the bind-omission decision (Part 1, clause 16.6.10 equations 21/22) sensitive to the bound
 /// entity's CURRENT authorization value: rotating the entity's authValue changes the recomputed value,
-/// the comparison fails, and the binding ends, exactly as clause 17.6.10 requires ("If the
+/// the comparison fails, and the binding ends, exactly as clause 16.6.10 requires ("If the
 /// administrator for a persistent object changes the authorization, sessions bound to the old
 /// authorization should no longer be valid") and exactly what defeats the clause's NV Index
 /// "squatting" attack (an attacker who recreates an identically-Named Index under an authValue they
@@ -87,7 +87,7 @@ public sealed class SessionBoundEntity: SensitiveMemory
     /// the full padded buffer.
     /// </summary>
     /// <param name="entityName">The bind entity's Name in this model's recorded bind form; never empty (an unbound session records <see cref="Unbound"/> instead).</param>
-    /// <param name="strippedAuthValue">The entity's authorization value with trailing zeros already removed (Part 1, clause 17.6.4.3; the reference strips unconditionally in <c>EntityGetAuthValue()</c>).</param>
+    /// <param name="strippedAuthValue">The entity's authorization value with trailing zeros already removed (Part 1, clause 16.6.4.3; the reference strips unconditionally in <c>EntityGetAuthValue()</c>).</param>
     /// <param name="pool">The memory pool the folded value's pinned storage is rented from.</param>
     /// <returns>The computed bound-entity value; the caller owns it.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="entityName"/> is empty or either input exceeds <see cref="BindValueSize"/> octets.</exception>
@@ -107,6 +107,41 @@ public sealed class SessionBoundEntity: SensitiveMemory
 
         IMemoryOwner<byte> storage = pool.Rent(BindValueSize, AllocationKind.Pinned);
         Fold(entityName, strippedAuthValue, storage.Memory.Span[..BindValueSize]);
+
+        return new SessionBoundEntity(storage);
+    }
+
+    /// <summary>
+    /// Rebuilds a bound-entity value from the exact octets a saved session context carries — the deserialization
+    /// counterpart of <see cref="Compute"/> for a value a saved <c>TPMS_CONTEXT</c> restores rather than
+    /// recomputes: a session's context blob retains only the already-folded <see cref="BindValueSize"/>-octet
+    /// value (TPM 2.0 Library Part 1, clause 27.5), never the bind entity's Name and current authValue
+    /// <see cref="Compute"/> would need to re-derive it.
+    /// </summary>
+    /// <param name="bind">
+    /// The bound-entity octets exactly as the context blob carried them: either empty, adopted as
+    /// <see cref="Unbound"/>, or exactly <see cref="BindValueSize"/> octets, copied into a freshly rented
+    /// carrier.
+    /// </param>
+    /// <param name="pool">The memory pool the rebuilt carrier's pinned storage is rented from.</param>
+    /// <returns>The rebuilt bound-entity value; the caller owns it.</returns>
+    /// <exception cref="ArgumentException"><paramref name="bind"/> is neither empty nor exactly <see cref="BindValueSize"/> octets.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="pool"/> is <see langword="null"/>.</exception>
+    internal static SessionBoundEntity FromMarshaled(ReadOnlySpan<byte> bind, BaseMemoryPool pool)
+    {
+        ArgumentNullException.ThrowIfNull(pool);
+        if(bind.IsEmpty)
+        {
+            return Unbound;
+        }
+
+        if(bind.Length != BindValueSize)
+        {
+            throw new ArgumentException($"A marshaled bound-entity value must be either empty or exactly {BindValueSize} octets.", nameof(bind));
+        }
+
+        IMemoryOwner<byte> storage = pool.Rent(BindValueSize, AllocationKind.Pinned);
+        bind.CopyTo(storage.Memory.Span[..BindValueSize]);
 
         return new SessionBoundEntity(storage);
     }

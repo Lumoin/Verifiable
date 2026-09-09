@@ -157,18 +157,22 @@ internal static class DpopTokenEndpointValidation
             now + WellKnownDpopValues.DefaultReplayWindow,
             cancellationToken).ConfigureAwait(false);
 
-        if(jtiOutcome == JtiReplayOutcome.Replayed)
+        ServerHttpResponse? jtiFailure = jtiOutcome switch
         {
-            return DpopValidationOutcome.Failure(ServerHttpResponse.BadRequest(
+            JtiReplayOutcome.Replayed => ServerHttpResponse.BadRequest(
                 OAuthErrors.InvalidDpopProof,
-                "DPoP proof jti has been seen previously."));
-        }
-
-        if(jtiOutcome == JtiReplayOutcome.StoreUnavailable)
-        {
-            return DpopValidationOutcome.Failure(ServerHttpResponse.ServerError(
+                "DPoP proof jti has been seen previously."),
+            JtiReplayOutcome.Unacceptable => ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidDpopProof,
+                "DPoP proof jti exceeds the length the replay guard can track."),
+            JtiReplayOutcome.StoreUnavailable => ServerHttpResponse.ServerError(
                 OAuthErrors.ServerError,
-                "DPoP proof jti replay defense is required by policy but no jti store is configured."));
+                "DPoP proof jti replay defense is required by policy but no jti store is configured."),
+            _ => null
+        };
+        if(jtiFailure is not null)
+        {
+            return DpopValidationOutcome.Failure(jtiFailure);
         }
 
         ConfirmationMethod? confirmation = proofResult.JwkThumbprint is not null

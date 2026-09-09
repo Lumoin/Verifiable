@@ -27,7 +27,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// TPM operations.
 /// </para>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, section 10.8.5, Table 117.
+/// Specification reference: TPM 2.0 Library Part 2, clause 10.7.5, Table 120.
 /// </para>
 /// </remarks>
 /// <param name="Handle">A permanent handle identifying the ACT.</param>

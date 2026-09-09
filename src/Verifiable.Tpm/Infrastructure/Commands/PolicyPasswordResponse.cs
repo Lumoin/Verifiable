@@ -1,0 +1,20 @@
+namespace Verifiable.Tpm.Infrastructure.Commands;
+
+/// <summary>
+/// Response for TPM2_PolicyPassword. This command has no response handles and no response parameters, so the
+/// response is the 10-byte header alone.
+/// </summary>
+/// <remarks>
+/// See TPM 2.0 Library Part 3, clause 23.18.
+/// </remarks>
+public sealed class PolicyPasswordResponse: ITpmWireType
+{
+    /// <summary>
+    /// The shared instance returned for a successful, parameterless response.
+    /// </summary>
+    public static PolicyPasswordResponse Instance { get; } = new();
+
+    private PolicyPasswordResponse()
+    {
+    }
+}

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Verifiable.OAuth.Server;
 
 namespace Verifiable.OAuth.Server.States;
 
@@ -25,4 +26,11 @@ public sealed record JtiSeenState: FlowState
 
     /// <summary>When the jti was first observed.</summary>
     public required DateTimeOffset SeenAt { get; init; }
+
+    /// <summary>
+    /// The one <c>(issuer, jti)</c> correlation key this state is indexed under, composed
+    /// through <see cref="JtiReplayGuard.CorrelationKey"/> so a host's save switch never
+    /// re-derives the shape by hand.
+    /// </summary>
+    public string CorrelationKey => JtiReplayGuard.CorrelationKey(Issuer, Jti);
 }

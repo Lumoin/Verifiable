@@ -60,9 +60,10 @@ public static class MicrosoftHmacFunctions
         int outputByteLength,
         Tag tag,
         BaseMemoryPool pool,
+        TimeProvider timeProvider,
         FrozenDictionary<string, object>? context = null,
         CancellationToken cancellationToken = default) =>
-        ComputeHmacAsync(new ReadOnlySequence<byte>(message), keyBytes, outputByteLength, tag, pool, context, cancellationToken);
+        ComputeHmacAsync(new ReadOnlySequence<byte>(message), keyBytes, outputByteLength, tag, pool, timeProvider, context, cancellationToken);
 
 
     /// <summary>
@@ -77,11 +78,13 @@ public static class MicrosoftHmacFunctions
         int outputByteLength,
         Tag tag,
         BaseMemoryPool pool,
+        TimeProvider timeProvider,
         FrozenDictionary<string, object>? context = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(tag);
         ArgumentNullException.ThrowIfNull(pool);
+        ArgumentNullException.ThrowIfNull(timeProvider);
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -155,7 +158,7 @@ public static class MicrosoftHmacFunctions
 
         HmacValue result = new(owner, stamped, activity);
         CryptoEvent evt = HmacComputedEvent.Create(
-            algorithmName.Name ?? "Unknown", (int)message.Length, outputByteLength);
+            algorithmName.Name ?? "Unknown", (int)message.Length, outputByteLength, timeProvider: timeProvider);
 
         return ValueTask.FromResult<(HmacValue, CryptoEvent?)>((result, evt));
     }
@@ -168,9 +171,10 @@ public static class MicrosoftHmacFunctions
         ReadOnlyMemory<byte> expectedMac,
         Tag tag,
         BaseMemoryPool pool,
+        TimeProvider timeProvider,
         FrozenDictionary<string, object>? context = null,
         CancellationToken cancellationToken = default) =>
-        VerifyHmacAsync(new ReadOnlySequence<byte>(message), keyBytes, expectedMac, tag, pool, context, cancellationToken);
+        VerifyHmacAsync(new ReadOnlySequence<byte>(message), keyBytes, expectedMac, tag, pool, timeProvider, context, cancellationToken);
 
 
     /// <summary>
@@ -184,11 +188,13 @@ public static class MicrosoftHmacFunctions
         ReadOnlyMemory<byte> expectedMac,
         Tag tag,
         BaseMemoryPool pool,
+        TimeProvider timeProvider,
         FrozenDictionary<string, object>? context = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(tag);
         ArgumentNullException.ThrowIfNull(pool);
+        ArgumentNullException.ThrowIfNull(timeProvider);
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -269,7 +275,7 @@ public static class MicrosoftHmacFunctions
             ? VerificationOutcome.Valid
             : VerificationOutcome.Invalid;
         CryptoEvent evt = HmacVerifiedEvent.Create(
-            algorithmName.Name ?? "Unknown", outcome, (int)message.Length);
+            algorithmName.Name ?? "Unknown", outcome, (int)message.Length, timeProvider: timeProvider);
 
         _ = stamped;
         _ = context;

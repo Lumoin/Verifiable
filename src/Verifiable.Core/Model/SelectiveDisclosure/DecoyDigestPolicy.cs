@@ -1,5 +1,5 @@
 using System;
-using System.Security.Cryptography;
+using Verifiable.Cryptography;
 
 namespace Verifiable.Core.Model.SelectiveDisclosure;
 
@@ -48,22 +48,37 @@ public static class DecoyDigestPolicy
     /// <summary>
     /// Adds a cryptographically-random number of decoy digests in the inclusive range
     /// <paramref name="minInclusive"/>..<paramref name="maxInclusive"/>, drawn independently at each
-    /// <c>_sd</c> location.
+    /// <c>_sd</c> location from <paramref name="fillEntropy"/>.
     /// </summary>
     /// <param name="minInclusive">The minimum number of decoys (inclusive). Must be non-negative.</param>
     /// <param name="maxInclusive">The maximum number of decoys (inclusive). Must be at least <paramref name="minInclusive"/>.</param>
+    /// <param name="fillEntropy">The entropy source the count is drawn from. Required.</param>
     /// <remarks>
-    /// The count is drawn with <see cref="RandomNumberGenerator.GetInt32(int, int)"/> so the library,
-    /// not the caller, owns the randomization. Drawing per location obscures the per-object claim count
-    /// independently.
+    /// Four bytes are drawn from <paramref name="fillEntropy"/> and folded to an unsigned 32-bit integer,
+    /// then reduced modulo the range width and offset by <paramref name="minInclusive"/> — a decoy count
+    /// only needs to be UNPREDICTABLE to an adversary counting real disclosures, not uniformly distributed
+    /// across the range; the small bias a modulo reduction introduces near the range's edges is immaterial
+    /// for that purpose, and drawing four bytes rather than calling into a bounded-integer API keeps the
+    /// draw expressed directly in terms of the caller-supplied <see cref="FillEntropyDelegate"/> the
+    /// library's other entropy consumers already use, rather than the platform CSPRNG's own bounded-range
+    /// helper. Drawing per location obscures the per-object claim count independently.
     /// </remarks>
-    public static DecoyDigestCountDelegate Random(int minInclusive, int maxInclusive)
+    public static DecoyDigestCountDelegate Random(int minInclusive, int maxInclusive, FillEntropyDelegate fillEntropy)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(minInclusive);
         ArgumentOutOfRangeException.ThrowIfLessThan(maxInclusive, minInclusive);
+        ArgumentNullException.ThrowIfNull(fillEntropy);
 
-        //GetInt32's upper bound is exclusive; +1 makes maxInclusive reachable.
-        return _ => RandomNumberGenerator.GetInt32(minInclusive, maxInclusive + 1);
+        uint rangeWidth = (uint)(maxInclusive - minInclusive) + 1;
+
+        return _ =>
+        {
+            Span<byte> draw = stackalloc byte[4];
+            fillEntropy(draw);
+            uint drawnValue = BitConverter.ToUInt32(draw);
+
+            return minInclusive + (int)(drawnValue % rangeWidth);
+        };
     }
 
 

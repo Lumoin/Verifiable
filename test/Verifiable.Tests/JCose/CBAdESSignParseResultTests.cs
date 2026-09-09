@@ -1,5 +1,6 @@
 using System;
-using System.Formats.Cbor;
+using System.Buffers;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Cbor;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
@@ -110,8 +111,9 @@ internal sealed class CBAdESSignParseResultTests
     [TestMethod]
     public void ParseCBAdESSignFailsClosedOnWrongTag()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
-        writer.WriteTag((CborTag)CoseTags.Sign1);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
+        writer.WriteTag(new CborTag((ulong)CoseTags.Sign1));
         writer.WriteStartArray(4);
         writer.WriteByteString([0xA0]);
         writer.WriteStartMap(0);
@@ -127,7 +129,7 @@ internal sealed class CBAdESSignParseResultTests
         writer.WriteEndArray();
         writer.WriteEndArray();
 
-        using CBAdESSignParseResult result = CBAdESSignatureSerialization.ParseCBAdESSign(writer.Encode(), BaseMemoryPool.Shared);
+        using CBAdESSignParseResult result = CBAdESSignatureSerialization.ParseCBAdESSign(writerBuffer.WrittenSpan.ToArray(), BaseMemoryPool.Shared);
 
         Assert.IsFalse(result.IsSuccess, "A tag other than 98 (here, COSE_Sign1_Tagged) must fail closed, never silently accepted.");
     }
@@ -164,7 +166,8 @@ internal sealed class CBAdESSignParseResultTests
     [TestMethod]
     public void ParseCBAdESSignFailsClosedOnZeroSigners()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartArray(4);
         writer.WriteByteString([0xA0]);
         writer.WriteStartMap(0);
@@ -174,7 +177,7 @@ internal sealed class CBAdESSignParseResultTests
         writer.WriteEndArray();
         writer.WriteEndArray();
 
-        using CBAdESSignParseResult result = CBAdESSignatureSerialization.ParseCBAdESSign(writer.Encode(), BaseMemoryPool.Shared);
+        using CBAdESSignParseResult result = CBAdESSignatureSerialization.ParseCBAdESSign(writerBuffer.WrittenSpan.ToArray(), BaseMemoryPool.Shared);
 
         Assert.IsFalse(result.IsSuccess, "signatures: [+ COSE_Signature] must be non-empty; a zero-signer array must fail closed.");
     }
@@ -217,11 +220,12 @@ internal sealed class CBAdESSignParseResultTests
         (byte[] ProtectedHeaderBytes, bool signerHasUHeaders, byte[] SignatureBytes)[] signers,
         byte[]? counterSignatureOpaqueValue)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
 
         if(tagged)
         {
-            writer.WriteTag((CborTag)CoseTags.Sign);
+            writer.WriteTag(new CborTag((ulong)CoseTags.Sign));
         }
 
         writer.WriteStartArray(4);
@@ -272,7 +276,7 @@ internal sealed class CBAdESSignParseResultTests
 
         writer.WriteEndArray();
 
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -280,12 +284,13 @@ internal sealed class CBAdESSignParseResultTests
     /// <returns>The encoded map bytes.</returns>
     private static byte[] EncodeUnknownUHeaderInstance()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(9999);
         writer.WriteInt32(1);
         writer.WriteEndMap();
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -294,11 +299,12 @@ internal sealed class CBAdESSignParseResultTests
     /// <returns>The encoded map bytes.</returns>
     private static byte[] EncodeFullCounterSignatureUHeaderInstance(byte[] counterSignatureValueBytes)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(CBAdESUnsignedHeaderElement.FullCounterSignatureLabel);
         writer.WriteEncodedValue(counterSignatureValueBytes);
         writer.WriteEndMap();
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 }

@@ -35,6 +35,9 @@ internal class FakeTpmHandleTests
                 bool isVerified = await FakeTpmClient.VerifyAsync(handle, dataToVerify.Span, signature.Span)
                     .ConfigureAwait(false);
 
+                //The (CryptoEvent?) cast is kept rather than relying on inference: a bare null literal
+                //here has no natural type of its own, and this async lambda's own inferred return type
+                //must exactly match VerificationDelegate's (bool, CryptoEvent?) tuple shape.
                 return (isVerified, (CryptoEvent?)null);
             };
 

@@ -16,12 +16,14 @@ using Verifiable.Tpm.Infrastructure.Sessions;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
+using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
 /// <summary>
 /// Independent challenger-side oracle for the RSA arm of the TPM2_MakeCredential / TPM2_ActivateCredential seed
-/// transport (TPM 2.0 Library Part 1, clause 24; Annex B.3 "RSADP", B.4 "RSAES_OAEP", B.10.3, B.10.4; RFC 8017
+/// transport (TPM 2.0 Library Part 1, clause 21; clauses 43.3 "RSADP", 43.4 "RSAES_OAEP", 20.3.2.3, 21.3; RFC 8017
 /// §7.1.1 EME-OAEP encoding), the RSA counterpart of <see cref="TpmInHouseSimulatorCredentialOracleTests"/>.
 /// </summary>
 /// <remarks>
@@ -47,7 +49,7 @@ namespace Verifiable.Tests.Tpm;
 /// framework CFB's lack of short-final-block handling (see
 /// <see cref="TpmInHouseSimulatorCredentialOracleTests.CredentialSecret"/>'s doc comment for the recorded
 /// rationale, inherited unchanged since the outer wrap does not change between the ECC and RSA arms, TPM 2.0
-/// Library Part 1, clause 24). This file never calls TPM2_MakeCredential(): the credential blob and encrypted
+/// Library Part 1, clause 21). This file never calls TPM2_MakeCredential(): the credential blob and encrypted
 /// secret are assembled here from first principles and driven only through the production
 /// TPM2_ActivateCredential() executor path, so a shared bug in the simulator's own MakeCredential/
 /// ActivateCredential crypto cannot round-trip silently against this oracle.
@@ -57,6 +59,11 @@ namespace Verifiable.Tests.Tpm;
 /// factory exists in this codebase (only the standard endorsement key, <see cref="CreatePrimaryInput.ForRsaEndorsementKey"/>,
 /// which this file uses) — so every test here authorizes <c>keyHandle</c> through the real PolicyA path
 /// (<c>TPM2_PolicySecret()</c> against the Endorsement Hierarchy) rather than a password session.
+/// </para>
+/// <para>
+/// Each test's <c>(blob, blobLength, secret, secretLength)</c> tuple is a tuple-deconstruction target;
+/// <c>blob</c>/<c>secret</c> are disposed in the method's own <see langword="finally"/> block because a
+/// <see langword="using"/> declaration cannot target a tuple-deconstruction assignment.
 /// </para>
 /// </remarks>
 [TestClass]
@@ -80,7 +87,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialOracleTests
     /// <summary>The RSA modulus size in bits used by these tests.</summary>
     private const ushort Rsa2048KeyBits = 2048;
 
-    /// <summary>The credential symmetric key width in bits (Part 1, clause 25.2: AES-128 for the L-1 storage/EK template).</summary>
+    /// <summary>The credential symmetric key width in bits (Part 1, clause 24.2: AES-128 for the L-1 storage/EK template).</summary>
     private const int SymmetricKeyBits = 128;
 
     /// <summary>The credential symmetric key width in octets.</summary>
@@ -89,18 +96,18 @@ internal sealed class TpmInHouseSimulatorRsaCredentialOracleTests
     /// <summary>The AES block size in octets, also the width of the all-zero CFB feedback register (IV).</summary>
     private const int AesBlockSize = 16;
 
-    /// <summary>The KDFa use label for the inner symmetric key (Part 1, clause 24.4, eq. (44)) — shared with the ECC arm.</summary>
+    /// <summary>The KDFa use label for the inner symmetric key (Part 1, clause 21.4, eq. (44)) — shared with the ECC arm.</summary>
     private const string StorageLabel = "STORAGE";
 
-    /// <summary>The KDFa use label for the outer HMAC key (Part 1, clause 24.4, eq. (46)) — shared with the ECC arm.</summary>
+    /// <summary>The KDFa use label for the outer HMAC key (Part 1, clause 21.5, eq. (46)) — shared with the ECC arm.</summary>
     private const string IntegrityLabel = "INTEGRITY";
 
-    /// <summary>The RSA default public exponent (TPM 2.0 Library Part 2, Table 215: <c>exponent = 0</c> wire convention).</summary>
+    /// <summary>The RSA default public exponent (TPM 2.0 Library Part 2, Table 228: <c>exponent = 0</c> wire convention).</summary>
     private static BigInteger PublicExponent { get; } = 65537;
 
     /// <summary>
     /// The OAEP label octets (<c>L</c>): ASCII <c>"IDENTITY"</c> plus a trailing NUL that is part of the
-    /// <c>lhash</c> digest input (TPM 2.0 Library Part 1, Annex B.4, B.10.4).
+    /// <c>lhash</c> digest input (TPM 2.0 Library Part 1, clause 43.4, 21.3).
     /// </summary>
     private static ReadOnlyMemory<byte> OaepLabelOctets { get; } = "IDENTITY\0"u8.ToArray();
 
@@ -127,7 +134,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialOracleTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse ek = await CreateRsaEndorsementKeyAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -179,7 +186,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialOracleTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse ek = await CreateRsaEndorsementKeyAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -203,7 +210,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialOracleTests
                         tpm, registry, pool, ak.ObjectHandle, ek.ObjectHandle, blob.Memory[..blobLength], secret.Memory[..secretLength], ak.Name.Span.ToArray(), ek.Name.Span.ToArray()).ConfigureAwait(false);
 
                     Assert.IsFalse(activateResult.IsSuccess, "A credential blob with a tampered outer HMAC must not activate.");
-                    Assert.AreEqual(TpmRcConstants.TPM_RC_INTEGRITY, activateResult.ResponseCode);
+                    Assert.AreEqual(HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_INTEGRITY, 0), activateResult.ResponseCode, "A tampered outer HMAC must be refused with TPM_RC_INTEGRITY at credentialBlob, parameter 1 of Table 26.");
                 }
                 finally
                 {
@@ -226,7 +233,8 @@ internal sealed class TpmInHouseSimulatorRsaCredentialOracleTests
     /// Verifies that flipping one octet of the OAEP ciphertext is rejected with TPM_RC_INTEGRITY and NOT any
     /// other response code — a regression probe: a naive implementation that reports an OAEP decode
     /// failure directly (a distinct RC, or an unhandled exception) would fail this test, proving the simulator's
-    /// deferred-failure discipline (TPM 2.0 Library Part 1, Annex B.10.3) is actually wired in, not merely
+    /// deferred-failure discipline (the v184 TPM 2.0 Library Part 1, clause A.10.3 rule; v185 keeps its rationale
+    /// at Part 3, clause 13.3.1) is actually wired in, not merely
     /// documented.
     /// </summary>
     [TestMethod]
@@ -234,7 +242,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialOracleTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse ek = await CreateRsaEndorsementKeyAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -260,9 +268,9 @@ internal sealed class TpmInHouseSimulatorRsaCredentialOracleTests
 
                     Assert.IsFalse(activateResult.IsSuccess, "A credential secret with a tampered OAEP ciphertext must not activate.");
                     Assert.AreEqual(
-                        TpmRcConstants.TPM_RC_INTEGRITY,
+                        HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_INTEGRITY, 0),
                         activateResult.ResponseCode,
-                        "An OAEP decode failure must be deferred to the outer-HMAC TPM_RC_INTEGRITY rejection, never surfaced as a distinct code (Part 1, Annex B.10.3).");
+                        "An OAEP decode failure must be deferred to the outer-HMAC TPM_RC_INTEGRITY rejection at credentialBlob, parameter 1 of Table 26, never surfaced as a distinct code (the v184 Part 1, clause A.10.3 rule).");
                 }
                 finally
                 {
@@ -282,8 +290,8 @@ internal sealed class TpmInHouseSimulatorRsaCredentialOracleTests
     }
 
     /// <summary>
-    /// Regression probe for the deferred-failure substitute-seed forgery oracle (TPM 2.0 Library Part 1, Annex
-    /// B.10.3). Mounts the exact attack a <em>fixed</em> substitute seed would enable: the challenger forges an
+    /// Regression probe for the deferred-failure substitute-seed forgery oracle (the v184 TPM 2.0 Library Part 1,
+    /// clause A.10.3 rule; v185 keeps its rationale at Part 3, clause 13.3.1). Mounts the exact attack a <em>fixed</em> substitute seed would enable: the challenger forges an
     /// outer HMAC under the all-zero seed — the value a naive deferral substitutes on OAEP decode failure — using
     /// only public inputs (the activate object's Name), pairs it with a deliberately decode-failing secret (an
     /// all-zero ciphertext, whose recovered OAEP block fails the <c>lHash</c> check), and drives the production
@@ -299,7 +307,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialOracleTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse ek = await CreateRsaEndorsementKeyAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -331,9 +339,9 @@ internal sealed class TpmInHouseSimulatorRsaCredentialOracleTests
                         activateResult.IsSuccess,
                         "A credential forged under the fixed all-zero substitute seed must never activate — that would bypass the endorsement key entirely.");
                     Assert.AreEqual(
-                        TpmRcConstants.TPM_RC_INTEGRITY,
+                        HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_INTEGRITY, 0),
                         activateResult.ResponseCode,
-                        "An OAEP decode failure must derive an unpredictable substitute seed, so the forged outer HMAC fails and activation is rejected with TPM_RC_INTEGRITY (Part 1, Annex B.10.3).");
+                        "An OAEP decode failure must derive an unpredictable substitute seed, so the forged outer HMAC fails and activation is rejected with TPM_RC_INTEGRITY at credentialBlob, parameter 1 of Table 26 (the v184 Part 1, clause A.10.3 rule).");
                 }
                 finally
                 {
@@ -508,7 +516,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialOracleTests
     }
 
     /// <summary>
-    /// Performs raw RSAEP (TPM 2.0 Library Part 1, Annex B.2): <c>c = EM^e mod n</c>, via
+    /// Performs raw RSAEP (TPM 2.0 Library Part 1, clause 43.2): <c>c = EM^e mod n</c>, via
     /// <see cref="BigInteger.ModPow(BigInteger, BigInteger, BigInteger)"/> directly over the EK's exported
     /// modulus and the default public exponent 65537 — no BouncyCastle, no framework RSA.
     /// </summary>
@@ -551,7 +559,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialOracleTests
 
     /// <summary>
     /// Builds the credential blob (TPMS_ID_OBJECT), the outer wrap of TPM2_MakeCredential() (Part 1, clauses
-    /// 24.3-24.6) — identical between the ECC and RSA arms (clause 24 does not branch on the credential key's
+    /// 21.3-21.6) — identical between the ECC and RSA arms (clause 21 does not branch on the credential key's
     /// algorithm), so this mirrors
     /// <see cref="TpmInHouseSimulatorCredentialOracleTests.BuildCredentialBlobAsync"/> exactly: <c>symKey =
     /// KDFa(seed, "STORAGE", objectName, empty, symBits)</c> keys the AES-CFB encryption of the marshaled
@@ -572,7 +580,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialOracleTests
     {
         int innerLength = sizeof(ushort) + credential.Length;
 
-        //symKey = KDFa(SHA256, seed, "STORAGE", objectName, Empty, 128) — Part 1, clause 24.4, eq. (44).
+        //symKey = KDFa(SHA256, seed, "STORAGE", objectName, Empty, 128) — Part 1, clause 21.4, eq. (44).
         using IMemoryOwner<byte> symKeyOwner = await Kdfa.DeriveAsync(
             HashAlgorithmName.SHA256, seed, StorageLabel, objectName, ReadOnlyMemory<byte>.Empty, SymmetricKeyBits, pool, cancellationToken).ConfigureAwait(false);
 
@@ -607,7 +615,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialOracleTests
             symKeyOwner.Memory.Span[..SymmetricKeyBytes].Clear();
         }
 
-        //hmacKey = KDFa(SHA256, seed, "INTEGRITY", Empty, Empty, 256) — Part 1, clause 24.4, eq. (46).
+        //hmacKey = KDFa(SHA256, seed, "INTEGRITY", Empty, Empty, 256) — Part 1, clause 21.5, eq. (46).
         using IMemoryOwner<byte> hmacKeyOwner = await Kdfa.DeriveAsync(
             HashAlgorithmName.SHA256, seed, IntegrityLabel, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, Sha256DigestSize * 8, pool, cancellationToken).ConfigureAwait(false);
 
@@ -621,7 +629,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialOracleTests
 
         try
         {
-            //outerHmac = HMAC_SHA256(hmacKey, encIdentity || objectName) — Part 1, clause 24.4, eq. (47).
+            //outerHmac = HMAC_SHA256(hmacKey, encIdentity || objectName) — Part 1, clause 21.5, eq. (47).
             using HmacValue outerHmac = await CryptographicKeyEvents.ComputeHmacAsync(
                 messageOwner.Memory[..messageLength], hmacKeyOwner.Memory[..Sha256DigestSize], outputByteLength: Sha256DigestSize, tag: HmacTag(), pool: pool, cancellationToken: cancellationToken).ConfigureAwait(false);
 
@@ -666,7 +674,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialOracleTests
     /// <summary>
     /// Copies the OAEP ciphertext into a pooled buffer as the encrypted-secret transport. The RSA arm's
     /// <c>TPM2B_ENCRYPTED_SECRET</c> content has no sub-structure (TPM 2.0 Library Part 2, clauses 11.4.2 and
-    /// 11.4.3, Table 209/210) — unlike the ECC arm's marshaled <c>TPMS_ECC_POINT</c>, the ciphertext IS the
+    /// 11.4.3, Table 223/224) — unlike the ECC arm's marshaled <c>TPMS_ECC_POINT</c>, the ciphertext IS the
     /// content verbatim; <see cref="ActivateCredentialInput.Create"/> supplies the one
     /// <c>TPM2B_ENCRYPTED_SECRET</c> size prefix the wire command carries, so no additional framing belongs here.
     /// </summary>
@@ -729,7 +737,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialOracleTests
 
         using ActivateCredentialInput activateInput = ActivateCredentialInput.Create(activateHandle, keyHandle, credentialBlob.Span, secret.Span, pool);
         using TpmPasswordSession activateAuth = TpmPasswordSession.CreateEmpty(pool);
-        using TpmPolicySession keySession = TpmPolicySession.ForSession(policyHandle, SessionAlg, pool);
+        using TpmPolicySession keySession = TpmPolicySession.ForSession(policyHandle, SessionAlg, TestEntropy.NewCounterStream(), pool);
         ReadOnlyMemory<byte>[] handleNames = [activateName, keyName];
 
         return await TpmCommandExecutor.ExecuteAsync<ActivateCredentialResponse>(
@@ -787,7 +795,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialOracleTests
     /// <returns>The operational simulator.</returns>
     private async Task<TpmSimulator> CreateOperationalAsync(BaseMemoryPool pool)
     {
-        var simulator = new TpmSimulator("tpm-in-house-rsa-credoracle", rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create());
+        var simulator = new TpmSimulator("tpm-in-house-rsa-credoracle", rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await BringOperationalAsync(simulator, pool).ConfigureAwait(false);
 

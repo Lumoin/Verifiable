@@ -11,7 +11,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Response structure (TPM 2.0 Library Part 3, Section 31.16) — the same TPM2B_ATTEST + TPMT_SIGNATURE shape as
+/// Response structure (TPM 2.0 Library Part 3, clause 31.16) — the same TPM2B_ATTEST + TPMT_SIGNATURE shape as
 /// TPM2_Certify's and TPM2_Quote's responses. Only the TPMS_NV_CERTIFY_INFO attestation form (TPM_ST_ATTEST_NV)
 /// is modelled; the TPMS_NV_DIGEST_CERTIFY_INFO form (TPM_ST_ATTEST_NV_DIGEST) is not produced by this simulator.
 /// </para>
@@ -65,7 +65,7 @@ public sealed class NvCertifyResponse: IDisposable, ITpmWireType
         try
         {
             //A TPM2_NV_Certify response's attestation type is fixed to TPM_ST_ATTEST_NV in this simulator (the
-            //TPMS_NV_DIGEST_CERTIFY_INFO form is not modelled, Part 3, §31.16). Reject a type-confused body here
+            //TPMS_NV_DIGEST_CERTIFY_INFO form is not modelled, Part 3, clause 31.16). Reject a type-confused body here
             //rather than surfacing it as a successful response whose Attested.Nv is null and faults the first
             //consumer that reads it.
             if(certifyInfo.AttestationData.Type != TpmStConstants.TPM_ST_ATTEST_NV)

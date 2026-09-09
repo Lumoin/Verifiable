@@ -44,7 +44,7 @@ namespace Verifiable.OAuth;
 [DebuggerDisplay("OAuthFormEncodedFields Count={Fields.Count}")]
 public readonly struct OAuthFormEncodedFields: IEquatable<OAuthFormEncodedFields>
 {
-    private readonly IReadOnlyDictionary<string, string>? fields;
+    private IReadOnlyDictionary<string, string>? RawFields { get; }
 
 
     /// <summary>
@@ -60,7 +60,7 @@ public readonly struct OAuthFormEncodedFields: IEquatable<OAuthFormEncodedFields
     public OAuthFormEncodedFields(IReadOnlyDictionary<string, string> fields)
     {
         ArgumentNullException.ThrowIfNull(fields);
-        this.fields = fields;
+        this.RawFields = fields;
     }
 
 
@@ -78,7 +78,7 @@ public readonly struct OAuthFormEncodedFields: IEquatable<OAuthFormEncodedFields
     /// <see cref="Empty"/>'s underlying dictionary so callers do not need to
     /// guard against an unconstructed wrapper.
     /// </summary>
-    public IReadOnlyDictionary<string, string> Fields => fields ?? Empty.Fields;
+    public IReadOnlyDictionary<string, string> Fields => RawFields ?? Empty.Fields;
 
 
     /// <summary>

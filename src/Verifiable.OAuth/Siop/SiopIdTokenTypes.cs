@@ -22,7 +22,7 @@ public static class SiopIdTokenTypes
     /// The <c>subject_signed_id_token</c> type — a Self-Issued ID Token, signed with
     /// key material under the End-User's control.
     /// </summary>
-    public static readonly string SubjectSignedIdToken = Utf8Constants.ToInternedString(SubjectSignedIdTokenUtf8);
+    public static string SubjectSignedIdToken { get; } = Utf8Constants.ToInternedString(SubjectSignedIdTokenUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="AttesterSignedIdToken"/>.</summary>
     public static ReadOnlySpan<byte> AttesterSignedIdTokenUtf8 => "attester_signed_id_token"u8;
@@ -31,7 +31,7 @@ public static class SiopIdTokenTypes
     /// The <c>attester_signed_id_token</c> type — an ID Token issued by the party
     /// operating the OP, i.e. the classical ID Token of OpenID Connect Core.
     /// </summary>
-    public static readonly string AttesterSignedIdToken = Utf8Constants.ToInternedString(AttesterSignedIdTokenUtf8);
+    public static string AttesterSignedIdToken { get; } = Utf8Constants.ToInternedString(AttesterSignedIdTokenUtf8);
 
 
     /// <summary>Returns <see langword="true"/> when <paramref name="value"/> is

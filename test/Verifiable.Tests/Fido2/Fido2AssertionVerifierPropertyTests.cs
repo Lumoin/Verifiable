@@ -28,7 +28,7 @@ internal sealed class Fido2AssertionVerifierPropertyTests
     /// </summary>
     [TestMethod]
     [SuppressMessage("Reliability", "CA2025:Ensure tasks using 'IDisposable' instances complete before the instances are disposed",
-        Justification = "CsCheck's Sample callback is synchronous and cannot await; GetAwaiter().GetResult() blocks until each async call fully completes, so mintedAssertion.Dispose() in the finally block runs strictly after VerifyMintedAssertionAsync returns.")]
+        Justification = "CsCheck's Sample callback is synchronous and cannot await; GetAwaiter().GetResult() blocks until each async call fully completes, so minted's using declaration disposes it strictly after VerifyMintedAssertionAsync returns.")]
     public void ValidAssertionsAlwaysVerifyAcrossRandomChallengesAndSignCounts()
     {
         using Fido2AssertionOracle oracle = Fido2AssertionOracle.CreateEs256();
@@ -41,20 +41,14 @@ internal sealed class Fido2AssertionVerifierPropertyTests
         {
             string challenge = BuildBase64UrlChallenge(sample.challengeLength, sample.challengeSeed);
 
-            MintedAssertion minted = oracle.MintAsync(challenge, ValidOrigin, signCount: sample.signCount, cancellationToken: TestContext.CancellationToken)
+            using MintedAssertion minted = oracle.MintAsync(challenge, ValidOrigin, signCount: sample.signCount, cancellationToken: TestContext.CancellationToken)
                 .AsTask().GetAwaiter().GetResult();
-            try
-            {
-                Fido2AssertionOutcome outcome = VerifyMintedAssertionAsync(oracle.CredentialPublicKey, minted, expectedChallenge: challenge)
-                    .GetAwaiter().GetResult();
 
-                Assert.IsTrue(outcome.SignatureValid);
-                Assert.IsTrue(outcome.IsAcceptable);
-            }
-            finally
-            {
-                minted.Dispose();
-            }
+            Fido2AssertionOutcome outcome = VerifyMintedAssertionAsync(oracle.CredentialPublicKey, minted, expectedChallenge: challenge)
+                .GetAwaiter().GetResult();
+
+            Assert.IsTrue(outcome.SignatureValid);
+            Assert.IsTrue(outcome.IsAcceptable);
         });
     }
 

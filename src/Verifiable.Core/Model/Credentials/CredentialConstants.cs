@@ -33,13 +33,10 @@ namespace Verifiable.Core.Model.Credentials
         /// </para>
         /// <para>
         /// See <see href="https://www.w3.org/TR/vc-data-model-2.0/#contexts">
-        /// VC Data Model 2.0 §4.2 Contexts</see>.
+        /// VC Data Model 2.0 §4.3 Contexts</see>.
         /// </para>
         /// </remarks>
-        public static Context DefaultVc20Context { get; } = new Context
-        {
-            Contexts = [CredentialsV2Context]
-        };
+        public static Context DefaultVc20Context { get; } = Context.FromIris(CredentialsV2Context);
 
         /// <summary>
         /// The VC Data Model 1.1 base context URI.
@@ -72,7 +69,8 @@ namespace Verifiable.Core.Model.Credentials
         /// whose <c>id</c> is a <c>data:</c> URL holding the secured credential.
         /// </summary>
         /// <remarks>
-        /// See <see href="https://www.w3.org/TR/vc-data-model-2.0/#presentations">VC-DM 2.0 §3.3 Presentations</see>.
+        /// See <see href="https://www.w3.org/TR/vc-data-model-2.0/#enveloped-verifiable-credentials">
+        /// VC-DM 2.0 §4.13 Verifiable Presentations, "Enveloped Verifiable Credentials"</see>.
         /// </remarks>
         public const string EnvelopedVerifiableCredentialType = "EnvelopedVerifiableCredential";
 

@@ -13,8 +13,8 @@ public record WebDidMethod: GenericDidMethod
 
     public WebDidMethod(string didString): base(didString)
     {
-    ArgumentNullException.ThrowIfNull(didString);
-    if(!didString.StartsWith(WellKnownDidMethodPrefixes.WebDidMethodPrefix, StringComparison.InvariantCulture))
+        ArgumentNullException.ThrowIfNull(didString);
+        if(!didString.StartsWith(Prefix, StringComparison.Ordinal))
         {
             throw new ArgumentException($"The DID string must start with '{Prefix}'.", nameof(didString));
         }

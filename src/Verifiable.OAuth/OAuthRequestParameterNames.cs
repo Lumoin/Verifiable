@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using Verifiable.Cryptography.Text;
 
@@ -42,7 +43,7 @@ public static class OAuthRequestParameterNames
     /// Value <c>code</c> requests an authorization code per
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.1">RFC 6749 §4.1.1</see>.
     /// </summary>
-    public static readonly string ResponseType = Utf8Constants.ToInternedString(ResponseTypeUtf8);
+    public static string ResponseType { get; } = Utf8Constants.ToInternedString(ResponseTypeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="ClientId"/>.</summary>
     public static ReadOnlySpan<byte> ClientIdUtf8 => "client_id"u8;
@@ -52,7 +53,7 @@ public static class OAuthRequestParameterNames
     /// The client identifier issued to the client during registration per
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-2.2">RFC 6749 §2.2</see>.
     /// </summary>
-    public static readonly string ClientId = Utf8Constants.ToInternedString(ClientIdUtf8);
+    public static string ClientId { get; } = Utf8Constants.ToInternedString(ClientIdUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="RedirectUri"/>.</summary>
     public static ReadOnlySpan<byte> RedirectUriUtf8 => "redirect_uri"u8;
@@ -63,7 +64,9 @@ public static class OAuthRequestParameterNames
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1.2">RFC 6749 §3.1.2</see>.
     /// Comparison MUST use exact string matching per RFC 9700 §2.1.
     /// </summary>
-    public static readonly string RedirectUri = Utf8Constants.ToInternedString(RedirectUriUtf8);
+    [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
+        Justification = "This member is the wire parameter NAME 'redirect_uri' (compared and serialised as a string), not a dereferenceable System.Uri.")]
+    public static string RedirectUri { get; } = Utf8Constants.ToInternedString(RedirectUriUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Scope"/>.</summary>
     public static ReadOnlySpan<byte> ScopeUtf8 => "scope"u8;
@@ -73,7 +76,7 @@ public static class OAuthRequestParameterNames
     /// The scope of the access request per
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.3">RFC 6749 §3.3</see>.
     /// </summary>
-    public static readonly string Scope = Utf8Constants.ToInternedString(ScopeUtf8);
+    public static string Scope { get; } = Utf8Constants.ToInternedString(ScopeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="AcrValues"/>.</summary>
     public static ReadOnlySpan<byte> AcrValuesUtf8 => "acr_values"u8;
@@ -85,7 +88,7 @@ public static class OAuthRequestParameterNames
     /// used by <see href="https://www.rfc-editor.org/rfc/rfc9470#section-4">RFC 9470 §4</see>
     /// step-up authentication to convey the authentication strength the resource server demands.
     /// </summary>
-    public static readonly string AcrValues = Utf8Constants.ToInternedString(AcrValuesUtf8);
+    public static string AcrValues { get; } = Utf8Constants.ToInternedString(AcrValuesUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="MaxAge"/>.</summary>
     public static ReadOnlySpan<byte> MaxAgeUtf8 => "max_age"u8;
@@ -98,7 +101,7 @@ public static class OAuthRequestParameterNames
     /// claim, and <c>max_age=0</c> requires a fresh authentication (equivalent to <c>prompt=login</c>).
     /// Used by <see href="https://www.rfc-editor.org/rfc/rfc9470#section-4">RFC 9470 §4</see> step-up.
     /// </summary>
-    public static readonly string MaxAge = Utf8Constants.ToInternedString(MaxAgeUtf8);
+    public static string MaxAge { get; } = Utf8Constants.ToInternedString(MaxAgeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="State"/>.</summary>
     public static ReadOnlySpan<byte> StateUtf8 => "state"u8;
@@ -111,7 +114,7 @@ public static class OAuthRequestParameterNames
     /// and
     /// <see href="https://www.rfc-editor.org/rfc/rfc9700#section-4.7">RFC 9700 §4.7</see>.
     /// </summary>
-    public static readonly string State = Utf8Constants.ToInternedString(StateUtf8);
+    public static string State { get; } = Utf8Constants.ToInternedString(StateUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="IdTokenHint"/>.</summary>
     public static ReadOnlySpan<byte> IdTokenHintUtf8 => "id_token_hint"u8;
@@ -121,7 +124,7 @@ public static class OAuthRequestParameterNames
     /// end-session endpoint as a hint about the End-User's session, per
     /// <see href="https://openid.net/specs/openid-connect-rpinitiated-1_0.html#RPLogout">OIDC RP-Initiated Logout §2</see>.
     /// </summary>
-    public static readonly string IdTokenHint = Utf8Constants.ToInternedString(IdTokenHintUtf8);
+    public static string IdTokenHint { get; } = Utf8Constants.ToInternedString(IdTokenHintUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="PostLogoutRedirectUri"/>.</summary>
     public static ReadOnlySpan<byte> PostLogoutRedirectUriUtf8 => "post_logout_redirect_uri"u8;
@@ -131,7 +134,9 @@ public static class OAuthRequestParameterNames
     /// User Agent after logout; validated against the client's registered values
     /// (RP-Initiated Logout §2).
     /// </summary>
-    public static readonly string PostLogoutRedirectUri = Utf8Constants.ToInternedString(PostLogoutRedirectUriUtf8);
+    [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
+        Justification = "This member is the wire parameter NAME 'post_logout_redirect_uri' (compared and serialised as a string), not a dereferenceable System.Uri.")]
+    public static string PostLogoutRedirectUri { get; } = Utf8Constants.ToInternedString(PostLogoutRedirectUriUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="LogoutHint"/>.</summary>
     public static ReadOnlySpan<byte> LogoutHintUtf8 => "logout_hint"u8;
@@ -140,7 +145,7 @@ public static class OAuthRequestParameterNames
     /// The <c>logout_hint</c> parameter — a hint to the OP about the End-User to log
     /// out (RP-Initiated Logout §2).
     /// </summary>
-    public static readonly string LogoutHint = Utf8Constants.ToInternedString(LogoutHintUtf8);
+    public static string LogoutHint { get; } = Utf8Constants.ToInternedString(LogoutHintUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="UiLocales"/>.</summary>
     public static ReadOnlySpan<byte> UiLocalesUtf8 => "ui_locales"u8;
@@ -149,7 +154,7 @@ public static class OAuthRequestParameterNames
     /// The <c>ui_locales</c> parameter — the End-User's preferred languages for any
     /// logout-confirmation UI (RP-Initiated Logout §2).
     /// </summary>
-    public static readonly string UiLocales = Utf8Constants.ToInternedString(UiLocalesUtf8);
+    public static string UiLocales { get; } = Utf8Constants.ToInternedString(UiLocalesUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="ResponseMode"/>.</summary>
     public static ReadOnlySpan<byte> ResponseModeUtf8 => "response_mode"u8;
@@ -160,7 +165,7 @@ public static class OAuthRequestParameterNames
     /// parameters from the authorization endpoint, per
     /// <see href="https://openid.net/specs/oauth-v2-multiple-response-types-1_0.html">OAuth 2.0 Multiple Response Type Encoding Practices</see>.
     /// </summary>
-    public static readonly string ResponseMode = Utf8Constants.ToInternedString(ResponseModeUtf8);
+    public static string ResponseMode { get; } = Utf8Constants.ToInternedString(ResponseModeUtf8);
 
     //Authorization response parameters — RFC 6749 §4.1.2.
 
@@ -172,7 +177,7 @@ public static class OAuthRequestParameterNames
     /// The authorization code returned by the authorization server per
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2">RFC 6749 §4.1.2</see>.
     /// </summary>
-    public static readonly string Code = Utf8Constants.ToInternedString(CodeUtf8);
+    public static string Code { get; } = Utf8Constants.ToInternedString(CodeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Iss"/>.</summary>
     public static ReadOnlySpan<byte> IssUtf8 => "iss"u8;
@@ -185,7 +190,7 @@ public static class OAuthRequestParameterNames
     /// and
     /// <see href="https://www.rfc-editor.org/rfc/rfc9700#section-4.4">RFC 9700 §4.4</see>.
     /// </summary>
-    public static readonly string Iss = Utf8Constants.ToInternedString(IssUtf8);
+    public static string Iss { get; } = Utf8Constants.ToInternedString(IssUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Error"/>.</summary>
     public static ReadOnlySpan<byte> ErrorUtf8 => "error"u8;
@@ -201,7 +206,7 @@ public static class OAuthRequestParameterNames
     /// server," so a present <see cref="Iss"/> on an error response is validated exactly like
     /// on a success response before the error is treated as authoritative.
     /// </summary>
-    public static readonly string Error = Utf8Constants.ToInternedString(ErrorUtf8);
+    public static string Error { get; } = Utf8Constants.ToInternedString(ErrorUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="ErrorDescription"/>.</summary>
     public static ReadOnlySpan<byte> ErrorDescriptionUtf8 => "error_description"u8;
@@ -213,7 +218,7 @@ public static class OAuthRequestParameterNames
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2.1">RFC 6749 §4.1.2.1</see>.
     /// OPTIONAL.
     /// </summary>
-    public static readonly string ErrorDescription = Utf8Constants.ToInternedString(ErrorDescriptionUtf8);
+    public static string ErrorDescription { get; } = Utf8Constants.ToInternedString(ErrorDescriptionUtf8);
 
     //Token request parameters — RFC 6749 §4.1.3.
 
@@ -225,7 +230,7 @@ public static class OAuthRequestParameterNames
     /// Specifies the grant type being used per
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.3">RFC 6749 §4.1.3</see>.
     /// </summary>
-    public static readonly string GrantType = Utf8Constants.ToInternedString(GrantTypeUtf8);
+    public static string GrantType { get; } = Utf8Constants.ToInternedString(GrantTypeUtf8);
 
     //Token response parameters — RFC 6749 §5.1.
 
@@ -237,7 +242,7 @@ public static class OAuthRequestParameterNames
     /// The access token issued by the authorization server per
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.1">RFC 6749 §5.1</see>.
     /// </summary>
-    public static readonly string AccessToken = Utf8Constants.ToInternedString(AccessTokenUtf8);
+    public static string AccessToken { get; } = Utf8Constants.ToInternedString(AccessTokenUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="TokenType"/>.</summary>
     public static ReadOnlySpan<byte> TokenTypeUtf8 => "token_type"u8;
@@ -247,7 +252,7 @@ public static class OAuthRequestParameterNames
     /// The type of the token issued per
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.1">RFC 6749 §5.1</see>.
     /// </summary>
-    public static readonly string TokenType = Utf8Constants.ToInternedString(TokenTypeUtf8);
+    public static string TokenType { get; } = Utf8Constants.ToInternedString(TokenTypeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="ExpiresIn"/>.</summary>
     public static ReadOnlySpan<byte> ExpiresInUtf8 => "expires_in"u8;
@@ -257,7 +262,7 @@ public static class OAuthRequestParameterNames
     /// The lifetime in seconds of the access token per
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.1">RFC 6749 §5.1</see>.
     /// </summary>
-    public static readonly string ExpiresIn = Utf8Constants.ToInternedString(ExpiresInUtf8);
+    public static string ExpiresIn { get; } = Utf8Constants.ToInternedString(ExpiresInUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="RefreshToken"/>.</summary>
     public static ReadOnlySpan<byte> RefreshTokenUtf8 => "refresh_token"u8;
@@ -267,7 +272,7 @@ public static class OAuthRequestParameterNames
     /// The refresh token used to obtain a new access token per
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.1">RFC 6749 §5.1</see>.
     /// </summary>
-    public static readonly string RefreshToken = Utf8Constants.ToInternedString(RefreshTokenUtf8);
+    public static string RefreshToken { get; } = Utf8Constants.ToInternedString(RefreshTokenUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="IdToken"/>.</summary>
     public static ReadOnlySpan<byte> IdTokenUtf8 => "id_token"u8;
@@ -278,7 +283,7 @@ public static class OAuthRequestParameterNames
     /// response per
     /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#TokenResponse">OpenID Connect Core 1.0 §3.1.3.3</see>.
     /// </summary>
-    public static readonly string IdToken = Utf8Constants.ToInternedString(IdTokenUtf8);
+    public static string IdToken { get; } = Utf8Constants.ToInternedString(IdTokenUtf8);
 
     //Revocation parameters — RFC 7009.
 
@@ -290,7 +295,7 @@ public static class OAuthRequestParameterNames
     /// The token to be revoked per
     /// <see href="https://www.rfc-editor.org/rfc/rfc7009#section-2.1">RFC 7009 §2.1</see>.
     /// </summary>
-    public static readonly string Token = Utf8Constants.ToInternedString(TokenUtf8);
+    public static string Token { get; } = Utf8Constants.ToInternedString(TokenUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="TokenTypeHint"/>.</summary>
     public static ReadOnlySpan<byte> TokenTypeHintUtf8 => "token_type_hint"u8;
@@ -300,7 +305,7 @@ public static class OAuthRequestParameterNames
     /// A hint about the type of the token submitted for revocation per
     /// <see href="https://www.rfc-editor.org/rfc/rfc7009#section-2.1">RFC 7009 §2.1</see>.
     /// </summary>
-    public static readonly string TokenTypeHint = Utf8Constants.ToInternedString(TokenTypeHintUtf8);
+    public static string TokenTypeHint { get; } = Utf8Constants.ToInternedString(TokenTypeHintUtf8);
 
     //PKCE parameters — RFC 7636.
 
@@ -314,7 +319,7 @@ public static class OAuthRequestParameterNames
     /// Absence of this parameter from a PAR body indicates a PKCE downgrade vulnerability
     /// per <see href="https://www.rfc-editor.org/rfc/rfc9700#section-4.8">RFC 9700 §4.8</see>.
     /// </summary>
-    public static readonly string CodeChallenge = Utf8Constants.ToInternedString(CodeChallengeUtf8);
+    public static string CodeChallenge { get; } = Utf8Constants.ToInternedString(CodeChallengeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="CodeChallengeMethod"/>.</summary>
     public static ReadOnlySpan<byte> CodeChallengeMethodUtf8 => "code_challenge_method"u8;
@@ -325,7 +330,7 @@ public static class OAuthRequestParameterNames
     /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.3">RFC 7636 §4.3</see>.
     /// Must be <c>S256</c> per HAIP 1.0 and RFC 9700 §2.1.1.
     /// </summary>
-    public static readonly string CodeChallengeMethod = Utf8Constants.ToInternedString(CodeChallengeMethodUtf8);
+    public static string CodeChallengeMethod { get; } = Utf8Constants.ToInternedString(CodeChallengeMethodUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="CodeVerifier"/>.</summary>
     public static ReadOnlySpan<byte> CodeVerifierUtf8 => "code_verifier"u8;
@@ -338,7 +343,7 @@ public static class OAuthRequestParameterNames
     /// registered indicates an authorization code injection attempt per
     /// <see href="https://www.rfc-editor.org/rfc/rfc9700#section-4.5">RFC 9700 §4.5</see>.
     /// </summary>
-    public static readonly string CodeVerifier = Utf8Constants.ToInternedString(CodeVerifierUtf8);
+    public static string CodeVerifier { get; } = Utf8Constants.ToInternedString(CodeVerifierUtf8);
 
     //PAR parameters — RFC 9126.
 
@@ -351,7 +356,9 @@ public static class OAuthRequestParameterNames
     /// authorization request per
     /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2.2">RFC 9126 §2.2</see>.
     /// </summary>
-    public static readonly string RequestUri = Utf8Constants.ToInternedString(RequestUriUtf8);
+    [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
+        Justification = "This member is the wire parameter NAME 'request_uri' (compared and serialised as a string), not a dereferenceable System.Uri.")]
+    public static string RequestUri { get; } = Utf8Constants.ToInternedString(RequestUriUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Request"/>.</summary>
     public static ReadOnlySpan<byte> RequestUtf8 => "request"u8;
@@ -364,7 +371,7 @@ public static class OAuthRequestParameterNames
     /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-3">RFC 9126 §3</see>
     /// or in the query of a direct authorization request per RFC 9101 §6.1.
     /// </summary>
-    public static readonly string Request = Utf8Constants.ToInternedString(RequestUtf8);
+    public static string Request { get; } = Utf8Constants.ToInternedString(RequestUtf8);
 
     //Device authorization parameters — RFC 8628.
 
@@ -379,7 +386,7 @@ public static class OAuthRequestParameterNames
     /// Acts as the correlation key for the device flow — stored at device authorization
     /// time and presented at each polling request.
     /// </summary>
-    public static readonly string DeviceCode = Utf8Constants.ToInternedString(DeviceCodeUtf8);
+    public static string DeviceCode { get; } = Utf8Constants.ToInternedString(DeviceCodeUtf8);
 
     //OID4VP response parameter — OID4VP 1.0 §8.2.
 
@@ -392,7 +399,7 @@ public static class OAuthRequestParameterNames
     /// <c>response_uri</c> per
     /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html">OID4VP 1.0 §8.2</see>.
     /// </summary>
-    public static readonly string Response = Utf8Constants.ToInternedString(ResponseUtf8);
+    public static string Response { get; } = Utf8Constants.ToInternedString(ResponseUtf8);
 
     //OID4VCI Pre-Authorized Code Flow token-request parameters — OID4VCI 1.0 §6.1.
 
@@ -407,7 +414,7 @@ public static class OAuthRequestParameterNames
     /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html">OID4VCI 1.0 §6.1</see>.
     /// MUST be present when that grant type is used.
     /// </summary>
-    public static readonly string PreAuthorizedCode = Utf8Constants.ToInternedString(PreAuthorizedCodeUtf8);
+    public static string PreAuthorizedCode { get; } = Utf8Constants.ToInternedString(PreAuthorizedCodeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="TxCode"/>.</summary>
     public static ReadOnlySpan<byte> TxCodeUtf8 => "tx_code"u8;
@@ -420,7 +427,7 @@ public static class OAuthRequestParameterNames
     /// MUST be present if a <c>tx_code</c> object was present in the Credential
     /// Offer, and MUST only be used with the Pre-Authorized Code grant type.
     /// </summary>
-    public static readonly string TxCode = Utf8Constants.ToInternedString(TxCodeUtf8);
+    public static string TxCode { get; } = Utf8Constants.ToInternedString(TxCodeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="AuthorizationDetails"/>.</summary>
     public static ReadOnlySpan<byte> AuthorizationDetailsUtf8 => "authorization_details"u8;
@@ -433,7 +440,7 @@ public static class OAuthRequestParameterNames
     /// (RFC 9396 §6.1 / OID4VCI 1.0 §6.1.1), and returned enriched in the token response
     /// (RFC 9396 §7 / OID4VCI 1.0 §6.2).
     /// </summary>
-    public static readonly string AuthorizationDetails = Utf8Constants.ToInternedString(AuthorizationDetailsUtf8);
+    public static string AuthorizationDetails { get; } = Utf8Constants.ToInternedString(AuthorizationDetailsUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="IssuerState"/>.</summary>
     public static ReadOnlySpan<byte> IssuerStateUtf8 => "issuer_state"u8;
@@ -450,7 +457,7 @@ public static class OAuthRequestParameterNames
     /// this Credential Issuer — it could have been injected by an attacker — so the library
     /// surfaces it to the application as untrusted input and validates nothing about it itself.
     /// </summary>
-    public static readonly string IssuerState = Utf8Constants.ToInternedString(IssuerStateUtf8);
+    public static string IssuerState { get; } = Utf8Constants.ToInternedString(IssuerStateUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Resource"/>.</summary>
     public static ReadOnlySpan<byte> ResourceUtf8 => "resource"u8;
@@ -465,7 +472,7 @@ public static class OAuthRequestParameterNames
     /// Authorization Server can differentiate Credential Issuers. The library reads and surfaces
     /// the value(s); honoring them is the application's decision.
     /// </summary>
-    public static readonly string Resource = Utf8Constants.ToInternedString(ResourceUtf8);
+    public static string Resource { get; } = Utf8Constants.ToInternedString(ResourceUtf8);
 
     //Token Exchange parameters — RFC 8693 §2.1 (request) / §2.2.1 (response).
 
@@ -479,7 +486,7 @@ public static class OAuthRequestParameterNames
     /// appear more than once. Complements <see cref="Resource"/> (the RFC 8707 URI form); either
     /// or both indicate the target of the requested token.
     /// </summary>
-    public static readonly string Audience = Utf8Constants.ToInternedString(AudienceUtf8);
+    public static string Audience { get; } = Utf8Constants.ToInternedString(AudienceUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="RequestedTokenType"/>.</summary>
     public static ReadOnlySpan<byte> RequestedTokenTypeUtf8 => "requested_token_type"u8;
@@ -490,7 +497,7 @@ public static class OAuthRequestParameterNames
     /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-3">RFC 8693 §3</see>. OPTIONAL;
     /// when omitted the authorization server chooses the issued type.
     /// </summary>
-    public static readonly string RequestedTokenType = Utf8Constants.ToInternedString(RequestedTokenTypeUtf8);
+    public static string RequestedTokenType { get; } = Utf8Constants.ToInternedString(RequestedTokenTypeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="SubjectToken"/>.</summary>
     public static ReadOnlySpan<byte> SubjectTokenUtf8 => "subject_token"u8;
@@ -500,7 +507,7 @@ public static class OAuthRequestParameterNames
     /// represents the identity of the party on behalf of whom the request is being made, per
     /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.1">RFC 8693 §2.1</see>. REQUIRED.
     /// </summary>
-    public static readonly string SubjectToken = Utf8Constants.ToInternedString(SubjectTokenUtf8);
+    public static string SubjectToken { get; } = Utf8Constants.ToInternedString(SubjectTokenUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="SubjectTokenType"/>.</summary>
     public static ReadOnlySpan<byte> SubjectTokenTypeUtf8 => "subject_token_type"u8;
@@ -510,7 +517,7 @@ public static class OAuthRequestParameterNames
     /// type of <see cref="SubjectToken"/>, one of the token-type URIs in
     /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-3">RFC 8693 §3</see>. REQUIRED.
     /// </summary>
-    public static readonly string SubjectTokenType = Utf8Constants.ToInternedString(SubjectTokenTypeUtf8);
+    public static string SubjectTokenType { get; } = Utf8Constants.ToInternedString(SubjectTokenTypeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="ActorToken"/>.</summary>
     public static ReadOnlySpan<byte> ActorTokenUtf8 => "actor_token"u8;
@@ -522,7 +529,7 @@ public static class OAuthRequestParameterNames
     /// its presence selects delegation over impersonation. When present,
     /// <see cref="ActorTokenType"/> is REQUIRED.
     /// </summary>
-    public static readonly string ActorToken = Utf8Constants.ToInternedString(ActorTokenUtf8);
+    public static string ActorToken { get; } = Utf8Constants.ToInternedString(ActorTokenUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="ActorTokenType"/>.</summary>
     public static ReadOnlySpan<byte> ActorTokenTypeUtf8 => "actor_token_type"u8;
@@ -533,7 +540,7 @@ public static class OAuthRequestParameterNames
     /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-3">RFC 8693 §3</see>. REQUIRED when
     /// <see cref="ActorToken"/> is present, and MUST be absent otherwise.
     /// </summary>
-    public static readonly string ActorTokenType = Utf8Constants.ToInternedString(ActorTokenTypeUtf8);
+    public static string ActorTokenType { get; } = Utf8Constants.ToInternedString(ActorTokenTypeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="IssuedTokenType"/>.</summary>
     public static ReadOnlySpan<byte> IssuedTokenTypeUtf8 => "issued_token_type"u8;
@@ -545,7 +552,7 @@ public static class OAuthRequestParameterNames
     /// successful response per
     /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.1">RFC 8693 §2.2.1</see>.
     /// </summary>
-    public static readonly string IssuedTokenType = Utf8Constants.ToInternedString(IssuedTokenTypeUtf8);
+    public static string IssuedTokenType { get; } = Utf8Constants.ToInternedString(IssuedTokenTypeUtf8);
 
     //JWT Bearer authorization grant parameter — RFC 7523 §2.1.
 
@@ -559,7 +566,7 @@ public static class OAuthRequestParameterNames
     /// "MUST contain a single JWT" that the authorization server validates per the §3 processing
     /// rules and exchanges for an access token. Confidential.
     /// </summary>
-    public static readonly string Assertion = Utf8Constants.ToInternedString(AssertionUtf8);
+    public static string Assertion { get; } = Utf8Constants.ToInternedString(AssertionUtf8);
 
     //Client-authentication request parameters — RFC 6749 §2.3.1 / RFC 7521 §4.2.
 
@@ -574,7 +581,7 @@ public static class OAuthRequestParameterNames
     /// <see cref="Server.ValidateClientCredentialsDelegate"/> seam; the name lets a grant detect
     /// whether client credentials are present (RFC 7523 §3.1). Confidential.
     /// </summary>
-    public static readonly string ClientSecret = Utf8Constants.ToInternedString(ClientSecretUtf8);
+    public static string ClientSecret { get; } = Utf8Constants.ToInternedString(ClientSecretUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="ClientAssertion"/>.</summary>
     public static ReadOnlySpan<byte> ClientAssertionUtf8 => "client_assertion"u8;
@@ -588,7 +595,7 @@ public static class OAuthRequestParameterNames
     /// <see cref="Server.ValidateClientCredentialsDelegate"/> seam; the name lets a grant detect
     /// whether client credentials are present (RFC 7523 §3.1). Confidential.
     /// </summary>
-    public static readonly string ClientAssertion = Utf8Constants.ToInternedString(ClientAssertionUtf8);
+    public static string ClientAssertion { get; } = Utf8Constants.ToInternedString(ClientAssertionUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="ClientAssertionType"/>.</summary>
     public static ReadOnlySpan<byte> ClientAssertionTypeUtf8 => "client_assertion_type"u8;
@@ -599,5 +606,5 @@ public static class OAuthRequestParameterNames
     /// <see cref="WellKnownClientAssertionTypes.JwtBearer"/> selects the RFC 7523 §2.2
     /// JWT profile (<c>private_key_jwt</c> / <c>client_secret_jwt</c>).
     /// </summary>
-    public static readonly string ClientAssertionType = Utf8Constants.ToInternedString(ClientAssertionTypeUtf8);
+    public static string ClientAssertionType { get; } = Utf8Constants.ToInternedString(ClientAssertionTypeUtf8);
 }

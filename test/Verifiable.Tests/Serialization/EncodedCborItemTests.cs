@@ -1,4 +1,5 @@
-using System.Formats.Cbor;
+using System.Buffers;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Cbor;
 
 namespace Verifiable.Tests.Serialization;
@@ -43,11 +44,12 @@ internal sealed class EncodedCborItemTests
         EncodedCborItem original = EncodedCborItem.Wrap(innerBytes);
 
         //Round-trip through a CborReader/Writer.
-        var writer = new CborWriter();
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.Strict);
         original.Write(writer);
-        byte[] emitted = writer.Encode();
+        byte[] emitted = buffer.WrittenSpan.ToArray();
 
-        var reader = new CborReader(emitted);
+        var reader = new CborReader(emitted, CborOptions.Strict);
         EncodedCborItem reparsed = EncodedCborItem.Read(reader);
 
         Assert.IsTrue(
@@ -84,10 +86,11 @@ internal sealed class EncodedCborItemTests
     public void ReadRejectsNonTag24Items()
     {
         //Plain byte string with no Tag 24 wrapper.
-        var writer = new CborWriter();
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.Strict);
         writer.WriteByteString([0x01]);
-        byte[] bytes = writer.Encode();
-        var reader = new CborReader(bytes);
+        byte[] bytes = buffer.WrittenSpan.ToArray();
+        var reader = new CborReader(bytes, CborOptions.Strict);
 
         Assert.ThrowsExactly<CborContentException>(() => EncodedCborItem.Read(reader));
     }
@@ -97,11 +100,12 @@ internal sealed class EncodedCborItemTests
     public void ReadRejectsTag24OverNonByteString()
     {
         //Tag 24 over a text string instead of a byte string.
-        var writer = new CborWriter();
-        writer.WriteTag((CborTag)24);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.Strict);
+        writer.WriteTag(CborTag.EncodedCborDataItem);
         writer.WriteTextString("not bytes");
-        byte[] bytes = writer.Encode();
-        var reader = new CborReader(bytes);
+        byte[] bytes = buffer.WrittenSpan.ToArray();
+        var reader = new CborReader(bytes, CborOptions.Strict);
 
         Assert.ThrowsExactly<CborContentException>(() => EncodedCborItem.Read(reader));
     }
@@ -109,11 +113,12 @@ internal sealed class EncodedCborItemTests
 
     private static byte[] EncodeInnerMap(Action<CborWriter> populate)
     {
-        var w = new CborWriter();
+        var buffer = new ArrayBufferWriter<byte>();
+        var w = new CborWriter(buffer, CborOptions.Strict);
         w.WriteStartMap(null);
         populate(w);
         w.WriteEndMap();
 
-        return w.Encode();
+        return buffer.WrittenSpan.ToArray();
     }
 }

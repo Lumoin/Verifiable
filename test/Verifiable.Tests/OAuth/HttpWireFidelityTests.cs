@@ -27,10 +27,10 @@ internal sealed class HttpWireFidelityTests
     private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
     private const string ClientId = "https://client.example.com";
-    private static readonly Uri ClientBaseUri = new("https://client.example.com");
-    private static readonly Uri RedirectUri =
+    private static Uri ClientBaseUri { get; } = new("https://client.example.com");
+    private static Uri RedirectUri { get; } =
         new("https://client.example.com/callback");
-    private static readonly Uri UnregisteredRedirectUri =
+    private static Uri UnregisteredRedirectUri { get; } =
         new("https://attacker.example.com/callback");
 
 

@@ -315,6 +315,9 @@ public static class JoseTokenClassifier
         }
         catch
         {
+            //Same rationale as ParseCompact's catch above: this is the first attacker-controlled-input
+            //boundary, so any decode or deserialize failure becomes MalformedShape rather than an
+            //escaping exception.
             return ValueTask.FromResult<JoseTokenShape>(
                 new MalformedShape(ReasonHeaderDecodeFailed));
         }

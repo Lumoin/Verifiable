@@ -71,7 +71,7 @@ internal sealed class WebAuthnRpHttpEdDsaCeremonyTests
         using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(host.Certificate, host.BaseAddress);
 
         using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulatorWithBackend(
-            "webauthn-rp-http-eddsa-authenticator", CtapCredentialSigningBackend.CreateEdDsaDefault());
+            "webauthn-rp-http-eddsa-authenticator", BaseMemoryPool.Shared, CtapCredentialSigningBackend.CreateEdDsaDefault());
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         using HttpResponseMessage optionsResponse = await PostAsync(

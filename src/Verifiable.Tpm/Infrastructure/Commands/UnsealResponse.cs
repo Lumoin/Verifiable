@@ -10,7 +10,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Response structure (TPM 2.0 Part 3, Section 12.7): a single sized buffer.
+/// Response structure (TPM 2.0 Library Part 3, clause 12.7): a single sized buffer.
 /// </para>
 /// <list type="bullet">
 ///   <item><description>outData (TPM2B_SENSITIVE_DATA): the recovered sealed data.</description></item>
@@ -24,6 +24,9 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 public sealed class UnsealResponse: ITpmWireType, IDisposable
 {
+    /// <summary>
+    /// Whether <see cref="Dispose"/> has run.
+    /// </summary>
     private bool disposed;
 
     /// <summary>
@@ -31,6 +34,10 @@ public sealed class UnsealResponse: ITpmWireType, IDisposable
     /// </summary>
     public Tpm2bSensitiveData OutData { get; }
 
+    /// <summary>
+    /// Wraps an already-parsed <c>outData</c>.
+    /// </summary>
+    /// <param name="outData">The recovered sealed data.</param>
     private UnsealResponse(Tpm2bSensitiveData outData)
     {
         OutData = outData;

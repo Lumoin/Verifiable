@@ -52,6 +52,7 @@ public static class MdocMsoDigestBindingValidator
     /// — the owned shape is what a CBOR reader produces on the parse path.
     /// </summary>
     /// <param name="issuerSigned">The parsed owned issuer-signed half of an mdoc document.</param>
+    /// <param name="pool">The memory pool every recomputed item digest is rented from.</param>
     /// <returns>
     /// An <see cref="MdocDigestBindingResult"/> carrying the overall pass/fail
     /// plus per-item outcomes. Callers ready to disclose claims to a verifier
@@ -59,11 +60,11 @@ public static class MdocMsoDigestBindingValidator
     /// callers iterate <see cref="MdocDigestBindingResult.ItemResults"/> for
     /// the per-item picture.
     /// </returns>
-    public static MdocDigestBindingResult Validate(MdocIssuerSigned issuerSigned)
+    public static MdocDigestBindingResult Validate(MdocIssuerSigned issuerSigned, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(issuerSigned);
 
-        return ValidateCore(issuerSigned.NameSpaces, issuerSigned.IssuerAuth);
+        return ValidateCore(issuerSigned.NameSpaces, issuerSigned.IssuerAuth, pool);
     }
 
 
@@ -75,18 +76,20 @@ public static class MdocMsoDigestBindingValidator
     /// <see cref="MdocIssuerSignedTrimmer.Trim"/> returns.
     /// </summary>
     /// <param name="view">The trimmed view referencing a subset of the owned items.</param>
+    /// <param name="pool">The memory pool every recomputed item digest is rented from.</param>
     /// <returns>The validation result with overall and per-item outcomes.</returns>
-    public static MdocDigestBindingResult Validate(MdocIssuerSignedView view)
+    public static MdocDigestBindingResult Validate(MdocIssuerSignedView view, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(view);
 
-        return ValidateCore(view.NameSpaces, view.IssuerAuth);
+        return ValidateCore(view.NameSpaces, view.IssuerAuth, pool);
     }
 
 
     private static MdocDigestBindingResult ValidateCore(
         IReadOnlyDictionary<string, IReadOnlyList<MdocIssuerSignedItem>> nameSpaces,
-        MdocIssuerAuth issuerAuth)
+        MdocIssuerAuth issuerAuth,
+        BaseMemoryPool pool)
     {
         if(!IsSupportedDigestAlgorithm(issuerAuth.Mso.DigestAlgorithm))
         {
@@ -103,7 +106,7 @@ public static class MdocMsoDigestBindingValidator
 
             foreach(MdocIssuerSignedItem item in nsEntry.Value)
             {
-                MdocDigestBindingItemResult itemResult = EvaluateItem(item, nameSpace, msoNamespaceDigests, issuerAuth.Mso.DigestAlgorithm);
+                MdocDigestBindingItemResult itemResult = EvaluateItem(item, nameSpace, msoNamespaceDigests, issuerAuth.Mso.DigestAlgorithm, pool);
                 itemResults.Add(itemResult);
 
                 if(!itemResult.IsValid)
@@ -129,7 +132,8 @@ public static class MdocMsoDigestBindingValidator
         MdocIssuerSignedItem item,
         string nameSpace,
         IReadOnlyDictionary<uint, ReadOnlyMemory<byte>>? msoNamespaceDigests,
-        string digestAlgorithm)
+        string digestAlgorithm,
+        BaseMemoryPool pool)
     {
         if(msoNamespaceDigests is null)
         {
@@ -141,7 +145,7 @@ public static class MdocMsoDigestBindingValidator
             return MdocDigestBindingItemResult.Failed(item, nameSpace, MdocDigestBindingItemFailureReason.DigestIdNotCommittedInMso);
         }
 
-        byte[] computedDigest = ComputeDigest(digestAlgorithm, item.WireBytes.Span);
+        byte[] computedDigest = ComputeDigest(digestAlgorithm, item.WireBytes.Span, pool);
 
         return expectedDigest.Span.SequenceEqual(computedDigest)
             ? MdocDigestBindingItemResult.Success(item, nameSpace)
@@ -164,18 +168,18 @@ public static class MdocMsoDigestBindingValidator
     /// rather than a direct framework hash call, so the library never
     /// picks a hash implementation the consumer did not wire.
     /// </summary>
-    private static byte[] ComputeDigest(string digestAlgorithm, ReadOnlySpan<byte> input)
+    private static byte[] ComputeDigest(string digestAlgorithm, ReadOnlySpan<byte> input, BaseMemoryPool pool)
     {
         (Tag tag, int length, string? qualifier) = digestAlgorithm switch
         {
-            MdocMsoWellKnownKeys.DigestAlgorithmSha256 => (CryptoTags.Sha256Digest, WellKnownHashAlgorithms.Sha256SizeBytes, (string?)null),
+            MdocMsoWellKnownKeys.DigestAlgorithmSha256 => (CryptoTags.Sha256Digest, WellKnownHashAlgorithms.Sha256SizeBytes, null),
             MdocMsoWellKnownKeys.DigestAlgorithmSha384 => (CryptoTags.Sha384Digest, WellKnownHashAlgorithms.Sha384SizeBytes, nameof(HashAlgorithmName.SHA384)),
             MdocMsoWellKnownKeys.DigestAlgorithmSha512 => (CryptoTags.Sha512Digest, WellKnownHashAlgorithms.Sha512SizeBytes, nameof(HashAlgorithmName.SHA512)),
             _ => throw new InvalidOperationException(
                 $"Unsupported MSO digestAlgorithm '{digestAlgorithm}' reached ComputeDigest after the gate.")
         };
 
-        using DigestValue digest = CryptographicKeyEvents.ComputeDigest(input, length, tag, BaseMemoryPool.Shared, qualifier);
+        using DigestValue digest = CryptographicKeyEvents.ComputeDigest(input, length, tag, pool, qualifier);
 
         //The pooled digest buffer may be larger than the requested length (pool implementations are free to
         //over-allocate); slice to the algorithm's exact output size before copying out.

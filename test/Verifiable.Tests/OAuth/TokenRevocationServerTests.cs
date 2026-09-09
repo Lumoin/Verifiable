@@ -26,10 +26,10 @@ internal sealed class TokenRevocationServerTests
     private const string ClientId = "https://revocation.client.test";
 
     /// <summary>The base URI the registered client is reachable at.</summary>
-    private static readonly Uri ClientBaseUri = new("https://revocation.client.test");
+    private static Uri ClientBaseUri { get; } = new("https://revocation.client.test");
 
     /// <summary>The single capability the revocation endpoint requires.</summary>
-    private static readonly ImmutableHashSet<CapabilityIdentifier> RevocationCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> RevocationCapabilities { get; } =
         ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.OAuthTokenRevocation);
 
 

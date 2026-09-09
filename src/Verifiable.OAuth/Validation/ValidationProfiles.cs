@@ -113,6 +113,9 @@ public static class ValidationProfiles
             new(ValidationChecks.CheckCredentialSignature,
                 [ValidationClaimIds.CredentialSignatureValid]),
 
+            new(ValidationChecks.CheckCredentialTypePresent,
+                [ValidationClaimIds.CredentialTypePresent]),
+
             new(ValidationChecks.CheckSdHash,
                 [ValidationClaimIds.SdHashMatchesPresentation]),
 

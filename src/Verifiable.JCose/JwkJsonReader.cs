@@ -490,7 +490,11 @@ public static class JwkJsonReader
     }
 
 
-    //Whether the byte at index closes a JSON value: end of input, or a structural/whitespace terminator.
+    /// <summary>Whether the byte at <paramref name="index"/> closes a JSON value: end of input, or a
+    /// structural/whitespace terminator.</summary>
+    /// <param name="json">UTF-8 JSON bytes.</param>
+    /// <param name="index">The position to test.</param>
+    /// <returns><see langword="true"/> when the position is past the end or at a terminator byte.</returns>
     private static bool IsValueClosed(ReadOnlySpan<byte> json, int index)
     {
         return index >= json.Length || IsNumberTerminator(json[index]);
@@ -702,6 +706,24 @@ public static class JwkJsonReader
 
         return Encoding.UTF8.GetString(json[bracketStart..pos]);
     }
+
+
+    /// <summary>
+    /// Extracts the content span of an object-valued property — the bytes between its outermost
+    /// <c>{</c> and <c>}</c> — without allocating a string. The public, span-returning sibling of
+    /// <see cref="ExtractObjectAsString(ReadOnlySpan{byte}, ReadOnlySpan{byte})"/> for a caller that
+    /// wants to keep reading key-by-key off the nested object (via <see cref="ExtractStringValue"/>,
+    /// <see cref="TryExtractLongValue"/>, or a further nested <see cref="ExtractObjectContent"/> call)
+    /// rather than re-parsing a re-encoded string.
+    /// </summary>
+    /// <param name="json">UTF-8 JSON bytes to search.</param>
+    /// <param name="key">The property key as a UTF-8 literal.</param>
+    /// <returns>
+    /// The span between the braces (exclusive), or an empty span if the key
+    /// is absent or the value is not an object.
+    /// </returns>
+    public static ReadOnlySpan<byte> ExtractObjectContent(ReadOnlySpan<byte> json, ReadOnlySpan<byte> key) =>
+        FindObjectContent(json, key);
 
 
     /// <summary>
@@ -1340,6 +1362,11 @@ public static class JwkJsonReader
     }
 
 
+    /// <summary>Decodes the four hex digits at <paramref name="start"/> of a <c>\uXXXX</c> JSON escape.</summary>
+    /// <param name="value">The string carrying the escape.</param>
+    /// <param name="start">The position of the first hex digit, immediately after <c>\u</c>.</param>
+    /// <param name="result">The decoded character when the four digits are valid hex.</param>
+    /// <returns><see langword="true"/> when four valid hex digits were present and decoded.</returns>
     private static bool TryDecodeHex4(string value, int start, out char result)
     {
         result = '\0';
@@ -1366,6 +1393,9 @@ public static class JwkJsonReader
     }
 
 
+    /// <summary>Maps one hex digit character to its numeric value, or -1 when it is not a hex digit.</summary>
+    /// <param name="character">The character to map.</param>
+    /// <returns>The nibble value 0-15, or -1 when <paramref name="character"/> is not a hex digit.</returns>
     private static int HexNibble(char character) =>
         character switch
         {

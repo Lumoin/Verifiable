@@ -19,7 +19,7 @@ public static class JarmResponseEncoding
     /// The <c>response</c> authorization response parameter that carries the JWT
     /// Response Document in every JARM encoding.
     /// </summary>
-    public static readonly string ResponseParameterName = Utf8Constants.ToInternedString(ResponseParameterNameUtf8);
+    public static string ResponseParameterName { get; } = Utf8Constants.ToInternedString(ResponseParameterNameUtf8);
 
 
     /// <summary>

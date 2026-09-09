@@ -11,7 +11,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Response structure (TPM 2.0 Library Part 3, Section 18.7) — the same TPM2B_ATTEST + TPMT_SIGNATURE shape as
+/// Response structure (TPM 2.0 Library Part 3, clause 18.7) — the same TPM2B_ATTEST + TPMT_SIGNATURE shape as
 /// TPM2_Certify's and TPM2_Quote's responses:
 /// </para>
 /// <list type="bullet">
@@ -63,7 +63,7 @@ public sealed class GetTimeResponse: IDisposable, ITpmWireType
         Tpm2bAttest timeInfo = Tpm2bAttest.Parse(ref reader, pool);
         try
         {
-            //A TPM2_GetTime response's attestation type is fixed to TPM_ST_ATTEST_TIME (Part 3, §18.7). Reject a
+            //A TPM2_GetTime response's attestation type is fixed to TPM_ST_ATTEST_TIME (Part 3, clause 18.7). Reject a
             //type-confused body here rather than surfacing it as a successful response whose Attested.Time is
             //null and faults the first consumer that reads it.
             if(timeInfo.AttestationData.Type != TpmStConstants.TPM_ST_ATTEST_TIME)

@@ -1,7 +1,8 @@
 using System.Buffers;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using Verifiable.Cbor;
 using Verifiable.Cbor.Fido2;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
@@ -18,6 +19,7 @@ using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tests.Tpm;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Fido2;
 
@@ -39,13 +41,13 @@ namespace Verifiable.Tests.Fido2;
 /// (<c>TPM2_CreatePrimary()</c>, exactly as <c>TpmInHouseSimulatorAttestationLogTests</c> mints its
 /// AK/EK), so both are genuinely loaded TPM objects with real Names and handles —
 /// <c>TPM2_Certify()</c> can certify the credential key exactly as TPM 2.0 Part 3 §18.2 specifies,
-/// with no import step needed. This sidesteps the one genuine gap this branch's TPM surface has:
-/// <c>Verifiable.Tpm</c> implements <c>TPM2_Load()</c> (Part 3 §12.2 — loading a
-/// <c>TPM2_Create()</c>-produced private blob under a parent) but not <c>TPM2_LoadExternal()</c>
-/// (Part 3 §12.1 — importing a fully external public/private key pair with no parent-wrapped private
-/// blob), so a credential key minted by a source OTHER than this TPM instance could not be certified
-/// on this branch's surface. Because the credential key here is itself TPM-native from the start,
-/// that gap is never exercised and does not block this capstone.
+/// with no import step needed. <c>Verifiable.Tpm</c> also implements <c>TPM2_LoadExternal()</c>
+/// (Part 3 §12.3 — loading an external public/private key pair, or a public area alone, with no
+/// parent-wrapped private blob) beside <c>TPM2_Load()</c> (Part 3 §12.2 — loading a
+/// <c>TPM2_Create()</c>-produced private blob under a parent), so a credential key minted by a
+/// source OTHER than this TPM instance can be loaded and certified too; that path is proven by the
+/// <c>TpmInHouseSimulatorLoadExternal*</c> tests, and this capstone keeps its credential key
+/// TPM-native from the start.
 /// </para>
 /// <para>
 /// <c>pubArea</c> is <see cref="Tpm2bPublic.GetRawBytes"/> of the credential primary's exported
@@ -79,7 +81,7 @@ internal sealed class TpmAttestationCapstoneTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse credentialPrimary = await CreateSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
@@ -247,7 +249,9 @@ internal sealed class TpmAttestationCapstoneTests
     /// <returns>The encoded <c>attStmt</c> CBOR bytes.</returns>
     private static byte[] EncodeTpmAttStmt(int alg, byte[] sig, byte[] certInfo, byte[] pubArea, IReadOnlyList<byte[]> x5c)
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(6);
 
         writer.WriteTextString("alg");
@@ -276,7 +280,7 @@ internal sealed class TpmAttestationCapstoneTests
 
         writer.WriteEndMap();
 
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -334,7 +338,7 @@ internal sealed class TpmAttestationCapstoneTests
     /// <returns>The operational simulator.</returns>
     private async Task<TpmSimulator> CreateOperationalAsync(BaseMemoryPool pool)
     {
-        var simulator = new TpmSimulator("tpm-in-house-fido2-capstone", signingBackend: BouncyCastleTpmEccSigningBackend.Create());
+        var simulator = new TpmSimulator("tpm-in-house-fido2-capstone", signingBackend: BouncyCastleTpmEccSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await BringOperationalAsync(simulator, pool).ConfigureAwait(false);
 

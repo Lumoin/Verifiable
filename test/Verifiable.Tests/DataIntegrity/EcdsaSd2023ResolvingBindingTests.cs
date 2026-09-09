@@ -30,17 +30,17 @@ internal sealed class EcdsaSd2023ResolvingBindingTests
     private const string IssuerDid = "did:example:ecdsa-sd-issuer";
     private const string SignerKeyId = "did:example:ecdsa-sd-issuer#key-1";
 
-    private static readonly DateTime ProofCreated = new(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+    private static DateTime ProofCreated { get; } = new(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
     //Canonicalization/signing here is in-memory; a default context yields the
     //secure-default SSRF policy and satisfies the policy-carrying parameter.
-    private static readonly ExchangeContext EmptyContext = new();
+    private static ExchangeContext EmptyContext { get; } = new();
 
-    private static readonly CanonicalizationDelegate RdfcCanonicalizer = CanonicalizationTestUtilities.CreateRdfcCanonicalizer();
+    private static CanonicalizationDelegate RdfcCanonicalizer { get; } = CanonicalizationTestUtilities.CreateRdfcCanonicalizer();
 
-    private static readonly ContextResolverDelegate ContextResolver = CanonicalizationTestUtilities.CreateTestContextResolver();
+    private static ContextResolverDelegate ContextResolver { get; } = CanonicalizationTestUtilities.CreateTestContextResolver();
 
-    private static readonly IReadOnlyList<CredentialPath> MandatoryPaths =
+    private static IReadOnlyList<CredentialPath> MandatoryPaths { get; } =
     [
         CredentialPath.FromJsonPointer("/issuer"),
         CredentialPath.FromJsonPointer("/type")
@@ -169,7 +169,7 @@ internal sealed class EcdsaSd2023ResolvingBindingTests
 
         var result = await signedCredential.VerifyBaseProofAsync(
             issuerPublicKey,
-            BouncyCastleCryptographicFunctions.VerifyP256Async,
+            BouncyCastleCryptographicFunctionsAdapter.VerifyP256Async,
             EcdsaSd2023CborSerializer.ParseBaseProof,
             JsonLdSelection.PartitionStatements,
             RdfcCanonicalizer,
@@ -278,7 +278,7 @@ internal sealed class EcdsaSd2023ResolvingBindingTests
 
         var result = await derivedCredential.VerifyDerivedProofAsync(
             issuerPublicKey,
-            BouncyCastleCryptographicFunctions.VerifyP256Async,
+            BouncyCastleCryptographicFunctionsAdapter.VerifyP256Async,
             EcdsaSd2023CborSerializer.ParseDerivedProof,
             RdfcCanonicalizer,
             ContextResolver,
@@ -383,7 +383,8 @@ internal sealed class EcdsaSd2023ResolvingBindingTests
             issuerPublicKey.AsReadOnlySpan(),
             MulticodecHeaders.P256PublicKey,
             MultibaseAlgorithms.Base58Btc,
-            TestSetup.Base58Encoder);
+            TestSetup.Base58Encoder,
+            BaseMemoryPool.Shared);
 
         return new DidDocument
         {

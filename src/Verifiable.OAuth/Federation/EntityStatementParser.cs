@@ -142,12 +142,18 @@ public static class EntityStatementParser
     }
 
 
-    //RFC 7519 §2 NumericDate is "a JSON numeric value representing the
-    //number of seconds from 1970-01-01T00:00:00Z UTC". The JSON wire shape
-    //is any numeric; the boxed type after deserialization depends on the
-    //resolver (long via DictionaryStringObjectJsonConverter; Decimal via
-    //source-gen default for object-typed properties; double via permissive
-    //handlers). Accept any integer-valued numeric.
+    /// <summary>
+    /// Reads a boxed RFC 7519 §2 NumericDate — "a JSON numeric value representing the
+    /// number of seconds from 1970-01-01T00:00:00Z UTC" — as an integral second count.
+    /// The JSON wire shape is any numeric; the boxed type after deserialization depends
+    /// on the resolver (<see cref="long"/> via <c>DictionaryStringObjectJsonConverter</c>;
+    /// <see cref="decimal"/> via the source-gen default for object-typed properties;
+    /// <see cref="double"/> via permissive handlers), so any integer-valued numeric is
+    /// accepted. The <c>== Truncate(…)</c> checks test whether a directly-deserialized
+    /// <see cref="decimal"/>/<see cref="double"/> already holds an exact integer value —
+    /// no arithmetic is performed on the claim, so the exact comparison carries no
+    /// floating-point rounding risk.
+    /// </summary>
     internal static bool TryReadIntegralSeconds(object raw, out long seconds)
     {
         switch(raw)

@@ -10,18 +10,25 @@ namespace Verifiable.OAuth.Client;
 /// transport stays auth-scheme-naive.
 /// </summary>
 /// <remarks>
+/// <para>
 /// Future binding schemes (RFC 9449 DPoP nonce, RFC 9421 HTTP signing)
 /// add additional headers (<c>DPoP</c>, <c>Signature</c>, <c>Signature-Input</c>)
 /// alongside <c>Authorization</c>. Because the transport delegate sees
 /// only the composed header bag, those schemes plug in without changing
 /// the delegate signature.
+/// </para>
+/// <para>
+/// Keyed case-insensitively — RFC 9110 §5.1: "Field names are case-insensitive" — so
+/// a name added under one casing replaces, rather than duplicates, one already present
+/// under another.
+/// </para>
 /// </remarks>
 [DebuggerDisplay("OutgoingHeaders ({Values.Count} headers)")]
 public sealed record OutgoingHeaders
 {
-    /// <summary>The composed header name-to-value map.</summary>
+    /// <summary>The composed header name-to-value map, keyed case-insensitively (RFC 9110 §5.1).</summary>
     public ImmutableDictionary<string, string> Values { get; init; } =
-        ImmutableDictionary<string, string>.Empty;
+        ImmutableDictionary.Create<string, string>(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>The empty header set.</summary>
     public static OutgoingHeaders Empty { get; } = new();

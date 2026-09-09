@@ -43,10 +43,10 @@ public static class BackChannelLogout
     /// <c>events</c> claim MUST carry, mapping to an empty JSON object
     /// (<see href="https://openid.net/specs/openid-connect-backchannel-1_0.html#LogoutToken">OIDC Back-Channel Logout 1.0 §2.4</see>).
     /// </summary>
-    public static readonly string BackChannelLogoutEventType = Utf8Constants.ToInternedString(BackChannelLogoutEventTypeUtf8);
+    public static string BackChannelLogoutEventType { get; } = Utf8Constants.ToInternedString(BackChannelLogoutEventTypeUtf8);
 
     /// <summary>Reused empty payload for tolerant reads of an absent or malformed claim.</summary>
-    private static readonly IReadOnlyDictionary<string, object> EmptyPayload =
+    private static IReadOnlyDictionary<string, object> EmptyPayload { get; } =
         new Dictionary<string, object>(0, StringComparer.Ordinal);
 
 

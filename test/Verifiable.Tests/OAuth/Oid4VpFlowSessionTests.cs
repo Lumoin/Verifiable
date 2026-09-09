@@ -4,12 +4,14 @@ using Verifiable.BouncyCastle;
 using Verifiable.Foundation.Automata;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Dcql;
+using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.AuthCode.States;
 using Verifiable.OAuth.Oid4Vp;
+using Verifiable.OAuth.Oid4Vp.Server;
 using Verifiable.OAuth.Oid4Vp.Session;
 using Verifiable.OAuth.Oid4Vp.States;
 using Verifiable.OAuth.Pkce;
@@ -142,12 +144,20 @@ internal sealed class Oid4VpFlowSessionTests
         Oid4VpStepResult result = await Oid4VpFlowSession.StepAsync(
             state, stepCount,
             new VerificationSucceeded(
-                new Dictionary<string, IReadOnlyDictionary<string, string>>
+                new Dictionary<CredentialQueryId, VpCredentialClaims>
                 {
-                    ["pid"] = new Dictionary<string, string>
+                    [new CredentialQueryId("pid")] = new VpCredentialClaims
                     {
-                        ["family_name"] = "Mustermann",
-                        ["given_name"] = "Erika"
+                        Extracted = new Dictionary<CredentialPath, string>
+                        {
+                            [CredentialPath.FromJsonPointer("/family_name")] = "Mustermann",
+                            [CredentialPath.FromJsonPointer("/given_name")] = "Erika"
+                        },
+                        Disclosed = new Dictionary<CredentialPath, object?>
+                        {
+                            [CredentialPath.FromJsonPointer("/family_name")] = "Mustermann",
+                            [CredentialPath.FromJsonPointer("/given_name")] = "Erika"
+                        }
                     }
                 },
                 TimeProvider.GetUtcNow()),
@@ -159,8 +169,8 @@ internal sealed class Oid4VpFlowSessionTests
         Assert.IsTrue(result.Accepted, "Flow must be accepted after VerificationSucceeded.");
         PresentationVerifiedState verified =
             Assert.IsInstanceOfType<PresentationVerifiedState>(result.State);
-        Assert.IsTrue(verified.Claims.ContainsKey("pid"),
-            "Verified claims must carry the pid credential.");
+        Assert.IsTrue(verified.Credentials.ContainsKey(new CredentialQueryId("pid")),
+            "Verified credentials must carry the pid credential.");
     }
 
 

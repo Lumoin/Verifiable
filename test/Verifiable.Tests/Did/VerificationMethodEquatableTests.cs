@@ -328,5 +328,34 @@ namespace Verifiable.Tests.Did
             int hash2 = Method1.GetHashCode();
             Assert.AreEqual(hash1, hash2);
         }
+
+
+        /// <summary>A <see cref="VerificationMethod"/> subtype with no additional identity members.</summary>
+        private sealed class DerivedVerificationMethod: VerificationMethod
+        {
+        }
+
+
+        /// <summary>
+        /// Proves <see cref="VerificationMethod.Equals(VerificationMethod?)"/> and its
+        /// <see cref="VerificationMethod.Equals(object?)"/> override are exact-type: a same-valued
+        /// subtype instance is unequal to a base instance through both overloads in both directions.
+        /// </summary>
+        [TestMethod]
+        public void DerivedInstanceWithSameMembersIsNotEqualToBaseInstance()
+        {
+            VerificationMethod derived = new DerivedVerificationMethod
+            {
+                Id = Method1.Id,
+                Type = Method1.Type,
+                Controller = Method1.Controller,
+                KeyFormat = Method1.KeyFormat
+            };
+
+            Assert.IsFalse(Method1.Equals(derived));
+            Assert.IsFalse(derived.Equals(Method1));
+            Assert.IsFalse(((object)Method1).Equals(derived));
+            Assert.IsFalse(((object)derived).Equals(Method1));
+        }
     }
 }

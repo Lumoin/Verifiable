@@ -168,6 +168,12 @@ public static class CAdESSignatureCreation
     /// <exception cref="ArgumentException">When neither or both of <paramref name="content"/>/<paramref name="detachedContentDigest"/> are supplied, <paramref name="detachedContentDigest"/>'s length does not match <paramref name="messageDigestAlgorithm"/>, or an optional attribute in <paramref name="optionalAttributes"/> is malformed.</exception>
     /// <exception cref="NotSupportedException">When <paramref name="messageDigestAlgorithm"/> is MD5, SHA-1, an unrecognised digest, or a supplied <paramref name="algorithmConstraints"/> table does not assert it reliable at <paramref name="signingTime"/>.</exception>
     /// <exception cref="TimestampAcquisitionException">When a requested <c>content-time-stamp</c> token could not be acquired or verified (<see cref="CAdESOptionalSignedAttributes.ContentTimestampRequests"/>).</exception>
+    /// <remarks>
+    /// <strong>Manual disposal, not <see langword="using"/> declarations.</strong> <c>messageDigest</c> is
+    /// declared <see langword="null"/> and assigned only inside the try body (attached versus detached), and
+    /// <c>attributes</c> is a per-attribute list, not one disposable value; both are released by the catch on
+    /// failure once ownership has not yet transferred to the returned preparation.
+    /// </remarks>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the two encoded carriers and the digest transfers to the returned preparation, which the caller disposes; the catch disposes the source attributes and, on later failure, the encoding's own carriers.")]
     [SuppressMessage("Design", "CA1068:CancellationToken parameters must come last",
@@ -771,6 +777,11 @@ public static class CAdESSignatureCreation
     /// signature's signature value. A counter signer needing a signer-side attribute
     /// (<c>commitment-type-indication</c>, <c>signer-location</c>, <c>signer-attributes-v2</c>) is a widening this
     /// surface can take later without changing anything already produced.
+    /// </para>
+    /// <para>
+    /// <strong>Manual disposal, not <see langword="using"/> declarations.</strong> Same shape as
+    /// <see cref="PrepareAsync"/>: <c>messageDigest</c> is declared <see langword="null"/> and assigned only
+    /// inside the try body, and <c>attributes</c> is a per-attribute list, not one disposable value.
     /// </para>
     /// </remarks>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",

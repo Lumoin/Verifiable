@@ -32,7 +32,7 @@ internal sealed class DpopProofConstructionTests
             key,
             TestSetup.Base64UrlEncoder,
             DpopTestSupport.Serializer,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -55,7 +55,7 @@ internal sealed class DpopProofConstructionTests
             key,
             TestSetup.Base64UrlEncoder,
             DpopTestSupport.Serializer,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -77,7 +77,7 @@ internal sealed class DpopProofConstructionTests
             key,
             TestSetup.Base64UrlEncoder,
             DpopTestSupport.Serializer,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -103,7 +103,7 @@ internal sealed class DpopProofConstructionTests
             key,
             TestSetup.Base64UrlEncoder,
             DpopTestSupport.Serializer,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -130,7 +130,7 @@ internal sealed class DpopProofConstructionTests
             key,
             TestSetup.Base64UrlEncoder,
             DpopTestSupport.Serializer,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 

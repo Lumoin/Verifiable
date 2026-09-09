@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography;
+using JsonPointerType = Lumoin.Veritas.JsonPointer.JsonPointer;
 
 namespace Verifiable.Core.Model.DataIntegrity;
 
@@ -44,7 +45,7 @@ public sealed class BaseProofValue: IDisposable
     /// <summary>
     /// Gets the mandatory JSON Pointers.
     /// </summary>
-    public required IReadOnlyList<JsonPointer.JsonPointer> MandatoryPointers { get; init; }
+    public required IReadOnlyList<JsonPointerType> MandatoryPointers { get; init; }
 
     /// <inheritdoc/>
     public void Dispose()

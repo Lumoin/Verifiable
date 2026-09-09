@@ -92,12 +92,15 @@ internal sealed class PooledMemoryTests
     }
 
 
-    /// <summary>Disposing a <see cref="PooledMemory"/> returns the buffer to the pool and is idempotent (a second call must not throw), per <see cref="SensitiveMemory"/>'s own contract.</summary>
+    /// <summary>Disposing a <see cref="PooledMemory"/> returns the buffer to the pool and is idempotent (a
+    /// second call must not throw), per <see cref="SensitiveMemory"/>'s own contract; the two calls below are
+    /// explicit (in addition to the <see langword="using"/> declaration's own release at scope exit) because
+    /// the repeated call is itself the behaviour under test.</summary>
     [TestMethod]
     public void DisposeIsIdempotent()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        PooledMemory pooledMemory = PooledMemory.FromBytes([0x01, 0x02], pool, TestTag);
+        using PooledMemory pooledMemory = PooledMemory.FromBytes([0x01, 0x02], pool, TestTag);
 
         pooledMemory.Dispose();
         pooledMemory.Dispose();
@@ -187,7 +190,7 @@ internal sealed class PooledMemoryTests
     public void RentedInstanceDoubleDisposesSafelyAndThrowsOnPostDisposeAccess()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        PooledMemory pooledMemory = PooledMemory.FromBytes([0x01, 0x02], pool, TestTag);
+        using PooledMemory pooledMemory = PooledMemory.FromBytes([0x01, 0x02], pool, TestTag);
 
         pooledMemory.Dispose();
         pooledMemory.Dispose();

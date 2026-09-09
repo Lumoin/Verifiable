@@ -2,7 +2,6 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
-using System.Net;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading;
@@ -37,13 +36,13 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// </remarks>
 internal sealed class CimdServiceHost: IAsyncDisposable
 {
-    private readonly WebApplication app;
+    private WebApplication App { get; }
 
 
     private CimdServiceHost(
         WebApplication app, X509Certificate2 certificate, Uri baseAddress, CimdServiceApplication application)
     {
-        this.app = app;
+        this.App = app;
         Certificate = certificate;
         BaseAddress = baseAddress;
         Application = application;
@@ -122,15 +121,18 @@ internal sealed class CimdServiceHost: IAsyncDisposable
     {
         ArgumentNullException.ThrowIfNull(timeProvider);
 
-        X509Certificate2 certificate = LoopbackTls.CreateServerCertificate("cimd-service-loopback-test-host");
+        //A test topology commonly starts several CIMD-document hosts side by side (a document host
+        //and a JWKS host, for example), so each host needs a genuinely distinct TLS identity rather
+        //than the process-wide shared leaf.
+        X509Certificate2 certificate = LoopbackTls.CreateDistinctServerCertificate("cimd-service-loopback-test-host");
 
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
-        builder.Logging.ClearProviders();
+        LoopbackKestrel.ConfigureLoopbackLogging(builder.Logging);
 
         //A single explicit HTTPS Listen call — no UseUrls — so there is no plaintext fallback on
         //this host at all.
         builder.WebHost.ConfigureKestrel(options =>
-            options.Listen(IPAddress.Loopback, port: 0, listenOptions => listenOptions.UseHttps(certificate)));
+            LoopbackKestrel.ConfigureLoopbackListener(options, certificate));
 
         WebApplication app = builder.Build();
 
@@ -152,8 +154,8 @@ internal sealed class CimdServiceHost: IAsyncDisposable
     /// <summary>Stops and disposes the host.</summary>
     public async ValueTask DisposeAsync()
     {
-        await app.StopAsync(CancellationToken.None).ConfigureAwait(false);
-        await app.DisposeAsync().ConfigureAwait(false);
+        await App.StopAsync(CancellationToken.None).ConfigureAwait(false);
+        await App.DisposeAsync().ConfigureAwait(false);
         Certificate.Dispose();
     }
 
@@ -205,8 +207,8 @@ internal sealed class CimdServiceHost: IAsyncDisposable
     /// </summary>
     private sealed class CimdServiceApplication
     {
-        private readonly ConcurrentDictionary<string, ProvisionedDocument> provisions = new(StringComparer.Ordinal);
-        private readonly ConcurrentDictionary<string, int> requestCounts = new(StringComparer.Ordinal);
+        private ConcurrentDictionary<string, ProvisionedDocument> Provisions { get; } = new(StringComparer.Ordinal);
+        private ConcurrentDictionary<string, int> RequestCounts { get; } = new(StringComparer.Ordinal);
         private int totalRequests;
 
 
@@ -225,16 +227,16 @@ internal sealed class CimdServiceHost: IAsyncDisposable
 
         /// <summary>Records a provisioned document, replacing any prior provision at the same path.</summary>
         public void Provision(string path, string documentJson, DateTimeOffset? expiresAt, string? developerInfo) =>
-            provisions[path] = new ProvisionedDocument(documentJson, expiresAt, developerInfo);
+            Provisions[path] = new ProvisionedDocument(documentJson, expiresAt, developerInfo);
 
 
         /// <summary>Whether a path was requested at least once.</summary>
-        public bool WasRequested(string path) => requestCounts.ContainsKey(path);
+        public bool WasRequested(string path) => RequestCounts.ContainsKey(path);
 
 
         /// <summary>The developer-supplied information recorded for a provisioned path, or <see langword="null"/>.</summary>
         public string? DeveloperInfo(string path) =>
-            provisions.TryGetValue(path, out ProvisionedDocument? provision) ? provision.DeveloperInfo : null;
+            Provisions.TryGetValue(path, out ProvisionedDocument? provision) ? provision.DeveloperInfo : null;
 
 
         /// <summary>Serves a GET request from the provisioned-document map, recording the requested path.</summary>
@@ -244,7 +246,7 @@ internal sealed class CimdServiceHost: IAsyncDisposable
             string path = context.Request.Path.HasValue ? context.Request.Path.Value! : string.Empty;
 
             Interlocked.Increment(ref totalRequests);
-            requestCounts.AddOrUpdate(path, 1, static (_, count) => count + 1);
+            RequestCounts.AddOrUpdate(path, 1, static (_, count) => count + 1);
 
             if(!HttpMethods.IsGet(context.Request.Method))
             {
@@ -257,7 +259,7 @@ internal sealed class CimdServiceHost: IAsyncDisposable
             //the CIMD-067 "or return a status code indicating an error response" branch. CIMD-065: this
             //service MAY expire clients from time to time; expiry is decided against the injected clock,
             //never DateTimeOffset.UtcNow.
-            if(!provisions.TryGetValue(path, out ProvisionedDocument? provision)
+            if(!Provisions.TryGetValue(path, out ProvisionedDocument? provision)
                 || (provision.ExpiresAt is { } expiresAt && TimeProvider.GetUtcNow() >= expiresAt))
             {
                 httpResponse.StatusCode = StatusCodes.Status404NotFound;

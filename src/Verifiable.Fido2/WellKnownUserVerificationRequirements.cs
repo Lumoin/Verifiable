@@ -23,7 +23,7 @@ public static class WellKnownUserVerificationRequirements
     /// <summary>
     /// The <c>required</c> wire value.
     /// </summary>
-    public static readonly string Required = Utf8Constants.ToInternedString(RequiredUtf8);
+    public static string Required { get; } = Utf8Constants.ToInternedString(RequiredUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Preferred"/>.</summary>
     public static ReadOnlySpan<byte> PreferredUtf8 => "preferred"u8;
@@ -31,7 +31,7 @@ public static class WellKnownUserVerificationRequirements
     /// <summary>
     /// The <c>preferred</c> wire value.
     /// </summary>
-    public static readonly string Preferred = Utf8Constants.ToInternedString(PreferredUtf8);
+    public static string Preferred { get; } = Utf8Constants.ToInternedString(PreferredUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Discouraged"/>.</summary>
     public static ReadOnlySpan<byte> DiscouragedUtf8 => "discouraged"u8;
@@ -39,7 +39,7 @@ public static class WellKnownUserVerificationRequirements
     /// <summary>
     /// The <c>discouraged</c> wire value.
     /// </summary>
-    public static readonly string Discouraged = Utf8Constants.ToInternedString(DiscouragedUtf8);
+    public static string Discouraged { get; } = Utf8Constants.ToInternedString(DiscouragedUtf8);
 
 
     /// <summary>

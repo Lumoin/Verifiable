@@ -1,5 +1,7 @@
 using CsCheck;
 using System.Globalization;
+using Lumoin.Base;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.ToolTests;
 
@@ -134,7 +136,7 @@ internal sealed class McpServerPropertyTests
     {
         for(int i = 0; i < 2; i++)
         {
-            var result = await VerifiableOperations.GetTpmInfoAsJsonAsync().ConfigureAwait(false);
+            var result = await VerifiableOperations.GetTpmInfoAsJsonAsync(BaseMemoryPool.Shared, TestEntropy.NewCounterStream()).ConfigureAwait(false);
 
             Assert.IsTrue(result.IsSuccess || !string.IsNullOrEmpty(result.Error));
         }

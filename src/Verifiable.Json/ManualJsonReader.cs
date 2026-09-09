@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Text.Json;
 
@@ -86,7 +87,24 @@ internal static class ManualJsonReader
     /// <see cref="JsonElementConversion.NarrowNumber"/> performs the same
     /// logic on <see cref="JsonElement"/> values.
     /// </para>
+    /// <para>
+    /// Exponent notation (<c>1e2</c>) and a signed zero (<c>-0</c>) both parse successfully and
+    /// normalize to their plain decimal value — <see cref="decimal"/> has no distinct negative-zero
+    /// representation, and the exponent is applied rather than preserved lexically. An inline
+    /// JSON-LD <c>@context</c> definition is an arbitrary JSON object (its own IRI/term-definition
+    /// members aside, nothing constrains what a member's value may be), so this narrowing applies
+    /// there too when a definition happens to carry a number: the lexical exponent/signed-zero form
+    /// is not preserved on that path either. This is harmless for a cryptosuite like
+    /// <c>eddsa-jcs-2022</c>, whose RFC 8785 JCS canonicalization normalizes numbers before signing
+    /// regardless, but is a real deviation for any caller expecting byte-for-byte re-emission of an
+    /// inline definition's numeric members. It matters identically to every other caller that
+    /// materializes an arbitrary JSON object, such as <c>DidDocument.AdditionalData</c>.
+    /// </para>
     /// </remarks>
+    /// <exception cref="JsonException">
+    /// Thrown when the number's text is beyond <see cref="decimal"/>'s representable range — a
+    /// malformed-input condition, not a CLR formatting bug, so it is never a <see cref="FormatException"/>.
+    /// </exception>
     internal static object ReadNumber(ref Utf8JsonReader reader)
     {
         if(reader.TryGetInt32(out int i))
@@ -99,7 +117,14 @@ internal static class ManualJsonReader
             return l;
         }
 
-        return reader.GetDecimal();
+        try
+        {
+            return reader.GetDecimal();
+        }
+        catch(FormatException exception)
+        {
+            throw new JsonException("The JSON number is outside the range decimal can represent.", exception);
+        }
     }
 
 
@@ -184,21 +209,59 @@ internal static class ManualJsonReader
     }
 
 
+    /// <summary>
+    /// Adds a completed member or element to its parent container. A JSON <see langword="null"/> is
+    /// data, not absence — <c>{"@vocab": null}</c> is JSON-LD 1.1's way to clear <c>@vocab</c>/<c>@base</c>
+    /// or remove a term, and <c>{"a":[1,null]}</c> is an ordinary array element — so
+    /// <paramref name="value"/> is stored even when <see langword="null"/>, exactly like every other
+    /// value; the CLR permits a <see langword="null"/> reference in an <see cref="object"/>-typed slot
+    /// regardless of the non-nullable annotation on <see cref="Dictionary{TKey, TValue}"/>'s and
+    /// <see cref="List{T}"/>'s type argument, which is why the null-forgiving operator is used here
+    /// rather than widening that argument across every consumer of this materialized shape.
+    /// </summary>
+    /// <param name="container">The parent <see cref="Dictionary{TKey, TValue}"/> or <see cref="List{T}"/>.</param>
+    /// <param name="key">The member name when <paramref name="container"/> is a dictionary; otherwise <see langword="null"/>.</param>
+    /// <param name="value">The value to add, which may be <see langword="null"/>.</param>
     private static void Add(object container, string? key, object? value)
     {
-        if(container is Dictionary<string, object> dict)
+        _ = container switch
         {
-            if(value is not null && key is not null)
-            {
-                dict[key] = value;
-            }
-        }
-        else if(container is List<object> list)
-        {
-            if(value is not null)
-            {
-                list.Add(value);
-            }
-        }
+            Dictionary<string, object> dict when key is not null => TryAddMember(dict, key, value),
+            List<object> list => TryAddElement(list, value),
+            _ => false
+        };
+    }
+
+
+    /// <summary>
+    /// Sets <paramref name="value"/> under <paramref name="key"/> in <paramref name="dictionary"/>, using the
+    /// null-forgiving operator because a JSON <see langword="null"/> is a valid stored value even though
+    /// <see cref="Dictionary{TKey, TValue}"/>'s type argument is non-nullable.
+    /// </summary>
+    /// <param name="dictionary">The dictionary to add the member to.</param>
+    /// <param name="key">The member name.</param>
+    /// <param name="value">The value to store, which may be <see langword="null"/>.</param>
+    /// <returns><see langword="true"/>, unconditionally, so this can serve as a switch expression arm.</returns>
+    private static bool TryAddMember(Dictionary<string, object> dictionary, string key, object? value)
+    {
+        dictionary[key] = value!;
+
+        return true;
+    }
+
+
+    /// <summary>
+    /// Appends <paramref name="value"/> to <paramref name="list"/>, using the null-forgiving operator because
+    /// a JSON <see langword="null"/> is a valid array element even though <see cref="List{T}"/>'s type
+    /// argument is non-nullable.
+    /// </summary>
+    /// <param name="list">The list to add the element to.</param>
+    /// <param name="value">The value to store, which may be <see langword="null"/>.</param>
+    /// <returns><see langword="true"/>, unconditionally, so this can serve as a switch expression arm.</returns>
+    private static bool TryAddElement(List<object> list, object? value)
+    {
+        list.Add(value!);
+
+        return true;
     }
 }

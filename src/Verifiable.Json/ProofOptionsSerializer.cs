@@ -2,6 +2,7 @@ using System;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization.Metadata;
+using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.DataIntegrity;
 
 namespace Verifiable.Json;
@@ -177,19 +178,27 @@ public static class ProofOptionsSerializer
     }
 
 
-    private static void AppendContext(JsonObject obj, object? context, JsonSerializerOptions options)
+    /// <summary>
+    /// Embeds <paramref name="context"/> as the <c>@context</c> member of <paramref name="obj"/>,
+    /// or leaves <paramref name="obj"/> untouched when there is no context to embed.
+    /// </summary>
+    /// <param name="obj">The proof options document being assembled, mutated in place.</param>
+    /// <param name="context">The secured document's context to embed, or <see langword="null"/> to skip.</param>
+    /// <param name="options">
+    /// The serializer options whose <see cref="JsonSerializerOptions.TypeInfoResolver"/> supplies the
+    /// registered <see cref="JsonTypeInfo{T}"/> for <see cref="Context"/> — the one carrying the
+    /// <see cref="Verifiable.Json.Converters.JsonLdContextConverter"/> — so the proof options document
+    /// carries the same <c>@context</c> bytes as the secured document itself, without a
+    /// reflection-based serialization fallback.
+    /// </param>
+    private static void AppendContext(JsonObject obj, Context? context, JsonSerializerOptions options)
     {
         if(context is null)
         {
             return;
         }
 
-        //Serialize the context through the registered converters (e.g., JsonLdContextConverter),
-        //then parse as a JsonNode to embed in the proof options document.
-        //options.GetTypeInfo retrieves the JsonTypeInfo registered for this concrete type,
-        //routing through the configured IJsonTypeInfoResolver (e.g. VerifiableJsonContext)
-        //without requiring reflection-based serialization.
-        JsonTypeInfo contextTypeInfo = options.GetTypeInfo(context.GetType());
+        JsonTypeInfo<Context> contextTypeInfo = (JsonTypeInfo<Context>)options.GetTypeInfo(typeof(Context));
         string contextJson = JsonSerializer.Serialize(context, contextTypeInfo);
         obj["@context"] = JsonNode.Parse(contextJson);
     }

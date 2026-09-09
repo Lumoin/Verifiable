@@ -11,7 +11,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Response structure (TPM 2.0 Part 3, Section 18.2):
+/// Response structure (TPM 2.0 Library Part 3, clause 18.2):
 /// </para>
 /// <list type="bullet">
 ///   <item><description>certifyInfo (TPM2B_ATTEST): the signed attestation (a marshaled TPMS_ATTEST of type TPM_ST_ATTEST_CERTIFY). The signature is over its raw bytes.</description></item>
@@ -62,7 +62,7 @@ public sealed class CertifyResponse: IDisposable, ITpmWireType
         Tpm2bAttest certifyInfo = Tpm2bAttest.Parse(ref reader, pool);
         try
         {
-            //A TPM2_Certify response's attestation type is fixed to TPM_ST_ATTEST_CERTIFY (Part 3, §18.2). Reject a
+            //A TPM2_Certify response's attestation type is fixed to TPM_ST_ATTEST_CERTIFY (Part 3, clause 18.2). Reject a
             //type-confused body (for example a replayed TPM2_Quote attestation) here rather than surfacing it as a
             //successful CertifyResponse whose Attested.Certify is null and faults the first consumer that reads it.
             if(certifyInfo.AttestationData.Type != TpmStConstants.TPM_ST_ATTEST_CERTIFY)

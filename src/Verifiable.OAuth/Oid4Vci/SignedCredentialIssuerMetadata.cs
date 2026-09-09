@@ -47,7 +47,7 @@ public static class SignedCredentialIssuerMetadata
     /// carry: "MUST be <c>openidvci-issuer-metadata+jwt</c>". A Wallet rejects a signed-metadata
     /// JWT whose <c>typ</c> is anything else, so both sides name the value from one source.
     /// </summary>
-    public static readonly string SignedMetadataType = Utf8Constants.ToInternedString(SignedMetadataTypeUtf8);
+    public static string SignedMetadataType { get; } = Utf8Constants.ToInternedString(SignedMetadataTypeUtf8);
 
 
     /// <summary>

@@ -1,6 +1,8 @@
 using System.Diagnostics;
+using Verifiable.Core.Dcql;
+using Verifiable.Cryptography;
+using Verifiable.Core.Model.Dcql;
 using Verifiable.Core.Model.SelectiveDisclosure;
-using Verifiable.Core.StatusList;
 
 namespace Verifiable.OAuth.Oid4Vp.Server;
 
@@ -10,9 +12,42 @@ namespace Verifiable.OAuth.Oid4Vp.Server;
 /// to construct a <see cref="Validation.ValidationContext"/> for library-side
 /// validation.
 /// </summary>
-[DebuggerDisplay("VpTokenParsed KbJwtSignatureValid={KbJwtSignatureValid} CredentialSignatureValid={CredentialSignatureValid}")]
+[DebuggerDisplay("VpTokenParsed CredentialQueryId={CredentialQueryId} KbJwtSignatureValid={KbJwtSignatureValid} CredentialSignatureValid={CredentialSignatureValid}")]
 public sealed record VpTokenParsed
 {
+    /// <summary>The DCQL credential query identifier the presented credential answered.</summary>
+    public required CredentialQueryId CredentialQueryId { get; init; }
+
+    /// <summary>The verified credential's claims, disclosures, type, issuer, trust evidence, and status claim.</summary>
+    public required VpCredentialClaims Credential { get; init; }
+
+    /// <summary>
+    /// The public key the credential's own issuer signature verified under, borrowed for this flow step.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A borrowed reference, never this record's to dispose: it belongs to whatever the seat's own
+    /// issuer-key seam answered from — <see cref="ResolveIssuerKeyDelegate"/> for SD-JWT,
+    /// <see cref="SdCwtVpVerificationSeams.ResolveIssuerKey"/> for SD-CWT, and for mdoc the
+    /// <see cref="Verifiable.Core.Model.Mdoc.MdocIacaTrustResolution"/> riding the
+    /// <see cref="MdocVpVerificationResult"/> the caller of
+    /// <see cref="MdocVpTokenVerification.VerifyAsync"/> disposes when the step ends. <see langword="null"/> when no key resolved or the issuer signature did not verify under
+    /// the one that did.
+    /// </para>
+    /// <para>
+    /// On the credential-status path it is populated for every format — SD-JWT, SD-CWT and mdoc alike —
+    /// because
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list-21#section-8.3">Token
+    /// Status List §8.3</see> orders the steps: "Upon receiving a Referenced Token, a Relying Party MUST
+    /// first perform the validation of the Referenced Token" and only "If the validation was successful"
+    /// evaluate its status. A status check therefore runs only downstream of a verified issuer signature,
+    /// which is exactly the point at which this key is known. It is what
+    /// <see cref="Verifiable.Core.StatusList.StatusListResolutionContext.ReferencedTokenIssuerKey"/> is
+    /// filled from, making Section 11.3's same-key recommendation reachable behind the status resolver.
+    /// </para>
+    /// </remarks>
+    public PublicKeyMemory? CredentialIssuerKey { get; init; }
+
     /// <summary>The <c>nonce</c> claim extracted from the KB-JWT.</summary>
     public string? KbJwtNonce { get; init; }
 
@@ -27,26 +62,6 @@ public sealed record VpTokenParsed
 
     /// <summary>Whether the credential issuer signature was cryptographically valid.</summary>
     public bool CredentialSignatureValid { get; init; }
-
-    /// <summary>
-    /// The verified credential issuer identifier — the SD-JWT <c>iss</c> the verifier
-    /// resolved to find the issuer signing key — or <see langword="null"/> when the
-    /// format does not surface a string issuer. Carried here so the verifier's
-    /// <see cref="AssessVpDisclosureDelegate"/> seam can enforce a DCQL
-    /// <c>trusted_authorities</c> constraint (the Core <c>DcqlEvaluator</c> only runs
-    /// that check when an issuer is supplied to its metadata extractor).
-    /// </summary>
-    /// <remarks>
-    /// Populated for <c>dc+sd-jwt</c> and <c>dc+sd-cwt</c> from the string <c>iss</c> (matched
-    /// against a <c>trusted_authorities</c> entry of type <c>openid_federation</c>), and for
-    /// <c>mso_mdoc</c> from the IssuerAuth leaf certificate's AuthorityKeyIdentifier (base64url,
-    /// type <c>aki</c>) when the verifier wires
-    /// <see cref="MdocVpVerificationSeams.ExtractAuthorityIdentifier"/>. <see langword="null"/>
-    /// when the format / wiring surfaces no authority identifier, in which case a
-    /// <c>trusted_authorities</c> constraint on that credential goes unenforced (the evaluator
-    /// skips a check it has no value for).
-    /// </remarks>
-    public string? CredentialIssuer { get; init; }
 
     /// <summary>Whether the <c>sd_hash</c> matched the presented disclosures (SD-JWT).</summary>
     public bool SdHashValid { get; init; }
@@ -72,30 +87,6 @@ public sealed record VpTokenParsed
     public string? KbJwtTransactionDataHashesAlg { get; init; }
 
     /// <summary>
-    /// The extracted credential claims, keyed by DCQL credential query identifier.
-    /// Each inner dictionary maps claim name to claim value.
-    /// </summary>
-    public required IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> ExtractedClaims { get; init; }
-
-    /// <summary>
-    /// The disclosed claims keyed by DCQL credential query identifier, then by the
-    /// claim's full canonical <see cref="CredentialPath"/> (RFC 6901 JSON Pointer —
-    /// SD-JWT/SD-CWT <c>/claimName</c>, mdoc <c>/{namespace}/{elementIdentifier}</c>)
-    /// with its native disclosed value.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This is the engine-facing view: the executor hands it (via the
-    /// <see cref="AssessVpDisclosureDelegate"/> seam) to the Core disclosure engine
-    /// to derive DCQL satisfaction and over-disclosure. It is distinct from
-    /// <see cref="ExtractedClaims"/>, which is the relying-party-facing string
-    /// projection keyed by claim name. Keying by full path keeps the assessment
-    /// unambiguous when claims share a leaf name across namespaces or nesting levels.
-    /// </para>
-    /// </remarks>
-    public required IReadOnlyDictionary<string, IReadOnlyDictionary<CredentialPath, object?>> DisclosedClaimPaths { get; init; }
-
-    /// <summary>
     /// The shortest disclosure salt length, in bytes, across the presentation's disclosures, or
     /// <see langword="null"/> when the format carries no disclosure salts (mdoc) or there were none.
     /// Captured here because the parse step holds the <c>SdToken</c> disclosures; the executor copies it
@@ -112,13 +103,4 @@ public sealed record VpTokenParsed
     /// or no reuse occurred.
     /// </summary>
     public bool SaltReused { get; init; }
-
-    /// <summary>
-    /// The IETF Token Status List reference (<c>status.status_list = {idx, uri}</c>) extracted from
-    /// the credential's issuer payload, or <see langword="null"/> when the credential carries no
-    /// status claim. A verifier — RP server, peer wallet, or agent — passes this to
-    /// <see cref="StatusList.CredentialStatusGate"/> to check revocation; surfacing it here keeps
-    /// the fetch and trust of the status list the caller's concern, not the parser's.
-    /// </summary>
-    public StatusListReference? CredentialStatus { get; init; }
 }

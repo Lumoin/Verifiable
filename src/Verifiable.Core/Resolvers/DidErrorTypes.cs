@@ -34,49 +34,49 @@ public static class DidErrorTypes
     /// <summary>
     /// The input DID does not conform to the DID syntax rules.
     /// </summary>
-    public static readonly Uri InvalidDid = new(Namespace + "INVALID_DID");
+    public static Uri InvalidDid { get; } = new(Namespace + "INVALID_DID");
 
     /// <summary>
     /// The DID document was malformed.
     /// </summary>
-    public static readonly Uri InvalidDidDocument = new(Namespace + "INVALID_DID_DOCUMENT");
+    public static Uri InvalidDidDocument { get; } = new(Namespace + "INVALID_DID_DOCUMENT");
 
     /// <summary>
     /// The DID does not exist in its verifiable data registry.
     /// </summary>
-    public static readonly Uri NotFound = new(Namespace + "NOT_FOUND");
+    public static Uri NotFound { get; } = new(Namespace + "NOT_FOUND");
 
     /// <summary>
     /// The representation requested via the <c>accept</c> input metadata property is not
     /// supported by the DID method and/or DID resolver implementation.
     /// </summary>
-    public static readonly Uri RepresentationNotSupported = new(Namespace + "REPRESENTATION_NOT_SUPPORTED");
+    public static Uri RepresentationNotSupported { get; } = new(Namespace + "REPRESENTATION_NOT_SUPPORTED");
 
     /// <summary>
     /// The input DID URL does not conform to the DID URL syntax rules.
     /// </summary>
-    public static readonly Uri InvalidDidUrl = new(Namespace + "INVALID_DID_URL");
+    public static Uri InvalidDidUrl { get; } = new(Namespace + "INVALID_DID_URL");
 
     /// <summary>
     /// The DID method used by the input DID is not supported by this resolver.
     /// </summary>
-    public static readonly Uri MethodNotSupported = new(Namespace + "METHOD_NOT_SUPPORTED");
+    public static Uri MethodNotSupported { get; } = new(Namespace + "METHOD_NOT_SUPPORTED");
 
     /// <summary>
     /// One or more of the supplied resolution or dereferencing options are invalid.
     /// </summary>
-    public static readonly Uri InvalidOptions = new(Namespace + "INVALID_OPTIONS");
+    public static Uri InvalidOptions { get; } = new(Namespace + "INVALID_OPTIONS");
 
     /// <summary>
     /// An unexpected error occurred during resolution or dereferencing.
     /// </summary>
-    public static readonly Uri InternalError = new(Namespace + "INTERNAL_ERROR");
+    public static Uri InternalError { get; } = new(Namespace + "INTERNAL_ERROR");
 
     /// <summary>
     /// The DID resolver does not support the requested feature. The <c>detail</c> field
     /// SHOULD describe which feature is unsupported.
     /// </summary>
-    public static readonly Uri FeatureNotSupported = new(Namespace + "FEATURE_NOT_SUPPORTED");
+    public static Uri FeatureNotSupported { get; } = new(Namespace + "FEATURE_NOT_SUPPORTED");
 
     /// <summary>
     /// A DID URL dereferenced to a resource that is not a conforming verification method, or
@@ -89,7 +89,7 @@ public static class DidErrorTypes
     /// <see href="https://www.w3.org/TR/did-resolution/#dereferencing-secondary-resource">DID
     /// Resolution §5.4.2</see>.
     /// </remarks>
-    public static readonly Uri InvalidVerificationMethod = new(Namespace + "INVALID_VERIFICATION_METHOD");
+    public static Uri InvalidVerificationMethod { get; } = new(Namespace + "INVALID_VERIFICATION_METHOD");
 
     /// <summary>
     /// A DID URL dereferenced to a verification method that is not associated, either by
@@ -102,7 +102,7 @@ public static class DidErrorTypes
     /// <see href="https://www.w3.org/TR/did-resolution/#dereferencing-secondary-resource">DID
     /// Resolution §5.4.2</see>.
     /// </remarks>
-    public static readonly Uri InvalidRelationshipForVerificationMethod = new(Namespace + "INVALID_RELATIONSHIP_FOR_VERIFICATION_METHOD");
+    public static Uri InvalidRelationshipForVerificationMethod { get; } = new(Namespace + "INVALID_RELATIONSHIP_FOR_VERIFICATION_METHOD");
 
     /// <summary>
     /// Maps a standard DID error type URI to the lowerCamelCase string code the W3C DID Resolution and the

@@ -6,6 +6,8 @@ using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Microsoft;
+using Microsoft.Extensions.Time.Testing;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Acdc;
 
@@ -21,8 +23,8 @@ internal static class AcdcTestSupport
     /// </summary>
     public static ComputeDigestDelegate AgileDigest { get; } = (input, outputByteLength, tag, pool, context, cancellationToken) =>
         tag.TryGet<CryptoAlgorithm>(out CryptoAlgorithm algorithm) && algorithm == CryptoAlgorithm.Blake3
-            ? BouncyCastleCryptographicFunctions.ComputeBlake3DigestAsync(input, outputByteLength, tag, pool, context, cancellationToken)
-            : MicrosoftCryptographicFunctions.ComputeDigestAsync(input, outputByteLength, tag, pool, context, cancellationToken);
+            ? BouncyCastleCryptographicFunctions.ComputeBlake3DigestAsync(input, outputByteLength, tag, pool, new FakeTimeProvider(TestClock.CanonicalEpoch), context, cancellationToken)
+            : MicrosoftCryptographicFunctions.ComputeDigestAsync(input, outputByteLength, tag, pool, new FakeTimeProvider(TestClock.CanonicalEpoch), context, cancellationToken);
 
 
     /// <summary>
@@ -46,7 +48,7 @@ internal static class AcdcTestSupport
     /// </summary>
     internal sealed class EncodedSerialization: IDisposable
     {
-        private readonly IMemoryOwner<byte> owner;
+        private IMemoryOwner<byte> Owner { get; }
 
         /// <summary>
         /// Creates the carrier over a pooled buffer.
@@ -55,7 +57,7 @@ internal static class AcdcTestSupport
         /// <param name="length">The number of bytes written.</param>
         public EncodedSerialization(IMemoryOwner<byte> owner, int length)
         {
-            this.owner = owner;
+            this.Owner = owner;
             Length = length;
         }
 
@@ -63,12 +65,12 @@ internal static class AcdcTestSupport
         public int Length { get; }
 
         /// <summary>The serialization bytes as memory.</summary>
-        public ReadOnlyMemory<byte> Memory => owner.Memory[..Length];
+        public ReadOnlyMemory<byte> Memory => Owner.Memory[..Length];
 
         /// <summary>The serialization bytes as a span.</summary>
-        public ReadOnlySpan<byte> Bytes => owner.Memory.Span[..Length];
+        public ReadOnlySpan<byte> Bytes => Owner.Memory.Span[..Length];
 
         /// <summary>Returns the pooled buffer.</summary>
-        public void Dispose() => owner.Dispose();
+        public void Dispose() => Owner.Dispose();
     }
 }

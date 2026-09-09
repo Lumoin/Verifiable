@@ -277,6 +277,10 @@ public static class WebPlusMicroledger
 
         if(entry.Operation is not WebPlusRawEntry raw)
         {
+            //The (string?) cast is load-bearing: ValueTask.FromResult<TResult> infers TResult from
+            //the argument alone (the method's declared return type does not flow into generic
+            //inference here), so a bare string literal would infer a non-nullable tuple element and
+            //fail to convert to the declared ValueTask<(LogState<WebPlusState>, string?)> return type.
             return ValueTask.FromResult((currentState, (string?)"The did:webplus microledger entry carries no parsed content."));
         }
 

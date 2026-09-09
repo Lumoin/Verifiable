@@ -99,7 +99,7 @@ internal sealed class TpmInterfaceSessionAndEntityHandleTests
     /// <see cref="TpmiShHmac.Parse"/> admits the whole HMAC session range and <see cref="TpmiShHmac.WriteTo"/>
     /// reproduces the exact wire bytes it was parsed from (<see
     /// href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 2, Section 9.9, Table 56).
+    /// Specification</see>, Part 2, clause 9.9, Table 55).
     /// </summary>
     /// <param name="value">A value drawn from the HMAC session range: its first, an interior, and its last octet.</param>
     [TestMethod]
@@ -125,7 +125,7 @@ internal sealed class TpmInterfaceSessionAndEntityHandleTests
     /// <summary>
     /// A handle outside the HMAC session range is refused by <see cref="TpmiShHmac.Parse"/> with
     /// <c>TPM_RC_VALUE</c>, and <see cref="TpmiShHmac.IsHmacSession"/> reports it as not admitted (TPM 2.0
-    /// Library Part 2, Section 9.9, Table 56).
+    /// Library Part 2, clause 9.9, Table 55).
     /// </summary>
     /// <param name="value">A policy session handle, a transient object handle, and a permanent handle.</param>
     [TestMethod]
@@ -142,7 +142,7 @@ internal sealed class TpmInterfaceSessionAndEntityHandleTests
 
     /// <summary>
     /// <see cref="TpmiShHmac.FromValue"/> is the unvalidated escape hatch for a value already known good — it
-    /// admits a value outside the HMAC session range without throwing (TPM 2.0 Library Part 2, Section 9.9).
+    /// admits a value outside the HMAC session range without throwing (TPM 2.0 Library Part 2, clause 9.9).
     /// </summary>
     [TestMethod]
     public void TpmiShHmacFromValueDoesNotValidate()
@@ -156,7 +156,7 @@ internal sealed class TpmInterfaceSessionAndEntityHandleTests
 
     /// <summary>
     /// <see cref="TpmiShHmac"/> converts implicitly to <see cref="TpmHandle"/>, carrying the raw value unchanged
-    /// for callers composing a handle area from typed session handles (TPM 2.0 Library Part 2, Section 9.9).
+    /// for callers composing a handle area from typed session handles (TPM 2.0 Library Part 2, clause 9.9).
     /// </summary>
     [TestMethod]
     public void TpmiShHmacConvertsImplicitlyToTpmHandle()
@@ -171,7 +171,7 @@ internal sealed class TpmInterfaceSessionAndEntityHandleTests
     /// <summary>
     /// <see cref="TpmiShPolicy.Parse"/> admits the whole policy session range and
     /// <see cref="TpmiShPolicy.WriteTo"/> reproduces the exact wire bytes it was parsed from (TPM 2.0 Library
-    /// Part 2, Section 9.10, Table 57).
+    /// Part 2, clause 9.10, Table 56).
     /// </summary>
     /// <param name="value">A value drawn from the policy session range: its first, an interior, and its last octet.</param>
     [TestMethod]
@@ -197,7 +197,7 @@ internal sealed class TpmInterfaceSessionAndEntityHandleTests
     /// <summary>
     /// A handle outside the policy session range is refused by <see cref="TpmiShPolicy.Parse"/> with
     /// <c>TPM_RC_VALUE</c>, and <see cref="TpmiShPolicy.IsPolicySession"/> reports it as not admitted (TPM 2.0
-    /// Library Part 2, Section 9.10, Table 57).
+    /// Library Part 2, clause 9.10, Table 56).
     /// </summary>
     /// <param name="value">An HMAC session handle, a transient object handle, and a permanent handle.</param>
     [TestMethod]
@@ -214,7 +214,7 @@ internal sealed class TpmInterfaceSessionAndEntityHandleTests
 
     /// <summary>
     /// <see cref="TpmiShPolicy.FromValue"/> is the unvalidated escape hatch — it admits a value outside the
-    /// policy session range without throwing (TPM 2.0 Library Part 2, Section 9.10).
+    /// policy session range without throwing (TPM 2.0 Library Part 2, clause 9.10).
     /// </summary>
     [TestMethod]
     public void TpmiShPolicyFromValueDoesNotValidate()
@@ -228,7 +228,7 @@ internal sealed class TpmInterfaceSessionAndEntityHandleTests
 
     /// <summary>
     /// <see cref="TpmiShPolicy"/> converts implicitly to <see cref="TpmHandle"/>, carrying the raw value
-    /// unchanged (TPM 2.0 Library Part 2, Section 9.10).
+    /// unchanged (TPM 2.0 Library Part 2, clause 9.10).
     /// </summary>
     [TestMethod]
     public void TpmiShPolicyConvertsImplicitlyToTpmHandle()
@@ -243,7 +243,7 @@ internal sealed class TpmInterfaceSessionAndEntityHandleTests
     /// <summary>
     /// <see cref="TpmiDhPcr.Parse"/> admits the whole PCR range in its bare form and
     /// <see cref="TpmiDhPcr.WriteTo"/> reproduces the exact wire bytes it was parsed from (TPM 2.0 Library
-    /// Part 2, Section 9.7, Table 54).
+    /// Part 2, clause 9.7, Table 53).
     /// </summary>
     /// <param name="value">A value drawn from the PCR range: PCR 0, an interior PCR, and the range's top octet.</param>
     [TestMethod]
@@ -269,7 +269,7 @@ internal sealed class TpmInterfaceSessionAndEntityHandleTests
     /// <summary>
     /// A handle outside the PCR range is refused by <see cref="TpmiDhPcr.Parse"/> with <c>TPM_RC_VALUE</c>, and
     /// <see cref="TpmiDhPcr.IsPcr"/> reports it as not admitted, even with <c>isNullAdmitted</c> set — the
-    /// range check and the NULL admission are independent (TPM 2.0 Library Part 2, Section 9.7, Table 54).
+    /// range check and the NULL admission are independent (TPM 2.0 Library Part 2, clause 9.7, Table 53).
     /// </summary>
     /// <param name="value">An NV Index handle and a transient object handle, both outside the PCR range.</param>
     [TestMethod]
@@ -286,7 +286,7 @@ internal sealed class TpmInterfaceSessionAndEntityHandleTests
 
     /// <summary>
     /// The bare form of <see cref="TpmiDhPcr.Parse"/> refuses <c>TPM_RH_NULL</c> with <c>TPM_RC_VALUE</c> — the
-    /// conditional value requires <c>isNullAdmitted</c> (TPM 2.0 Library Part 2, Section 9.7, Table 54, the
+    /// conditional value requires <c>isNullAdmitted</c> (TPM 2.0 Library Part 2, clause 9.7, Table 53, the
     /// <c>+TPM_RH_NULL</c> row).
     /// </summary>
     [TestMethod]
@@ -300,7 +300,7 @@ internal sealed class TpmInterfaceSessionAndEntityHandleTests
 
     /// <summary>
     /// The <c>+</c> form of <see cref="TpmiDhPcr.Parse"/> (<c>isNullAdmitted: true</c>) admits
-    /// <c>TPM_RH_NULL</c> and round-trips it byte-identically (TPM 2.0 Library Part 2, Section 9.7, Table 54,
+    /// <c>TPM_RH_NULL</c> and round-trips it byte-identically (TPM 2.0 Library Part 2, clause 9.7, Table 53,
     /// the <c>+TPM_RH_NULL</c> row).
     /// </summary>
     [TestMethod]
@@ -322,7 +322,7 @@ internal sealed class TpmInterfaceSessionAndEntityHandleTests
 
     /// <summary>
     /// <see cref="TpmiDhPcr.FromValue"/> is the unvalidated escape hatch — it admits a value outside the PCR
-    /// range without throwing (TPM 2.0 Library Part 2, Section 9.7).
+    /// range without throwing (TPM 2.0 Library Part 2, clause 9.7).
     /// </summary>
     [TestMethod]
     public void TpmiDhPcrFromValueDoesNotValidate()
@@ -336,7 +336,7 @@ internal sealed class TpmInterfaceSessionAndEntityHandleTests
 
     /// <summary>
     /// <see cref="TpmiDhPcr"/> converts implicitly to <see cref="TpmHandle"/>, carrying the raw value unchanged
-    /// (TPM 2.0 Library Part 2, Section 9.7).
+    /// (TPM 2.0 Library Part 2, clause 9.7).
     /// </summary>
     [TestMethod]
     public void TpmiDhPcrConvertsImplicitlyToTpmHandle()
@@ -351,7 +351,7 @@ internal sealed class TpmInterfaceSessionAndEntityHandleTests
     /// <summary>
     /// <see cref="TpmiDhPersistent.Parse"/> admits the whole persistent-object range and
     /// <see cref="TpmiDhPersistent.WriteTo"/> reproduces the exact wire bytes it was parsed from (TPM 2.0
-    /// Library Part 2, Section 9.5, Table 52).
+    /// Library Part 2, clause 9.5, Table 51).
     /// </summary>
     /// <param name="value">A value drawn from the persistent-object range: its first, an interior, and its last octet.</param>
     [TestMethod]
@@ -377,7 +377,7 @@ internal sealed class TpmInterfaceSessionAndEntityHandleTests
     /// <summary>
     /// A handle outside the persistent-object range is refused by <see cref="TpmiDhPersistent.Parse"/> with
     /// <c>TPM_RC_VALUE</c>, and <see cref="TpmiDhPersistent.IsPersistent"/> reports it as not admitted (TPM 2.0
-    /// Library Part 2, Section 9.5, Table 52).
+    /// Library Part 2, clause 9.5, Table 51).
     /// </summary>
     /// <param name="value">A transient object handle and an NV Index handle, both outside the persistent range.</param>
     [TestMethod]
@@ -393,7 +393,7 @@ internal sealed class TpmInterfaceSessionAndEntityHandleTests
 
     /// <summary>
     /// <see cref="TpmiDhPersistent.FromValue"/> is the unvalidated escape hatch — it admits a value outside the
-    /// persistent-object range without throwing (TPM 2.0 Library Part 2, Section 9.5).
+    /// persistent-object range without throwing (TPM 2.0 Library Part 2, clause 9.5).
     /// </summary>
     [TestMethod]
     public void TpmiDhPersistentFromValueDoesNotValidate()
@@ -407,7 +407,7 @@ internal sealed class TpmInterfaceSessionAndEntityHandleTests
 
     /// <summary>
     /// <see cref="TpmiDhPersistent"/> converts implicitly to <see cref="TpmHandle"/>, carrying the raw value
-    /// unchanged (TPM 2.0 Library Part 2, Section 9.5).
+    /// unchanged (TPM 2.0 Library Part 2, clause 9.5).
     /// </summary>
     [TestMethod]
     public void TpmiDhPersistentConvertsImplicitlyToTpmHandle()
@@ -423,7 +423,7 @@ internal sealed class TpmInterfaceSessionAndEntityHandleTests
     /// <see cref="TpmiDhContext.Parse"/> admits a handle from each of the three ranges
     /// <c>TPM2_ContextSave()</c>/<c>TPM2_FlushContext()</c> operate over — HMAC session, policy session, and
     /// transient object — and <see cref="TpmiDhContext.WriteTo"/> reproduces the exact wire bytes it was parsed
-    /// from (TPM 2.0 Library Part 2, Section 9.11, Table 58).
+    /// from (TPM 2.0 Library Part 2, clause 9.11, Table 57).
     /// </summary>
     /// <param name="value">A handle from the HMAC session, policy session, and transient object ranges in turn.</param>
     [TestMethod]
@@ -450,7 +450,7 @@ internal sealed class TpmInterfaceSessionAndEntityHandleTests
     /// A handle outside all three unioned ranges is refused by <see cref="TpmiDhContext.Parse"/> with
     /// <c>TPM_RC_VALUE</c>, and <see cref="TpmiDhContext.IsContext"/> reports it as not admitted — a saved or
     /// loaded context is never a persistent object, an NV Index, or a permanent handle (TPM 2.0 Library Part 2,
-    /// Section 9.11, Table 58).
+    /// clause 9.11, Table 57).
     /// </summary>
     /// <param name="value">A persistent object handle, an NV Index handle, and a permanent handle.</param>
     [TestMethod]
@@ -467,7 +467,7 @@ internal sealed class TpmInterfaceSessionAndEntityHandleTests
 
     /// <summary>
     /// <see cref="TpmiDhContext.FromValue"/> is the unvalidated escape hatch — it admits a value outside every
-    /// unioned range without throwing (TPM 2.0 Library Part 2, Section 9.11).
+    /// unioned range without throwing (TPM 2.0 Library Part 2, clause 9.11).
     /// </summary>
     [TestMethod]
     public void TpmiDhContextFromValueDoesNotValidate()
@@ -481,7 +481,7 @@ internal sealed class TpmInterfaceSessionAndEntityHandleTests
 
     /// <summary>
     /// <see cref="TpmiDhContext"/> converts implicitly to <see cref="TpmHandle"/>, carrying the raw value
-    /// unchanged (TPM 2.0 Library Part 2, Section 9.11).
+    /// unchanged (TPM 2.0 Library Part 2, clause 9.11).
     /// </summary>
     [TestMethod]
     public void TpmiDhContextConvertsImplicitlyToTpmHandle()
@@ -495,7 +495,7 @@ internal sealed class TpmInterfaceSessionAndEntityHandleTests
 
     /// <summary>
     /// <see cref="TpmiDhEntity.Parse"/> admits each of the four named permanent handles and round-trips it
-    /// byte-identically (TPM 2.0 Library Part 2, Section 9.6, Table 53).
+    /// byte-identically (TPM 2.0 Library Part 2, clause 9.6, Table 52).
     /// </summary>
     /// <param name="value">Each of <c>TPM_RH_OWNER</c>, <c>TPM_RH_ENDORSEMENT</c>, <c>TPM_RH_PLATFORM</c>, and <c>TPM_RH_LOCKOUT</c>.</param>
     [TestMethod]
@@ -522,7 +522,7 @@ internal sealed class TpmInterfaceSessionAndEntityHandleTests
     /// <summary>
     /// <see cref="TpmiDhEntity.Parse"/> admits a handle from each of the object, NV Index, PCR, and
     /// vendor-specific authorization ranges the table unions in, and round-trips it byte-identically (TPM 2.0
-    /// Library Part 2, Section 9.6, Table 53).
+    /// Library Part 2, clause 9.6, Table 52).
     /// </summary>
     /// <param name="value">A transient, persistent, NV Index, PCR, and vendor-authorization handle in turn.</param>
     [TestMethod]
@@ -551,8 +551,8 @@ internal sealed class TpmInterfaceSessionAndEntityHandleTests
     /// <summary>
     /// A handle in none of the named permanent handles, the four unioned ranges, or the vendor-authorization
     /// range is refused by <see cref="TpmiDhEntity.Parse"/> with <c>TPM_RC_VALUE</c>, and
-    /// <see cref="TpmiDhEntity.IsEntity"/> reports it as not admitted (TPM 2.0 Library Part 2, Section 9.6,
-    /// Table 53).
+    /// <see cref="TpmiDhEntity.IsEntity"/> reports it as not admitted (TPM 2.0 Library Part 2, clause 9.6,
+    /// Table 52).
     /// </summary>
     /// <param name="value">A session handle, an unlisted permanent handle, and the octet just past the vendor-authorization range.</param>
     [TestMethod]
@@ -569,7 +569,7 @@ internal sealed class TpmInterfaceSessionAndEntityHandleTests
 
     /// <summary>
     /// The bare form of <see cref="TpmiDhEntity.Parse"/> refuses <c>TPM_RH_NULL</c> with <c>TPM_RC_VALUE</c> —
-    /// the conditional value requires <c>isNullAdmitted</c> (TPM 2.0 Library Part 2, Section 9.6, Table 53, the
+    /// the conditional value requires <c>isNullAdmitted</c> (TPM 2.0 Library Part 2, clause 9.6, Table 52, the
     /// <c>+TPM_RH_NULL</c> row).
     /// </summary>
     [TestMethod]
@@ -583,7 +583,7 @@ internal sealed class TpmInterfaceSessionAndEntityHandleTests
 
     /// <summary>
     /// The <c>+</c> form of <see cref="TpmiDhEntity.Parse"/> (<c>isNullAdmitted: true</c>) admits
-    /// <c>TPM_RH_NULL</c> and round-trips it byte-identically (TPM 2.0 Library Part 2, Section 9.6, Table 53,
+    /// <c>TPM_RH_NULL</c> and round-trips it byte-identically (TPM 2.0 Library Part 2, clause 9.6, Table 52,
     /// the <c>+TPM_RH_NULL</c> row).
     /// </summary>
     [TestMethod]
@@ -605,7 +605,7 @@ internal sealed class TpmInterfaceSessionAndEntityHandleTests
 
     /// <summary>
     /// <see cref="TpmiDhEntity.FromValue"/> is the unvalidated escape hatch — it admits a value outside every
-    /// admitted set without throwing (TPM 2.0 Library Part 2, Section 9.6).
+    /// admitted set without throwing (TPM 2.0 Library Part 2, clause 9.6).
     /// </summary>
     [TestMethod]
     public void TpmiDhEntityFromValueDoesNotValidate()
@@ -619,7 +619,7 @@ internal sealed class TpmInterfaceSessionAndEntityHandleTests
 
     /// <summary>
     /// <see cref="TpmiDhEntity"/> converts implicitly to <see cref="TpmHandle"/>, carrying the raw value
-    /// unchanged (TPM 2.0 Library Part 2, Section 9.6).
+    /// unchanged (TPM 2.0 Library Part 2, clause 9.6).
     /// </summary>
     [TestMethod]
     public void TpmiDhEntityConvertsImplicitlyToTpmHandle()

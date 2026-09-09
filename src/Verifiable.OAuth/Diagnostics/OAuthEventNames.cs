@@ -28,7 +28,7 @@ public static class OAuthEventNames
     /// parameters and ignores these extras; their presence may indicate a non-conformant client
     /// or a front-channel tampering attempt, so it is surfaced for deployments to alert on.
     /// </summary>
-    public static readonly string ExtraneousAuthorizeParameters =
+    public static string ExtraneousAuthorizeParameters { get; } =
         Utf8Constants.ToInternedString(ExtraneousAuthorizeParametersUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="DuplicateGrantedCredentialConfigurationCollapsed"/>.</summary>
@@ -43,7 +43,7 @@ public static class OAuthEventNames
     /// authorization details object took precedence so the type is granted once. Observational; it
     /// does not change the single-grant outcome.
     /// </summary>
-    public static readonly string DuplicateGrantedCredentialConfigurationCollapsed =
+    public static string DuplicateGrantedCredentialConfigurationCollapsed { get; } =
         Utf8Constants.ToInternedString(DuplicateGrantedCredentialConfigurationCollapsedUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="LongLivedBearerCredentialTokenRefused"/>.</summary>
@@ -59,7 +59,7 @@ public static class OAuthEventNames
     /// than mint a long-lived bearer Credential token; the event surfaces the detection for
     /// deployments to alert on.
     /// </summary>
-    public static readonly string LongLivedBearerCredentialTokenRefused =
+    public static string LongLivedBearerCredentialTokenRefused { get; } =
         Utf8Constants.ToInternedString(LongLivedBearerCredentialTokenRefusedUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Oid4VpClientIdMixUpRejected"/>.</summary>
@@ -77,7 +77,7 @@ public static class OAuthEventNames
     /// or POSTing a response — the OID4VP mix-up defence — and the event surfaces the detection for
     /// deployments to alert on.
     /// </summary>
-    public static readonly string Oid4VpClientIdMixUpRejected =
+    public static string Oid4VpClientIdMixUpRejected { get; } =
         Utf8Constants.ToInternedString(Oid4VpClientIdMixUpRejectedUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="IdentityScopesDroppedForNonEndUserGrant"/>.</summary>
@@ -95,7 +95,7 @@ public static class OAuthEventNames
     /// authenticated user. The dropped scope values ride under
     /// <see cref="DroppedScopesTagName"/>.
     /// </summary>
-    public static readonly string IdentityScopesDroppedForNonEndUserGrant =
+    public static string IdentityScopesDroppedForNonEndUserGrant { get; } =
         Utf8Constants.ToInternedString(IdentityScopesDroppedForNonEndUserGrantUtf8);
 
     /// <summary>
@@ -103,5 +103,5 @@ public static class OAuthEventNames
     /// space-separated scope values dropped by an
     /// <see cref="IdentityScopesDroppedForNonEndUserGrant"/> event.
     /// </summary>
-    public static readonly string DroppedScopesTagName = "oauth.token.dropped_scopes";
+    public static string DroppedScopesTagName { get; } = "oauth.token.dropped_scopes";
 }

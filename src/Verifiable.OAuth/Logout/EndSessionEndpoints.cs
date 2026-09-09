@@ -44,7 +44,7 @@ public static class EndSessionEndpoints
     /// The endpoint builder delegate. Pass this to
     /// <see cref="Verifiable.Server.ServerConfiguration.EndpointBuilders"/>.
     /// </summary>
-    public static readonly EndpointBuilderDelegate Builder = static (registration, context, ct) =>
+    public static EndpointBuilderDelegate Builder { get; } = static (registration, context, ct) =>
     {
         List<EndpointCandidate> candidates = [];
 
@@ -176,7 +176,7 @@ public static class EndSessionEndpoints
                     //exactly as it advertises. The verified id_token_hint path is the one that
                     //carries the sub/sid the Logout Tokens are built from; the sessionless
                     //logout_hint path leaves any cascade to the app's by-hint terminate.
-                    if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OidcBackChannelLogout)
+                    if(registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OidcBackChannelLogout)
                         && oauth.DeliverBackChannelLogoutAsync is not null)
                     {
                         await oauth.DeliverBackChannelLogoutAsync(
@@ -187,7 +187,7 @@ public static class EndSessionEndpoints
                 //§2: redirect to the validated post_logout_redirect_uri (state echoed),
                 //else answer 200 — the session is terminated either way.
                 return redirectLocation is not null
-                    ? ((FlowInput?)null, ServerHttpResponse.Redirect(redirectLocation))
+                    ? (null, ServerHttpResponse.Redirect(redirectLocation))
                     : (null, ServerHttpResponse.Ok());
             },
 
@@ -217,7 +217,7 @@ public static class EndSessionEndpoints
                 idTokenHint,
                 oauth.Codecs.Decoder!,
                 bytes => oauth.Codecs.JwtHeaderDeserializer!(bytes),
-                BaseMemoryPool.Shared);
+                oauth.MemoryPool!);
         }
         catch(Exception ex) when(ex is FormatException or InvalidOperationException)
         {
@@ -264,7 +264,7 @@ public static class EndSessionEndpoints
                     idTokenHint,
                     oauth.Codecs.Decoder!,
                     bytes => oauth.Codecs.JwtPayloadDeserializer!(bytes),
-                    BaseMemoryPool.Shared,
+                    oauth.MemoryPool!,
                     publicKey,
                     cancellationToken).ConfigureAwait(false);
             }

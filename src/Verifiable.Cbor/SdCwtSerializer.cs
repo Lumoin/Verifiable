@@ -2,7 +2,7 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using System.Security.Cryptography;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -87,14 +87,15 @@ public static class SdCwtSerializer
     /// <returns>The CBOR-encoded COSE_Sign1 bytes.</returns>
     public static byte[] Serialize(
         SdCwtMessage message,
-        CborConformanceMode conformanceMode = CborConformanceMode.Canonical)
+        CborConformanceMode conformanceMode = CborConformanceMode.RfcCanonical)
     {
         ArgumentNullException.ThrowIfNull(message);
 
-        var writer = new CborWriter(conformanceMode);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborSerializerOptions.Default(conformanceMode));
 
         //COSE_Sign1 = tag(18) [protected, unprotected, payload, signature].
-        writer.WriteTag((CborTag)CoseTags.Sign1);
+        writer.WriteTag(new CborTag((ulong)CoseTags.Sign1));
         writer.WriteStartArray(4);
 
         //Protected header (as bstr).
@@ -120,7 +121,7 @@ public static class SdCwtSerializer
 
         writer.WriteEndArray();
 
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
     }
 
 
@@ -136,18 +137,47 @@ public static class SdCwtSerializer
     /// <returns>The parsed SD-CWT message. Caller owns and disposes (which disposes
     /// every contained disclosure and salt).</returns>
     /// <exception cref="CborContentException">Thrown when the format is invalid.</exception>
-    public static SdCwtMessage Parse(ReadOnlyMemory<byte> coseSign1, Tag saltTag, BaseMemoryPool pool)
+    public static SdCwtMessage Parse(ReadOnlyMemory<byte> coseSign1, Tag saltTag, BaseMemoryPool pool) =>
+        Parse(coseSign1, saltTag, pool, out _);
+
+
+    /// <summary>
+    /// Parses an SD-CWT message and additionally surfaces each disclosure's CBOR bytes exactly as
+    /// the unprotected header carried them.
+    /// </summary>
+    /// <remarks>
+    /// A disclosure's digest is a commitment to the bytes the Issuer hashed, so the binding is
+    /// answered against those bytes and never against a re-encoding of the parsed value — this is
+    /// the same rule <see cref="Verifiable.Json.Sd.SdJwtSerializer"/> follows for
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9901">RFC 9901</see> §4.2.3, and it keeps a
+    /// validly encoded disclosure that this library would have written differently from failing
+    /// to bind.
+    /// </remarks>
+    /// <param name="coseSign1">The CBOR-encoded COSE_Sign1 bytes.</param>
+    /// <param name="saltTag">The tag stamped on each wrapped <see cref="Salt"/>.</param>
+    /// <param name="pool">Memory pool for allocating salt buffers.</param>
+    /// <param name="disclosureWireBytes">
+    /// Each disclosure's CBOR bytes as they arrived, in the same order as the returned message's
+    /// <see cref="SdCwtMessage.Disclosures"/>.
+    /// </param>
+    /// <returns>The parsed SD-CWT message. Caller owns and disposes it.</returns>
+    /// <exception cref="CborContentException">Thrown when the format is invalid.</exception>
+    internal static SdCwtMessage Parse(
+        ReadOnlyMemory<byte> coseSign1,
+        Tag saltTag,
+        BaseMemoryPool pool,
+        out IReadOnlyList<byte[]> disclosureWireBytes)
     {
         ArgumentNullException.ThrowIfNull(saltTag);
         ArgumentNullException.ThrowIfNull(pool);
 
-        var reader = new CborReader(coseSign1, CborConformanceMode.Lax);
+        var reader = new CborReader(coseSign1, CborOptions.Lax);
 
         //Read and validate COSE_Sign1 tag.
         CborTag tag = reader.ReadTag();
-        if((int)tag != CoseTags.Sign1)
+        if((int)tag.Value != CoseTags.Sign1)
         {
-            throw new CborContentException($"Expected COSE_Sign1 tag (18), got {(int)tag}.");
+            throw new CborContentException($"Expected COSE_Sign1 tag (18), got {(int)tag.Value}.");
         }
 
         int? arrayLength = reader.ReadStartArray();
@@ -161,6 +191,7 @@ public static class SdCwtSerializer
 
         //Unprotected header - extract sd_claims.
         var disclosures = new List<SdDisclosure>();
+        var wireBytes = new List<byte[]>();
         reader.ReadStartMap();
 
         try
@@ -177,6 +208,7 @@ public static class SdCwtSerializer
                         byte[] disclosureCbor = reader.ReadByteString();
                         SdDisclosure disclosure = ParseDisclosure(disclosureCbor, saltTag, pool);
                         disclosures.Add(disclosure);
+                        wireBytes.Add(disclosureCbor);
                     }
                     reader.ReadEndArray();
                 }
@@ -206,7 +238,101 @@ public static class SdCwtSerializer
 
         reader.ReadEndArray();
 
+        disclosureWireBytes = wireBytes;
+
         return new SdCwtMessage(payload, protectedHeader, signature, disclosures);
+    }
+
+
+    /// <summary>
+    /// Parses an SD-CWT message from COSE_Sign1 format into a structured
+    /// <see cref="SdToken{TEnvelope}"/>. Computes <see cref="SdToken{TEnvelope}.DisclosurePaths"/>
+    /// and <see cref="SdToken{TEnvelope}.IssuerSignedClaims"/> by walking the payload's digest
+    /// tree, sharing the walker core with <see cref="SdCwtPathExtraction.ExtractPaths(SdCwtMessage, EncodeDelegate, BaseMemoryPool, string)"/>.
+    /// </summary>
+    /// <param name="coseSign1">The CBOR-encoded COSE_Sign1 bytes.</param>
+    /// <param name="saltTag">The tag stamped on each wrapped <see cref="Salt"/>.</param>
+    /// <param name="pool">Memory pool for allocating salt buffers.</param>
+    /// <param name="encoder">Delegate for Base64Url encoding, used to compute disclosure digests.</param>
+    /// <param name="hashAlgorithm">The disclosure-digest hash algorithm in IANA format.</param>
+    /// <returns>The parsed token. Caller owns and disposes it (which disposes every contained
+    /// disclosure and salt).</returns>
+    /// <exception cref="CborContentException">Thrown when the COSE_Sign1 envelope is invalid.</exception>
+    /// <exception cref="FormatException">
+    /// Thrown when two disclosures carry the same salt bytes, when a same-level claim name
+    /// collides, or when a disclosure is not referenced by any digest in the payload.
+    /// </exception>
+    public static SdToken<ReadOnlyMemory<byte>> ParseToken(
+        ReadOnlyMemory<byte> coseSign1,
+        Tag saltTag,
+        BaseMemoryPool pool,
+        EncodeDelegate encoder,
+        string hashAlgorithm = WellKnownHashAlgorithms.Sha256Iana)
+    {
+        ArgumentNullException.ThrowIfNull(saltTag);
+        ArgumentNullException.ThrowIfNull(pool);
+        ArgumentNullException.ThrowIfNull(encoder);
+
+        SdCwtMessage message = Parse(coseSign1, saltTag, pool, out IReadOnlyList<byte[]> disclosureWireBytes);
+
+        try
+        {
+            var digestToDisclosure = new Dictionary<string, SdDisclosure>(StringComparer.Ordinal);
+
+            //draft-ietf-spice-sd-cwt follows RFC 9901 §9.3: the Issuer chooses an independent salt
+            //per disclosure. SdDisclosure equality is its salt bytes, so this set detects a wire
+            //form that carries two disclosures under one salt — a shape that would let a forged
+            //disclosure ride a legitimate one's identity through the parse plumbing.
+            var saltsSeen = new HashSet<SdDisclosure>();
+
+            for(int i = 0; i < message.Disclosures.Count; i++)
+            {
+                SdDisclosure disclosure = message.Disclosures[i];
+
+                if(!saltsSeen.Add(disclosure))
+                {
+                    throw new FormatException(
+                        "draft-ietf-spice-sd-cwt (RFC 9901 §9.3): two Disclosures carry the same salt value; the Issuer must choose a new salt for each claim.");
+                }
+
+                //The digest is computed over the disclosure's bytes exactly as the unprotected
+                //header carried them (RFC 9901 §4.2.3's rule), never a re-encoding of the parsed
+                //value, which a validly encoded disclosure could legitimately differ from.
+                byte[] digestBytes = ComputeDisclosureDigest(disclosureWireBytes[i], hashAlgorithm, pool);
+                digestToDisclosure[encoder(digestBytes)] = disclosure;
+            }
+
+            SdCwtWalkResult walkResult = SdCwtPathExtraction.Walk(message.Payload, digestToDisclosure, encoder);
+
+            //draft-ietf-spice-sd-cwt mirrors RFC 9901 §7.1 step 5: every Disclosure the wire
+            //form carries must be referenced by some digest — one the walk could not place is a
+            //parse failure, not silently dropped.
+            foreach(SdDisclosure disclosure in message.Disclosures)
+            {
+                if(!walkResult.DisclosurePaths.ContainsKey(disclosure))
+                {
+                    throw new FormatException(
+                        $"draft-ietf-spice-sd-cwt: the disclosure '{disclosure}' is not referenced by any digest in the issuer-signed payload.");
+                }
+            }
+
+            return SdToken<ReadOnlyMemory<byte>>.CreateParsed(
+                coseSign1.ToArray(),
+                message.Disclosures,
+                new SdDisclosurePaths(walkResult.DisclosurePaths),
+                walkResult.IssuerSignedClaims,
+                walkResult.DisclosureInteriorClaims);
+        }
+        catch
+        {
+            //The payload failed the digest-resolution rules — dispose every disclosure
+            //already parsed before propagating. The token never came into existence.
+            foreach(SdDisclosure d in message.Disclosures)
+            {
+                d.Dispose();
+            }
+            throw;
+        }
     }
 
 
@@ -222,9 +348,10 @@ public static class SdCwtSerializer
         ReadOnlySpan<byte> protectedHeader,
         ReadOnlySpan<byte> payload,
         ReadOnlySpan<byte> externalAad = default,
-        CborConformanceMode conformanceMode = CborConformanceMode.Canonical)
+        CborConformanceMode conformanceMode = CborConformanceMode.RfcCanonical)
     {
-        var writer = new CborWriter(conformanceMode);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborSerializerOptions.Default(conformanceMode));
         writer.WriteStartArray(4);
         writer.WriteTextString("Signature1");
         writer.WriteByteString(protectedHeader);
@@ -232,7 +359,7 @@ public static class SdCwtSerializer
         writer.WriteByteString(payload);
         writer.WriteEndArray();
 
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
     }
 
 
@@ -246,9 +373,10 @@ public static class SdCwtSerializer
     public static byte[] BuildProtectedHeader(
         int algorithm,
         string? mediaType = null,
-        CborConformanceMode conformanceMode = CborConformanceMode.Canonical)
+        CborConformanceMode conformanceMode = CborConformanceMode.RfcCanonical)
     {
-        var writer = new CborWriter(conformanceMode);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborSerializerOptions.Default(conformanceMode));
 
         int mapSize = mediaType is null ? 1 : 2;
         writer.WriteStartMap(mapSize);
@@ -264,7 +392,7 @@ public static class SdCwtSerializer
 
         writer.WriteEndMap();
 
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
     }
 
 
@@ -276,11 +404,12 @@ public static class SdCwtSerializer
     /// <returns>The CBOR-encoded disclosure bytes.</returns>
     public static byte[] SerializeDisclosure(
         SdDisclosure disclosure,
-        CborConformanceMode conformanceMode = CborConformanceMode.Canonical)
+        CborConformanceMode conformanceMode = CborConformanceMode.RfcCanonical)
     {
         ArgumentNullException.ThrowIfNull(disclosure);
 
-        var writer = new CborWriter(conformanceMode);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborSerializerOptions.Default(conformanceMode));
 
         if(disclosure.ClaimName is not null)
         {
@@ -300,7 +429,7 @@ public static class SdCwtSerializer
             writer.WriteEndArray();
         }
 
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
     }
 
 
@@ -325,7 +454,7 @@ public static class SdCwtSerializer
         ArgumentNullException.ThrowIfNull(saltTag);
         ArgumentNullException.ThrowIfNull(pool);
 
-        var reader = new CborReader(disclosureCbor.ToArray(), CborConformanceMode.Lax);
+        var reader = new CborReader(disclosureCbor.ToArray(), CborOptions.Lax);
         return ReadDisclosure(ref reader, saltTag, pool);
     }
 
@@ -511,6 +640,7 @@ public static class SdCwtSerializer
     /// </summary>
     /// <param name="disclosureCbor">The CBOR-encoded disclosure bytes.</param>
     /// <param name="algorithm">The hash algorithm name (e.g., "sha-256").</param>
+    /// <param name="pool">The memory pool the digest is rented from.</param>
     /// <returns>The hash digest bytes.</returns>
     /// <remarks>
     /// <para>
@@ -519,12 +649,13 @@ public static class SdCwtSerializer
     /// in the payload.
     /// </para>
     /// </remarks>
-    public static byte[] ComputeDisclosureDigest(ReadOnlySpan<byte> disclosureCbor, string algorithm)
+    public static byte[] ComputeDisclosureDigest(ReadOnlySpan<byte> disclosureCbor, string algorithm, BaseMemoryPool pool)
     {
         ArgumentException.ThrowIfNullOrEmpty(algorithm);
+        ArgumentNullException.ThrowIfNull(pool);
 
         (Tag tag, int length, string? qualifier) = ResolveDigestTag(algorithm);
-        using DigestValue digest = CryptographicKeyEvents.ComputeDigest(disclosureCbor, length, tag, BaseMemoryPool.Shared, qualifier);
+        using DigestValue digest = CryptographicKeyEvents.ComputeDigest(disclosureCbor, length, tag, pool, qualifier);
 
         //The pooled digest buffer may be larger than the requested length (pool implementations are free to
         //over-allocate); slice to the algorithm's exact output size before copying out.
@@ -537,10 +668,11 @@ public static class SdCwtSerializer
     /// </summary>
     /// <param name="disclosureCbor">The CBOR-encoded disclosure bytes.</param>
     /// <param name="algorithm">The hash algorithm name (e.g., "sha-256").</param>
+    /// <param name="pool">The memory pool the digest is rented from.</param>
     /// <returns>The hash digest bytes.</returns>
-    public static byte[] ComputeDisclosureDigest(byte[] disclosureCbor, string algorithm)
+    public static byte[] ComputeDisclosureDigest(byte[] disclosureCbor, string algorithm, BaseMemoryPool pool)
     {
-        return ComputeDisclosureDigest(disclosureCbor.AsSpan(), algorithm);
+        return ComputeDisclosureDigest(disclosureCbor.AsSpan(), algorithm, pool);
     }
 
 
@@ -549,6 +681,7 @@ public static class SdCwtSerializer
     /// </summary>
     /// <param name="sdClaimsCbor">The CBOR-encoded sd_claims array.</param>
     /// <param name="algorithm">The hash algorithm name.</param>
+    /// <param name="pool">The memory pool the digest is rented from.</param>
     /// <returns>The hash digest bytes.</returns>
     /// <remarks>
     /// Per draft-ietf-spice-sd-cwt, the sd_hash is computed over the entire
@@ -556,12 +689,14 @@ public static class SdCwtSerializer
     /// </remarks>
     public static byte[] ComputeSdHash(
         ReadOnlySpan<byte> sdClaimsCbor,
-        string algorithm)
+        string algorithm,
+        BaseMemoryPool pool)
     {
         ArgumentException.ThrowIfNullOrEmpty(algorithm);
+        ArgumentNullException.ThrowIfNull(pool);
 
         (Tag tag, int length, string? qualifier) = ResolveDigestTag(algorithm);
-        using DigestValue digest = CryptographicKeyEvents.ComputeDigest(sdClaimsCbor, length, tag, BaseMemoryPool.Shared, qualifier);
+        using DigestValue digest = CryptographicKeyEvents.ComputeDigest(sdClaimsCbor, length, tag, pool, qualifier);
 
         //The pooled digest buffer may be larger than the requested length (pool implementations are free to
         //over-allocate); slice to the algorithm's exact output size before copying out.

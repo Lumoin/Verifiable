@@ -1588,6 +1588,10 @@ public static class EArkValidationChecks
         bool everyRightsLinkTyped = true;
         bool everyRightsLinkValued = true;
         var relationships = new List<PremisRelationship>();
+
+        //One pass accumulating every independent per-file fact this check reports; splitting the body into
+        //per-field helpers would multiply parameters (each accumulator threaded in and out) rather than
+        //simplify anything, since every fact is genuinely independent of the others.
         for(int i = 0; i < files.Count; ++i)
         {
             PremisObject file = files[i];

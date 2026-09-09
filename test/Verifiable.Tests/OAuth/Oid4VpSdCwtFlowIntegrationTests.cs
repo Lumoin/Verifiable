@@ -4,6 +4,7 @@ using Verifiable.Core.Dcql;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Oid4Vp;
+using Verifiable.OAuth.Oid4Vp.Server.States;
 using Verifiable.OAuth.Oid4Vp.States;
 using Verifiable.OAuth.Oid4Vp.Wallet;
 using Verifiable.OAuth.Oid4Vp.Wallet.States;
@@ -132,26 +133,37 @@ internal sealed class Oid4VpSdCwtFlowIntegrationTests
 
 
     /// <summary>
-    /// Verifies that an SD-CWT whose <c>iss</c> is listed in the DCQL query's
-    /// <c>trusted_authorities</c> constraint (OID4VP 1.0 §6.1.1.3) reaches
-    /// <see cref="PresentationVerifiedState"/>.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-6.1.1.3">
+    /// OID4VP 1.0 §6.1.1.3</see>'s <c>openid_federation</c> match requires "a valid trust path,
+    /// including the given Entity Identifier"; the credential's own <c>iss</c> string is not
+    /// itself trusted-authority evidence — a textual coincidence between <c>iss</c> and a query
+    /// value is not a match. This host wires no
+    /// <c>ResolveTrustedAuthorityEvidenceDelegate</c>, so a <c>trusted_authorities</c> constraint on
+    /// an SD-CWT credential fails closed (<see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-6.4.2">
+    /// §6.4.2</see>'s MUST NOT) even when the requested identifier textually equals the issuer.
     /// </summary>
     [TestMethod]
-    public async Task SdCwtFlowFromTrustedAuthorityReachesPresentationVerified()
+    public async Task SdCwtFlowWithoutResolvedTrustedAuthorityEvidenceDoesNotVerify()
     {
-        //OID4VP 1.0 §6.1.1.3: the DCQL query pins the acceptable issuer via a
-        //trusted_authorities (openid_federation) constraint. The SD-CWT's iss matches,
-        //so the verifier's fail-closed DcqlEvaluator check passes for the dc+sd-cwt format.
         await using FormatRun run = await SdCwtVpFixture.Format.StartAsync(
             TimeProvider, TestContext.CancellationToken).ConfigureAwait(false);
 
-        FlowState state = await DriveFlowAsync(
+        (FlowState state, string? refusalDetail) = await DriveFlowAsync(
             run,
             SdCwtVpFixture.BuildSdCwtTrustedAuthoritiesPreparedQuery(SdCwtVpFixture.IssuerId))
             .ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<PresentationVerifiedState>(state,
-            "An SD-CWT whose issuer is in trusted_authorities must verify.");
+        Assert.IsInstanceOfType<VerifierFlowFailedState>(state,
+            "With no trust-evidence resolver wired, the credential carries no OID4VP 1.0 §6.1.1 evidence, so a trusted_authorities constraint fails closed even though iss textually matches.");
+        var failed = (VerifierFlowFailedState)state;
+        Assert.IsNotNull(failed.Refusal,
+            "A refused presentation carries a typed refusal so the direct_post endpoint answers RFC 6749 §4.1.2.1, not 500.");
+        Assert.AreEqual(VerifierFlowRefusalKind.Unverifiable, failed.Refusal!.Value.Kind,
+            "An unmet trusted_authorities constraint is part of the DCQL query, so the presentation does not satisfy the Authorization Request — RFC 6749 §4.1.2.1 invalid_request.");
+        Assert.IsTrue(refusalDetail is not null && refusalDetail.Contains("status 400", StringComparison.Ordinal),
+            "The real-wire direct_post refusal answers HTTP 400 (RFC 6749 §4.1.2.1), never 500.");
+        Assert.IsTrue(refusalDetail!.Contains(OAuthErrors.InvalidRequest, StringComparison.Ordinal),
+            "The real-wire refusal body carries the invalid_request error code.");
     }
 
 
@@ -168,23 +180,60 @@ internal sealed class Oid4VpSdCwtFlowIntegrationTests
         await using FormatRun run = await SdCwtVpFixture.Format.StartAsync(
             TimeProvider, TestContext.CancellationToken).ConfigureAwait(false);
 
-        FlowState state = await DriveFlowAsync(
+        (FlowState state, string? refusalDetail) = await DriveFlowAsync(
             run,
             SdCwtVpFixture.BuildSdCwtTrustedAuthoritiesPreparedQuery("https://stranger.example.com"))
             .ConfigureAwait(false);
 
-        Assert.IsNotInstanceOfType<PresentationVerifiedState>(state,
+        Assert.IsInstanceOfType<VerifierFlowFailedState>(state,
             "An SD-CWT whose issuer is not in trusted_authorities must NOT verify.");
+        var failed = (VerifierFlowFailedState)state;
+        Assert.AreEqual(VerifierFlowRefusalKind.Unverifiable, failed.Refusal!.Value.Kind,
+            "An issuer outside trusted_authorities does not satisfy the DCQL query — RFC 6749 §4.1.2.1 invalid_request.");
+        Assert.IsTrue(refusalDetail is not null && refusalDetail.Contains("status 400", StringComparison.Ordinal),
+            "The real-wire direct_post refusal answers HTTP 400 (RFC 6749 §4.1.2.1), never 500.");
+    }
+
+
+    /// <summary>
+    /// A holder releases the queried claims, but the credential's type is not among the query's
+    /// <c>vct_values</c>, so the DCQL type match (OID4VP 1.0 §6.1.1) is not satisfied and
+    /// the verifier refuses the presentation. The real-wire <c>direct_post</c> answer is RFC 6749 §4.1.2.1
+    /// <c>invalid_request</c> with HTTP 400 — never 500, which stays reserved for a genuine Verifier fault
+    /// (<see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-8.2">OID4VP 1.0
+    /// §8.2</see> defines only the success answer).
+    /// </summary>
+    [TestMethod]
+    public async Task AnSdCwtWhoseTypeTheTypedQueryDoesNotAcceptIsRefusedAsInvalidRequest()
+    {
+        await using FormatRun run = await SdCwtVpFixture.Format.StartAsync(
+            TimeProvider, TestContext.CancellationToken).ConfigureAwait(false);
+
+        (FlowState state, string? refusalDetail) = await DriveFlowAsync(
+            run,
+            SdCwtVpFixture.BuildSdCwtTypeMismatchPreparedQuery())
+            .ConfigureAwait(false);
+
+        Assert.IsInstanceOfType<VerifierFlowFailedState>(state,
+            "A credential whose type is not among the typed query's vct_values does not satisfy the DCQL query, so the verifier refuses it.");
+        var failed = (VerifierFlowFailedState)state;
+        Assert.AreEqual(VerifierFlowRefusalKind.Unverifiable, failed.Refusal!.Value.Kind,
+            "A presentation that does not satisfy the Authorization Request is refused as RFC 6749 §4.1.2.1 invalid_request.");
+        Assert.IsTrue(refusalDetail is not null && refusalDetail.Contains("status 400", StringComparison.Ordinal),
+            "The refused direct_post answers HTTP 400, not 500 (OID4VP 1.0 §8.2 defines only the success answer).");
+        Assert.IsTrue(refusalDetail!.Contains(OAuthErrors.InvalidRequest, StringComparison.Ordinal),
+            "The refusal body carries the invalid_request error code per RFC 6749 §4.1.2.1.");
     }
 
 
     /// <summary>
     /// Drives the verifier through PAR → JAR → encrypted direct_post for the supplied DCQL
-    /// query and returns the verifier's terminal flow state. A verifier rejection surfaces as
-    /// a non-200 direct_post (the wallet client throws), which is swallowed so the caller can
-    /// assert on the flow state either way.
+    /// query and returns the verifier's terminal flow state together with the refusal detail the wallet
+    /// client observed on a non-200 direct_post. A verifier rejection surfaces as a non-200 direct_post
+    /// (the wallet client throws, its message carrying the HTTP status and RFC 6749 §4.1.2.1 body), which is
+    /// captured so the caller can assert on both the flow state and the real-wire answer.
     /// </summary>
-    private async Task<FlowState> DriveFlowAsync(FormatRun run, PreparedDcqlQuery query)
+    private async Task<(FlowState State, string? RefusalDetail)> DriveFlowAsync(FormatRun run, PreparedDcqlQuery query)
     {
         TestHostShell app = run.App;
         using VerifierKeyMaterial verifierKeys = app.RegisterClient(
@@ -208,6 +257,7 @@ internal sealed class Oid4VpSdCwtFlowIntegrationTests
                 run.Produce,
                 TestHostShell.PinnedVerifierKeyResolver(verifierKeys.SigningPublicKey)));
 
+        string? refusalDetail = null;
         try
         {
             _ = await walletClient.PresentJarAsync(
@@ -220,11 +270,13 @@ internal sealed class Oid4VpSdCwtFlowIntegrationTests
                 },
                 TestContext.CancellationToken).ConfigureAwait(false);
         }
-        catch(InvalidOperationException)
+        catch(InvalidOperationException exception)
         {
-            //Verifier rejected the presentation (non-200 direct_post).
+            //Verifier rejected the presentation (non-200 direct_post). The message carries the HTTP status
+            //and the RFC 6749 §4.1.2.1 error body the verifier answered.
+            refusalDetail = exception.Message;
         }
 
-        return app.GetFlowState(parHandle).State;
+        return (app.GetFlowState(parHandle).State, refusalDetail);
     }
 }

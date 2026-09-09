@@ -127,14 +127,14 @@ internal sealed class JAdESSignatureFullHouseFlowTests
             JAdESEtsiUJson.Encode,
             TestSetup.Base64UrlEncoder,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             dereference: null,
             dereferenceContext: null,
             unknownMechanismHandler: null,
             BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        foreach(JoseSerializationFormat format in (JoseSerializationFormat[])[JoseSerializationFormat.FlattenedJson, JoseSerializationFormat.GeneralJson])
+        foreach(JoseSerializationFormat format in new[] { JoseSerializationFormat.FlattenedJson, JoseSerializationFormat.GeneralJson })
         {
             byte[] wireBytes = JAdESSignatureCreation.Serialize(created, format, TestSetup.Base64UrlEncoder, JsonSerialize);
 
@@ -145,7 +145,7 @@ internal sealed class JAdESSignatureFullHouseFlowTests
                 JAdESProtectedHeaderJson.DetectX5tPresence,
                 JAdESEtsiUJson.TryParse,
                 publicKey,
-                MicrosoftCryptographicFunctions.VerifyP256Async,
+                MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
                 TestSetup.Base64UrlDecoder,
                 TestSetup.Base64UrlEncoder,
                 dereference: null,

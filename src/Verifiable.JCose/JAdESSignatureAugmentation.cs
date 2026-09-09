@@ -647,10 +647,19 @@ public static class JAdESSignatureAugmentation
     /// <see cref="JAdESSignatureTimestampContext.TargetLevel"/>.
     /// </exception>
     /// <remarks>
+    /// <para>
     /// Letter c ("each <c>sigTst</c> shall contain only one electronic time-stamp") holds by construction: this
     /// call always builds a <see cref="AdESTimestampContainer"/> with exactly one <see cref="AdESTimestampToken"/>;
     /// a second Time-Stamping Authority is a second call (Table 1 NOTE 7, multi-TSA), appending a second, sibling
     /// <c>sigTst</c> element, never a second token inside one container.
+    /// </para>
+    /// <para>
+    /// <strong>Manual disposal, not <see langword="using"/> declarations.</strong> <c>workingUnsignedHeaders</c>
+    /// is reassigned once the new element is appended (a <see langword="using"/> declaration forbids any
+    /// reassignment), and <c>token</c> is declared <see langword="null"/> ahead of the try body and assigned
+    /// only after the digest is computed inside it; the <see langword="finally"/> disposes both on every exit
+    /// path.
+    /// </para>
     /// </remarks>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "container/element become reachable through workingUnsignedHeaders once appended (or " +
@@ -756,6 +765,12 @@ public static class JAdESSignatureAugmentation
     /// When <paramref name="context"/>'s wire bytes cannot be parsed; or when a supplied object is not of the
     /// kind the placement admits (<see cref="JAdESAugmentationFailureKind.UnsupportedValidationObject"/>).
     /// </exception>
+    /// <remarks>
+    /// <strong>Manual disposal, not a <see langword="using"/> declaration.</strong> <c>workingUnsignedHeaders</c>
+    /// is reassigned through <c>AppendOne</c> as each placed element is added (a <see langword="using"/>
+    /// declaration forbids any reassignment); the <see langword="finally"/> below disposes whatever it holds
+    /// on every exit path, after serialization has already copied the needed bytes into the returned array.
+    /// </remarks>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Each xVals/rVals/anyValData element AppendOne builds becomes reachable through the " +
             "returned workingUnsignedHeaders, disposed in the finally below. Roslyn cannot trace ownership " +
@@ -1217,6 +1232,13 @@ public static class JAdESSignatureAugmentation
     /// message imprint is built (reusing <see cref="BuildValidationDataMembers"/>, the same core
     /// <see cref="AddValidationDataAsync"/> uses), so the imprint genuinely covers it — order is normative.
     /// </para>
+    /// <para>
+    /// <strong>Manual disposal, not <see langword="using"/> declarations.</strong> <c>workingUnsignedHeaders</c>
+    /// is reassigned through <c>AppendOne</c> as the gap-fill and final elements are added (a
+    /// <see langword="using"/> declaration forbids any reassignment), and <c>acquiredTokens</c> is a per-leg
+    /// <see cref="List{T}"/> of tokens rather than one disposable value; both are disposed in their own
+    /// <see langword="finally"/> on every exit path.
+    /// </para>
     /// </remarks>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Every gap-fill xVals/rVals element and the final container/element built from " +
@@ -1431,6 +1453,13 @@ public static class JAdESSignatureAugmentation
     /// <see cref="AddReferencesTimestampAsync"/> — Annex A.1.5.1 and A.1.5.2 are identical except for the leading
     /// JWS Signature Value segment.
     /// </summary>
+    /// <remarks>
+    /// <strong>Manual disposal, not <see langword="using"/> declarations.</strong> <c>workingUnsignedHeaders</c>
+    /// is reassigned once the new element is appended, and <c>token</c> is declared <see langword="null"/>
+    /// ahead of the try body and assigned only after the digest is computed inside it (a
+    /// <see langword="using"/> declaration forbids reassignment and accepts only a single assignment at its
+    /// own declaration); both are disposed on every exit path.
+    /// </remarks>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "finalContainer/element become reachable through workingUnsignedHeaders once appended, " +
             "disposed in the finally below. Roslyn cannot trace ownership through AppendOne to that later " +
@@ -2182,7 +2211,7 @@ public static class JAdESSignatureAugmentation
 
     //Never read by JwsSerialization -- JwsSignatureComponent.Protected is the wire truth for every serialization
     //form (never a re-derived encoding of the decoded model). Shared, never mutated.
-    private static readonly Dictionary<string, object> EmptyProtectedHeaderDictionary = [];
+    private static Dictionary<string, object> EmptyProtectedHeaderDictionary { get; } = [];
 
 
     /// <summary>Throws a typed <see cref="JAdESAugmentationException"/> naming <paramref name="failureKind"/> when <paramref name="isOfKind"/> is <see langword="false"/>.</summary>

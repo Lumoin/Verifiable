@@ -14,13 +14,15 @@ using Verifiable.Tpm.Infrastructure.Sessions;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
+using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
 /// <summary>
 /// Drives <c>TPM2_PolicySecret()</c>'s POLICY-session authorization arm — equations 26/27 (TPM 2.0 Library Part
-/// 1, clause 17.6.12) and the PolicySecret-scoped <c>TPM_RC_MODE</c> gate (Part 3, Section 23.4.1) — plus the
-/// salted/bound POLICY session factories (Part 3, Section 11.1.1) against the in-house behavioural
+/// 1, clause 16.6.12) and the PolicySecret-scoped <c>TPM_RC_MODE</c> gate (Part 3, clause 23.4.1) — plus the
+/// salted/bound POLICY session factories (Part 3, clause 11.1.1) against the in-house behavioural
 /// <see cref="TpmSimulator"/> — entirely in-process, with no external assets — through the same production
 /// command path the production code uses (<see cref="TpmCommandExecutor"/> with the real
 /// <see cref="PolicySecretInput"/>/<see cref="StartAuthSessionInput"/>/<see cref="TpmSession"/>).
@@ -37,8 +39,8 @@ namespace Verifiable.Tests.Tpm;
 /// <para>
 /// <b>A hierarchy must be given a policy before a POLICY session can authorize it at all.</b> "When the
 /// authPolicy is empty, it cannot match any policyDigest value so the use of authPolicy is disabled" (TPM 2.0
-/// Library Part 1, clause 11.2, Table 5), so every test here first installs one through
-/// <c>TPM2_SetPrimaryPolicy</c> (Part 3, Section 24.3) — otherwise the authorizer is refused with
+/// Library Part 1, clause 10.2, Table 8), so every test here first installs one through
+/// <c>TPM2_SetPrimaryPolicy</c> (Part 3, clause 24.3) — otherwise the authorizer is refused with
 /// <c>TPM_RC_AUTH_UNAVAILABLE</c> before any of the mechanics below is reached. The digest installed is the one
 /// the test's own session will accumulate: the <c>TPM2_PolicyAuthValue</c> fold for the tests that run it, and
 /// the Zero Digest for the one that deliberately does not — a 32-octet value a fresh session already carries,
@@ -46,7 +48,7 @@ namespace Verifiable.Tests.Tpm;
 /// </para>
 /// <para>
 /// <b>eq. 26 vs. eq. 27.</b> Equation 26's key is <c>sessionKey ‖ authValue</c>; equation 27's is
-/// <c>sessionKey</c> alone, and <c>isAuthValueNeeded</c> decides between them (Part 1, clause 17.6.12).
+/// <c>sessionKey</c> alone, and <c>isAuthValueNeeded</c> decides between them (Part 1, clause 16.6.12).
 /// Equation 27 is unreachable for <c>PolicySecret</c> specifically: <c>TPM_RC_MODE</c> categorically refuses an
 /// isAuthValueNeeded-CLEAR policy-session authorizer before any HMAC is ever evaluated (see
 /// <see cref="PolicySecretOverPolicySessionWithoutPolicyAuthValueReturnsMode"/>), and no other command in this
@@ -57,7 +59,7 @@ namespace Verifiable.Tests.Tpm;
 /// rather than by inspection;
 /// <see cref="IndependentlyTranscribedEquation26AuthHmacMatchesWhatTheSimulatorAccepted"/> pins the same
 /// equation byte-for-byte against an independent transcription over an unbound, unsalted session whose
-/// <c>PolicySessionState.SessionKey</c> is itself the Empty Buffer (clause 17.6.9 — no bind entity, no salt, no
+/// <c>PolicySessionState.SessionKey</c> is itself the Empty Buffer (clause 16.6.9 — no bind entity, no salt, no
 /// KDFa run at all). The salted E2E tests
 /// (<see cref="SaltedUnboundPolicySessionAuthorizesPolicySecretRsa"/>,
 /// <see cref="SaltedUnboundPolicySessionAuthorizesPolicySecretEcc"/>) are where a genuine, non-empty
@@ -76,21 +78,21 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
     /// <summary>Every RSA/ECC storage-parent-shaped template this simulator builds fixes nameAlg to SHA-256.</summary>
     private const TpmAlgIdConstants TpmKeyNameAlg = TpmAlgIdConstants.TPM_ALG_SHA256;
 
-    /// <summary>The RSA public exponent the framework RSA key generator uses (Table 215's "0" default).</summary>
+    /// <summary>The RSA public exponent the framework RSA key generator uses (Table 228's "0" default).</summary>
     private const uint DefaultRsaExponent = 65537;
 
     /// <summary>Gets or sets the per-test context (supplies the cancellation token).</summary>
     public TestContext TestContext { get; set; } = null!;
 
     /// <summary>
-    /// Part 3, Section 23.4.1 verbatim: "If a policy session is used and use of the authValue of authHandle is
+    /// Part 3, clause 23.4.1 verbatim: "If a policy session is used and use of the authValue of authHandle is
     /// not required, the TPM will return TPM_RC_MODE." A fresh POLICY session's isAuthValueNeeded/isPasswordNeeded
-    /// both default CLEAR (Part 1, clause 17.7.8), so authorizing PolicySecret with one before running
+    /// both default CLEAR (Part 1, clause 16.7.8), so authorizing PolicySecret with one before running
     /// <c>TPM2_PolicyAuthValue()</c> must be refused — before any HMAC is ever evaluated.
     /// </summary>
     /// <remarks>
     /// The policy installed on the endorsement hierarchy is the Zero Digest, which is exactly what a fresh
-    /// session's policyDigest already is (Part 1, clause 17.7.1), so the session satisfies the hierarchy's policy
+    /// session's policyDigest already is (Part 1, clause 16.7.1), so the session satisfies the hierarchy's policy
     /// and the refusal can only be the isAuthValueNeeded gate. Installing the <c>TPM2_PolicyAuthValue</c> digest
     /// instead would pre-empt it with <c>TPM_RC_POLICY_FAIL</c>, and installing nothing at all would pre-empt it
     /// with <c>TPM_RC_AUTH_UNAVAILABLE</c> — each a different rung of the same ladder.
@@ -100,7 +102,7 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         await InstallEndorsementPolicyAsync(tpm, ZeroDigest()).ConfigureAwait(false);
@@ -117,8 +119,8 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
 
                 Assert.IsFalse(secretResult.IsSuccess, "A POLICY session that never ran PolicyAuthValue must not authorize PolicySecret.");
                 Assert.AreEqual(
-                    TpmRcConstants.TPM_RC_MODE, secretResult.ResponseCode,
-                    "isAuthValueNeeded and isPasswordNeeded both CLEAR on the authorizing POLICY session must answer TPM_RC_MODE (Part 3, Section 23.4.1), not a session-encoded auth failure.");
+                    HmacKeyHarness.SessionEncodedRc(TpmRcConstants.TPM_RC_MODE, 0), secretResult.ResponseCode,
+                    "isAuthValueNeeded and isPasswordNeeded both CLEAR on the authorizing POLICY session must answer TPM_RC_MODE (Part 3, clause 23.4.1), not a session-encoded auth failure.");
             }
         }
         finally
@@ -129,8 +131,8 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
 
     /// <summary>
     /// The positive counterpart: once <c>TPM2_PolicyAuthValue()</c> SETs isAuthValueNeeded (Part 1, clause
-    /// 17.7.7.6), the SAME session authorizing the SAME command now succeeds via equation 26 (TPM 2.0 Library Part
-    /// 1, clause 17.6.12) — proving the flag
+    /// 16.7.7.6), the SAME session authorizing the SAME command now succeeds via equation 26 (TPM 2.0 Library Part
+    /// 1, clause 16.6.12) — proving the flag
     /// genuinely gates <c>TPM_RC_MODE</c> rather than the command being unconditionally refused for a POLICY
     /// authorizer.
     /// </summary>
@@ -139,7 +141,7 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         await InstallEndorsementPolicyAsync(tpm, ComputePolicyAuthValueDigest()).ConfigureAwait(false);
@@ -172,11 +174,11 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
     /// <summary>
     /// Equation 26 over a genuinely non-empty authorization value, which is where its key composition becomes
     /// observable rather than merely stated: <c>authHMAC = HMAC(sessionKey ‖ authValue, …)</c> (TPM 2.0 Library
-    /// Part 1, clause 17.6.12). <c>TPM2_HierarchyChangeAuth</c> gives the endorsement hierarchy a real
-    /// authorization value first (Part 3, Section 24.8.1), so the two candidate keys differ; the session that
+    /// Part 1, clause 16.6.12). <c>TPM2_HierarchyChangeAuth</c> gives the endorsement hierarchy a real
+    /// authorization value first (Part 3, clause 24.8.1), so the two candidate keys differ; the session that
     /// folds that value into its own key authorizes, and an otherwise identical session that folds nothing is
     /// refused with a session-encoded <c>TPM_RC_BAD_AUTH</c> - the endorsement hierarchy is a
-    /// dictionary-attack-exempt permanent entity (Part 1, clause 17.8.1), so its mismatch moves no counter. An
+    /// dictionary-attack-exempt permanent entity (Part 1, clause 16.8.1), so its mismatch moves no counter. An
     /// implementation that keyed a policy-session authorizer on the session key alone would accept both.
     /// </summary>
     [TestMethod]
@@ -186,7 +188,7 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         //The policy is installed while the hierarchy's authorization value is still empty, so this setup command
@@ -249,10 +251,10 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
 
 
     /// <summary>
-    /// The equation 26 (TPM 2.0 Library Part 1, clause 17.6.12) authValue term enters the session HMAC key with
+    /// The equation 26 (TPM 2.0 Library Part 1, clause 16.6.12) authValue term enters the session HMAC key with
     /// trailing zero octets removed (TPM 2.0
-    /// Library Part 1, clause 17.6.4.3: "Trailing octets of zero are to be removed from any string before it is
-    /// used as an authValue"; clause 17.6.5's Note applies the same rule to the HMAC computation). The hierarchy
+    /// Library Part 1, clause 16.6.4.3: "Trailing octets of zero are to be removed from any string before it is
+    /// used as an authValue"; clause 16.6.5's Note applies the same rule to the HMAC computation). The hierarchy
     /// is rotated to a value ENDING in zero octets and the authorizing session receives that same zero-tailed
     /// form: the host session strips before keying, so the authorization succeeds only if the simulator strips
     /// its stored term identically — a simulator folding the raw stored bytes diverges and refuses.
@@ -264,7 +266,7 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         await InstallEndorsementPolicyAsync(tpm, ComputePolicyAuthValueDigest()).ConfigureAwait(false);
@@ -301,7 +303,7 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
         }
 
         //The password arm accepts the same secret in its zero-padded shape: both compare operands strip
-        //(Part 1, clause 17.6.4.3), so whichever form the caller retained — padded or already stripped —
+        //(Part 1, clause 16.6.4.3), so whichever form the caller retained — padded or already stripped —
         //authorizes the next rotation.
         TpmResult<HierarchyChangeAuthResponse> paddedRotation = await tpm.ChangeHierarchyAuthWithPasswordAsync(
             TpmRh.TPM_RH_ENDORSEMENT, zeroTailedAuth, ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false);
@@ -312,9 +314,9 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
 
     /// <summary>
     /// A PolicySecret that fails AFTER its authorizer's command HMAC has already verified (here: a caller-supplied
-    /// nonceTPM that does not match the target session's retained nonce, TPM 2.0 Library Part 3, Section 23.2.2)
+    /// nonceTPM that does not match the target session's retained nonce, TPM 2.0 Library Part 3, clause 23.2.2)
     /// must leave the authorizing session's isAuthValueNeeded SET — the flag may only be CLEARed by successful use
-    /// (Part 3, Section 23.2.4), never by a command that goes on to fail one of the parameter checks. Proven by a
+    /// (Part 3, clause 23.2.4), never by a command that goes on to fail one of the parameter checks. Proven by a
     /// subsequent, otherwise-identical use of the SAME authorizer succeeding.
     /// </summary>
     [TestMethod]
@@ -322,7 +324,7 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         await InstallEndorsementPolicyAsync(tpm, ComputePolicyAuthValueDigest()).ConfigureAwait(false);
@@ -352,8 +354,8 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
 
                         Assert.IsFalse(badResult.IsSuccess, "A caller-supplied nonceTPM that does not match the target session's retained nonce must fail.");
                         Assert.AreEqual(
-                            TpmRcConstants.TPM_RC_VALUE, badResult.ResponseCode,
-                            "The authorizer's command HMAC verifies first; the mismatch surfaces only at the later nonceTPM check, which answers TPM_RC_VALUE (Part 3, clause 23.2.2, printed page 189, rule 1).");
+                            HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_VALUE, 0), badResult.ResponseCode,
+                            "The authorizer's command HMAC verifies first; the mismatch surfaces only at the later nonceTPM check, which answers TPM_RC_VALUE (Part 3, clause 23.2.2, printed page 209, rule 1).");
                     }
 
                     using PolicySecretInput goodInput = PolicySecretInput.CreateImmediate((uint)TpmRh.TPM_RH_ENDORSEMENT, targetHandle, pool);
@@ -376,7 +378,7 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
 
     /// <summary>
     /// Successful use resets the authorizing POLICY session's context, not merely its two flags (TPM 2.0 Library
-    /// Part 3, Section 23.2.4; the reference's <c>SessionResetPolicyData</c>/<c>SessionSetStartTime</c>, invoked
+    /// Part 3, clause 23.2.4; the reference's <c>SessionResetPolicyData</c>/<c>SessionSetStartTime</c>, invoked
     /// unconditionally on every successful use of a policy session): a self-referential PolicySecret's own
     /// extension of its authorizer's policyDigest is wiped back to the Zero Digest by that same reset, and a
     /// second self-referential use over the same (now-reset) session is refused with TPM_RC_MODE exactly as a
@@ -394,7 +396,7 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         await InstallEndorsementPolicyAsync(tpm, ComputePolicyAuthValueDigest()).ConfigureAwait(false);
@@ -433,7 +435,7 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
 
                 Assert.IsFalse(secondResult.IsSuccess, "A session whose context was reset by its own successful use must not still authorize a second PolicySecret as if isAuthValueNeeded were still SET.");
                 Assert.AreEqual(
-                    TpmRcConstants.TPM_RC_MODE, secondResult.ResponseCode,
+                    HmacKeyHarness.SessionEncodedRc(TpmRcConstants.TPM_RC_MODE, 0), secondResult.ResponseCode,
                     "isAuthValueNeeded must have been CLEARed by the successful-use reset, exactly as for a fresh session.");
             }
         }
@@ -444,9 +446,9 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
     }
 
     /// <summary>
-    /// Independently transcribes equation 26's exact authHMAC (TPM 2.0 Library Part 1, clause 17.6.12: <c>authHMAC
+    /// Independently transcribes equation 26's exact authHMAC (TPM 2.0 Library Part 1, clause 16.6.12: <c>authHMAC
     /// = HMAC(sessionKey ‖ authValue, cpHash ‖ nonceCaller ‖ nonceTPM ‖ sessionAttributes)</c>) over a genuine
-    /// POLICY-table session — sessionKey is the Empty Buffer (clause 17.6.9: this session is unbound and
+    /// POLICY-table session — sessionKey is the Empty Buffer (clause 16.6.9: this session is unbound and
     /// unsalted, so no KDFa runs at all), cpHash and the HMAC itself via <c>CryptographicKeyEvents</c>'s
     /// registered digest/HMAC seam — from the raw wire bytes the session actually sent, proving the simulator's
     /// accept path against an independently-assembled transcription (see the class remarks for why authValue is
@@ -465,8 +467,8 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
             return await simulator.SubmitAsync(command, commandPool, ct).ConfigureAwait(false);
         }
 
-        using TpmDevice capturingDevice = TpmDevice.Create(CaptureAsync);
-        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice capturingDevice = TpmDevice.Create(CaptureAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
+        using TpmDevice plainDevice = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         await InstallEndorsementPolicyAsync(plainDevice, ComputePolicyAuthValueDigest()).ConfigureAwait(false);
@@ -496,7 +498,7 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
 
             BaseMemoryPool oraclePool = BaseMemoryPool.Shared;
 
-            //Part 1, clause 17.6.9: a session that is neither bound nor salted has sessionKey = an Empty Buffer —
+            //Part 1, clause 16.6.9: a session that is neither bound nor salted has sessionKey = an Empty Buffer —
             //no KDFa is run at all, unlike the bound/salted recipes (equations 20/23/25).
             ReadOnlyMemory<byte> sessionKey = ReadOnlyMemory<byte>.Empty;
 
@@ -515,7 +517,7 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
             using DigestValue cpHash = await CryptographicKeyEvents.ComputeDigestAsync(
                 cpHashInputOwner.Memory[..cpHashInputLength], outputByteLength: DigestSize, tag: DigestTag(), pool: oraclePool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-            //Equation 26 (TPM 2.0 Library Part 1, clause 17.6.12): authHMAC = HMAC(sessionKey ‖ authValue, cpHash ‖ nonceCaller ‖ nonceTPM ‖
+            //Equation 26 (TPM 2.0 Library Part 1, clause 16.6.12): authHMAC = HMAC(sessionKey ‖ authValue, cpHash ‖ nonceCaller ‖ nonceTPM ‖
             //sessionAttributes). authValue is the endorsement hierarchy's own authorization value (empty, per the
             //class remarks) — the key reduces to sessionKey, but the KEY COMPOSITION itself (not merely its
             //accidental value) is what this transcription exercises.
@@ -549,7 +551,7 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
     }
 
     /// <summary>
-    /// A salted, unbound POLICY session against an RSA tpmKey (TPM 2.0 Library Part 3, Section 11.1.1: sessionKey
+    /// A salted, unbound POLICY session against an RSA tpmKey (TPM 2.0 Library Part 3, clause 11.1.1: sessionKey
     /// derivation is identical for every sessionType) authorizes PolicySecret end to end, proving the host and the
     /// simulator derived the same session key from the RSA-OAEP-recovered salt for the POLICY session table.
     /// </summary>
@@ -558,7 +560,7 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse tpmKey = await CreateRsaDecryptKeyAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -571,7 +573,7 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
             TpmRsaSigningBackend rsaBackend = MicrosoftTpmRsaSigningBackend.Create();
 
             (StartAuthSessionInput startInput, IMemoryOwner<byte> salt, int saltLength) = await StartAuthSessionInputExtensions.CreateSaltedPolicySession(
-                tpmKeyHandle, modulus, DefaultRsaExponent, TpmKeyNameAlg, SessionAlg, rsaBackend.EncryptOaep, pool, TestContext.CancellationToken).ConfigureAwait(false);
+                tpmKeyHandle, modulus, DefaultRsaExponent, TpmKeyNameAlg, SessionAlg, rsaBackend.EncryptOaep, TestEntropy.NewCounterStream(), pool, TestContext.CancellationToken).ConfigureAwait(false);
 
             using(salt)
             {
@@ -583,7 +585,7 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
 
                 using TpmSession session = await TpmSession.CreateBoundAsync(
                     new TpmHandle(sessionHandle), ReadOnlyMemory<byte>.Empty, startInput.NonceCaller, startResponse.NonceTPM,
-                    SessionAlg, pool, salt: salt.Memory[..saltLength], cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+                    SessionAlg, TestEntropy.NewCounterStream(), pool, salt: salt.Memory[..saltLength], cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
                 await AuthorizeEndorsementSecretOverPolicySessionAsync(tpm, registry, pool, sessionHandle, session).ConfigureAwait(false);
             }
@@ -601,7 +603,7 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse tpmKey = await CreateEccDecryptKeyAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -615,7 +617,7 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
 
             (StartAuthSessionInput startInput, IMemoryOwner<byte> salt, int saltLength) = await StartAuthSessionInputExtensions.CreateSaltedPolicySession(
                 tpmKeyHandle, point, TpmEccCurveConstants.TPM_ECC_NIST_P256, TpmKeyNameAlg, SessionAlg,
-                eccBackend.GenerateKey, eccBackend.ComputeSharedSecret, pool, TestContext.CancellationToken).ConfigureAwait(false);
+                eccBackend.GenerateKey, eccBackend.ComputeSharedSecret, TestEntropy.NewCounterStream(), pool, TestContext.CancellationToken).ConfigureAwait(false);
 
             using(salt)
             {
@@ -627,7 +629,7 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
 
                 using TpmSession session = await TpmSession.CreateBoundAsync(
                     new TpmHandle(sessionHandle), ReadOnlyMemory<byte>.Empty, startInput.NonceCaller, startResponse.NonceTPM,
-                    SessionAlg, pool, salt: salt.Memory[..saltLength], cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+                    SessionAlg, TestEntropy.NewCounterStream(), pool, salt: salt.Memory[..saltLength], cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
                 await AuthorizeEndorsementSecretOverPolicySessionAsync(tpm, registry, pool, sessionHandle, session).ConfigureAwait(false);
             }
@@ -642,7 +644,7 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
     /// <summary>
     /// A salted AND bound POLICY session (RSA tpmKey, bound to the owner hierarchy) authorizes PolicySecret end to
     /// end: the distinction that the bind entity's authValue strengthens the KDFa sessionKey once, at
-    /// establishment — Part 1, clause 17.6.12 equation 25 — and is never re-folded into the per-command authHMAC
+    /// establishment — Part 1, clause 16.6.12 equation 25 — and is never re-folded into the per-command authHMAC
     /// merely because the session is bound) is exercised structurally here since the bind entity (owner) and the
     /// authorized entity (endorsement) are DIFFERENT, so no bind-entity-omission question could arise even for an
     /// HMAC session; equation 26/27 alone (isAuthValueNeeded) decides the authValue fold, exactly as for the
@@ -653,7 +655,7 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse tpmKey = await CreateRsaDecryptKeyAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -666,7 +668,7 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
             TpmRsaSigningBackend rsaBackend = MicrosoftTpmRsaSigningBackend.Create();
 
             (StartAuthSessionInput startInput, IMemoryOwner<byte> salt, int saltLength) = await StartAuthSessionInputExtensions.CreateBoundAndSaltedPolicySession(
-                tpmKeyHandle, (uint)TpmRh.TPM_RH_OWNER, modulus, DefaultRsaExponent, TpmKeyNameAlg, SessionAlg, rsaBackend.EncryptOaep, pool, TestContext.CancellationToken).ConfigureAwait(false);
+                tpmKeyHandle, (uint)TpmRh.TPM_RH_OWNER, modulus, DefaultRsaExponent, TpmKeyNameAlg, SessionAlg, rsaBackend.EncryptOaep, TestEntropy.NewCounterStream(), pool, TestContext.CancellationToken).ConfigureAwait(false);
 
             using(salt)
             {
@@ -679,7 +681,7 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
                 //The bind entity (owner) carries empty auth by default in this simulator (see the class remarks).
                 using TpmSession session = await TpmSession.CreateBoundAsync(
                     new TpmHandle(sessionHandle), ReadOnlyMemory<byte>.Empty, startInput.NonceCaller, startResponse.NonceTPM,
-                    SessionAlg, pool, salt: salt.Memory[..saltLength], cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+                    SessionAlg, TestEntropy.NewCounterStream(), pool, salt: salt.Memory[..saltLength], cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
                 await AuthorizeEndorsementSecretOverPolicySessionAsync(tpm, registry, pool, sessionHandle, session).ConfigureAwait(false);
             }
@@ -703,7 +705,7 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         uint trialHandle = 0;
@@ -748,7 +750,7 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         await InstallEndorsementPolicyAsync(tpm, ComputePolicyAuthValueDigest()).ConfigureAwait(false);
@@ -793,13 +795,13 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
-        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedPolicySession(SessionAlg) with { NonceCaller = new byte[15] };
+        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedPolicySession(SessionAlg, TestEntropy.NewCounterStream(), pool) with { NonceCaller = new byte[15] };
 
         TpmRcConstants rc = await AttemptStartAuthSessionAsync(tpm, registry, pool, startInput).ConfigureAwait(false);
-        Assert.AreEqual(TpmRcConstants.TPM_RC_SIZE, rc, "A 15-octet nonceCaller is one short of the fixed 16-octet floor, for a POLICY session exactly as for an HMAC session.");
+        Assert.AreEqual(HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SIZE, 0), rc, "A 15-octet nonceCaller is one short of the fixed 16-octet floor, for a POLICY session exactly as for an HMAC session.");
     }
 
     /// <summary>
@@ -812,13 +814,13 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
-        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedPolicySession(SessionAlg) with { EncryptedSalt = new byte[] { 0x01, 0x02, 0x03, 0x04 } };
+        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedPolicySession(SessionAlg, TestEntropy.NewCounterStream(), pool) with { EncryptedSalt = new byte[] { 0x01, 0x02, 0x03, 0x04 } };
 
         TpmRcConstants rc = await AttemptStartAuthSessionAsync(tpm, registry, pool, startInput).ConfigureAwait(false);
-        Assert.AreEqual(TpmRcConstants.TPM_RC_VALUE, rc, "An unsalted POLICY session request naming a non-empty encryptedSalt must be rejected, exactly as for an HMAC session.");
+        Assert.AreEqual(HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_VALUE, 1), rc, "An unsalted POLICY session request naming a non-empty encryptedSalt must be rejected, exactly as for an HMAC session.");
     }
 
     /// <summary>
@@ -831,20 +833,20 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
-        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedPolicySession(SessionAlg) with { TpmKey = (uint)TpmRh.TPM_RH_OWNER };
+        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedPolicySession(SessionAlg, TestEntropy.NewCounterStream(), pool) with { TpmKey = (uint)TpmRh.TPM_RH_OWNER };
 
         TpmRcConstants rc = await AttemptStartAuthSessionAsync(tpm, registry, pool, startInput).ConfigureAwait(false);
-        Assert.AreEqual(TpmRcConstants.TPM_RC_KEY, rc, "A permanent handle named as tpmKey is never an asymmetric key, for a POLICY session exactly as for an HMAC session.");
+        Assert.AreEqual(HmacKeyHarness.HandleEncodedRc(TpmRcConstants.TPM_RC_KEY, 0), rc, "A permanent handle named as tpmKey is never an asymmetric key, for a POLICY session exactly as for an HMAC session.");
     }
 
     /// <summary>
     /// Installs <paramref name="policyDigest"/> as the endorsement hierarchy's authorization policy through
-    /// <c>TPM2_SetPrimaryPolicy</c> (TPM 2.0 Library Part 3, Section 24.3), the precondition every
+    /// <c>TPM2_SetPrimaryPolicy</c> (TPM 2.0 Library Part 3, clause 24.3), the precondition every
     /// policy-session authorizer in this file needs: an entity whose authPolicy is the Empty Buffer is outside
-    /// the policy path entirely (Part 1, clause 11.2, Table 5).
+    /// the policy path entirely (Part 1, clause 10.2, Table 8).
     /// </summary>
     /// <param name="tpm">The TPM device.</param>
     /// <param name="policyDigest">The digest the authorizing session will accumulate.</param>
@@ -869,7 +871,7 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
 
     /// <summary>
     /// Transcribes the policyDigest a session reaches by folding <c>TPM2_PolicyAuthValue()</c> alone:
-    /// <c>policyDigest = H(ZeroDigest ‖ TPM_CC_PolicyAuthValue)</c> (TPM 2.0 Library Part 3, Section 23.11).
+    /// <c>policyDigest = H(ZeroDigest ‖ TPM_CC_PolicyAuthValue)</c> (TPM 2.0 Library Part 3, clause 23.11).
     /// </summary>
     /// <returns>The policy digest.</returns>
     private static byte[] ComputePolicyAuthValueDigest()
@@ -877,13 +879,13 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
         byte[] digest = new byte[DigestSize];
         Span<byte> zero = stackalloc byte[DigestSize];
         zero.Clear();
-        _ = TpmPolicyDigest.ExtendForAuthValue(zero, SessionAlg, digest);
+        _ = TpmPolicyDigest.ExtendForAuthValue(zero, SessionAlg, digest, BaseMemoryPool.Shared);
 
         return digest;
     }
 
     /// <summary>
-    /// The Zero Digest a fresh policy session's policyDigest starts at (TPM 2.0 Library Part 1, clause 17.7.1) -
+    /// The Zero Digest a fresh policy session's policyDigest starts at (TPM 2.0 Library Part 1, clause 16.7.1) -
     /// a legitimate <see cref="DigestSize"/>-octet policy value, and a different thing from the Empty Buffer,
     /// which disables policy authorization altogether.
     /// </summary>
@@ -927,14 +929,14 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
     /// <summary>
     /// Starts an unbound, unsalted POLICY session through the production <c>TPM2_StartAuthSession()</c> path and
     /// wraps it as a <see cref="TpmSession"/> via the plain constructor, whose sessionKey is the Empty Buffer
-    /// (TPM 2.0 Library Part 1, clause 17.6.9) — no bind entity, no salt, so no KDFa runs. Also returns copies of
+    /// (TPM 2.0 Library Part 1, clause 16.6.9) — no bind entity, no salt, so no KDFa runs. Also returns copies of
     /// the two start nonces (captured before nonceTPM's ownership transfers into the session) for tests that need
     /// an independent oracle.
     /// </summary>
     private async Task<(uint SessionHandle, TpmSession Session, byte[] InitialNonceCaller, byte[] InitialNonceTpm)> StartUnboundPolicySessionAsync(
         TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool)
     {
-        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedPolicySession(SessionAlg);
+        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedPolicySession(SessionAlg, TestEntropy.NewCounterStream(), pool);
 
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             tpm, startInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
@@ -944,7 +946,7 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
         byte[] initialNonceCaller = startInput.NonceCaller.ToArray();
         byte[] initialNonceTpm = startResponse.NonceTPM.AsReadOnlySpan().ToArray();
 
-        var session = new TpmSession(new TpmHandle(startResponse.SessionHandle.Value), startResponse.NonceTPM, SessionAlg, pool);
+        var session = new TpmSession(new TpmHandle(startResponse.SessionHandle.Value), startResponse.NonceTPM, SessionAlg, TestEntropy.NewCounterStream(), pool);
 
         return (startResponse.SessionHandle.Value, session, initialNonceCaller, initialNonceTpm);
     }
@@ -957,14 +959,14 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
     private async Task<(uint SessionHandle, TpmSession Session)> StartTrialPolicySessionAsync(
         TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool)
     {
-        StartAuthSessionInput startInput = StartAuthSessionInput.CreateTrialPolicySession(SessionAlg);
+        StartAuthSessionInput startInput = StartAuthSessionInput.CreateTrialPolicySession(SessionAlg, TestEntropy.NewCounterStream(), pool);
 
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             tpm, startInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession (trial) failed: '{startResult.ResponseCode}'.");
 
         StartAuthSessionResponse startResponse = startResult.Value;
-        var session = new TpmSession(new TpmHandle(startResponse.SessionHandle.Value), startResponse.NonceTPM, SessionAlg, pool);
+        var session = new TpmSession(new TpmHandle(startResponse.SessionHandle.Value), startResponse.NonceTPM, SessionAlg, TestEntropy.NewCounterStream(), pool);
 
         return (startResponse.SessionHandle.Value, session);
     }
@@ -985,8 +987,8 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
 
     /// <summary>
     /// The format-one session-index encoding (TPM 2.0 Library Part 2, clause 6.6.2): RC + TPM_RC_S +
-    /// TPM_RC_n(0x100·(index+1)) — the test-side mirror of TpmLifecycleTransitions.SessionEncodedRc, transcribed
-    /// independently rather than referencing the production internal.
+    /// TPM_RC_n(0x100·(index+1)) — the test-side mirror of Verifiable.Tpm.Spec.TpmRcExtensions.SessionEncodedRc,
+    /// transcribed independently rather than referencing the production member.
     /// </summary>
     private static TpmRcConstants SessionEncodedRc(TpmRcConstants baseRc, int sessionIndex) =>
         (TpmRcConstants)((uint)baseRc + (uint)TpmRcConstants.TPM_RC_S + (0x100u * (uint)(sessionIndex + 1)));
@@ -1096,7 +1098,7 @@ internal sealed class TpmInHouseSimulatorPolicySessionHmacTests
     private async Task<TpmSimulator> CreateOperationalAsync(BaseMemoryPool pool)
     {
         var simulator = new TpmSimulator(
-            "tpm-in-house-policy-session-hmac", signingBackend: BouncyCastleTpmEccSigningBackend.Create(), rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create());
+            "tpm-in-house-policy-session-hmac", signingBackend: BouncyCastleTpmEccSigningBackend.Create(), rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await IssueStartupClearAsync(simulator, pool).ConfigureAwait(false);
 

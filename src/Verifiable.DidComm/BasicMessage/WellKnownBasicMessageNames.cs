@@ -21,7 +21,7 @@ public static class WellKnownBasicMessageNames
     public static ReadOnlySpan<byte> BasicMessageProtocolUtf8 => "https://didcomm.org/basicmessage/2.0"u8;
 
     /// <summary>The protocol identifier URI (PIURI) of Basic Message Protocol 2.0 (didcomm.org/basicmessage/2.0).</summary>
-    public static readonly string BasicMessageProtocol = Utf8Constants.ToInternedString(BasicMessageProtocolUtf8);
+    public static string BasicMessageProtocol { get; } = Utf8Constants.ToInternedString(BasicMessageProtocolUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="MessageType"/>.</summary>
     public static ReadOnlySpan<byte> MessageTypeUtf8 => "https://didcomm.org/basicmessage/2.0/message"u8;
@@ -30,7 +30,7 @@ public static class WellKnownBasicMessageNames
     /// The <c>message</c> Message Type URI — the value of the <c>type</c> header that identifies a Basic
     /// Message (didcomm.org/basicmessage/2.0 §message).
     /// </summary>
-    public static readonly string MessageType = Utf8Constants.ToInternedString(MessageTypeUtf8);
+    public static string MessageType { get; } = Utf8Constants.ToInternedString(MessageTypeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Content"/>.</summary>
     public static ReadOnlySpan<byte> ContentUtf8 => "content"u8;
@@ -39,7 +39,7 @@ public static class WellKnownBasicMessageNames
     /// The message body <c>content</c> member — REQUIRED. The human-readable text the basic message carries
     /// (didcomm.org/basicmessage/2.0 §message).
     /// </summary>
-    public static readonly string Content = Utf8Constants.ToInternedString(ContentUtf8);
+    public static string Content { get; } = Utf8Constants.ToInternedString(ContentUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Lang"/>.</summary>
     public static ReadOnlySpan<byte> LangUtf8 => "lang"u8;
@@ -49,5 +49,5 @@ public static class WellKnownBasicMessageNames
     /// is a top-level header (a sibling of <c>body</c>), not a body member (didcomm.org/basicmessage/2.0
     /// §message).
     /// </summary>
-    public static readonly string Lang = Utf8Constants.ToInternedString(LangUtf8);
+    public static string Lang { get; } = Utf8Constants.ToInternedString(LangUtf8);
 }

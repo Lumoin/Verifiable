@@ -59,6 +59,7 @@ internal sealed class BasicAccessControlTests
 
 
     [TestMethod]
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The tuple-deconstructed access keys are disposed in the finally block; using cannot target a tuple-deconstruction assignment.")]
     public async Task DerivesAccessKeysPerAppendixD2()
     {
         (SymmetricKeyMemory encryptionKey, SymmetricKeyMemory macKey) =

@@ -1,5 +1,5 @@
 using System.Buffers;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Mdoc;
@@ -223,7 +223,7 @@ internal sealed class MdocCborIssuanceEndToEndTests
 
                 //And it must be the Tag 24-wrapped MSO per ISO/IEC 18013-5 §9.1.2.4.
                 EncodedCborItem wrapper = EncodedCborItem.Read(
-                    new CborReader(signedMsoPayload.ToArray(), CborConformanceMode.Lax));
+                    new CborReader(signedMsoPayload.ToArray(), CborOptions.Lax));
                 MdocMobileSecurityObject mso = MdocCborMsoReader.Read(wrapper.InnerBytes.Span);
                 Assert.AreEqual(PidDocType, mso.DocType);
                 Assert.HasCount(2, mso.ValueDigests[PidNamespace]);
@@ -378,8 +378,8 @@ internal sealed class MdocCborIssuanceEndToEndTests
 
 
     //Bit-identical to TestClock.CanonicalEpoch.AddDays(-8) (2026-05-24T12:00:00Z).
-    private static readonly DateTimeOffset SampleValiditySigned = TestClock.CanonicalEpoch.AddDays(-8);
-    private static readonly DateTimeOffset SampleValidityValidUntil = SampleValiditySigned.AddYears(1);
+    private static DateTimeOffset SampleValiditySigned { get; } = TestClock.CanonicalEpoch.AddDays(-8);
+    private static DateTimeOffset SampleValidityValidUntil { get; } = SampleValiditySigned.AddYears(1);
 
 
     private static MdocValidityInfo SampleValidity() =>

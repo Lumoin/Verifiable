@@ -1,8 +1,9 @@
 using System;
 using System.Buffers;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using System.Threading;
 using System.Threading.Tasks;
+using Verifiable.Cbor;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Cbor.Fido2;
 using Verifiable.Fido2;
@@ -49,7 +50,7 @@ internal sealed class CtapAuthenticatorExtensionsTests
     [TestMethod]
     public async Task MakeCredentialWithCredProtectAloneEmitsOnlyCredProtectKeyWithRequestedLevel()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("ext-mc-credprotect-alone");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("ext-mc-credprotect-alone",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         ReadOnlyMemory<byte> extensions = BuildMakeCredentialExtensionsInput(credProtect: 2);
@@ -78,7 +79,7 @@ internal sealed class CtapAuthenticatorExtensionsTests
     [TestMethod]
     public async Task MakeCredentialWithMinPinLengthAloneForAuthorizedRpEmitsOnlyMinPinLengthKeyAndNeverCredProtect()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("ext-mc-minpinlength-alone");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("ext-mc-minpinlength-alone",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
 
@@ -108,7 +109,7 @@ internal sealed class CtapAuthenticatorExtensionsTests
     [TestMethod]
     public async Task MakeCredentialWithMinPinLengthForUnauthorizedRpReturnsOkWithNoExtensionsOutput()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("ext-mc-minpinlength-unauthorized");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("ext-mc-minpinlength-unauthorized",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         ReadOnlyMemory<byte> extensions = BuildMakeCredentialExtensionsInput(minPinLength: true);
@@ -127,7 +128,7 @@ internal sealed class CtapAuthenticatorExtensionsTests
     [TestMethod]
     public async Task MakeCredentialWithBothExtensionsRequestedAndAuthorizedEmitsBothKeysInCanonicalOrder()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("ext-mc-both-extensions");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("ext-mc-both-extensions",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
 
@@ -156,7 +157,7 @@ internal sealed class CtapAuthenticatorExtensionsTests
     [DataRow(4, DisplayName = "one-past-range")]
     public async Task MakeCredentialWithInvalidCredProtectValueReturnsInvalidParameter(int illegalCredProtect)
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator($"ext-mc-credprotect-invalid-{illegalCredProtect}");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator($"ext-mc-credprotect-invalid-{illegalCredProtect}",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         ReadOnlyMemory<byte> extensions = BuildMakeCredentialExtensionsInput(credProtect: illegalCredProtect);
@@ -171,7 +172,7 @@ internal sealed class CtapAuthenticatorExtensionsTests
     [TestMethod]
     public async Task MakeCredentialWithNoExtensionsRequestedProducesNoExtensionDataFlag()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("ext-mc-no-extensions");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("ext-mc-no-extensions",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool);
@@ -190,7 +191,7 @@ internal sealed class CtapAuthenticatorExtensionsTests
     [TestMethod]
     public async Task MakeCredentialExcludeListMatchAtDefaultLevelIsExcludedUnconditionally()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("ext-mc-exclude-level1");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("ext-mc-exclude-level1",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapRegisteredCredential registered = await RegisterCredentialAsync(simulator, pool, BuildFixedBytes(16, 0xC0), TestContext.CancellationToken);
@@ -209,7 +210,7 @@ internal sealed class CtapAuthenticatorExtensionsTests
     [TestMethod]
     public async Task MakeCredentialExcludeListMatchAtLevelTwoIsExcludedUnconditionally()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("ext-mc-exclude-level2");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("ext-mc-exclude-level2",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapRegisteredCredential registered = await RegisterCredentialAsync(
@@ -229,7 +230,7 @@ internal sealed class CtapAuthenticatorExtensionsTests
     [TestMethod]
     public async Task MakeCredentialExcludeListMatchAtLevelThreeWithUvCollectedIsExcluded()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("ext-mc-exclude-level3-uv");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("ext-mc-exclude-level3-uv",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
 
@@ -259,7 +260,7 @@ internal sealed class CtapAuthenticatorExtensionsTests
     [TestMethod]
     public async Task MakeCredentialExcludeListMatchAtLevelThreeWithoutUvSucceeds()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("ext-mc-exclude-level3-no-uv");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("ext-mc-exclude-level3-no-uv",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapRegisteredCredential registered = await RegisterCredentialAsync(
@@ -285,7 +286,7 @@ internal sealed class CtapAuthenticatorExtensionsTests
     [TestMethod]
     public async Task MakeCredentialExcludeListExemptedLevelThreeFirstThenLevelOneSecondStillExcludes()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("ext-mc-exclude-level3-then-level1");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("ext-mc-exclude-level3-then-level1",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapRegisteredCredential levelThree = await RegisterCredentialAsync(
@@ -313,7 +314,7 @@ internal sealed class CtapAuthenticatorExtensionsTests
     public async Task GetAssertionDiscoverableScanHidesLevelTwoCredentialWithoutUvButAllowListSeesIt()
     {
         const string rpId = "ext-ga-level2.example";
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("ext-ga-level2");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("ext-ga-level2",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapRegisteredCredential registered = await RegisterCredentialAsync(
@@ -340,7 +341,7 @@ internal sealed class CtapAuthenticatorExtensionsTests
     public async Task GetAssertionLevelThreeCredentialInvisibleWithoutUvVisibleWithUv()
     {
         const string rpId = "ext-ga-level3.example";
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("ext-ga-level3");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("ext-ga-level3",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
 
@@ -400,7 +401,7 @@ internal sealed class CtapAuthenticatorExtensionsTests
     public async Task GetAssertionLevelOneCredentialNeverFilteredEvenWithoutUv()
     {
         const string rpId = "ext-ga-level1.example";
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("ext-ga-level1");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("ext-ga-level1",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0xD4), TestContext.CancellationToken, rpId: rpId);
@@ -419,7 +420,7 @@ internal sealed class CtapAuthenticatorExtensionsTests
     [TestMethod]
     public async Task SetMinPinLengthAuthorizedRpLosesAuthorizationAfterReset()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("ext-minpinlength-reset-clears");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("ext-minpinlength-reset-clears",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
 
@@ -487,5 +488,5 @@ internal sealed class CtapAuthenticatorExtensionsTests
 
     /// <summary>Decodes a single CTAP2-canonical CBOR unsigned/negative integer from an authenticator extension output's raw encoded value.</summary>
     private static int ReadCborInt32(ReadOnlyMemory<byte> encodedValue) =>
-        checked((int)new CborReader(encodedValue, CborConformanceMode.Ctap2Canonical).ReadInt64());
+        checked((int)new CborReader(encodedValue, CborOptions.Ctap2Canonical).ReadInt64());
 }

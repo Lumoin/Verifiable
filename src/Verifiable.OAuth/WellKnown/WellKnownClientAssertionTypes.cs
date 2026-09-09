@@ -15,7 +15,7 @@ public static class WellKnownClientAssertionTypes
     /// The <c>urn:ietf:params:oauth:client-assertion-type:jwt-bearer</c> value — the RFC 7523 §2.2 JWT
     /// client-authentication profile (<c>private_key_jwt</c> / <c>client_secret_jwt</c>).
     /// </summary>
-    public static readonly string JwtBearer = Utf8Constants.ToInternedString(JwtBearerUtf8);
+    public static string JwtBearer { get; } = Utf8Constants.ToInternedString(JwtBearerUtf8);
 
 
     /// <summary>Whether <paramref name="value"/> is <see cref="JwtBearer"/>.</summary>

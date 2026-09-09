@@ -803,7 +803,7 @@ public static class CredentialBbs2023Extensions
             }
 
             //Per §3.3.3 createDisclosureData, disclosedPointers = mandatoryPointers ++ selectivePointers.
-            var disclosedPointers = new List<Verifiable.JsonPointer.JsonPointer>(mandatoryPointers);
+            var disclosedPointers = new List<Lumoin.Veritas.JsonPointer.JsonPointer>(mandatoryPointers);
             disclosedPointers.AddRange(selectivePointers);
 
             //Create the reveal document from the disclosed pointers.

@@ -1,5 +1,6 @@
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.SelectiveDisclosure;
 
@@ -42,8 +43,7 @@ internal sealed class SatOptimizerIntegrationTests
         var optimizer = BuildSatOptimizer(
             sensitivePathPairs: [(Ssn, AccountNumber)]);
 
-        var computation = new DisclosureComputation<string>(
-            [], crossCredentialOptimizers: [optimizer]);
+        var computation = new DisclosureComputation<string>([], new FakeTimeProvider(TestClock.CanonicalEpoch), crossCredentialOptimizers: [optimizer]);
 
         var matches = new[]
         {
@@ -108,8 +108,7 @@ internal sealed class SatOptimizerIntegrationTests
                 return Task.FromResult(decisions);
             });
 
-        var computation = new DisclosureComputation<string>(
-            [], crossCredentialOptimizers: [signalAwareOptimizer]);
+        var computation = new DisclosureComputation<string>([], new FakeTimeProvider(TestClock.CanonicalEpoch), crossCredentialOptimizers: [signalAwareOptimizer]);
 
         var requestingPartySignals = new Dictionary<Type, object>
         {

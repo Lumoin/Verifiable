@@ -20,7 +20,7 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// [SkipIfNoTpm]
 /// public void TestRequiringTpm()
 /// {
-///     using TpmDevice tpm = TpmDevice.Open();
+///     using TpmDevice tpm = TpmDevice.Open(BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 ///     //Test code here.
 /// }
 /// </code>
@@ -84,6 +84,13 @@ internal sealed class ConditionalTestMethodAttribute: TestMethodAttribute
     }
 
 
+    /// <summary>
+    /// Collects every <see cref="BaseSkipAttribute"/> declared on the test method or its declaring-type
+    /// hierarchy. MSTest's <see cref="ITestMethod"/> hands only the method's own attributes through
+    /// <see cref="ITestMethod.GetAllAttributes"/>; reaching a class-level skip attribute on an enclosing
+    /// type requires walking <see cref="Type.DeclaringType"/> with <see cref="Type.GetCustomAttributes"/>,
+    /// since MSTest exposes no hierarchy-walking equivalent of its own.
+    /// </summary>
     private static List<BaseSkipAttribute> FindSkipAttributes(ITestMethod testMethod)
     {
         var skipAttributes = new List<BaseSkipAttribute>();

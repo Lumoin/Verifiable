@@ -44,7 +44,7 @@ internal class HwTpmSessionTests
         if(TpmDevice.IsAvailable)
         {
             HasTpm = true;
-            Tpm = TpmDevice.Open();
+            Tpm = TpmDevice.Open(BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         }
     }
 
@@ -79,7 +79,7 @@ internal class HwTpmSessionTests
         _ = registry.Register(TpmCcConstants.TPM_CC_FlushContext, TpmResponseCodec.FlushContext);
 
         //Create an unbound, unsalted HMAC session.
-        var startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(TpmAlgIdConstants.TPM_ALG_SHA256);
+        var startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(TpmAlgIdConstants.TPM_ALG_SHA256, TestEntropy.NewCounterStream(), pool);
 
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             Tpm,
@@ -121,7 +121,7 @@ internal class HwTpmSessionTests
         _ = registry.Register(TpmCcConstants.TPM_CC_FlushContext, TpmResponseCodec.FlushContext);
 
         //Step 1: Create an HMAC session.
-        var startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(TpmAlgIdConstants.TPM_ALG_SHA256);
+        var startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(TpmAlgIdConstants.TPM_ALG_SHA256, TestEntropy.NewCounterStream(), pool);
 
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             Tpm,
@@ -141,7 +141,7 @@ internal class HwTpmSessionTests
         using var session = new TpmSession(
             new TpmHandle(startResponse.SessionHandle.Value),
             startResponse.NonceTPM,
-            TpmAlgIdConstants.TPM_ALG_SHA256,
+            TpmAlgIdConstants.TPM_ALG_SHA256, TestEntropy.NewCounterStream(),
             pool);
 
         //Configure session for audit (integrity verification without authorization).
@@ -191,7 +191,7 @@ internal class HwTpmSessionTests
         _ = registry.Register(TpmCcConstants.TPM_CC_FlushContext, TpmResponseCodec.FlushContext);
 
         //Create session.
-        var startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(TpmAlgIdConstants.TPM_ALG_SHA256);
+        var startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(TpmAlgIdConstants.TPM_ALG_SHA256, TestEntropy.NewCounterStream(), pool);
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             Tpm, startInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -202,7 +202,7 @@ internal class HwTpmSessionTests
         using var session = new TpmSession(
             new TpmHandle(startResponse.SessionHandle.Value),
             startResponse.NonceTPM,
-            TpmAlgIdConstants.TPM_ALG_SHA256,
+            TpmAlgIdConstants.TPM_ALG_SHA256, TestEntropy.NewCounterStream(),
             pool);
 
         session.SessionAttributes = TpmaSession.CONTINUE_SESSION | TpmaSession.AUDIT;
@@ -297,7 +297,7 @@ internal class HwTpmSessionTests
         try
         {
             //Start a bound session that negotiates XOR parameter encryption.
-            StartAuthSessionInput startInput = StartAuthSessionInput.CreateBoundUnsaltedHmacSession(objectHandle, SessionAlg, xor);
+            StartAuthSessionInput startInput = StartAuthSessionInput.CreateBoundUnsaltedHmacSession(objectHandle, SessionAlg, TestEntropy.NewCounterStream(), pool, xor);
 
             TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
                 Tpm, startInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
@@ -306,15 +306,14 @@ internal class HwTpmSessionTests
             //nonceTPM ownership transfers to the session below.
             StartAuthSessionResponse startResponse = startResult.Value;
 
-            Tpm2bAuth bindAuth = Tpm2bAuth.CreateEmpty(pool);
-            try
+            using Tpm2bAuth bindAuth = Tpm2bAuth.CreateEmpty(pool);
             {
                 using var session = await TpmSession.CreateBoundAsync(
                     new TpmHandle(startResponse.SessionHandle.Value),
                     bindAuth.AsReadOnlyMemory(),
                     startInput.NonceCaller,
                     startResponse.NonceTPM,
-                    SessionAlg,
+                    SessionAlg, TestEntropy.NewCounterStream(),
                     pool,
                     symmetric: xor,
                     cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -347,10 +346,6 @@ internal class HwTpmSessionTests
                     _ = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(
                         Tpm, flushSession, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
                 }
-            }
-            finally
-            {
-                bindAuth.Dispose();
             }
         }
         finally
@@ -386,7 +381,7 @@ internal class HwTpmSessionTests
         //Step 1: Create a transient bind object whose authValue is known to this test. The object is marked
         //noDA so that even a regression (host-derived session key diverging from the TPM's) yields
         //TPM_RC_BAD_AUTH rather than advancing this hardware TPM's dictionary-attack counter: binding to a
-        //DA-protected object would make an auth failure tick the box toward lockout (Part 1 §17.6 / DA rules).
+        //DA-protected object would make an auth failure tick the box toward lockout (Part 1, clause 16.6 / DA rules).
         using CreatePrimaryInput primaryInput = CreatePrimaryInput.ForEccSigningKey(
             TpmRh.TPM_RH_OWNER,
             bindPassword,
@@ -411,7 +406,7 @@ internal class HwTpmSessionTests
         {
             //Step 2: Start a bound HMAC session against the object. The generated nonceCaller is the one the
             //key derivation consumes, so it is read back from the input below.
-            StartAuthSessionInput startInput = StartAuthSessionInput.CreateBoundUnsaltedHmacSession(objectHandle, SessionAlg);
+            StartAuthSessionInput startInput = StartAuthSessionInput.CreateBoundUnsaltedHmacSession(objectHandle, SessionAlg, TestEntropy.NewCounterStream(), pool);
 
             TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
                 Tpm, startInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
@@ -423,51 +418,44 @@ internal class HwTpmSessionTests
             TestContext.WriteLine($"Bound session handle: 0x{startResponse.SessionHandle.Value:X8}.");
 
             //Step 3: Derive the bound session on the host from the object's authValue and the start nonces.
-            Tpm2bAuth bindAuth = bindPassword is null
+            using Tpm2bAuth bindAuth = bindPassword is null
                 ? Tpm2bAuth.CreateEmpty(pool)
                 : Tpm2bAuth.CreateFromPassword(bindPassword, pool);
 
-            try
-            {
-                using var session = await TpmSession.CreateBoundAsync(
-                    new TpmHandle(startResponse.SessionHandle.Value),
-                    bindAuth.AsReadOnlyMemory(),
-                    startInput.NonceCaller,
-                    startResponse.NonceTPM,
-                    SessionAlg,
-                    pool,
-                    cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            using var session = await TpmSession.CreateBoundAsync(
+                new TpmHandle(startResponse.SessionHandle.Value),
+                bindAuth.AsReadOnlyMemory(),
+                startInput.NonceCaller,
+                startResponse.NonceTPM,
+                SessionAlg, TestEntropy.NewCounterStream(),
+                pool,
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-                //Use the bound session to audit GetRandom (no auth handle, so the session keys off sessionKey
-                //only). The AUDIT attribute is load-bearing: it is what makes the TPM verify the command HMAC of
-                //this handle-less session, so a wrong host-derived session key surfaces as TPM_RC_AUTH_FAIL -
-                //that is exactly what turns this into a host-vs-TPM session-key equality oracle.
-                session.SessionAttributes = TpmaSession.CONTINUE_SESSION | TpmaSession.AUDIT;
+            //Use the bound session to audit GetRandom (no auth handle, so the session keys off sessionKey
+            //only). The AUDIT attribute is load-bearing: it is what makes the TPM verify the command HMAC of
+            //this handle-less session, so a wrong host-derived session key surfaces as TPM_RC_AUTH_FAIL -
+            //that is exactly what turns this into a host-vs-TPM session-key equality oracle.
+            session.SessionAttributes = TpmaSession.CONTINUE_SESSION | TpmaSession.AUDIT;
 
-                const int NumberOfRandomBytes = 32;
-                var getRandomInput = new GetRandomInput(NumberOfRandomBytes);
+            const int NumberOfRandomBytes = 32;
+            var getRandomInput = new GetRandomInput(NumberOfRandomBytes);
 
-                TpmResult<GetRandomResponse> randomResult = await TpmCommandExecutor.ExecuteAsync<GetRandomResponse>(
-                    Tpm, getRandomInput, [session], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+            TpmResult<GetRandomResponse> randomResult = await TpmCommandExecutor.ExecuteAsync<GetRandomResponse>(
+                Tpm, getRandomInput, [session], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
-                Assert.IsTrue(randomResult.IsSuccess,
-                    $"Bound-session GetRandom failed: '{randomResult.ResponseCode}'. A failure here means the host-derived bound session key diverged from the TPM's.");
+            Assert.IsTrue(randomResult.IsSuccess,
+                $"Bound-session GetRandom failed: '{randomResult.ResponseCode}'. A failure here means the host-derived bound session key diverged from the TPM's.");
 
-                using GetRandomResponse randomResponse = randomResult.Value;
-                Assert.AreEqual(NumberOfRandomBytes, randomResponse.RandomBytes.Size);
-                TestContext.WriteLine($"Bound-session random bytes: {Convert.ToHexString(randomResponse.RandomBytes.AsReadOnlySpan())}");
+            using GetRandomResponse randomResponse = randomResult.Value;
+            Assert.AreEqual(NumberOfRandomBytes, randomResponse.RandomBytes.Size);
+            TestContext.WriteLine($"Bound-session random bytes: {Convert.ToHexString(randomResponse.RandomBytes.AsReadOnlySpan())}");
 
-                //Flush the session.
-                var flushSession = FlushContextInput.ForHandle(startResponse.SessionHandle.Value);
-                TpmResult<FlushContextResponse> flushSessionResult = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(
-                    Tpm, flushSession, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+            //Flush the session.
+            var flushSession = FlushContextInput.ForHandle(startResponse.SessionHandle.Value);
+            TpmResult<FlushContextResponse> flushSessionResult = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(
+                Tpm, flushSession, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
-                Assert.IsTrue(flushSessionResult.IsSuccess, $"FlushContext (session) failed: '{flushSessionResult.ResponseCode}'.");
-            }
-            finally
-            {
-                bindAuth.Dispose();
-            }
+            Assert.IsTrue(flushSessionResult.IsSuccess, $"FlushContext (session) failed: '{flushSessionResult.ResponseCode}'.");
         }
         finally
         {
@@ -541,7 +529,7 @@ internal class HwTpmSessionTests
         BaseMemoryPool pool,
         TpmResponseRegistry registry)
     {
-        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(sessionAlg);
+        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(sessionAlg, TestEntropy.NewCounterStream(), pool);
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             Tpm, startInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession failed: '{startResult.ResponseCode}'.");
@@ -549,7 +537,7 @@ internal class HwTpmSessionTests
         //nonceTPM ownership transfers to the session, so this response is deliberately not disposed.
         StartAuthSessionResponse startResponse = startResult.Value;
         using var session = new TpmSession(
-            new TpmHandle(startResponse.SessionHandle.Value), startResponse.NonceTPM, sessionAlg, pool);
+            new TpmHandle(startResponse.SessionHandle.Value), startResponse.NonceTPM, sessionAlg, TestEntropy.NewCounterStream(), pool);
         session.SetAuthValue(parentAuth, pool);
 
         try

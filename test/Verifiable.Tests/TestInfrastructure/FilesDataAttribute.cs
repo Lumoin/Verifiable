@@ -65,6 +65,11 @@ namespace Verifiable.Tests.TestInfrastructure
         }
 
 
+        /// <summary>
+        /// Names each data row after the test method and its first argument. <see cref="MethodInfo"/> is
+        /// the parameter <see cref="ITestDataSource.GetDisplayName"/> itself declares; no further
+        /// reflection happens beyond what the interface's own contract hands in.
+        /// </summary>
         public string? GetDisplayName(MethodInfo methodInfo, object?[]? data)
         {
             if(data == null || data.Length == 0)
@@ -77,7 +82,7 @@ namespace Verifiable.Tests.TestInfrastructure
         }
 
 
-        /// <inheritDoc />
+        /// <inheritdoc/>
         public IEnumerable<object[]> GetData(MethodInfo testMethod)
         {
             ArgumentNullException.ThrowIfNull(testMethod);

@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using Verifiable.Cryptography;
 using Verifiable.Microsoft;
 using Verifiable.OAuth.Server.Keys;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
 
@@ -20,9 +21,9 @@ internal sealed class InProcessKeySetTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly KeyId KidA = new("kid-A");
-    private static readonly KeyId KidB = new("kid-B");
-    private static readonly KeyId KidC = new("kid-C");
+    private static KeyId KidA { get; } = new("kid-A");
+    private static KeyId KidB { get; } = new("kid-B");
+    private static KeyId KidC { get; } = new("kid-C");
 
 
     [TestMethod]
@@ -109,7 +110,6 @@ internal sealed class InProcessKeySetTests
         using InProcessKeySet keySet = new();
         SymmetricKey matA = CreateHmacMaterial();
         SymmetricKey matB = CreateHmacMaterial();
-        SymmetricKey matC = CreateHmacMaterial();
 
         //KidA: Incoming. KidB: Current → Retiring. KidC: never added.
         keySet.AddIncoming(KidA, matA);
@@ -222,7 +222,7 @@ internal sealed class InProcessKeySetTests
         return new SymmetricKey(
             material,
             Guid.NewGuid().ToString("N"),
-            MicrosoftHmacFunctions.ComputeHmacAsync,
-            MicrosoftHmacFunctions.VerifyHmacAsync);
+            MicrosoftHmacFunctionsAdapter.ComputeHmacAsync,
+            MicrosoftHmacFunctionsAdapter.VerifyHmacAsync);
     }
 }

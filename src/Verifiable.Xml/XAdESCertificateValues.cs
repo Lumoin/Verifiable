@@ -127,8 +127,8 @@ public sealed class XAdESCertificateValues: IDisposable
     /// <c>EncapsulatedX509Certificate</c> entry base64-decodes a full certificate and the schema's own
     /// <c>xsd:choice maxOccurs="unbounded"</c> content model sets no numeric limit. Chosen generously above any
     /// legitimate certificate-chain-plus-cross-certificates set;
-    /// <c>XAdESGrowthBoundsCostTests.CertificateValuesFloodIsRefusedWithinTheCeiling</c> measures a flood one
-    /// entry past this bound refusing well inside its own loose ceiling.
+    /// <c>XAdESGrowthBoundsCostTests.CertificateValuesFloodIsRefusedWithNoPooledRent</c> measures a flood one
+    /// entry past this bound refusing with no pooled rent, since an <c>OtherCertificate</c> entry carries no pooled content.
     /// </summary>
     public const int MaximumEntryCount = 4096;
 

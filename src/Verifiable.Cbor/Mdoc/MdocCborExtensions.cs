@@ -124,9 +124,9 @@ public static class MdocCborExtensions
         /// An <see cref="MdocDigestBindingResult"/> carrying the overall
         /// pass/fail plus per-item outcomes.
         /// </returns>
-        public MdocDigestBindingResult VerifyDigestBinding()
+        public MdocDigestBindingResult VerifyDigestBinding(BaseMemoryPool pool)
         {
-            return MdocMsoDigestBindingValidator.Validate(document.IssuerSigned);
+            return MdocMsoDigestBindingValidator.Validate(document.IssuerSigned, pool);
         }
 
 
@@ -181,9 +181,9 @@ public static class MdocCborExtensions
         /// An <see cref="MdocDigestBindingResult"/> carrying the overall
         /// pass/fail plus per-item outcomes.
         /// </returns>
-        public MdocDigestBindingResult VerifyDigestBinding()
+        public MdocDigestBindingResult VerifyDigestBinding(BaseMemoryPool pool)
         {
-            return MdocMsoDigestBindingValidator.Validate(presentation.IssuerSigned);
+            return MdocMsoDigestBindingValidator.Validate(presentation.IssuerSigned, pool);
         }
 
 

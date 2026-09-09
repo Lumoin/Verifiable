@@ -5,7 +5,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// is the 10-byte header alone.
 /// </summary>
 /// <remarks>
-/// See TPM 2.0 Library Part 3, Section 31.7 (Table 233).
+/// See TPM 2.0 Library Part 3, clause 31.7 (Table 254).
 /// </remarks>
 public sealed class NvWriteResponse: ITpmWireType
 {
@@ -14,6 +14,9 @@ public sealed class NvWriteResponse: ITpmWireType
     /// </summary>
     public static NvWriteResponse Instance { get; } = new();
 
+    /// <summary>
+    /// Prevents external construction: the parameterless response resolves to <see cref="Instance"/>.
+    /// </summary>
     private NvWriteResponse()
     {
     }

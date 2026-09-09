@@ -11,6 +11,7 @@ using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.OutboundFetch;
 using Verifiable.Core.Resolvers;
+using Verifiable.Core.Transport;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Core.Did.Methods.WebVh;
@@ -158,7 +159,7 @@ public static class WebVhDidUrlDereferencer
         //The resource is opaque (it may be any media type, including binary), so it is returned as the
         //transport-owned tagged buffer with the server's content type. It is not a DID document, so no
         //DID document metadata accompanies it.
-        string? contentType = response.TryGetHeader("Content-Type", out string? value) ? value : null;
+        string? contentType = response.Headers.TryGetValue(WellKnownHttpHeaderNames.ContentType, out string? value) ? value : null;
 
         return DidDereferencingResult.Success(response.Body, contentMetadata: null, contentType: contentType);
     }
@@ -214,6 +215,8 @@ public static class WebVhDidUrlDereferencer
         }
         catch
         {
+            //presentationDeserializer is a caller-supplied delegate over untrusted fetched bytes; any failure
+            //to parse them is an invalid DID from the dereferencer's perspective, cancellation excepted above.
             return DidDereferencingResult.Failure(DidResolutionErrors.InvalidDid);
         }
 
@@ -572,6 +575,8 @@ public static class WebVhDidUrlDereferencer
         }
         catch
         {
+            //A transport/network failure is a not-found from this helper's perspective, cancellation
+            //excepted above.
             return null;
         }
     }

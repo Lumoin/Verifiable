@@ -24,7 +24,7 @@ public static class OAuthMetricNames
     /// Total number of requests handled, tagged by flow kind and endpoint.
     /// Instrument: Counter.
     /// </summary>
-    public static readonly string RequestCount = Utf8Constants.ToInternedString(RequestCountUtf8);
+    public static string RequestCount { get; } = Utf8Constants.ToInternedString(RequestCountUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="RequestDuration"/>.</summary>
     public static ReadOnlySpan<byte> RequestDurationUtf8 => "oauth.server.request.duration"u8;
@@ -33,7 +33,7 @@ public static class OAuthMetricNames
     /// Request handling duration in milliseconds, tagged by flow kind and endpoint.
     /// Instrument: Histogram.
     /// </summary>
-    public static readonly string RequestDuration = Utf8Constants.ToInternedString(RequestDurationUtf8);
+    public static string RequestDuration { get; } = Utf8Constants.ToInternedString(RequestDurationUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="ResponseCount"/>.</summary>
     public static ReadOnlySpan<byte> ResponseCountUtf8 => "oauth.server.responses"u8;
@@ -42,7 +42,7 @@ public static class OAuthMetricNames
     /// Number of responses by status code, tagged by flow kind.
     /// Instrument: Counter.
     /// </summary>
-    public static readonly string ResponseCount = Utf8Constants.ToInternedString(ResponseCountUtf8);
+    public static string ResponseCount { get; } = Utf8Constants.ToInternedString(ResponseCountUtf8);
 
     //Validation — counters.
 
@@ -53,7 +53,7 @@ public static class OAuthMetricNames
     /// Total number of validation claim evaluations, tagged by claim code and outcome.
     /// Instrument: Counter.
     /// </summary>
-    public static readonly string ValidationClaimCount = Utf8Constants.ToInternedString(ValidationClaimCountUtf8);
+    public static string ValidationClaimCount { get; } = Utf8Constants.ToInternedString(ValidationClaimCountUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="ValidationFailureCount"/>.</summary>
     public static ReadOnlySpan<byte> ValidationFailureCountUtf8 => "oauth.server.validation.failures"u8;
@@ -62,7 +62,7 @@ public static class OAuthMetricNames
     /// Total number of failed validation claims, tagged by claim code.
     /// Instrument: Counter.
     /// </summary>
-    public static readonly string ValidationFailureCount = Utf8Constants.ToInternedString(ValidationFailureCountUtf8);
+    public static string ValidationFailureCount { get; } = Utf8Constants.ToInternedString(ValidationFailureCountUtf8);
 
     //Flow lifecycle — gauges and counters.
 
@@ -73,7 +73,7 @@ public static class OAuthMetricNames
     /// Number of currently active flows (created but not yet completed or expired).
     /// Instrument: UpDownCounter.
     /// </summary>
-    public static readonly string ActiveFlowCount = Utf8Constants.ToInternedString(ActiveFlowCountUtf8);
+    public static string ActiveFlowCount { get; } = Utf8Constants.ToInternedString(ActiveFlowCountUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="FlowCreatedCount"/>.</summary>
     public static ReadOnlySpan<byte> FlowCreatedCountUtf8 => "oauth.server.flows.created"u8;
@@ -82,7 +82,7 @@ public static class OAuthMetricNames
     /// Total number of flows created, tagged by flow kind.
     /// Instrument: Counter.
     /// </summary>
-    public static readonly string FlowCreatedCount = Utf8Constants.ToInternedString(FlowCreatedCountUtf8);
+    public static string FlowCreatedCount { get; } = Utf8Constants.ToInternedString(FlowCreatedCountUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="FlowCompletedCount"/>.</summary>
     public static ReadOnlySpan<byte> FlowCompletedCountUtf8 => "oauth.server.flows.completed"u8;
@@ -91,7 +91,7 @@ public static class OAuthMetricNames
     /// Total number of flows completed (reached terminal state), tagged by flow kind.
     /// Instrument: Counter.
     /// </summary>
-    public static readonly string FlowCompletedCount = Utf8Constants.ToInternedString(FlowCompletedCountUtf8);
+    public static string FlowCompletedCount { get; } = Utf8Constants.ToInternedString(FlowCompletedCountUtf8);
 
     //Correlation — counters.
 
@@ -103,7 +103,7 @@ public static class OAuthMetricNames
     /// (<c>resolved</c> or <c>not_found</c>).
     /// Instrument: Counter.
     /// </summary>
-    public static readonly string CorrelationResolutionCount = Utf8Constants.ToInternedString(CorrelationResolutionCountUtf8);
+    public static string CorrelationResolutionCount { get; } = Utf8Constants.ToInternedString(CorrelationResolutionCountUtf8);
 
     //Client lifecycle — gauges and counters.
 
@@ -114,7 +114,7 @@ public static class OAuthMetricNames
     /// Number of currently registered clients.
     /// Instrument: UpDownCounter.
     /// </summary>
-    public static readonly string ActiveClientCount = Utf8Constants.ToInternedString(ActiveClientCountUtf8);
+    public static string ActiveClientCount { get; } = Utf8Constants.ToInternedString(ActiveClientCountUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="ClientLifecycleCount"/>.</summary>
     public static ReadOnlySpan<byte> ClientLifecycleCountUtf8 => "oauth.server.clients.lifecycle"u8;
@@ -124,7 +124,7 @@ public static class OAuthMetricNames
     /// (<c>registered</c>, <c>updated</c>, <c>deregistered</c>).
     /// Instrument: Counter.
     /// </summary>
-    public static readonly string ClientLifecycleCount = Utf8Constants.ToInternedString(ClientLifecycleCountUtf8);
+    public static string ClientLifecycleCount { get; } = Utf8Constants.ToInternedString(ClientLifecycleCountUtf8);
 
     //Token operations — counters and histograms.
 
@@ -135,7 +135,7 @@ public static class OAuthMetricNames
     /// Total number of tokens signed, tagged by algorithm.
     /// Instrument: Counter.
     /// </summary>
-    public static readonly string TokenSignedCount = Utf8Constants.ToInternedString(TokenSignedCountUtf8);
+    public static string TokenSignedCount { get; } = Utf8Constants.ToInternedString(TokenSignedCountUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="TokenSignDuration"/>.</summary>
     public static ReadOnlySpan<byte> TokenSignDurationUtf8 => "oauth.server.tokens.sign.duration"u8;
@@ -144,7 +144,7 @@ public static class OAuthMetricNames
     /// Token signing duration in milliseconds, tagged by algorithm.
     /// Instrument: Histogram.
     /// </summary>
-    public static readonly string TokenSignDuration = Utf8Constants.ToInternedString(TokenSignDurationUtf8);
+    public static string TokenSignDuration { get; } = Utf8Constants.ToInternedString(TokenSignDurationUtf8);
 
     //JWKS — counters.
 
@@ -155,5 +155,5 @@ public static class OAuthMetricNames
     /// Total number of JWKS document builds, tagged by segment.
     /// Instrument: Counter.
     /// </summary>
-    public static readonly string JwksBuildCount = Utf8Constants.ToInternedString(JwksBuildCountUtf8);
+    public static string JwksBuildCount { get; } = Utf8Constants.ToInternedString(JwksBuildCountUtf8);
 }

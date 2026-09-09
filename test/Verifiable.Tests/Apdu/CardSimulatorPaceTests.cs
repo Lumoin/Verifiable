@@ -12,6 +12,8 @@ using Verifiable.Apdu.Pace;
 using Verifiable.Apdu.SecureMessaging;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
+using Microsoft.Extensions.Time.Testing;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Apdu;
 
@@ -58,7 +60,7 @@ internal sealed class CardSimulatorPaceTests
     public async Task EncryptsThePaceNonceUnderTheMrzDerivedKey()
     {
         using ElementaryFile dataGroup1 = DataGroup1.Write(Td2MachineReadableZone, BaseMemoryPool.Shared);
-        using var card = new CardSimulator("passport-pace", [dataGroup1], FillAscending);
+        using var card = new CardSimulator("passport-pace", [dataGroup1], FillAscending, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         using ApduDevice device = ApduDevice.Create(card.TransceiveAsync);
 
         //MSE:Set AT selecting the PACE-ECDH-GM-AES128 mechanism (DO'80' OID) for the MRZ password (DO'83').
@@ -96,7 +98,7 @@ internal sealed class CardSimulatorPaceTests
     public async Task EstablishesPaceSessionAgainstTheRealTerminal()
     {
         using ElementaryFile dataGroup1 = DataGroup1.Write(Td2MachineReadableZone, BaseMemoryPool.Shared);
-        using var card = new CardSimulator("passport-pace-establish", [dataGroup1], paceCurve: CryptoTags.BrainpoolP256r1ExchangePublicKey);
+        using var card = new CardSimulator("passport-pace-establish", [dataGroup1], paceCurve: CryptoTags.BrainpoolP256r1ExchangePublicKey, rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         using ApduDevice device = ApduDevice.Create(card.TransceiveAsync);
 
         //EstablishAsync runs all four GENERAL AUTHENTICATE rounds and verifies the chip's token T_IC; reaching
@@ -118,7 +120,7 @@ internal sealed class CardSimulatorPaceTests
     public async Task EstablishesPaceSessionWithIntegratedMappingAgainstTheRealTerminal()
     {
         using ElementaryFile dataGroup1 = DataGroup1.Write(Td2MachineReadableZone, BaseMemoryPool.Shared);
-        using var card = new CardSimulator("passport-pace-im", [dataGroup1], paceCurve: CryptoTags.BrainpoolP256r1ExchangePublicKey);
+        using var card = new CardSimulator("passport-pace-im", [dataGroup1], paceCurve: CryptoTags.BrainpoolP256r1ExchangePublicKey, rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         using ApduDevice device = ApduDevice.Create(card.TransceiveAsync);
 
         //Integrated Mapping: the terminal sends the additional nonce t in DO'81' and the chip answers with an
@@ -148,7 +150,7 @@ internal sealed class CardSimulatorPaceTests
         using(staticPublicKey)
         {
             using var card = new CardSimulator("passport-pace-cam", [dataGroup1],
-                paceCurve: CryptoTags.BrainpoolP256r1ExchangePublicKey, paceChipAuthenticationKey: staticKey);
+                paceCurve: CryptoTags.BrainpoolP256r1ExchangePublicKey, paceChipAuthenticationKey: staticKey, rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
             using ApduDevice device = ApduDevice.Create(card.TransceiveAsync);
 
             //Chip Authentication Mapping: round 4 carries the chip token (DO'86') and the Encrypted Chip
@@ -182,7 +184,7 @@ internal sealed class CardSimulatorPaceTests
         using(wrongPublicKey)
         {
             using var card = new CardSimulator("passport-pace-cam-wrong-key", [dataGroup1],
-                paceCurve: CryptoTags.BrainpoolP256r1ExchangePublicKey, paceChipAuthenticationKey: staticKey);
+                paceCurve: CryptoTags.BrainpoolP256r1ExchangePublicKey, paceChipAuthenticationKey: staticKey, rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
             using ApduDevice device = ApduDevice.Create(card.TransceiveAsync);
 
             await Assert.ThrowsExactlyAsync<InvalidOperationException>(
@@ -198,7 +200,7 @@ internal sealed class CardSimulatorPaceTests
     {
         using ElementaryFile efCom = EfCom.Write("0106", "040000", [0x61, 0x75], BaseMemoryPool.Shared);
         using ElementaryFile dataGroup1 = DataGroup1.Write(Td2MachineReadableZone, BaseMemoryPool.Shared);
-        using var card = new CardSimulator("passport-pace-sm-read", [efCom, dataGroup1], paceCurve: CryptoTags.BrainpoolP256r1ExchangePublicKey);
+        using var card = new CardSimulator("passport-pace-sm-read", [efCom, dataGroup1], paceCurve: CryptoTags.BrainpoolP256r1ExchangePublicKey, rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         using ApduDevice device = ApduDevice.Create(card.TransceiveAsync);
 
         (SymmetricKeyMemory encryptionKey, SymmetricKeyMemory macKey) = await EstablishPaceAsync(
@@ -223,7 +225,7 @@ internal sealed class CardSimulatorPaceTests
     public async Task RefusesAMappingRoundBeforeTheEncryptedNonceRound()
     {
         using ElementaryFile dataGroup1 = DataGroup1.Write(Td2MachineReadableZone, BaseMemoryPool.Shared);
-        using var card = new CardSimulator("passport-pace-order", [dataGroup1], FillAscending, paceCurve: CryptoTags.BrainpoolP256r1ExchangePublicKey);
+        using var card = new CardSimulator("passport-pace-order", [dataGroup1], FillAscending, paceCurve: CryptoTags.BrainpoolP256r1ExchangePublicKey, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         using ApduDevice device = ApduDevice.Create(card.TransceiveAsync);
 
         byte[] setAtData = Convert.FromHexString("800A04007F00070202040202830101");

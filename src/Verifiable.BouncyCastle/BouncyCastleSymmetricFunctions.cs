@@ -80,11 +80,13 @@ public static class BouncyCastleSymmetricFunctions
         ReadOnlyMemory<byte> iv,
         Tag tag,
         BaseMemoryPool pool,
+        TimeProvider timeProvider,
         FrozenDictionary<string, object>? context = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(tag);
         ArgumentNullException.ThrowIfNull(pool);
+        ArgumentNullException.ThrowIfNull(timeProvider);
         cancellationToken.ThrowIfCancellationRequested();
         _ = context;
 
@@ -102,7 +104,7 @@ public static class BouncyCastleSymmetricFunctions
         IMemoryOwner<byte> owner = CbcTransform(plaintext.Span, keyBytes.Span, iv.Span, algorithm, forEncryption: true, pool);
         Ciphertext result = new(owner, stamped, activity);
         CryptoEvent evt = SymmetricCipherPerformedEvent.Create(
-            algorithm, encrypting: true, plaintext.Length, owner.Memory.Length, CryptoLib.Name);
+            algorithm, encrypting: true, plaintext.Length, owner.Memory.Length, CryptoLib.Name, timeProvider: timeProvider);
 
         return ValueTask.FromResult<(Ciphertext, CryptoEvent?)>((result, evt));
     }
@@ -120,11 +122,13 @@ public static class BouncyCastleSymmetricFunctions
         ReadOnlyMemory<byte> iv,
         Tag tag,
         BaseMemoryPool pool,
+        TimeProvider timeProvider,
         FrozenDictionary<string, object>? context = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(tag);
         ArgumentNullException.ThrowIfNull(pool);
+        ArgumentNullException.ThrowIfNull(timeProvider);
         cancellationToken.ThrowIfCancellationRequested();
         _ = context;
 
@@ -142,7 +146,7 @@ public static class BouncyCastleSymmetricFunctions
         IMemoryOwner<byte> owner = CbcTransform(ciphertext.Span, keyBytes.Span, iv.Span, algorithm, forEncryption: false, pool);
         DecryptedContent result = new(owner, stamped, activity);
         CryptoEvent evt = SymmetricCipherPerformedEvent.Create(
-            algorithm, encrypting: false, ciphertext.Length, owner.Memory.Length, CryptoLib.Name);
+            algorithm, encrypting: false, ciphertext.Length, owner.Memory.Length, CryptoLib.Name, timeProvider: timeProvider);
 
         return ValueTask.FromResult<(DecryptedContent, CryptoEvent?)>((result, evt));
     }
@@ -159,11 +163,13 @@ public static class BouncyCastleSymmetricFunctions
         int outputByteLength,
         Tag tag,
         BaseMemoryPool pool,
+        TimeProvider timeProvider,
         FrozenDictionary<string, object>? context = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(tag);
         ArgumentNullException.ThrowIfNull(pool);
+        ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(outputByteLength, 0);
         cancellationToken.ThrowIfCancellationRequested();
         _ = context;
@@ -185,7 +191,7 @@ public static class BouncyCastleSymmetricFunctions
         IMemoryOwner<byte> owner = ComputeMacCore(message.Span, keyBytes.Span, outputByteLength, algorithm, pool);
         MacValue result = new(owner, stamped, activity);
         CryptoEvent evt = BlockCipherMacComputedEvent.Create(
-            algorithm, message.Length, outputByteLength, CryptoLib.Name);
+            algorithm, message.Length, outputByteLength, CryptoLib.Name, timeProvider: timeProvider);
 
         return ValueTask.FromResult<(MacValue, CryptoEvent?)>((result, evt));
     }
@@ -201,11 +207,13 @@ public static class BouncyCastleSymmetricFunctions
         ReadOnlyMemory<byte> expectedMac,
         Tag tag,
         BaseMemoryPool pool,
+        TimeProvider timeProvider,
         FrozenDictionary<string, object>? context = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(tag);
         ArgumentNullException.ThrowIfNull(pool);
+        ArgumentNullException.ThrowIfNull(timeProvider);
         cancellationToken.ThrowIfCancellationRequested();
         _ = context;
 
@@ -233,7 +241,7 @@ public static class BouncyCastleSymmetricFunctions
         activity?.Stop();
 
         VerificationOutcome outcome = isValid ? VerificationOutcome.Valid : VerificationOutcome.Invalid;
-        CryptoEvent evt = BlockCipherMacVerifiedEvent.Create(algorithm, outcome, message.Length, CryptoLib.Name);
+        CryptoEvent evt = BlockCipherMacVerifiedEvent.Create(algorithm, outcome, message.Length, CryptoLib.Name, timeProvider: timeProvider);
 
         return ValueTask.FromResult<(bool, CryptoEvent?)>((isValid, evt));
     }

@@ -40,19 +40,19 @@ internal sealed class SiopDidSubjectFlowTests
     private const string WalletDid = "did:example:NzbLsXh8uDCcd6MNwXF4W7noWXFZAfHkxZsRGC9Xs";
     private const string WalletKeyId = WalletDid + "#key-1";
 
-    private static readonly Uri RelyingPartyBaseUri = new("https://rp.example.com");
+    private static Uri RelyingPartyBaseUri { get; } = new("https://rp.example.com");
 
-    private static readonly ImmutableHashSet<CapabilityIdentifier> SiopCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> SiopCapabilities { get; } =
         ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.SiopSelfIssuedOp);
 
-    private static readonly string[] AllowedSiopAlgorithms = [WellKnownJwaValues.Es256];
+    private static string[] AllowedSiopAlgorithms { get; } = [WellKnownJwaValues.Es256];
 
-    private static readonly JwtHeaderSerializer HeaderSerializer =
+    private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)header,
             TestSetup.DefaultSerializationOptions);
 
-    private static readonly JwtPayloadSerializer PayloadSerializer =
+    private static JwtPayloadSerializer PayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)payload,
             TestSetup.DefaultSerializationOptions);

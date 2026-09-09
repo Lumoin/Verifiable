@@ -20,7 +20,7 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.OAuth;
 
 /// <summary>
-/// Slice 7 — the global-logout → CAEP <c>session-revoked</c> emit, end to end over real
+/// The global-logout → CAEP <c>session-revoked</c> emit, end to end over real
 /// HTTP. A Global Token Revocation request
 /// (<see href="https://drafts.aaronpk.com/draft-parecki-oauth-global-token-revocation/draft-parecki-oauth-global-token-revocation.html">draft-parecki-oauth-global-token-revocation</see>)
 /// revokes a subject; its revoke-subject seam then emits a CAEP <c>session-revoked</c>
@@ -68,7 +68,7 @@ internal sealed class GlobalLogoutCaepEmitHttpTests
     private const string GtrClientId = "https://gtr.client.test";
 
     /// <summary>The base URI the GTR client is reachable at.</summary>
-    private static readonly Uri GtrClientBaseUri = new("https://gtr.client.test");
+    private static Uri GtrClientBaseUri { get; } = new("https://gtr.client.test");
 
     /// <summary>The <c>iss</c> half of the revoked iss_sub Subject Identifier.</summary>
     private const string RevokedIssuer = "https://issuer.test";
@@ -81,7 +81,7 @@ internal sealed class GlobalLogoutCaepEmitHttpTests
         /*lang=json,strict*/ "{\"sub_id\":{\"format\":\"iss_sub\",\"iss\":\"https://issuer.test\",\"sub\":\"subject-123\"}}";
 
     /// <summary>The single capability the Global Token Revocation endpoint requires.</summary>
-    private static readonly ImmutableHashSet<CapabilityIdentifier> GtrCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> GtrCapabilities { get; } =
         ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.OAuthGlobalTokenRevocation);
 
 

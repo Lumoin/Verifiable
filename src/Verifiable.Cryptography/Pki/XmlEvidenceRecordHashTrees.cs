@@ -710,7 +710,7 @@ public sealed record XmlEvidenceRecordHashTreeBuildContext
 public sealed class XmlEvidenceRecordHashTreeBuild: IDisposable
 {
     /// <summary>The per-group reduced trees; a claimed slot is <see langword="null"/> and no longer this instance's to release.</summary>
-    private readonly XmlEvidenceRecordHashTree?[] reducedHashTrees;
+    private XmlEvidenceRecordHashTree?[] ReducedHashTrees { get; }
 
     /// <summary>Whether <see cref="Dispose"/> has already run.</summary>
     private bool disposed;
@@ -722,7 +722,7 @@ public sealed class XmlEvidenceRecordHashTreeBuild: IDisposable
     internal XmlEvidenceRecordHashTreeBuild(DigestValue root, XmlEvidenceRecordHashTree[] reducedHashTrees)
     {
         Root = root;
-        this.reducedHashTrees = reducedHashTrees;
+        this.ReducedHashTrees = reducedHashTrees;
     }
 
 
@@ -730,7 +730,7 @@ public sealed class XmlEvidenceRecordHashTreeBuild: IDisposable
     public DigestValue Root { get; }
 
     /// <summary>Gets the number of data object groups the tree was built over.</summary>
-    public int GroupCount => reducedHashTrees.Length;
+    public int GroupCount => ReducedHashTrees.Length;
 
 
     /// <summary>
@@ -745,10 +745,10 @@ public sealed class XmlEvidenceRecordHashTreeBuild: IDisposable
     public XmlEvidenceRecordHashTree ClaimReducedHashTree(int groupIndex)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(groupIndex);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(groupIndex, reducedHashTrees.Length);
-        XmlEvidenceRecordHashTree claimed = reducedHashTrees[groupIndex]
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(groupIndex, ReducedHashTrees.Length);
+        XmlEvidenceRecordHashTree claimed = ReducedHashTrees[groupIndex]
             ?? throw new InvalidOperationException($"The reduced hash tree of group {groupIndex} was already claimed; a tree has exactly one owner.");
-        reducedHashTrees[groupIndex] = null;
+        ReducedHashTrees[groupIndex] = null;
 
         return claimed;
     }
@@ -760,9 +760,9 @@ public sealed class XmlEvidenceRecordHashTreeBuild: IDisposable
         if(!disposed)
         {
             Root.Dispose();
-            for(int i = 0; i < reducedHashTrees.Length; ++i)
+            for(int i = 0; i < ReducedHashTrees.Length; ++i)
             {
-                reducedHashTrees[i]?.Dispose();
+                ReducedHashTrees[i]?.Dispose();
             }
 
             disposed = true;

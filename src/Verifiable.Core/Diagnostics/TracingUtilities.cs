@@ -1,8 +1,6 @@
-using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using System.Security.Cryptography;
 
 
 namespace Verifiable.Core.Diagnostics
@@ -16,9 +14,15 @@ namespace Verifiable.Core.Diagnostics
         /// Retrieves the current <see cref="Activity.TraceId"/> or generates a new one if none exists.
         /// </summary>
         /// <returns>A string representing the TraceId.</returns>
+        /// <remarks>
+        /// The fallback draw is <see cref="ActivityTraceId.CreateRandom"/> — the diagnostics framework's own
+        /// W3C trace-context identifier minting, not a cryptographic key material draw, so it is the platform
+        /// boundary itself rather than a caller-suppliable entropy seam: a trace id correlates log lines, it
+        /// never gates access or authenticates anything.
+        /// </remarks>
         public static string GetOrCreateTraceId()
         {
-            return Activity.Current?.TraceId.ToString() ?? Activity.TraceIdGenerator?.Invoke().ToHexString() ?? Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
+            return Activity.Current?.TraceId.ToString() ?? Activity.TraceIdGenerator?.Invoke().ToHexString() ?? ActivityTraceId.CreateRandom().ToHexString();
 
         }
 
@@ -39,9 +43,15 @@ namespace Verifiable.Core.Diagnostics
         /// Retrieves the current <see cref="Activity.SpanId"/> or generates a new one if none exists.
         /// </summary>
         /// <returns>A string representing the SpanId.</returns>
+        /// <remarks>
+        /// The fallback draw is <see cref="ActivitySpanId.CreateRandom"/> — the diagnostics framework's own
+        /// span-identifier minting, not a cryptographic key material draw, so it is the platform boundary
+        /// itself rather than a caller-suppliable entropy seam: a span id correlates log lines, it never
+        /// gates access or authenticates anything.
+        /// </remarks>
         public static string GetOrCreateSpanId()
-        {            
-            return Activity.Current?.SpanId.ToString() ?? Convert.ToHexString(RandomNumberGenerator.GetBytes(8));
+        {
+            return Activity.Current?.SpanId.ToString() ?? ActivitySpanId.CreateRandom().ToHexString();
         }
 
 

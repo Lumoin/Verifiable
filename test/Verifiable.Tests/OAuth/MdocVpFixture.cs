@@ -1,5 +1,5 @@
 using System.Buffers;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Time.Testing;
@@ -10,6 +10,7 @@ using Verifiable.Core.Model.Dcql;
 using Verifiable.Core.Model.Mdoc;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Core.Model.SelectiveDisclosure.Strategy;
+using Verifiable.Core.StatusList;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.JCose;
@@ -38,9 +39,9 @@ namespace Verifiable.Tests.OAuth;
 /// </summary>
 internal static class MdocVpFixture
 {
-    private const string CredentialQueryId = "pid";
-    private static readonly string PidDocType = EudiPid.AttestationType;
-    private static readonly string PidNamespace = EudiPid.Mdoc.Namespace;
+    private const string PidCredentialQueryId = "pid";
+    private static string PidDocType { get; } = EudiPid.AttestationType;
+    private static string PidNamespace { get; } = EudiPid.Mdoc.Namespace;
 
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
@@ -49,6 +50,17 @@ internal static class MdocVpFixture
     public static FormatFixture Format => new("mso_mdoc", StartAsync);
 
 
+    /// <summary>
+    /// Starts an mdoc <see cref="FormatRun"/> whose issued PID references no Token Status List
+    /// entry — the matrix's plain row. Callers that need a status-bearing mdoc call
+    /// <see cref="IssueAsync"/> directly with a <see cref="StatusListReference"/> and compose their
+    /// own <see cref="FormatRun"/> the way this method does (see
+    /// <c>MdocCredentialStatusGateTests.StartMdocRunAsync</c> and
+    /// <c>MdocVpTokenVerificationStatusTests</c> for the two call sites that need per-test
+    /// resolver/policy hosts <see cref="Format"/>'s fixed wiring cannot provide).
+    /// </summary>
+    /// <param name="tp">The clock the host and the MSO's <c>validityInfo</c> are built against.</param>
+    /// <param name="cancellationToken">Cancels issuance.</param>
     private static async ValueTask<FormatRun> StartAsync(FakeTimeProvider tp, CancellationToken cancellationToken)
     {
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> issuerKeys =
@@ -56,27 +68,12 @@ internal static class MdocVpFixture
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> deviceKeys =
             TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
 
-        //The verifier's trust framework resolves the issuer key out of band; the
-        //seams carry that resolver plus the CBOR/COSE implementations the executor
-        //dispatches mso_mdoc through.
-        MdocVpVerificationSeams seams = new()
-        {
-            ResolveIssuerKey = TrustAnchorFor(issuerKeys.PublicKey),
-            ParseDeviceResponse = MdocCborDeviceResponseReader.Read,
-            EncodeSessionTranscript = Oid4VpMdocSessionTranscriptEncoder.Encode,
-            DecodeElementValue = DecodeElementValue,
-            ParseCoseSign1 = CoseSerialization.ParseCoseSign1,
-            ParseCoseSign1AllowingNilPayload = CoseSerialization.ParseCoseSign1AllowingNilPayload,
-            EncodeDeviceAuthenticationBytes = MdocCborDeviceAuthenticationEncoder.EncodeAuthenticationBytes,
-            BuildSigStructure = CoseSerialization.BuildSigStructure
-        };
-
-        TestHostShell app = new(tp, mdocSeams: seams);
+        TestHostShell app = new(tp, mdocSeams: BuildSeams(issuerKeys.PublicKey));
 
         //The wallet holds the issued mdoc; the device key matches the MSO's
         //committed device key. The credential and key never leave the wallet —
         //only the wire JWE crosses to the verifier.
-        MdocDocument issued = await IssueAsync(issuerKeys, deviceKeys, cancellationToken).ConfigureAwait(false);
+        MdocDocument issued = await IssueAsync(issuerKeys, deviceKeys, status: null, cancellationToken).ConfigureAwait(false);
 
         return new FormatRun
         {
@@ -97,16 +94,61 @@ internal static class MdocVpFixture
     }
 
 
+    /// <summary>
+    /// The mdoc verification seams the executor dispatches an <c>mso_mdoc</c> presentation
+    /// through: the project's own CBOR/COSE implementations, plus <paramref name="resolveIssuerKey"/>
+    /// standing in for the verifier's trust framework and <paramref name="extractTrustedAuthorityEvidence"/>
+    /// for DCQL <c>trusted_authorities</c> enforcement when a caller wires one. The single seam
+    /// composition every host in this fixture and its callers builds a host from.
+    /// </summary>
+    /// <param name="resolveIssuerKey">The issuer-key resolution the verifier's trust framework performs.</param>
+    /// <param name="extractTrustedAuthorityEvidence">
+    /// The trust-evidence extractor for DCQL <c>trusted_authorities</c>, or <see langword="null"/> when
+    /// the caller does not exercise it.
+    /// </param>
+    /// <returns>The seams a host is built with.</returns>
+    public static MdocVpVerificationSeams BuildSeams(
+        ResolveMdocIssuerKeyDelegate resolveIssuerKey,
+        ExtractMdocTrustedAuthorityEvidenceDelegate? extractTrustedAuthorityEvidence = null) =>
+        new()
+        {
+            ResolveIssuerKey = resolveIssuerKey,
+            ParseDeviceResponse = MdocCborDeviceResponseReader.Read,
+            EncodeSessionTranscript = Oid4VpMdocSessionTranscriptEncoder.Encode,
+            DecodeElementValue = DecodeElementValue,
+            ParseCoseSign1 = CoseSerialization.ParseCoseSign1,
+            ParseCoseSign1AllowingNilPayload = CoseSerialization.ParseCoseSign1AllowingNilPayload,
+            EncodeDeviceAuthenticationBytes = MdocCborDeviceAuthenticationEncoder.EncodeAuthenticationBytes,
+            BuildSigStructure = CoseSerialization.BuildSigStructure,
+            ExtractTrustedAuthorityEvidence = extractTrustedAuthorityEvidence
+        };
+
+
+    /// <summary>
+    /// <see cref="BuildSeams(ResolveMdocIssuerKeyDelegate, ExtractMdocTrustedAuthorityEvidenceDelegate?)"/>
+    /// over the common case: the verifier's trust framework knows the issuer key directly, resolved
+    /// through <see cref="TrustAnchorFor"/>.
+    /// </summary>
+    /// <param name="trustedIssuerKey">The issuer public key the verifier resolves out of band.</param>
+    /// <returns>The seams a host is built with.</returns>
+    public static MdocVpVerificationSeams BuildSeams(PublicKeyMemory trustedIssuerKey) =>
+        BuildSeams(TrustAnchorFor(trustedIssuerKey));
+
+
     private static void AssertClaims(PresentationVerifiedState verified)
     {
-        Assert.IsTrue(verified.Claims.TryGetValue(CredentialQueryId,
-            out IReadOnlyDictionary<string, string>? claims),
-            "Verified claims must be keyed by the DCQL credential query id.");
-        Assert.AreEqual("Mustermann", claims![EudiPid.Mdoc.FamilyName],
+        Assert.IsTrue(verified.Credentials.TryGetValue(new CredentialQueryId(PidCredentialQueryId),
+            out VpCredentialClaims? credential),
+            "Verified credentials must be keyed by the DCQL credential query id.");
+        IReadOnlyDictionary<CredentialPath, string> claims = credential!.Extracted;
+        CredentialPath familyNamePath = CredentialPath.Root.Append(EudiPid.Mdoc.Namespace).Append(EudiPid.Mdoc.FamilyName);
+        CredentialPath givenNamePath = CredentialPath.Root.Append(EudiPid.Mdoc.Namespace).Append(EudiPid.Mdoc.GivenName);
+        CredentialPath birthDatePath = CredentialPath.Root.Append(EudiPid.Mdoc.Namespace).Append(EudiPid.Mdoc.BirthDate);
+        Assert.AreEqual("Mustermann", claims[familyNamePath],
             "The disclosed family_name must round-trip through the full flow.");
-        Assert.AreEqual("Erika", claims[EudiPid.Mdoc.GivenName],
+        Assert.AreEqual("Erika", claims[givenNamePath],
             "The disclosed given_name must round-trip through the full flow.");
-        Assert.IsFalse(claims.ContainsKey(EudiPid.Mdoc.BirthDate),
+        Assert.IsFalse(claims.ContainsKey(birthDatePath),
             "The issued mdoc carries birth_date, but the query asks only for family_name + " +
             "given_name; element-level trimming (MdocDocument.Derive) must withhold birth_date " +
             "from the DeviceResponse so it never surfaces in the verified set.");
@@ -121,7 +163,7 @@ internal static class MdocVpFixture
             [
                 new CredentialQuery
                 {
-                    Id = CredentialQueryId,
+                    Id = PidCredentialQueryId,
                     Format = MdocDcqlAdapter.FormatIdentifier,
                     Meta = new CredentialQueryMeta { DoctypeValue = PidDocType },
                     Claims =
@@ -153,7 +195,7 @@ internal static class MdocVpFixture
             [
                 new CredentialQuery
                 {
-                    Id = CredentialQueryId,
+                    Id = PidCredentialQueryId,
                     Format = MdocDcqlAdapter.FormatIdentifier,
                     Meta = new CredentialQueryMeta { DoctypeValue = PidDocType },
                     TrustedAuthorities =
@@ -178,18 +220,34 @@ internal static class MdocVpFixture
 
 
     /// <summary>
-    /// The mdoc authority-identifier extractor wired behind
-    /// <see cref="MdocVpVerificationSeams.ExtractAuthorityIdentifier"/> — the library
-    /// composition of <see cref="MdocCborAuthorityIdentifierExtractor"/> (x5chain) and
-    /// <see cref="MicrosoftX509Functions.GetAuthorityKeyIdentifier"/> (the leaf cert's AKI),
-    /// the exact analogue of how the IACA resolver is composed from
-    /// <c>MdocCborIacaTrustResolver.Create</c> + <c>MicrosoftX509Functions.ValidateChainAsync</c>.
+    /// The mdoc trust-evidence extractor wired behind
+    /// <see cref="MdocVpVerificationSeams.ExtractTrustedAuthorityEvidence"/> — the library
+    /// composition of <see cref="MdocCborTrustedAuthorityEvidence"/> (x5chain) and a resolver
+    /// reading every chain certificate's AuthorityKeyIdentifier via
+    /// <see cref="MicrosoftX509Functions.GetAuthorityKeyIdentifier"/>, the exact analogue of how the
+    /// IACA resolver is composed from <c>MdocCborIacaTrustResolver.Create</c> +
+    /// <c>MicrosoftX509Functions.ValidateChainAsync</c>.
     /// </summary>
-    public static readonly ExtractMdocAuthorityIdentifierDelegate ExtractLeafAuthorityKeyIdentifier =
-        MdocCborAuthorityIdentifierExtractor.Create(
-            MicrosoftX509Functions.GetAuthorityKeyIdentifier,
-            TestSetup.Base64UrlEncoder,
-            Pool);
+    public static ExtractMdocTrustedAuthorityEvidenceDelegate ExtractTrustedAuthorityEvidence { get; } =
+        MdocCborTrustedAuthorityEvidence.Create(ResolveAuthorityKeyIdentifierEvidence, Pool);
+
+
+    /// <summary>
+    /// A minimal <see cref="ResolveTrustedAuthorityEvidenceDelegate"/>: reads every chain
+    /// certificate's AuthorityKeyIdentifier via the shipped
+    /// <see cref="X509TrustedAuthorityEvidence.CollectAuthorityKeyIdentifiers"/> composition — the
+    /// <c>aki</c> arm only, since the fixture's chains carry no ETSI Trusted List or OpenID
+    /// Federation evidence.
+    /// </summary>
+    private static ValueTask<TrustedAuthorityEvidence?> ResolveAuthorityKeyIdentifierEvidence(
+        IReadOnlyList<PkiCertificateMemory> chain, string? issuerIdentifier, BaseMemoryPool pool, CancellationToken cancellationToken)
+    {
+        IReadOnlySet<AuthorityKeyIdentifier> authorityKeyIdentifiers =
+            X509TrustedAuthorityEvidence.CollectAuthorityKeyIdentifiers(chain, MicrosoftX509Functions.GetAuthorityKeyIdentifier);
+
+        return ValueTask.FromResult<TrustedAuthorityEvidence?>(
+            new TrustedAuthorityEvidence { AuthorityKeyIdentifiers = authorityKeyIdentifiers });
+    }
 
 
     /// <summary>
@@ -218,12 +276,7 @@ internal static class MdocVpFixture
                 //-> DcqlPathResolver.ToDisclosureMatch -> DisclosureComputation.ComputeAsync
                 //-> DisclosureStrategyGraph. mdoc has no always-visible mandatory paths, so
                 //the lattice bottom is empty; the engine's SelectedPaths is the minimal set.
-                DisclosureStrategyGraph<MdocDocument> graph = (await DcqlDisclosure.ComputeStrategyAsync(
-                    query,
-                    storedMdoc,
-                    MdocDcqlAdapter.MetadataExtractor,
-                    MdocDcqlAdapter.ClaimExtractor,
-                    cancellationToken: cancellationToken).ConfigureAwait(false)).Graph;
+                DisclosureStrategyGraph<MdocDocument> graph = (await DcqlDisclosure.ComputeStrategyAsync(query, storedMdoc, MdocDcqlAdapter.CreateMetadataExtractor(), MdocDcqlAdapter.ClaimExtractor, new FakeTimeProvider(TestClock.CanonicalEpoch), cancellationToken: cancellationToken).ConfigureAwait(false)).Graph;
 
                 MdocPresentationDocument trimmed = storedMdoc.Derive(graph.Decisions[0].SelectedPaths);
 
@@ -238,7 +291,8 @@ internal static class MdocVpFixture
                     context.Request.ClientId,
                     context.Request.ResponseUri.OriginalString,
                     context.Request.Nonce,
-                    nonce.Span);
+                    nonce.Span,
+                    BaseMemoryPool.Shared);
 
                 using MdocPresentationDocument presented = await trimmed.DeviceSignAsync(
                     MdocDeviceNameSpaces.Empty, sessionTranscript, deviceKey, Pool, cancellationToken)
@@ -261,9 +315,22 @@ internal static class MdocVpFixture
     }
 
 
+    /// <summary>
+    /// Issues the shared PID logical document, optionally referencing a Token Status List entry
+    /// on the MSO's <c>status</c> member.
+    /// </summary>
+    /// <param name="issuerKeys">The issuer's P-256 signing key material.</param>
+    /// <param name="deviceKeys">The wallet's device key material the MSO commits to.</param>
+    /// <param name="status">
+    /// The Status List entry to commit into the MSO's optional <c>status</c> member as a
+    /// <c>status_list</c>-only status claim, or <see langword="null"/> to issue a credential with no
+    /// status entry.
+    /// </param>
+    /// <param name="cancellationToken">Cancels issuance.</param>
     public static async ValueTask<MdocDocument> IssueAsync(
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> issuerKeys,
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> deviceKeys,
+        StatusListReference? status,
         CancellationToken cancellationToken)
     {
         return await BuildPidLogicalDocument().SignAsync(
@@ -271,7 +338,10 @@ internal static class MdocVpFixture
             {
                 DigestAlgorithm = MdocMsoWellKnownKeys.DigestAlgorithmSha256,
                 Validity = SampleValidity(),
-                DeviceKey = CoseKeyFromP256Public(deviceKeys.PublicKey)
+                DeviceKey = CoseKeyFromP256Public(deviceKeys.PublicKey),
+                Status = status is { } reference
+                    ? StatusClaim.FromStatusList(reference.Index, reference.Uri)
+                    : null
             },
             issuerKeys.PrivateKey,
             Pool,
@@ -342,29 +412,23 @@ internal static class MdocVpFixture
             rootTrustAnchor = CopyToPkiCertificate(rootCert.RawData);
         }
 
-        MdocVpVerificationSeams seams = new()
-        {
-            ResolveIssuerKey = MdocCborIacaTrustResolver.Create(
+        MdocVpVerificationSeams seams = BuildSeams(
+            MdocCborIacaTrustResolver.Create(
                 MicrosoftX509Functions.ValidateChainAsync,
                 trustAnchors: [rootTrustAnchor],
                 validationTime: tp.GetUtcNow(),
                 pool: Pool),
-            ParseDeviceResponse = MdocCborDeviceResponseReader.Read,
-            EncodeSessionTranscript = Oid4VpMdocSessionTranscriptEncoder.Encode,
-            DecodeElementValue = DecodeElementValue,
-            ParseCoseSign1 = CoseSerialization.ParseCoseSign1,
-            ParseCoseSign1AllowingNilPayload = CoseSerialization.ParseCoseSign1AllowingNilPayload,
-            EncodeDeviceAuthenticationBytes = MdocCborDeviceAuthenticationEncoder.EncodeAuthenticationBytes,
-            BuildSigStructure = CoseSerialization.BuildSigStructure,
-            ExtractAuthorityIdentifier = ExtractLeafAuthorityKeyIdentifier
-        };
+            ExtractTrustedAuthorityEvidence);
 
         TestHostShell app = new(tp, mdocSeams: seams);
 
+        TrustedAuthorityEvidence? issuedEvidence = await ExtractTrustedAuthorityEvidence(
+            issued.IssuerSigned.IssuerAuth, cancellationToken).ConfigureAwait(false);
         string authorityKeyIdentifier =
-            ExtractLeafAuthorityKeyIdentifier(issued.IssuerSigned.IssuerAuth)
-            ?? throw new InvalidOperationException(
-                "The issued mdoc's leaf certificate has no AuthorityKeyIdentifier to pin.");
+            issuedEvidence?.AuthorityKeyIdentifiers.Count > 0
+                ? issuedEvidence.AuthorityKeyIdentifiers.First().ToBase64Url()
+                : throw new InvalidOperationException(
+                    "The issued mdoc's leaf certificate has no AuthorityKeyIdentifier to pin.");
 
         FormatRun run = new()
         {
@@ -453,22 +517,32 @@ internal static class MdocVpFixture
     /// <summary>
     /// Trust-anchor resolver: the verifier knows the issuer key out of band (the
     /// legitimate trust input). Returns a fresh clone per call so the resolution owns
-    /// its own carrier.
+    /// its own carrier. Shared by every caller that needs a direct-trust
+    /// <see cref="ResolveMdocIssuerKeyDelegate"/> rather than chain validation.
     /// </summary>
-    private static ResolveMdocIssuerKeyDelegate TrustAnchorFor(PublicKeyMemory trustedIssuerKey) =>
+    /// <param name="trustedIssuerKey">The issuer public key the verifier resolves out of band.</param>
+    /// <returns>The resolver delegate.</returns>
+    public static ResolveMdocIssuerKeyDelegate TrustAnchorFor(PublicKeyMemory trustedIssuerKey) =>
         (issuerAuth, cancellationToken) => ValueTask.FromResult(
             MdocIacaTrustResolution.Success(ClonePublicKey(trustedIssuerKey, Pool)));
 
 
-    private static string DecodeElementValue(ReadOnlyMemory<byte> encodedElementValue)
+    /// <summary>Decodes a CBOR element value to its string form for the claim surface.</summary>
+    /// <param name="encodedElementValue">The element's encoded CBOR bytes.</param>
+    /// <returns>The decoded value as text.</returns>
+    public static string DecodeElementValue(ReadOnlyMemory<byte> encodedElementValue)
     {
-        var reader = new CborReader(encodedElementValue, CborConformanceMode.Lax);
+        var reader = new CborReader(encodedElementValue, CborOptions.Lax);
 
         return CborValueConverter.ReadValue(reader)?.ToString() ?? string.Empty;
     }
 
 
-    private static PublicKeyMemory ClonePublicKey(PublicKeyMemory source, BaseMemoryPool pool)
+    /// <summary>Copies a public key into a freshly rented buffer, so the resolution owns an independently disposable carrier.</summary>
+    /// <param name="source">The key to clone.</param>
+    /// <param name="pool">The pool the clone's buffer is rented from.</param>
+    /// <returns>The cloned key, carrying <paramref name="source"/>'s own <see cref="PublicKeyMemory.Tag"/>.</returns>
+    public static PublicKeyMemory ClonePublicKey(PublicKeyMemory source, BaseMemoryPool pool)
     {
         ReadOnlySpan<byte> bytes = source.AsReadOnlySpan();
         IMemoryOwner<byte> owner = pool.Rent(bytes.Length);
@@ -478,7 +552,9 @@ internal static class MdocVpFixture
     }
 
 
-    private static MdocValidityInfo SampleValidity() =>
+    /// <summary>The fixed validity window every mdoc this fixture issues carries — a one-year window signed 2026-05-25.</summary>
+    /// <returns>The validity window.</returns>
+    public static MdocValidityInfo SampleValidity() =>
         new(
             signed: new DateTimeOffset(2026, 5, 25, 8, 0, 0, TimeSpan.Zero),
             validFrom: new DateTimeOffset(2026, 5, 25, 8, 0, 0, TimeSpan.Zero),

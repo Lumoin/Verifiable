@@ -1,8 +1,8 @@
 using System.Buffers;
-using System.Linq;
-using System.Reflection;
+using System.IO;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -10,6 +10,7 @@ using Verifiable.Cryptography.Pki;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Microsoft;
+using Verifiable.Tests.Foundation;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -19,8 +20,8 @@ namespace Verifiable.Tests.JCose;
 /// The promotion-discipline template proof: an <see cref="UnverifiedJAdESMessage"/>
 /// -- the untrusted parse result -- is NOT accepted where a <see cref="Verified{T}"/> is demanded, proven both at
 /// compile time (the type system offers no conversion, and every minting surface is non-public -- checked here
-/// via reflection, since a negative-compilation claim has no direct expression inside an MSTest method body) and
-/// at runtime (a message that parses and decodes successfully but fails cryptographic verification never reaches
+/// as a source scan of each declaring file, since a negative-compilation claim has no direct expression inside
+/// an MSTest method body) and at runtime (a message that parses and decodes successfully but fails cryptographic verification never reaches
 /// <see cref="JAdESValidationResult.Verified"/>). This is the family-wide template for the
 /// <c>Unverified*</c>/<see cref="Verified{T}"/> promotion discipline elsewhere in the library.
 /// </summary>
@@ -45,20 +46,21 @@ internal sealed class JAdESPromotionDisciplineTests
 
 
     /// <summary>
-    /// Compile-time proof, verified via reflection: neither <see cref="UnverifiedJAdESMessage"/> nor the two
-    /// carrier types it decodes into (<see cref="JAdESProtectedHeaders"/>, <see cref="JAdESUnsignedHeaders"/>)
-    /// defines an implicit or explicit conversion operator targeting <see cref="Verified{JAdESVerifiedSignatureFacts}"/>
-    /// -- so <c>Verified&lt;JAdESVerifiedSignatureFacts&gt; v = unverifiedMessage;</c> is a genuine compile error
-    /// (CS0029) everywhere this assertion holds, not merely an untested convention.
+    /// Compile-time proof, verified as a source scan of each declaring file: neither
+    /// <see cref="UnverifiedJAdESMessage"/> nor the two carrier types it decodes into
+    /// (<see cref="JAdESProtectedHeaders"/>, <see cref="JAdESUnsignedHeaders"/>) declares an implicit or
+    /// explicit conversion operator at all -- so <c>Verified&lt;JAdESVerifiedSignatureFacts&gt; v =
+    /// unverifiedMessage;</c> is a genuine compile error (CS0029) everywhere this assertion holds, not merely
+    /// an untested convention.
     /// </summary>
     [TestMethod]
     public void NoConversionExistsFromUnverifiedTypesToVerifiedFacts()
     {
-        Type verifiedFactsType = typeof(Verified<JAdESVerifiedSignatureFacts>);
+        string repositoryRoot = SourceHygieneScanner.FindRepositoryRoot();
 
-        AssertNoConversionOperatorTargets(typeof(UnverifiedJAdESMessage), verifiedFactsType);
-        AssertNoConversionOperatorTargets(typeof(JAdESProtectedHeaders), verifiedFactsType);
-        AssertNoConversionOperatorTargets(typeof(JAdESUnsignedHeaders), verifiedFactsType);
+        AssertNoConversionOperatorInSource(repositoryRoot, "src/Verifiable.JCose/UnverifiedJAdESMessage.cs");
+        AssertNoConversionOperatorInSource(repositoryRoot, "src/Verifiable.JCose/JAdESProtectedHeaders.cs");
+        AssertNoConversionOperatorInSource(repositoryRoot, "src/Verifiable.Cryptography/Pki/JAdESUnsignedHeaders.cs");
     }
 
 
@@ -66,33 +68,26 @@ internal sealed class JAdESPromotionDisciplineTests
     /// <see cref="Verified{JAdESVerifiedSignatureFacts}"/>'s own constructor is non-public (family-wide,
     /// <c>Verified.cs</c>'s own remarks: "intentionally internal ... only first-party verification paths ...
     /// construct one") -- an external assembly cannot wrap decoded-but-unverified data into a
-    /// <see cref="Verified{T}"/> even by direct construction, let alone by an implicit conversion.
+    /// <see cref="Verified{T}"/> even by direct construction, let alone by an implicit conversion. Proved as a
+    /// source scan of the declaring file's own constructor declaration line.
     /// </summary>
     [TestMethod]
     public void VerifiedFactsConstructorIsNotPublic()
     {
-        ConstructorInfo[] constructors = typeof(Verified<JAdESVerifiedSignatureFacts>).GetConstructors(
-            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-
-        Assert.IsGreaterThan(0, constructors.Length);
-        Assert.IsTrue(constructors.All(static c => !c.IsPublic),
-            "Verified<T>'s constructor must stay non-public -- a public constructor would let any caller mint a 'verified' value without going through JAdESSignatureValidation.ValidateAsync.");
+        AssertConstructorIsNotPublicInSource(SourceHygieneScanner.FindRepositoryRoot(), "src/Verifiable.Cryptography/Verified.cs", "Verified");
     }
 
 
     /// <summary>
     /// <see cref="JAdESVerifiedSignatureFacts"/>'s own constructor is <see langword="internal"/> (its own
     /// remarks: "minted only by <see cref="JAdESSignatureValidation"/>") -- the facts a <see cref="Verified{T}"/>
-    /// wraps cannot themselves be fabricated from outside this library either.
+    /// wraps cannot themselves be fabricated from outside this library either. Proved as a source scan of the
+    /// declaring file's own constructor declaration line.
     /// </summary>
     [TestMethod]
     public void VerifiedSignatureFactsConstructorIsNotPublic()
     {
-        ConstructorInfo[] constructors = typeof(JAdESVerifiedSignatureFacts).GetConstructors(
-            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-
-        Assert.IsGreaterThan(0, constructors.Length);
-        Assert.IsTrue(constructors.All(static c => !c.IsPublic));
+        AssertConstructorIsNotPublicInSource(SourceHygieneScanner.FindRepositoryRoot(), JAdESValidationResultPath, "JAdESVerifiedSignatureFacts");
     }
 
 
@@ -100,25 +95,17 @@ internal sealed class JAdESPromotionDisciplineTests
     /// <see cref="JAdESValidationResult"/> has no public constructor, and its <c>Success</c>/<c>Failed</c>
     /// minting factories are non-public -- the ONLY public route to an instance carrying a non-null
     /// <see cref="JAdESValidationResult.Verified"/> is <see cref="JAdESSignatureValidation.ValidateAsync"/>
-    /// itself, which performs the actual cryptographic check before minting one.
+    /// itself, which performs the actual cryptographic check before minting one. Proved as a source scan of
+    /// the declaring file's own declaration lines.
     /// </summary>
     [TestMethod]
     public void ValidationResultHasNoPublicConstructorOrMintingFactory()
     {
-        Type resultType = typeof(JAdESValidationResult);
+        string repositoryRoot = SourceHygieneScanner.FindRepositoryRoot();
 
-        ConstructorInfo[] constructors = resultType.GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-        Assert.IsGreaterThan(0, constructors.Length);
-        Assert.IsTrue(constructors.All(static c => !c.IsPublic));
-
-        MethodInfo? success = resultType.GetMethod("Success", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
-        MethodInfo? failed = resultType.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)
-            .FirstOrDefault(static m => m.Name == "Failed");
-
-        Assert.IsNotNull(success);
-        Assert.IsFalse(success!.IsPublic, "Success must stay non-public -- minting a 'valid' result is JAdESSignatureValidation's exclusive responsibility.");
-        Assert.IsNotNull(failed);
-        Assert.IsFalse(failed!.IsPublic);
+        AssertConstructorIsNotPublicInSource(repositoryRoot, JAdESValidationResultPath, "JAdESValidationResult");
+        AssertStaticFactoryIsNotPublicInSource(repositoryRoot, JAdESValidationResultPath, "Success");
+        AssertStaticFactoryIsNotPublicInSource(repositoryRoot, JAdESValidationResultPath, "Failed");
     }
 
 
@@ -151,7 +138,7 @@ internal sealed class JAdESPromotionDisciplineTests
             JAdESEtsiUJson.Encode,
             TestSetup.Base64UrlEncoder,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             dereference: null,
             dereferenceContext: null,
             unknownMechanismHandler: null,
@@ -168,7 +155,7 @@ internal sealed class JAdESPromotionDisciplineTests
             JAdESProtectedHeaderJson.DetectX5tPresence,
             JAdESEtsiUJson.TryParse,
             publicKey,
-            MicrosoftCryptographicFunctions.VerifyP256Async,
+            MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             TestSetup.Base64UrlDecoder,
             TestSetup.Base64UrlEncoder,
             dereference: null,
@@ -212,7 +199,7 @@ internal sealed class JAdESPromotionDisciplineTests
             JAdESEtsiUJson.Encode,
             TestSetup.Base64UrlEncoder,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             dereference: null,
             dereferenceContext: null,
             unknownMechanismHandler: null,
@@ -228,7 +215,7 @@ internal sealed class JAdESPromotionDisciplineTests
             JAdESProtectedHeaderJson.DetectX5tPresence,
             JAdESEtsiUJson.TryParse,
             publicKey,
-            MicrosoftCryptographicFunctions.VerifyP256Async,
+            MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             TestSetup.Base64UrlDecoder,
             TestSetup.Base64UrlEncoder,
             dereference: null,
@@ -264,14 +251,69 @@ internal sealed class JAdESPromotionDisciplineTests
     }
 
 
-    private static void AssertNoConversionOperatorTargets(Type source, Type target)
-    {
-        List<Type> conversionTargets = [.. source.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)
-            .Where(static m => m.Name is "op_Implicit" or "op_Explicit")
-            .Select(static m => m.ReturnType)];
+    /// <summary>The repository-relative path declaring <see cref="JAdESVerifiedSignatureFacts"/> and <see cref="JAdESValidationResult"/>.</summary>
+    private const string JAdESValidationResultPath = "src/Verifiable.JCose/JAdESValidationResult.cs";
 
-        Assert.DoesNotContain(target, conversionTargets,
-            $"{source.Name} must define no conversion operator to {target.Name} -- the compiler must reject assigning unverified data where Verified<T> is demanded.");
+
+    /// <summary>
+    /// Asserts the declaring file at <paramref name="relativePath"/> defines no <see langword="implicit"/> or
+    /// <see langword="explicit"/> conversion operator at all -- a source-text check, since a type declaring
+    /// none cannot possibly convert to <see cref="Verified{T}"/> or anything else, and the compiler already
+    /// rejects the assignment this proves.
+    /// </summary>
+    /// <param name="repositoryRoot">The repository root <paramref name="relativePath"/> is relative to.</param>
+    /// <param name="relativePath">The declaring file's repository-relative path.</param>
+    private static void AssertNoConversionOperatorInSource(string repositoryRoot, string relativePath)
+    {
+        string text = File.ReadAllText(Path.Combine(repositoryRoot, relativePath));
+
+        Assert.IsFalse(
+            Regex.IsMatch(text, @"\b(?:implicit|explicit)\s+operator\b"),
+            $"{relativePath} must define no conversion operator -- the compiler must reject assigning unverified data where Verified<T> is demanded.");
+    }
+
+
+    /// <summary>
+    /// Asserts <paramref name="typeName"/>'s declaring file at <paramref name="relativePath"/> carries a
+    /// non-public constructor declaration and no public one -- a source-text check, since the compiler already
+    /// enforces whatever accessibility the declaration states.
+    /// </summary>
+    /// <param name="repositoryRoot">The repository root <paramref name="relativePath"/> is relative to.</param>
+    /// <param name="relativePath">The declaring file's repository-relative path.</param>
+    /// <param name="typeName">The type whose constructor is checked.</param>
+    private static void AssertConstructorIsNotPublicInSource(string repositoryRoot, string relativePath, string typeName)
+    {
+        string text = File.ReadAllText(Path.Combine(repositoryRoot, relativePath));
+        string escapedName = Regex.Escape(typeName);
+
+        Assert.IsFalse(
+            Regex.IsMatch(text, $@"(?m)^\s*public\s+{escapedName}\s*\("),
+            $"{relativePath}: {typeName} must declare no public constructor.");
+        Assert.IsTrue(
+            Regex.IsMatch(text, $@"(?m)^\s*(?:private|internal|protected)\s+{escapedName}\s*\("),
+            $"{relativePath}: {typeName} must declare a non-public constructor.");
+    }
+
+
+    /// <summary>
+    /// Asserts the static method named <paramref name="methodName"/> in the file at
+    /// <paramref name="relativePath"/> is declared non-public and never also declared public -- a source-text
+    /// check of the minting factory's own accessibility modifier.
+    /// </summary>
+    /// <param name="repositoryRoot">The repository root <paramref name="relativePath"/> is relative to.</param>
+    /// <param name="relativePath">The declaring file's repository-relative path.</param>
+    /// <param name="methodName">The static factory method's name.</param>
+    private static void AssertStaticFactoryIsNotPublicInSource(string repositoryRoot, string relativePath, string methodName)
+    {
+        string text = File.ReadAllText(Path.Combine(repositoryRoot, relativePath));
+        string escapedName = Regex.Escape(methodName);
+
+        Assert.IsFalse(
+            Regex.IsMatch(text, $@"(?m)^\s*public\s+static\s+\S.*\b{escapedName}\s*\("),
+            $"{relativePath}: {methodName} must stay non-public -- minting one is the validation surface's exclusive responsibility.");
+        Assert.IsTrue(
+            Regex.IsMatch(text, $@"(?m)^\s*(?:private|internal|protected)\s+static\s+\S.*\b{escapedName}\s*\("),
+            $"{relativePath}: {methodName} must exist and stay non-public.");
     }
 
 

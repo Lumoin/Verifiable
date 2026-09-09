@@ -48,7 +48,7 @@ internal sealed class CtapAuthenticatorPinRetriesCustodyTests
         var pinStore = new InMemoryCtapPinRetriesCustodyStore();
 
         using CtapAuthenticatorSimulator simulator = await CtapClientPinFixtures.CreateSimulatorWithCustodyAsync(
-            "pin-custody-blocked-rejects-correct", stateStore.CreateBundle(), aaguid, pinStore.CreateBundle(), cancellationToken: TestContext.CancellationToken);
+            "pin-custody-blocked-rejects-correct", stateStore.CreateBundle(), aaguid, BaseMemoryPool.Shared, pinStore.CreateBundle(), cancellationToken: TestContext.CancellationToken);
         await EstablishPinAsync(simulator, pool, "1234");
 
         pinStore.ForceBlocked();
@@ -83,7 +83,7 @@ internal sealed class CtapAuthenticatorPinRetriesCustodyTests
         var pinStore = new InMemoryCtapPinRetriesCustodyStore();
 
         using CtapAuthenticatorSimulator simulator = await CtapClientPinFixtures.CreateSimulatorWithCustodyAsync(
-            "pin-custody-mirror-tracks-verdict", stateStore.CreateBundle(), aaguid, pinStore.CreateBundle(), cancellationToken: TestContext.CancellationToken);
+            "pin-custody-mirror-tracks-verdict", stateStore.CreateBundle(), aaguid, BaseMemoryPool.Shared, pinStore.CreateBundle(), cancellationToken: TestContext.CancellationToken);
         await EstablishPinAsync(simulator, pool, "1234");
         Assert.AreEqual(8, await GetPinRetriesAsync(simulator, pool));
 
@@ -121,7 +121,7 @@ internal sealed class CtapAuthenticatorPinRetriesCustodyTests
         var pinStore = new InMemoryCtapPinRetriesCustodyStore();
 
         using CtapAuthenticatorSimulator simulator = await CtapClientPinFixtures.CreateSimulatorWithCustodyAsync(
-            "pin-custody-blocked-beats-latch", stateStore.CreateBundle(), aaguid, pinStore.CreateBundle(), cancellationToken: TestContext.CancellationToken);
+            "pin-custody-blocked-beats-latch", stateStore.CreateBundle(), aaguid, BaseMemoryPool.Shared, pinStore.CreateBundle(), cancellationToken: TestContext.CancellationToken);
         await EstablishPinAsync(simulator, pool, "1234");
 
         //Two isolated mismatches (mismatches=1,2; never latching) before fast-forwarding the persistent
@@ -166,7 +166,7 @@ internal sealed class CtapAuthenticatorPinRetriesCustodyTests
         var pinStore = new InMemoryCtapPinRetriesCustodyStore();
 
         using CtapAuthenticatorSimulator simulator = await CtapClientPinFixtures.CreateSimulatorWithCustodyAsync(
-            "pin-custody-decrypt-failure-penalizes", stateStore.CreateBundle(), aaguid, pinStore.CreateBundle(), cancellationToken: TestContext.CancellationToken);
+            "pin-custody-decrypt-failure-penalizes", stateStore.CreateBundle(), aaguid, BaseMemoryPool.Shared, pinStore.CreateBundle(), cancellationToken: TestContext.CancellationToken);
         await EstablishPinAsync(simulator, pool, "1234");
 
         int operationsBeforeAttempt = pinStore.OperationLog.Count;
@@ -195,7 +195,7 @@ internal sealed class CtapAuthenticatorPinRetriesCustodyTests
         var pinStore = new InMemoryCtapPinRetriesCustodyStore();
 
         using CtapAuthenticatorSimulator simulator = await CtapClientPinFixtures.CreateSimulatorWithCustodyAsync(
-            "pin-custody-provision-rotates", stateStore.CreateBundle(), aaguid, pinStore.CreateBundle(), cancellationToken: TestContext.CancellationToken);
+            "pin-custody-provision-rotates", stateStore.CreateBundle(), aaguid, BaseMemoryPool.Shared, pinStore.CreateBundle(), cancellationToken: TestContext.CancellationToken);
 
         await EstablishPinAsync(simulator, pool, "1234");
         Assert.HasCount(1, pinStore.ProvisionedPinHashes, "setPIN establishment must provision the persistent tier exactly once.");
@@ -231,7 +231,7 @@ internal sealed class CtapAuthenticatorPinRetriesCustodyTests
         var pinStore = new InMemoryCtapPinRetriesCustodyStore();
 
         using(CtapAuthenticatorSimulator first = await CtapClientPinFixtures.CreateSimulatorWithCustodyAsync(
-            RunId, stateStore.CreateBundle(), aaguid, pinStore.CreateBundle(), cancellationToken: TestContext.CancellationToken))
+            RunId, stateStore.CreateBundle(), aaguid, BaseMemoryPool.Shared, pinStore.CreateBundle(), cancellationToken: TestContext.CancellationToken))
         {
             await EstablishPinAsync(first, pool, "1234");
             Assert.AreEqual(WellKnownCtapStatusCodes.PinInvalid, await AttemptWrongCurrentPinAsync(first, pool));
@@ -244,7 +244,7 @@ internal sealed class CtapAuthenticatorPinRetriesCustodyTests
         pinStore.SeedPinCount(InMemoryCtapPinRetriesCustodyStore.PinLimit - 3);
 
         using CtapAuthenticatorSimulator second = await CtapClientPinFixtures.CreateSimulatorWithCustodyAsync(
-            RunId, stateStore.CreateBundle(), aaguid, pinStore.CreateBundle(), cancellationToken: TestContext.CancellationToken);
+            RunId, stateStore.CreateBundle(), aaguid, BaseMemoryPool.Shared, pinStore.CreateBundle(), cancellationToken: TestContext.CancellationToken);
 
         Assert.AreEqual(
             3, await GetPinRetriesAsync(second, pool),
@@ -265,7 +265,7 @@ internal sealed class CtapAuthenticatorPinRetriesCustodyTests
         var pinStore = new InMemoryCtapPinRetriesCustodyStore();
 
         using CtapAuthenticatorSimulator simulator = await CtapClientPinFixtures.CreateSimulatorWithCustodyAsync(
-            "pin-custody-reset-retires", stateStore.CreateBundle(), aaguid, pinStore.CreateBundle(), cancellationToken: TestContext.CancellationToken);
+            "pin-custody-reset-retires", stateStore.CreateBundle(), aaguid, BaseMemoryPool.Shared, pinStore.CreateBundle(), cancellationToken: TestContext.CancellationToken);
         await EstablishPinAsync(simulator, pool, "1234");
         Assert.DoesNotContain("Retire", pinStore.OperationLog);
 
@@ -303,9 +303,8 @@ internal sealed class CtapAuthenticatorPinRetriesCustodyTests
         var pinStore = new InMemoryCtapPinRetriesCustodyStore();
 
         byte[] staleSnapshotBytes;
-        CtapAuthenticatorSimulator simulator1 = await CtapClientPinFixtures.CreateSimulatorWithCustodyAsync(
-            RunId, stateStore.CreateBundle(), aaguid, pinStore.CreateBundle(), cancellationToken: TestContext.CancellationToken);
-        try
+        using(CtapAuthenticatorSimulator simulator1 = await CtapClientPinFixtures.CreateSimulatorWithCustodyAsync(
+            RunId, stateStore.CreateBundle(), aaguid, BaseMemoryPool.Shared, pinStore.CreateBundle(), cancellationToken: TestContext.CancellationToken))
         {
             await EstablishPinAsync(simulator1, pool, "1234");
 
@@ -330,22 +329,19 @@ internal sealed class CtapAuthenticatorPinRetriesCustodyTests
             //snapshot capture above had to happen before this call.
             await ChangePinExpectingSuccessAsync(simulator1, pool, currentPin: "1234", newPin: "5678");
         }
-        finally
-        {
-            simulator1.Dispose();
-        }
 
         //Replays the stale, pre-rotation snapshot: local CurrentStoredPin still says "1234"'s hash, and
         //forcePINChange still reads true — but the SHARED pinStore's own authoritative PIN is now "5678".
         stateStore.ReplaceSnapshotBytes(RunId, staleSnapshotBytes);
 
         using CtapAuthenticatorSimulator simulator2 = await CtapClientPinFixtures.CreateSimulatorWithCustodyAsync(
-            RunId, stateStore.CreateBundle(), aaguid, pinStore.CreateBundle(), cancellationToken: TestContext.CancellationToken);
+            RunId, stateStore.CreateBundle(), aaguid, BaseMemoryPool.Shared, pinStore.CreateBundle(), cancellationToken: TestContext.CancellationToken);
 
         //changePIN(current="5678" [the REAL current PIN], new="1234" [equals only the STALE local hash]):
         //the custody-verified current-PIN check matches "5678"; forcePINChange's own same-PIN check must
         //compare "1234" against the CONFIRMED current hash (of "5678"), never the stale local
-        //CurrentStoredPin (of "1234") — the pre-fix code would wrongly reject this with PinPolicyViolation.
+        //CurrentStoredPin (of "1234") — comparing against the stale value would wrongly reject this with
+        //PinPolicyViolation.
         await ChangePinExpectingSuccessAsync(simulator2, pool, currentPin: "5678", newPin: "1234");
     }
 

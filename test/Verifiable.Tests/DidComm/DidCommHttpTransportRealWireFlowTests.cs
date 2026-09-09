@@ -88,6 +88,11 @@ internal sealed class DidCommHttpTransportRealWireFlowTests
     /// over a genuine <see cref="HttpClient"/>, the inbox's captured media type and body classify as
     /// <see cref="DidCommMessageClass.Anoncrypt"/>, and Bob decrypts exactly the bytes that crossed the wire.
     /// </summary>
+    /// <summary><c>receivedBodyOwner</c> is declared <see langword="null"/> and assigned once inside the
+    /// host's request callback below, so a <see langword="using"/> declaration cannot target it (CS1656
+    /// forbids a second assignment to a <see langword="using"/> local); <c>packed</c>/<c>recipientPrivate</c>
+    /// are tuple-deconstruction targets, for the same reason. All three are disposed in the
+    /// <see langword="finally"/> block.</summary>
     [TestMethod]
     public async Task AnoncryptMessageRoundTripsOverHttpsTransport()
     {
@@ -158,6 +163,9 @@ internal sealed class DidCommHttpTransportRealWireFlowTests
     /// <see cref="DidCommTransmitError.Rejected"/>, carrying the transport's numeric status
     /// (DIDComm v2.1 §HTTPS: "A successful message receipt MUST return a code in the 2xx HTTPS Status Code range").
     /// </summary>
+    /// <summary><c>packed</c>/<c>recipientPrivate</c> are tuple-deconstruction targets, disposed in the
+    /// <see langword="finally"/> block below because a <see langword="using"/> declaration cannot target
+    /// one.</summary>
     [TestMethod]
     public async Task NonSuccessStatusYieldsExactRejectedShape()
     {
@@ -223,7 +231,7 @@ internal sealed class DidCommHttpTransportRealWireFlowTests
             HeaderSerializer,
             TestSetup.Base64UrlEncoder,
             CryptoFormatConversions.DefaultTagToEpkCrvConverter,
-            MicrosoftEntropyFunctions.GenerateNonce,
+            MicrosoftEntropyFunctionsAdapter.GenerateNonce,
             Pool,
             cancellationToken).ConfigureAwait(false);
 

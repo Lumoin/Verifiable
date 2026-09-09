@@ -250,6 +250,9 @@ public static class WebFingerClient
             }
             catch
             {
+                //descriptorDeserializer is a caller-supplied delegate over untrusted fetched bytes; any
+                //failure to parse them is an invalid JRD from the resolver's perspective, cancellation
+                //excepted above.
                 return WebFingerResolutionResult.Failure(WebFingerResolutionErrors.InvalidJrd);
             }
 

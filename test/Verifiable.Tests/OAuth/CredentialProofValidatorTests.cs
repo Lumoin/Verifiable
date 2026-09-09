@@ -25,8 +25,8 @@ internal sealed class CredentialProofValidatorTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly DateTimeOffset NowInstant = TestClock.CanonicalEpoch;
-    private static readonly TimeSpan IatSkew = TimeSpan.FromMinutes(5);
+    private static DateTimeOffset NowInstant { get; } = TestClock.CanonicalEpoch;
+    private static TimeSpan IatSkew { get; } = TimeSpan.FromMinutes(5);
     private const string Audience = "https://credential-issuer.example.com";
     private const string CredentialNonce = "c-nonce-LarRGSbmUPYtRYO6BQ4yn8";
 
@@ -38,17 +38,17 @@ internal sealed class CredentialProofValidatorTests
     //openid4vci-proof+jwt). RFC 7515 JWT headers carry it literally, the same relaxed escaping
     //the library's JCS canonical writer uses; the general-purpose escaping options would emit
     //"+" and break the typ contract a real Credential Issuer reads.
-    private static readonly System.Text.Json.JsonSerializerOptions JoseSerializationOptions =
+    private static System.Text.Json.JsonSerializerOptions JoseSerializationOptions { get; } =
         new(TestSetup.DefaultSerializationOptions)
         {
             Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
         };
 
-    private static readonly JwtHeaderSerializer HeaderSerializer =
+    private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)header, JoseSerializationOptions);
 
-    private static readonly JwtPayloadSerializer PayloadSerializer =
+    private static JwtPayloadSerializer PayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)payload, JoseSerializationOptions);
 

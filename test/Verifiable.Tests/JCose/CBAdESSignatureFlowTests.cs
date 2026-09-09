@@ -1,7 +1,8 @@
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Cbor;
@@ -282,9 +283,10 @@ internal sealed class CBAdESSignatureFlowTests
         //DER-shaped payload, wrapped as one CBOR byte string via an independent writer, never a raw byte
         //literal (which is not itself valid CBOR).
         byte[] placeholderCertificateDer = [0x30, 0x82, 0x01, 0x0A, 0x02, 0x01, 0x00, 0x30, 0x0D];
-        var chainWriter = new CborWriter(CborConformanceMode.Canonical);
+        var chainWriterBuffer = new ArrayBufferWriter<byte>();
+        var chainWriter = new CborWriter(chainWriterBuffer, CborOptions.RfcCanonical);
         chainWriter.WriteByteString(placeholderCertificateDer);
-        byte[] expectedChainBytes = chainWriter.Encode();
+        byte[] expectedChainBytes = chainWriterBuffer.WrittenSpan.ToArray();
 
         (AdESCertificateThumbprint thumbprint, byte[] _) =
             await CreateSigningCertificateThumbprintAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -673,9 +675,10 @@ internal sealed class CBAdESSignatureFlowTests
         //CBAdESSignerAttributeOpaqueQualifyingValue.EncodedValue must itself be one well-formed CBOR data item
         //(mirroring the TryParseSignerAttributesPreservesOpaqueQualifyingValueBytesExactly
         //fixture) -- never a raw byte literal, which is not itself valid CBOR.
-        var qualifyingValueWriter = new CborWriter(CborConformanceMode.Canonical);
+        var qualifyingValueWriterBuffer = new ArrayBufferWriter<byte>();
+        var qualifyingValueWriter = new CborWriter(qualifyingValueWriterBuffer, CborOptions.RfcCanonical);
         qualifyingValueWriter.WriteTextString("flow5-claimed-value");
-        byte[] claimedQualifyingValueBytes = qualifyingValueWriter.Encode();
+        byte[] claimedQualifyingValueBytes = qualifyingValueWriterBuffer.WrittenSpan.ToArray();
 
         var keyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
         using var publicKey = keyPair.PublicKey;
@@ -959,7 +962,7 @@ internal sealed class CBAdESSignatureFlowTests
     /// <param name="wireBytes">The freshly serialized <c>COSE_Sign1</c> wire bytes.</param>
     private static void AssertWirePayloadIsNil(ReadOnlySpan<byte> wireBytes)
     {
-        var reader = new CborReader(wireBytes.ToArray(), CborConformanceMode.Canonical);
+        var reader = new CborReader(wireBytes.ToArray(), CborOptions.RfcCanonical);
         if(reader.PeekState() == CborReaderState.Tag)
         {
             reader.ReadTag();

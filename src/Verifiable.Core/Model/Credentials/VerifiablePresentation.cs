@@ -1,5 +1,9 @@
+using System;
+using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.DataIntegrity;
+using Verifiable.Foundation;
 
 namespace Verifiable.Core.Model.Credentials
 {
@@ -34,7 +38,7 @@ namespace Verifiable.Core.Model.Credentials
     /// VC Data Model 2.0 §3.3 Presentations</see>.
     /// </para>
     /// </remarks>
-    public class VerifiablePresentation
+    public class VerifiablePresentation: IEquatable<VerifiablePresentation>
     {
         /// <summary>
         /// The JSON-LD context that defines the terms used in this presentation.
@@ -145,5 +149,102 @@ namespace Verifiable.Core.Model.Credentials
         /// Additional properties as defined by the JSON-LD context.
         /// </summary>
         public IDictionary<string, object>? AdditionalData { get; set; }
+
+
+        /// <summary>
+        /// Equality compares this presentation's own members: <see cref="Context"/>,
+        /// <see cref="Id"/>, <see cref="Holder"/>, the <see cref="Type"/> sequence, the
+        /// <see cref="VerifiableCredential"/> and <see cref="EnvelopedVerifiableCredential"/>
+        /// sequences, <see cref="TermsOfUse"/>, and <see cref="AdditionalData"/>, compared only
+        /// when <paramref name="other"/> has this exact runtime type, mirroring
+        /// <see cref="VerifiableCredential.Equals(VerifiableCredential?)"/>. Sequence members
+        /// compare element-wise in order via <see cref="StructuralEquality.SequenceEqual"/>, so
+        /// each <see cref="VerifiableCredential"/> element is compared through that type's own
+        /// (<see cref="VerifiableCredential.Context"/>, <see cref="VerifiableCredential.Id"/>,
+        /// <see cref="VerifiableCredential.Issuer"/>, <see cref="VerifiableCredential.ValidFrom"/>,
+        /// <see cref="VerifiableCredential.ValidUntil"/>) equality: two presentations whose
+        /// credentials differ only in subject claims, status, or an embedded proof still compare
+        /// equal at that element, a scope this method does not widen. <see cref="AdditionalData"/>
+        /// is an open JSON-LD bucket and compares structurally via
+        /// <see cref="StructuralEquality.JsonEqual"/>. This method is <see langword="virtual"/>:
+        /// a derived type such as <see cref="DataIntegrity.DataIntegritySecuredPresentation"/>,
+        /// which adds a proof chain, overrides it to fold its own members in, so the override is
+        /// still reached when the instance is compared through this base static type, this
+        /// class's <c>IEquatable&lt;VerifiablePresentation&gt;</c> implementation, or the
+        /// inherited <c>operator ==</c>: a presentation carrying that proof is never equal to
+        /// one lacking it or signed differently, regardless of which static type the caller holds
+        /// the instances as.
+        /// </summary>
+        /// <param name="other">The presentation to compare against.</param>
+        /// <returns><see langword="true"/> if the presentations are equal; otherwise <see langword="false"/>.</returns>
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public virtual bool Equals(VerifiablePresentation? other)
+        {
+            if(other is null)
+            {
+                return false;
+            }
+
+            if(ReferenceEquals(this, other))
+            {
+                return true;
+            }
+
+            if(GetType() != other.GetType())
+            {
+                return false;
+            }
+
+            return Equals(Context, other.Context)
+                && string.Equals(Id, other.Id, StringComparison.Ordinal)
+                && string.Equals(Holder, other.Holder, StringComparison.Ordinal)
+                && StructuralEquality.SequenceEqual(Type, other.Type)
+                && StructuralEquality.SequenceEqual(VerifiableCredential, other.VerifiableCredential)
+                && StructuralEquality.SequenceEqual(EnvelopedVerifiableCredential, other.EnvelopedVerifiableCredential)
+                && StructuralEquality.SequenceEqual(TermsOfUse, other.TermsOfUse)
+                && StructuralEquality.JsonEqual(AdditionalData, other.AdditionalData);
+        }
+
+
+        /// <inheritdoc/>
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public override bool Equals([NotNullWhen(true)] object? obj) =>
+            obj is VerifiablePresentation other && Equals(other);
+
+
+        /// <inheritdoc/>
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public override int GetHashCode()
+        {
+            var hash = new HashCode();
+            hash.Add(Context);
+            hash.Add(Id, StringComparer.Ordinal);
+            hash.Add(Holder, StringComparer.Ordinal);
+            hash.Add(StructuralEquality.SequenceHashCode(Type));
+            hash.Add(StructuralEquality.SequenceHashCode(VerifiableCredential));
+            hash.Add(StructuralEquality.SequenceHashCode(EnvelopedVerifiableCredential));
+            hash.Add(StructuralEquality.SequenceHashCode(TermsOfUse));
+            hash.Add(StructuralEquality.JsonHashCode(AdditionalData));
+
+            return hash.ToHashCode();
+        }
+
+
+        /// <inheritdoc/>
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public static bool operator ==(VerifiablePresentation? left, VerifiablePresentation? right)
+        {
+            if(left is null)
+            {
+                return right is null;
+            }
+
+            return left.Equals(right);
+        }
+
+
+        /// <inheritdoc/>
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public static bool operator !=(VerifiablePresentation? left, VerifiablePresentation? right) => !(left == right);
     }
 }

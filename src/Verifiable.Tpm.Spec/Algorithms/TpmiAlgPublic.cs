@@ -20,10 +20,10 @@ namespace Verifiable.Tpm.Spec.Algorithms;
 /// <c>TPM_RC_TYPE</c>.
 /// </para>
 /// <para>
-/// Part 2 v185 (2026/03/12, Published) writes the admitted set out name by name in Section 12.2.2,
-/// Table 225, and Section 6.3, Table 8 places the three lattice names inside its Object Types group:
+/// Part 2 v185 (2026/03/12, Published) writes the admitted set out name by name in clause 12.2.2,
+/// Table 225, and clause 6.3, Table 8 places the three lattice names inside its Object Types group:
 /// <c>TPM_ALG_MLKEM</c> 0x00A0, <c>TPM_ALG_MLDSA</c> 0x00A1, and <c>TPM_ALG_HASH_MLDSA</c> 0x00A2. The
-/// printed v184 text names the same class by reference instead of by enumeration — Section 12.2.2,
+/// printed v184 text names the same class by reference instead of by enumeration — clause 12.2.2,
 /// Table 211's single row <c>TPM_ALG_!ALG.o</c>, "all object types", the algorithm-registry expression for
 /// every algorithm the registry marks as an object type.
 /// </para>
@@ -35,7 +35,7 @@ namespace Verifiable.Tpm.Spec.Algorithms;
 /// conformant TPM may implement a proper subset of what this selector accepts.
 /// </para>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 12.2.2 — Table 225 (v185), Table 211 (v184).
+/// Specification reference: TPM 2.0 Library Part 2, clause 12.2.2 — Table 225 (v185), Table 211 (v184).
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]

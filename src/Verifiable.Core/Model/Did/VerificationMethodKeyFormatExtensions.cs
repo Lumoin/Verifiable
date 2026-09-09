@@ -345,10 +345,10 @@ namespace Verifiable.Core.Model.Did
         /// </exception>
         /// <seealso cref="SelectKeyFormatType"/>
         /// <seealso cref="KeyFormatFactory.DefaultKeyFormatCreator"/>
-        public static KeyFormat CreateKeyFormat(this VerificationMethodTypeInfo vmType, PublicKeyMemory key)
+        public static KeyFormat CreateKeyFormat(this VerificationMethodTypeInfo vmType, PublicKeyMemory key, BaseMemoryPool pool)
         {
             Type formatType = vmType.SelectKeyFormatType(key);
-            return KeyFormatFactory.DefaultKeyFormatCreator(formatType, key);
+            return KeyFormatFactory.DefaultKeyFormatCreator(formatType, key, pool);
         }
     }
 }

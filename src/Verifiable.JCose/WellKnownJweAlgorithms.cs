@@ -17,7 +17,7 @@ namespace Verifiable.JCose
         /// RSAES-PKCS1-V1_5 encryption.
         /// </summary>
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7518#section-4.2">RSAES-PKCS1-v1_5</see>.</remarks>
-        public static readonly string Rsa15 = Utf8Constants.ToInternedString(Rsa15Utf8);
+        public static string Rsa15 { get; } = Utf8Constants.ToInternedString(Rsa15Utf8);
 
         /// <summary>The UTF-8 source literal of <see cref="RsaOaep"/>.</summary>
         public static ReadOnlySpan<byte> RsaOaepUtf8 => "RSA-OAEP"u8;
@@ -26,7 +26,7 @@ namespace Verifiable.JCose
         /// RSAES OAEP encryption.
         /// </summary>
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7518#section-4.3">RSAES OAEP</see>.</remarks>
-        public static readonly string RsaOaep = Utf8Constants.ToInternedString(RsaOaepUtf8);
+        public static string RsaOaep { get; } = Utf8Constants.ToInternedString(RsaOaepUtf8);
 
         /// <summary>The UTF-8 source literal of <see cref="RsaOaep256"/>.</summary>
         public static ReadOnlySpan<byte> RsaOaep256Utf8 => "RSA-OAEP-256"u8;
@@ -35,7 +35,7 @@ namespace Verifiable.JCose
         /// RSAES OAEP encryption with SHA-256.
         /// </summary>
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7518#section-4.3">RSAES OAEP</see>.</remarks>
-        public static readonly string RsaOaep256 = Utf8Constants.ToInternedString(RsaOaep256Utf8);
+        public static string RsaOaep256 { get; } = Utf8Constants.ToInternedString(RsaOaep256Utf8);
 
         /// <summary>The UTF-8 source literal of <see cref="A128Kw"/>.</summary>
         public static ReadOnlySpan<byte> A128KwUtf8 => "A128KW"u8;
@@ -44,7 +44,7 @@ namespace Verifiable.JCose
         /// AES key wrap encryption with 128-bit key.
         /// </summary>
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7518#section-4.4">AES Key Wrap</see>.</remarks>
-        public static readonly string A128Kw = Utf8Constants.ToInternedString(A128KwUtf8);
+        public static string A128Kw { get; } = Utf8Constants.ToInternedString(A128KwUtf8);
 
         /// <summary>The UTF-8 source literal of <see cref="A192Kw"/>.</summary>
         public static ReadOnlySpan<byte> A192KwUtf8 => "A192KW"u8;
@@ -53,7 +53,7 @@ namespace Verifiable.JCose
         /// AES key wrap encryption with 192-bit key.
         /// </summary>
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7518#section-4.4">AES Key Wrap</see>.</remarks>
-        public static readonly string A192Kw = Utf8Constants.ToInternedString(A192KwUtf8);
+        public static string A192Kw { get; } = Utf8Constants.ToInternedString(A192KwUtf8);
 
         /// <summary>The UTF-8 source literal of <see cref="A256Kw"/>.</summary>
         public static ReadOnlySpan<byte> A256KwUtf8 => "A256KW"u8;
@@ -62,7 +62,7 @@ namespace Verifiable.JCose
         /// AES key wrap encryption with 256-bit key.
         /// </summary>
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7518#section-4.4">AES Key Wrap</see>.</remarks>
-        public static readonly string A256Kw = Utf8Constants.ToInternedString(A256KwUtf8);
+        public static string A256Kw { get; } = Utf8Constants.ToInternedString(A256KwUtf8);
 
         /// <summary>The UTF-8 source literal of <see cref="Dir"/>.</summary>
         public static ReadOnlySpan<byte> DirUtf8 => "dir"u8;
@@ -71,7 +71,7 @@ namespace Verifiable.JCose
         /// Direct shared symmetric key encryption.
         /// </summary>
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7518#section-4.6">Direct Key Agreement</see>.</remarks>
-        public static readonly string Dir = Utf8Constants.ToInternedString(DirUtf8);
+        public static string Dir { get; } = Utf8Constants.ToInternedString(DirUtf8);
 
         /// <summary>The UTF-8 source literal of <see cref="EcdhEs"/>.</summary>
         public static ReadOnlySpan<byte> EcdhEsUtf8 => "ECDH-ES"u8;
@@ -80,7 +80,7 @@ namespace Verifiable.JCose
         /// Elliptic Curve Diffie-Hellman key agreement.
         /// </summary>
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7518#section-4.6">ECDH-ES</see>.</remarks>
-        public static readonly string EcdhEs = Utf8Constants.ToInternedString(EcdhEsUtf8);
+        public static string EcdhEs { get; } = Utf8Constants.ToInternedString(EcdhEsUtf8);
 
         /// <summary>The UTF-8 source literal of <see cref="EcdhEsA128Kw"/>.</summary>
         public static ReadOnlySpan<byte> EcdhEsA128KwUtf8 => "ECDH-ES+A128KW"u8;
@@ -89,7 +89,7 @@ namespace Verifiable.JCose
         /// Elliptic Curve Diffie-Hellman key agreement with AES key wrap encryption with 128-bit key.
         /// </summary>
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7518#section-4.6">ECDH-ES+A128KW</see>.</remarks>
-        public static readonly string EcdhEsA128Kw = Utf8Constants.ToInternedString(EcdhEsA128KwUtf8);
+        public static string EcdhEsA128Kw { get; } = Utf8Constants.ToInternedString(EcdhEsA128KwUtf8);
 
         /// <summary>The UTF-8 source literal of <see cref="EcdhEsA192Kw"/>.</summary>
         public static ReadOnlySpan<byte> EcdhEsA192KwUtf8 => "ECDH-ES+A192KW"u8;
@@ -98,7 +98,7 @@ namespace Verifiable.JCose
         /// Elliptic Curve Diffie-Hellman key agreement with AES key wrap encryption with 192-bit key.
         /// </summary>
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7518#section-4.6">ECDH-ES+A192KW</see>.</remarks>
-        public static readonly string EcdhEsA192Kw = Utf8Constants.ToInternedString(EcdhEsA192KwUtf8);
+        public static string EcdhEsA192Kw { get; } = Utf8Constants.ToInternedString(EcdhEsA192KwUtf8);
 
         /// <summary>The UTF-8 source literal of <see cref="EcdhEsA256Kw"/>.</summary>
         public static ReadOnlySpan<byte> EcdhEsA256KwUtf8 => "ECDH-ES+A256KW"u8;
@@ -107,7 +107,7 @@ namespace Verifiable.JCose
         /// Elliptic Curve Diffie-Hellman key agreement with AES key wrap encryption with 256-bit key.
         /// </summary>
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7518#section-4.6">ECDH-ES+A256KW</see>.</remarks>
-        public static readonly string EcdhEsA256Kw = Utf8Constants.ToInternedString(EcdhEsA256KwUtf8);
+        public static string EcdhEsA256Kw { get; } = Utf8Constants.ToInternedString(EcdhEsA256KwUtf8);
 
         /// <summary>The UTF-8 source literal of <see cref="Ecdh1Pu"/>.</summary>
         public static ReadOnlySpan<byte> Ecdh1PuUtf8 => "ECDH-1PU"u8;
@@ -116,7 +116,7 @@ namespace Verifiable.JCose
         /// Elliptic Curve Diffie-Hellman key agreement with authenticated encryption.
         /// </summary>
         /// <remarks>See more at <see href="https://datatracker.ietf.org/doc/draft-madden-jose-ecdh-1pu-04/">ECDH-1PU</see>.</remarks>
-        public static readonly string Ecdh1Pu = Utf8Constants.ToInternedString(Ecdh1PuUtf8);
+        public static string Ecdh1Pu { get; } = Utf8Constants.ToInternedString(Ecdh1PuUtf8);
 
         /// <summary>The UTF-8 source literal of <see cref="Ecdh1PuA128Kw"/>.</summary>
         public static ReadOnlySpan<byte> Ecdh1PuA128KwUtf8 => "ECDH-1PU+A128KW"u8;
@@ -125,7 +125,7 @@ namespace Verifiable.JCose
         /// Elliptic Curve Diffie-Hellman key agreement with authenticated encryption and AES key wrap encryption with 128-bit key.
         /// </summary>
         /// <remarks>See more at <see href="https://datatracker.ietf.org/doc/draft-madden-jose-ecdh-1pu-04/">ECDH-1PU+A128KW</see>.</remarks>
-        public static readonly string Ecdh1PuA128Kw = Utf8Constants.ToInternedString(Ecdh1PuA128KwUtf8);
+        public static string Ecdh1PuA128Kw { get; } = Utf8Constants.ToInternedString(Ecdh1PuA128KwUtf8);
 
         /// <summary>The UTF-8 source literal of <see cref="Ecdh1PuA192Kw"/>.</summary>
         public static ReadOnlySpan<byte> Ecdh1PuA192KwUtf8 => "ECDH-1PU+A192KW"u8;
@@ -134,7 +134,7 @@ namespace Verifiable.JCose
         /// Elliptic Curve Diffie-Hellman key agreement with authenticated encryption and AES key wrap encryption with 192-bit key.
         /// </summary>
         /// <remarks>See more at <see href="https://datatracker.ietf.org/doc/draft-madden-jose-ecdh-1pu-04/">ECDH-1PU+A192KW</see>.</remarks>
-        public static readonly string Ecdh1PuA192Kw = Utf8Constants.ToInternedString(Ecdh1PuA192KwUtf8);
+        public static string Ecdh1PuA192Kw { get; } = Utf8Constants.ToInternedString(Ecdh1PuA192KwUtf8);
 
         /// <summary>The UTF-8 source literal of <see cref="Ecdh1PuA256Kw"/>.</summary>
         public static ReadOnlySpan<byte> Ecdh1PuA256KwUtf8 => "ECDH-1PU+A256KW"u8;
@@ -143,7 +143,7 @@ namespace Verifiable.JCose
         /// Elliptic Curve Diffie-Hellman key agreement with authenticated encryption and AES key wrap encryption with 256-bit key.
         /// </summary>
         /// <remarks>See more at <see href="https://datatracker.ietf.org/doc/draft-madden-jose-ecdh-1pu-04/">ECDH-1PU+A256KW</see>.</remarks>
-        public static readonly string Ecdh1PuA256Kw = Utf8Constants.ToInternedString(Ecdh1PuA256KwUtf8);
+        public static string Ecdh1PuA256Kw { get; } = Utf8Constants.ToInternedString(Ecdh1PuA256KwUtf8);
 
         /// <summary>The UTF-8 source literal of <see cref="A128GcmKw"/>.</summary>
         public static ReadOnlySpan<byte> A128GcmKwUtf8 => "A128GCMKW"u8;
@@ -152,7 +152,7 @@ namespace Verifiable.JCose
         /// AES GCM key encryption with 128-bit key.
         /// </summary>
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7518#section-4.7">A128GCMKW</see>.</remarks>
-        public static readonly string A128GcmKw = Utf8Constants.ToInternedString(A128GcmKwUtf8);
+        public static string A128GcmKw { get; } = Utf8Constants.ToInternedString(A128GcmKwUtf8);
 
         /// <summary>The UTF-8 source literal of <see cref="A192GcmKw"/>.</summary>
         public static ReadOnlySpan<byte> A192GcmKwUtf8 => "A192GCMKW"u8;
@@ -161,7 +161,7 @@ namespace Verifiable.JCose
         /// AES GCM key encryption with 192-bit key.
         /// </summary>
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7518#section-4.7">A192GCMKW</see>.</remarks>
-        public static readonly string A192GcmKw = Utf8Constants.ToInternedString(A192GcmKwUtf8);
+        public static string A192GcmKw { get; } = Utf8Constants.ToInternedString(A192GcmKwUtf8);
 
         /// <summary>The UTF-8 source literal of <see cref="A256GcmKw"/>.</summary>
         public static ReadOnlySpan<byte> A256GcmKwUtf8 => "A256GCMKW"u8;
@@ -170,7 +170,7 @@ namespace Verifiable.JCose
         /// AES GCM key encryption with 256-bit key.
         /// </summary>
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7518#section-4.7">A256GCMKW</see>.</remarks>
-        public static readonly string A256GcmKw = Utf8Constants.ToInternedString(A256GcmKwUtf8);
+        public static string A256GcmKw { get; } = Utf8Constants.ToInternedString(A256GcmKwUtf8);
 
         /// <summary>The UTF-8 source literal of <see cref="Pbes2Hs256A128Kw"/>.</summary>
         public static ReadOnlySpan<byte> Pbes2Hs256A128KwUtf8 => "PBES2-HS256+A128KW"u8;
@@ -179,7 +179,7 @@ namespace Verifiable.JCose
         /// PBES2 key encryption with SHA-256 and AES key wrap with 128-bit key.
         /// </summary>
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7518#section-4.8.1.2">PBES2-HS256+A128KW</see>.</remarks>
-        public static readonly string Pbes2Hs256A128Kw = Utf8Constants.ToInternedString(Pbes2Hs256A128KwUtf8);
+        public static string Pbes2Hs256A128Kw { get; } = Utf8Constants.ToInternedString(Pbes2Hs256A128KwUtf8);
 
         /// <summary>The UTF-8 source literal of <see cref="Pbes2Hs384A192Kw"/>.</summary>
         public static ReadOnlySpan<byte> Pbes2Hs384A192KwUtf8 => "PBES2-HS384+A192KW"u8;
@@ -188,7 +188,7 @@ namespace Verifiable.JCose
         /// PBES2 key encryption with SHA-384 and AES key wrap with 192-bit key.
         /// </summary>
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7518#section-4.8.1.2">PBES2-HS384+A192KW</see>.</remarks>
-        public static readonly string Pbes2Hs384A192Kw = Utf8Constants.ToInternedString(Pbes2Hs384A192KwUtf8);
+        public static string Pbes2Hs384A192Kw { get; } = Utf8Constants.ToInternedString(Pbes2Hs384A192KwUtf8);
 
         /// <summary>The UTF-8 source literal of <see cref="Pbes2Hs512A256Kw"/>.</summary>
         public static ReadOnlySpan<byte> Pbes2Hs512A256KwUtf8 => "PBES2-HS512+A256KW"u8;
@@ -197,7 +197,7 @@ namespace Verifiable.JCose
         /// PBES2 key encryption with SHA-512 and AES key wrap with 256-bit key.
         /// </summary>
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7518#section-4.8.1.2">PBES2-HS512+A256KW</see>.</remarks>
-        public static readonly string Pbes2Hs512A256Kw = Utf8Constants.ToInternedString(Pbes2Hs512A256KwUtf8);
+        public static string Pbes2Hs512A256Kw { get; } = Utf8Constants.ToInternedString(Pbes2Hs512A256KwUtf8);
 
 
         /// <summary>
@@ -474,7 +474,7 @@ namespace Verifiable.JCose
         /// </returns>
         public static bool Equals(string algorithmA, string algorithmB)
         {
-            return object.ReferenceEquals(algorithmA, algorithmB) || StringComparer.InvariantCulture.Equals(algorithmA, algorithmB);
+            return object.ReferenceEquals(algorithmA, algorithmB) || StringComparer.Ordinal.Equals(algorithmA, algorithmB);
         }
     }
 }

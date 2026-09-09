@@ -10,8 +10,8 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </summary>
 /// <remarks>
 /// <para>
-/// "This Table 120 list is only used in TPM2_GetCapability(capability == TPM_CAP_COMMANDS)" — it is the
-/// <c>command</c> member of <c>TPMU_CAPABILITIES</c> (Part 2, clause 10.10.1, Table 135). Its elements are
+/// "This Table 123 list is only used in TPM2_GetCapability(capability == TPM_CAP_COMMANDS)" — it is the
+/// <c>command</c> member of <c>TPMU_CAPABILITIES</c> (Part 2, clause 10.9.1, Table 138). Its elements are
 /// <c>TPMA_CC</c> attribute words, not bare <c>TPM_CC</c> command codes: the command code rides in the low
 /// 16 bits as <c>commandIndex</c> and the remaining bits carry the resource attributes a TPM Resource Manager
 /// needs. The sibling <c>TPML_CC</c> carries bare command codes and is what
@@ -32,13 +32,13 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// } TPML_CCA;
 /// </code>
 /// <para>
-/// Table 120 bounds <c>count</c> by the implementation-dependent <c>MAX_CAP_CC</c>. This carrier holds no
+/// Table 123 bounds <c>count</c> by the implementation-dependent <c>MAX_CAP_CC</c>. This carrier holds no
 /// pooled memory — each element is a 4-octet value type — so the bound enforced here is the buffer-capacity
 /// guard <see cref="TpmReader.EnsureCount"/> applies across the list types: a count that could not possibly fit
 /// in the remaining wire bytes is refused before it can size an allocation.
 /// </para>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, clause 10.9.2, Table 120.
+/// Specification reference: TPM 2.0 Library Part 2, clause 10.8.2, Table 123.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -109,7 +109,7 @@ public sealed class TpmlCca: ITpmWireType
     /// </summary>
     /// <param name="reader">The reader.</param>
     /// <returns>The parsed command-attribute list.</returns>
-    /// <exception cref="InvalidOperationException">The count exceeds what the remaining buffer can hold. This is a host-side refusal of a malformed response and carries no TPM response code: <c>TPML_CCA</c> is returned by the TPM and never entered into it (Part 2, clause 10.10.1, Table 135, printed page 152 selects it for <c>TPM_CAP_COMMANDS</c>), and unlike its <c>TPML_CC</c> and <c>TPML_ALG</c> siblings Table 120, printed page 146 carries no <c>#TPM_RC_SIZE</c> row.</exception>
+    /// <exception cref="InvalidOperationException">The count exceeds what the remaining buffer can hold. This is a host-side refusal of a malformed response and carries no TPM response code: <c>TPML_CCA</c> is returned by the TPM and never entered into it (Part 2, clause 10.9.1, Table 138, printed page 152 selects it for <c>TPM_CAP_COMMANDS</c>), and unlike its <c>TPML_CC</c> and <c>TPML_ALG</c> siblings Table 123, printed page 146 carries no <c>#TPM_RC_SIZE</c> row.</exception>
     public static TpmlCca Parse(ref TpmReader reader)
     {
         uint count = reader.ReadUInt32();
@@ -120,7 +120,7 @@ public sealed class TpmlCca: ITpmWireType
         }
 
         //Each TPMA_CC occupies 4 octets on the wire, so a count larger than the remaining buffer can hold is a
-        //malformed length and must not size the backing array (Part 2, clause 10.9.2).
+        //malformed length and must not size the backing array (Part 2, clause 10.8.2).
         reader.EnsureCount(count, sizeof(uint));
 
         var builder = ImmutableArray.CreateBuilder<TpmaCc>((int)count);

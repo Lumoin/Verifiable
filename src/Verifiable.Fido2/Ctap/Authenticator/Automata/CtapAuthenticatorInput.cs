@@ -11,9 +11,9 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Automata;
 /// The input alphabet of the CTAP2 authenticator simulator's pushdown automaton: the commands a
 /// platform sends, already parsed from the wire by <see cref="CtapAuthenticatorSimulator"/> before
 /// they enter the automaton, plus the effect fold-back inputs the effectful loop feeds back after
-/// running a <see cref="CtapAction"/>. This slice models <c>authenticatorGetInfo</c> (0x04),
-/// <c>authenticatorMakeCredential</c> (0x01), <c>authenticatorGetAssertion</c> (0x02),
-/// <c>authenticatorGetNextAssertion</c> (0x08), and a catch-all for every other command byte.
+/// running a <see cref="CtapAction"/>. <c>authenticatorGetInfo</c> (0x04),
+/// <c>authenticatorMakeCredential</c> (0x01), <c>authenticatorGetAssertion</c> (0x02), and
+/// <c>authenticatorGetNextAssertion</c> (0x08) are modelled, plus a catch-all for every other command byte.
 /// </summary>
 public abstract record CtapAuthenticatorInput;
 

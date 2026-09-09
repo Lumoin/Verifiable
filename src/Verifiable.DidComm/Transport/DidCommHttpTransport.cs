@@ -1,9 +1,9 @@
 using System;
-using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Core;
 using Verifiable.Core.OutboundFetch;
+using Verifiable.Core.Transport;
 using Verifiable.Foundation;
 
 namespace Verifiable.DidComm.Transport;
@@ -45,9 +45,6 @@ namespace Verifiable.DidComm.Transport;
 /// </remarks>
 public static class DidCommHttpTransport
 {
-    //The HTTP header that carries the message's IANA media type (DIDComm v2.1 §HTTPS L1120).
-    private const string ContentTypeHeader = "Content-Type";
-
     //A one-way DIDComm POST expects only a small status receipt; the response body is never read (§HTTPS L1124),
     //so a tight cap lets a cooperating transport abort an oversized reply rather than buffering it (the M3
     //response-size bound, extended to the transmit path).
@@ -98,7 +95,7 @@ public static class DidCommHttpTransport
         {
             Target = endpoint,
             Method = "POST",
-            Headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { [ContentTypeHeader] = mediaType },
+            Headers = HttpHeaderSet.FromPairs((WellKnownHttpHeaderNames.ContentType, mediaType)),
             Body = new TaggedMemory<byte>(body, Tag.Empty),
             MaxResponseBytes = MaxAcceptResponseBytes
         };
@@ -190,7 +187,7 @@ public static class DidCommHttpTransport
         {
             Target = endpoint,
             Method = "POST",
-            Headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { [ContentTypeHeader] = mediaType },
+            Headers = HttpHeaderSet.FromPairs((WellKnownHttpHeaderNames.ContentType, mediaType)),
             Body = new TaggedMemory<byte>(body, Tag.Empty),
             MaxResponseBytes = maxReplyBytes
         };
@@ -239,7 +236,7 @@ public static class DidCommHttpTransport
         }
 
         //Content-Type is passed through verbatim, whatever the endpoint reported (or none) — no interpretation.
-        response.TryGetHeader(ContentTypeHeader, out string? replyMediaType);
+        response.Headers.TryGetValue(WellKnownHttpHeaderNames.ContentType, out string? replyMediaType);
 
         //The pooled copy is the LAST operation before minting Accepted, so no throw window opens between
         //renting the lease and the result taking ownership of it.

@@ -20,6 +20,8 @@ using Verifiable.Tpm.Infrastructure.Sessions;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
+using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Apdu;
 
@@ -54,9 +56,9 @@ internal sealed class TpmBackedTerminalAuthenticationTests
     /// <summary>The width in bytes of a NIST P-256 coordinate.</summary>
     private const int P256ComponentSize = 32;
 
-    private static readonly DateOnly Effective = new(2024, 1, 1);
-    private static readonly DateOnly Expiration = new(2026, 1, 1);
-    private static readonly DateOnly WithinValidity = new(2025, 1, 1);
+    private static DateOnly Effective { get; } = new(2024, 1, 1);
+    private static DateOnly Expiration { get; } = new(2026, 1, 1);
+    private static DateOnly WithinValidity { get; } = new(2025, 1, 1);
 
     public required TestContext TestContext { get; set; }
 
@@ -72,7 +74,7 @@ internal sealed class TpmBackedTerminalAuthenticationTests
         //Generate the terminal's Terminal Authentication key inside the in-house TPM and export only its public
         //point; TPM2_Sign produces the EXTERNAL AUTHENTICATE signature, so the private scalar never leaves it.
         using TpmSimulator tpmSimulator = await CreateOperationalTpmAsync("passport-terminal-tpm", pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(tpmSimulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(tpmSimulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry tpmRegistry = new TpmResponseRegistry()
             .Register(TpmCcConstants.TPM_CC_CreatePrimary, TpmResponseCodec.CreatePrimary)
             .Register(TpmCcConstants.TPM_CC_Sign, TpmResponseCodec.Sign);
@@ -93,7 +95,7 @@ internal sealed class TpmBackedTerminalAuthenticationTests
         using var terminalKey = new PrivateKey(
             TpmCryptographicFunctions.CreateHandleKeyMemory(primary.ObjectHandle.Value, CryptoTags.P256PrivateKey, pool),
             "tpm-terminal-p256",
-            TpmCryptographicFunctions.SignAsync,
+            TpmCryptographicFunctionsAdapter.SignAsync,
             TpmCryptographicFunctions.CreateP256SigningContext(tpm));
 
         //Mint the Inspection System chain; the Document Verifier certifies the TPM-exported point as the terminal's.
@@ -120,7 +122,7 @@ internal sealed class TpmBackedTerminalAuthenticationTests
 
         using var card = new CardSimulator(
             "passport-terminal-tpm-auth", [efCom, dataGroup1, dataGroup14File],
-            chipAuthenticationKeys: [chipKey], terminalAuthenticationTrustAnchor: trustAnchor, terminalAuthenticationDate: WithinValidity);
+            chipAuthenticationKeys: [chipKey], terminalAuthenticationTrustAnchor: trustAnchor, terminalAuthenticationDate: WithinValidity, rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         using ApduDevice device = ApduDevice.Create(card.TransceiveAsync);
 
         (SecureMessagingSession bacSession, SymmetricKeyMemory accessEncryptionKey, SymmetricKeyMemory accessMacKey) =
@@ -156,7 +158,7 @@ internal sealed class TpmBackedTerminalAuthenticationTests
     /// <returns>The operational simulator.</returns>
     private async Task<TpmSimulator> CreateOperationalTpmAsync(string tpmId, BaseMemoryPool pool)
     {
-        var simulator = new TpmSimulator(tpmId, signingBackend: BouncyCastleTpmEccSigningBackend.Create());
+        var simulator = new TpmSimulator(tpmId, signingBackend: BouncyCastleTpmEccSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         var startup = new StartupInput(TpmSuConstants.TPM_SU_CLEAR);

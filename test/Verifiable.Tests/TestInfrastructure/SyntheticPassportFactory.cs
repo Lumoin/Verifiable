@@ -44,13 +44,13 @@ internal static class SyntheticPassportFactory
         "I<UTOERIKSSON<<ANNA<MARIA<<<<<<<<<<<" +
         "L898902C<3UTO6908061F9406236<<<<<<<8";
 
-    private static readonly byte[] WriterFaceImage = [0xFF, 0xD8, 0x00, 0x11, 0x22, 0xFF, 0xD9];
+    private static byte[] WriterFaceImage { get; } = [0xFF, 0xD8, 0x00, 0x11, 0x22, 0xFF, 0xD9];
 
     /// <summary>The default certificate validity start.</summary>
-    public static readonly DateTimeOffset NotBefore = new(2024, 1, 1, 0, 0, 0, TimeSpan.Zero);
+    public static DateTimeOffset NotBefore { get; } = new(2024, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
     /// <summary>The default certificate validity end.</summary>
-    public static readonly DateTimeOffset NotAfter = new(2034, 1, 1, 0, 0, 0, TimeSpan.Zero);
+    public static DateTimeOffset NotAfter { get; } = new(2034, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
 
     /// <summary>
@@ -267,7 +267,19 @@ internal static class SyntheticPassportFactory
     private static IMemoryOwner<byte> EncodeToPooled(AsnWriter writer)
     {
         IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(writer.GetEncodedLength());
-        if(!writer.TryEncode(owner.Memory.Span, out _))
+        bool encoded;
+        try
+        {
+            encoded = writer.TryEncode(owner.Memory.Span, out _);
+        }
+        catch
+        {
+            owner.Dispose();
+
+            throw;
+        }
+
+        if(!encoded)
         {
             owner.Dispose();
 

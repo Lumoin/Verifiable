@@ -15,7 +15,7 @@ internal sealed class WellKnownWebFingerValuesTests
 {
     //RFC 3986 §3.3 pchar = unreserved / pct-encoded / sub-delims / ":" / "@"; segment-nz = 1*pchar. This
     //fixed-literal sanity check does not need the pct-encoded alternative.
-    private static readonly Regex SegmentNzPattern = new(@"^[A-Za-z0-9\-._~!$&'()*+,;=:@]+$");
+    private static Regex SegmentNzPattern { get; } = new(@"^[A-Za-z0-9\-._~!$&'()*+,;=:@]+$");
 
 
     /// <summary>The JRD media type registered by RFC 7033 §10.2.</summary>

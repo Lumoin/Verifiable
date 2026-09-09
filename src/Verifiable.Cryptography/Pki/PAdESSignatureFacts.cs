@@ -111,7 +111,20 @@ public static class PAdESSignatureFacts
         ArgumentNullException.ThrowIfNull(pool);
 
         SignedContentMemory detachedContent = PAdESSignatureValidation.BuildByteRangeContent(signature, pool);
-        if(!TryTrimToDerLength(signature.Contents, pool, out CmsSignedData? rightSizedContents))
+        bool trimmed;
+        CmsSignedData? rightSizedContents;
+        try
+        {
+            trimmed = TryTrimToDerLength(signature.Contents, pool, out rightSizedContents);
+        }
+        catch
+        {
+            detachedContent.Dispose();
+
+            throw;
+        }
+
+        if(!trimmed)
         {
             //Unreachable through PAdESLifecycleValidation's own call order: this context is built only after
             //PAdESSignatureValidation.ValidateSignatureAsync already proved -- via the SAME TryTrimToDerLength gate
@@ -128,7 +141,7 @@ public static class PAdESSignatureFacts
 
         return new SignatureFactsExtractionContext
         {
-            SignedDataObject = rightSizedContents,
+            SignedDataObject = rightSizedContents!,
             SignerDocuments = [new SignerDocumentReference { Identifier = "PAdES-ByteRange", Content = detachedContent }]
         };
     }

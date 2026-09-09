@@ -19,8 +19,8 @@ namespace Verifiable.Tests.Cesr;
 [TestClass]
 internal sealed class CesrStreamWriterTests
 {
-    private static readonly byte[] PublicKeyRaw = Convert.FromHexString("0ff9dafee5024209554babba1e341af32c637fcaec9e3e65d568ecda03db1ce6");
-    private static readonly byte[] SaltRaw = Convert.FromHexString("3f033eef724684dfcdc01ceb16d49d4d");
+    private static byte[] PublicKeyRaw { get; } = Convert.FromHexString("0ff9dafee5024209554babba1e341af32c637fcaec9e3e65d568ecda03db1ce6");
+    private static byte[] SaltRaw { get; } = Convert.FromHexString("3f033eef724684dfcdc01ceb16d49d4d");
 
 
     /// <summary>

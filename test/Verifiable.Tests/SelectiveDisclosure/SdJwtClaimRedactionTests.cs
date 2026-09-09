@@ -363,6 +363,7 @@ internal sealed class SdJwtClaimRedactionTests
             json, disclosablePaths, TestSalts.DefaultGenerator(),
             SdJwtWireFixtures.SerializeDisclosure, ComputeDigest, TestSetup.Base64UrlEncoder,
             WellKnownHashAlgorithms.Sha256Iana,
+            BaseMemoryPool.Shared,
             new DecoyDigestOptions(countReadingState, sentinel));
 
         Assert.AreSame(sentinel, observed, "The caller-supplied State must reach the policy unchanged.");
@@ -417,7 +418,7 @@ internal sealed class SdJwtClaimRedactionTests
 
         //The real disclosures' digests must all be present in the _sd array.
         var realDigests = disclosures
-            .Select(d => ComputeDigest(SdJwtWireFixtures.SerializeDisclosure(d, TestSetup.Base64UrlEncoder), WellKnownHashAlgorithms.Sha256Iana, TestSetup.Base64UrlEncoder))
+            .Select(d => ComputeDigest(SdJwtWireFixtures.SerializeDisclosure(d, TestSetup.Base64UrlEncoder), WellKnownHashAlgorithms.Sha256Iana, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared))
             .ToHashSet();
 
         foreach(string realDigest in realDigests)
@@ -451,7 +452,7 @@ internal sealed class SdJwtClaimRedactionTests
         return SdJwtClaimRedaction.Redact(
             json, disclosablePaths, TestSalts.DefaultGenerator(),
             SdJwtWireFixtures.SerializeDisclosure, ComputeDigest,
-            TestSetup.Base64UrlEncoder, WellKnownHashAlgorithms.Sha256Iana);
+            TestSetup.Base64UrlEncoder, WellKnownHashAlgorithms.Sha256Iana, BaseMemoryPool.Shared);
     }
 
     /// <summary>
@@ -463,12 +464,12 @@ internal sealed class SdJwtClaimRedactionTests
         return SdJwtClaimRedaction.Redact(
             json, disclosablePaths, TestSalts.DefaultGenerator(),
             SdJwtWireFixtures.SerializeDisclosure, ComputeDigest,
-            TestSetup.Base64UrlEncoder, WellKnownHashAlgorithms.Sha256Iana, decoyCount);
+            TestSetup.Base64UrlEncoder, WellKnownHashAlgorithms.Sha256Iana, BaseMemoryPool.Shared, decoyCount);
     }
 
-    private static string ComputeDigest(string encodedDisclosure, string algorithmName, EncodeDelegate encoder)
+    private static string ComputeDigest(string encodedDisclosure, string algorithmName, EncodeDelegate encoder, BaseMemoryPool pool)
     {
         return SdJwtPathExtraction.ComputeDisclosureDigest(
-            encodedDisclosure, algorithmName, encoder);
+            encodedDisclosure, algorithmName, encoder, pool);
     }
 }

@@ -179,7 +179,15 @@ namespace Verifiable.Core.Model.Did
         public KeyFormat? KeyFormat { get; set; }
 
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Determines whether this verification method is equal to <paramref name="other"/> by
+        /// comparing <see cref="Id"/>, <see cref="Controller"/>, <see cref="Type"/>,
+        /// <see cref="Expires"/>, <see cref="Revoked"/> and <see cref="KeyFormat"/>. Equality is
+        /// exact-type, not polymorphic over subtypes: a derived type adding further
+        /// identity-bearing members is never equal to a same-valued instance of this type.
+        /// </summary>
+        /// <param name="other">The verification method to compare against.</param>
+        /// <returns><see langword="true"/> if the verification methods are equal; otherwise <see langword="false"/>.</returns>
         [EditorBrowsable(EditorBrowsableState.Never)]
         public bool Equals(VerificationMethod? other)
         {
@@ -193,6 +201,11 @@ namespace Verifiable.Core.Model.Did
                 return true;
             }
 
+            if(GetType() != other.GetType())
+            {
+                return false;
+            }
+
             return string.Equals(Id, other.Id, StringComparison.Ordinal)
                 && string.Equals(Controller, other.Controller, StringComparison.Ordinal)
                 && string.Equals(Type, other.Type, StringComparison.Ordinal)
@@ -204,7 +217,8 @@ namespace Verifiable.Core.Model.Did
 
         /// <inheritdoc />
         [EditorBrowsable(EditorBrowsableState.Never)]
-        public override bool Equals([NotNullWhen(true)] object? obj) => obj is VerificationMethod method && Equals(method);
+        public override bool Equals([NotNullWhen(true)] object? obj) =>
+            obj is VerificationMethod other && Equals(other);
 
 
         /// <inheritdoc />

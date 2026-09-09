@@ -27,6 +27,7 @@ namespace Verifiable.Core.Model.SelectiveDisclosure;
 /// Each returned salt's ownership transfers to the disclosure produced from it.
 /// </param>
 /// <param name="hashAlgorithm">The hash algorithm identifier in IANA format (e.g., <c>"sha-256"</c>).</param>
+/// <param name="pool">The memory pool every disclosure digest is rented from.</param>
 /// <param name="decoyOptions">
 /// Optional decoy-digest configuration (count policy plus per-call state) threaded explicitly from the
 /// issuance entry point. <see cref="DecoyDigestOptions.None"/> (the default) means no decoys. The implementation invokes the policy
@@ -41,6 +42,7 @@ public delegate (ReadOnlyMemory<byte> RedactedPayload, IReadOnlyList<SdDisclosur
     IReadOnlySet<CredentialPath> disclosablePaths,
     GenerateDisclosureSaltDelegate generateSalt,
     string hashAlgorithm,
+    BaseMemoryPool pool,
     DecoyDigestOptions decoyOptions);
 
 
@@ -255,7 +257,7 @@ public static class SdIssuance
         string resolvedMediaType = mediaType ?? string.Empty;
 
         var (redactedPayload, disclosures) = redact(
-            payload, disclosablePaths, generateSalt, resolvedHashAlgorithm, decoyOptions);
+            payload, disclosablePaths, generateSalt, resolvedHashAlgorithm, memoryPool, decoyOptions);
 
         //RFC 9901 §9.4: every disclosure MUST use a unique salt — a repeated salt lets a verifier
         //correlate the disclosures and defeats the unlinkability the salt exists to provide. This

@@ -497,13 +497,13 @@ public readonly struct CryptoAlgorithm: IEquatable<CryptoAlgorithm>
     public static CryptoAlgorithm Blake3 { get; } = new CryptoAlgorithm(33);
 
 
-    private static List<CryptoAlgorithm> algorithms { get; } = new([Rsa2048]);
+    private static List<CryptoAlgorithm> RegisteredAlgorithms { get; } = new([Rsa2048]);
 
 
     /// <summary>
     /// Gets all registered algorithm values.
     /// </summary>
-    public static IReadOnlyList<CryptoAlgorithm> Algorithms => algorithms.AsReadOnly();
+    public static IReadOnlyList<CryptoAlgorithm> Algorithms => RegisteredAlgorithms.AsReadOnly();
 
 
     /// <summary>
@@ -521,16 +521,16 @@ public readonly struct CryptoAlgorithm: IEquatable<CryptoAlgorithm>
     /// </remarks>
     public static CryptoAlgorithm Create(int algorithm)
     {
-        for(int i = 0; i < algorithms.Count; ++i)
+        for(int i = 0; i < RegisteredAlgorithms.Count; ++i)
         {
-            if(algorithms[i].Algorithm == algorithm)
+            if(RegisteredAlgorithms[i].Algorithm == algorithm)
             {
                 throw new ArgumentException("Code already exists.");
             }
         }
 
         var newAlgorithm = new CryptoAlgorithm(algorithm);
-        algorithms.Add(newAlgorithm);
+        RegisteredAlgorithms.Add(newAlgorithm);
 
         return newAlgorithm;
     }

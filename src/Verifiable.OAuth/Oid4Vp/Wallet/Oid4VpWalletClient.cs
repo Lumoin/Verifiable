@@ -366,7 +366,7 @@ public sealed class Oid4VpWalletClient
         using IMemoryOwner<byte> headerBytes = base64UrlDecoder(
             compactJar.AsSpan(0, firstDot).ToString(), pool);
 
-        return JwkJsonReader.ExtractStringValue(headerBytes.Memory.Span, "alg"u8);
+        return JwkJsonReader.ExtractStringValue(headerBytes.Memory.Span, WellKnownJoseHeaderNames.AlgUtf8);
     }
 
 
@@ -707,6 +707,11 @@ public sealed class Oid4VpWalletClient
             context,
             cancellationToken).ConfigureAwait(false);
 
+        //OID4VP 1.0 §8.2: "Additional response parameters MAY be defined and used. The Wallet MUST ignore
+        //any unrecognized parameters." The client reads only the HTTP status code here and never decodes
+        //the 200 response body's JSON object — redirect_uri or any other member the Response URI's answer
+        //carries (present or future) is inert to this client by construction, not by a member-by-member
+        //allowlist that could drift out of date.
         if(postResponse.StatusCode != 200)
         {
             throw new InvalidOperationException(

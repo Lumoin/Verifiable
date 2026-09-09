@@ -303,13 +303,13 @@ internal sealed class FederationEntityConfigurationEndpointTests
 
         Assert.IsTrue(
             metadata.TryGetValue(WellKnownEntityTypeIdentifiers.OpenIdProvider.Value, out object? openIdProviderObj)
-            && openIdProviderObj is IReadOnlyDictionary<string, object> openIdProviderBlock,
+            && openIdProviderObj is IReadOnlyDictionary<string, object>,
             "EC metadata must include an openid_provider block.");
 
         Assert.IsTrue(
             ((IReadOnlyDictionary<string, object>)openIdProviderObj!).TryGetValue(
                 WellKnownFederationClaimNames.ClientRegistrationTypesSupported, out object? typesObj)
-            && typesObj is IReadOnlyList<object> typeItems,
+            && typesObj is IReadOnlyList<object>,
             "openid_provider must advertise client_registration_types_supported.");
 
         List<string> values = [];

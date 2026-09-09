@@ -39,8 +39,8 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// </remarks>
 internal sealed class TraceTreeCapture: IDisposable
 {
-    private readonly ConcurrentQueue<Activity> stoppedActivities = new();
-    private readonly ActivityListener listener;
+    private ConcurrentQueue<Activity> StoppedActivityLog { get; } = new();
+    private ActivityListener Listener { get; }
 
     /// <summary>
     /// The ASP.NET Core hosting <see cref="ActivitySource"/> name. It emits the
@@ -91,17 +91,17 @@ internal sealed class TraceTreeCapture: IDisposable
                 nameof(sourceNames));
         }
 
-        listener = new ActivityListener
+        Listener = new ActivityListener
         {
             ShouldListenTo = source => subscribedSourceNames.Contains(source.Name),
             Sample = static (ref ActivityCreationOptions<ActivityContext> _) =>
                 ActivitySamplingResult.AllDataAndRecorded,
             SampleUsingParentId = static (ref ActivityCreationOptions<string> _) =>
                 ActivitySamplingResult.AllDataAndRecorded,
-            ActivityStopped = stoppedActivities.Enqueue
+            ActivityStopped = StoppedActivityLog.Enqueue
         };
 
-        ActivitySource.AddActivityListener(listener);
+        ActivitySource.AddActivityListener(Listener);
     }
 
 
@@ -111,12 +111,12 @@ internal sealed class TraceTreeCapture: IDisposable
     /// not stopped yet are absent from the snapshot, so read after the traffic under
     /// assertion has fully completed (for example after the loopback host has drained).
     /// </summary>
-    public IReadOnlyList<Activity> StoppedActivities => [.. stoppedActivities];
+    public IReadOnlyList<Activity> StoppedActivities => [.. StoppedActivityLog];
 
 
     /// <inheritdoc/>
     public void Dispose()
     {
-        listener.Dispose();
+        Listener.Dispose();
     }
 }

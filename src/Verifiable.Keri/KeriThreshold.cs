@@ -348,6 +348,9 @@ public sealed class KeriThreshold: IEquatable<KeriThreshold>
                 builder.Append(',');
             }
 
+            //The explicit ToString() is deliberate: Fraction is a readonly struct with no
+            //StringBuilder.Append(Fraction) overload, so Append(clause[i]) directly would resolve to
+            //Append(object) and box the struct; converting to string first avoids that box.
             builder.Append('"').Append(clause[i].ToString()).Append('"');
         }
     }

@@ -57,6 +57,14 @@ public static class GeneralJweParsing
     /// <exception cref="FormatException">
     /// Thrown when any structural or security invariant is violated.
     /// </exception>
+    /// <remarks>
+    /// <strong>Manual disposal, not <see langword="using"/> declarations.</strong> <c>aad</c>, <c>epk</c>,
+    /// <c>iv</c>, <c>ciphertext</c>, <c>tag</c> and <c>recipients</c> all transfer ownership into the
+    /// returned <see cref="AeadGeneralMessage"/> on success — nulled/reset just before the return so the
+    /// <see langword="finally"/> disposes them only when parsing throws first, never on the success path
+    /// a <see langword="using"/> declaration would also dispose on; <c>recipients</c> is additionally a
+    /// per-entry list, not one disposable value.
+    /// </remarks>
     public static AeadGeneralMessage ParseGeneralJson(
         string generalJson,
         string expectedAlgorithm,
@@ -202,6 +210,13 @@ public static class GeneralJweParsing
     /// <returns>The validated single-recipient <see cref="AeadGeneralMessage"/>. The caller owns and must dispose.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="flattenedJson"/> exceeds <see cref="MaxGeneralJweByteCount"/>.</exception>
     /// <exception cref="FormatException">Thrown when any structural or security invariant is violated.</exception>
+    /// <remarks>
+    /// <strong>Manual disposal, not <see langword="using"/> declarations.</strong> Same shape as
+    /// <see cref="ParseGeneralJson"/>: <c>aad</c>, <c>epk</c>, <c>iv</c>, <c>ciphertext</c>, <c>tag</c> and
+    /// <c>recipients</c> transfer ownership into the returned <see cref="AeadGeneralMessage"/> on success —
+    /// nulled/reset just before the return so the <see langword="finally"/> disposes them only when parsing
+    /// throws first.
+    /// </remarks>
     public static AeadGeneralMessage ParseFlattenedJson(
         string flattenedJson,
         string expectedAlgorithm,
@@ -454,19 +469,19 @@ public static class GeneralJweParsing
         out IReadOnlyDictionary<string, object> header,
         out JweContentEncryption contentEncryption)
     {
-        string? alg = JwkJsonReader.ExtractStringValue(headerJson, "alg"u8);
+        string? alg = JwkJsonReader.ExtractStringValue(headerJson, WellKnownJoseHeaderNames.AlgUtf8);
         string? enc = JwkJsonReader.ExtractStringValue(headerJson, "enc"u8);
 
         if(alg is null)
         {
             throw new FormatException(
-                $"JWE protected header must contain the '{WellKnownJwkMemberNames.Alg}' parameter.");
+                $"JWE protected header must contain the '{WellKnownJoseHeaderNames.Alg}' parameter.");
         }
 
         if(!string.Equals(alg, expectedAlgorithm, StringComparison.Ordinal))
         {
             throw new FormatException(
-                $"JWE '{WellKnownJwkMemberNames.Alg}' value '{alg}' does not match the expected " +
+                $"JWE '{WellKnownJoseHeaderNames.Alg}' value '{alg}' does not match the expected " +
                 $"algorithm '{expectedAlgorithm}'.");
         }
 
@@ -497,13 +512,13 @@ public static class GeneralJweParsing
         //are a separate piece of work.
         JweAlgorithm algorithm = JweAlgorithm.FromWellKnownName(alg)
             ?? throw new FormatException(
-                $"JWE '{WellKnownJwkMemberNames.Alg}' value '{alg}' is not a key management algorithm " +
+                $"JWE '{WellKnownJoseHeaderNames.Alg}' value '{alg}' is not a key management algorithm " +
                 "this library implements for the JSON serializations.");
 
         if(algorithm.Mode != JweKeyManagementMode.KeyAgreementWithKeyWrapping)
         {
             throw new NotSupportedException(
-                $"JWE '{WellKnownJwkMemberNames.Alg}' value '{alg}' uses the {algorithm.Mode} key " +
+                $"JWE '{WellKnownJoseHeaderNames.Alg}' value '{alg}' uses the {algorithm.Mode} key " +
                 "management mode, which the JSON serialization paths do not implement. Only Key " +
                 "Agreement with Key Wrapping (ECDH-ES+A*KW, ECDH-1PU+A*KW) is supported here.");
         }
@@ -575,7 +590,7 @@ public static class GeneralJweParsing
 
         var headerDict = new Dictionary<string, object>(5)
         {
-            [WellKnownJwkMemberNames.Alg] = alg,
+            [WellKnownJoseHeaderNames.Alg] = alg,
             [WellKnownJoseHeaderNames.Enc] = enc,
             [WellKnownJoseHeaderNames.Epk] = epkDict
         };
@@ -805,7 +820,7 @@ public static class GeneralJweParsing
     //permitted, matching the ECDH-1PU Appendix B vector.
     private static (byte[] Utf8, string Name)[] CryptographicHeaderParameters { get; } =
     [
-        ("alg"u8.ToArray(), WellKnownJwkMemberNames.Alg),
+        (WellKnownJoseHeaderNames.AlgUtf8.ToArray(), WellKnownJoseHeaderNames.Alg),
         ("enc"u8.ToArray(), WellKnownJoseHeaderNames.Enc),
         ("apu"u8.ToArray(), WellKnownJoseHeaderNames.Apu),
         ("apv"u8.ToArray(), WellKnownJoseHeaderNames.Apv),

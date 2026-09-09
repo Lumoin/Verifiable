@@ -120,15 +120,9 @@ internal sealed class JAdESSignedComponentModelsTests
     public void ConstructingCertificateThumbprintsBelowMinimumCountThrows()
     {
         using DigestValue digest = CreateDigest([0x01]);
-        var single = new AdESCertificateThumbprint(new AdESDigestAlgorithmTextIdentifier("sha-256"), digest);
-        try
-        {
-            Assert.ThrowsExactly<ArgumentException>(() => new AdESCertificateThumbprints([single]));
-        }
-        finally
-        {
-            single.Dispose();
-        }
+        using var single = new AdESCertificateThumbprint(new AdESDigestAlgorithmTextIdentifier("sha-256"), digest);
+
+        Assert.ThrowsExactly<ArgumentException>(() => new AdESCertificateThumbprints([single]));
     }
 
 

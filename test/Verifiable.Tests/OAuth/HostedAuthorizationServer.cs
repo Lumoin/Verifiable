@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Text.Json;
+using Microsoft.Extensions.Time.Testing;
 using Verifiable.BouncyCastle;
 using Verifiable.Core;
 using Verifiable.Core.Assessment;
@@ -32,6 +33,7 @@ using Verifiable.OAuth.Server.Metadata;
 using Verifiable.OAuth.Server.Pipeline;
 using Verifiable.Server.Pipeline;
 using Verifiable.OAuth.Server.Registration;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.OAuth.Server.States;
 using Verifiable.OAuth.Siop.Server;
 using Verifiable.OAuth.Siop.Server.States;
@@ -39,7 +41,6 @@ using Verifiable.OAuth.Validation;
 using Verifiable.Vcalm;
 using Verifiable.Vcalm.Exchange;
 using Verifiable.Tests.TestDataProviders;
-using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
 
@@ -140,6 +141,42 @@ internal sealed class HostedAuthorizationServer
     /// source of truth, mirroring <paramref name="resolveIssuerKey"/>. When
     /// <see langword="null"/> the SIOP validator fails closed on a DID subject.
     /// </param>
+    /// <param name="parseX5c">
+    /// Optional parser for a <c>dc+sd-jwt</c> issuer JWS's <c>x5c</c> header, feeding the <c>aki</c>
+    /// arm of <paramref name="resolveTrustedAuthorityEvidence"/>. <see langword="null"/> when the
+    /// host's SD-JWT credentials carry no certificate chain.
+    /// </param>
+    /// <param name="resolveTrustedAuthorityEvidence">
+    /// Optional OID4VP 1.0 §6.1.1 trust-evidence resolver for <c>dc+sd-jwt</c> credentials, wired to
+    /// e.g. <see cref="TrustedAuthorityEvidenceResolution.Build"/>. <see langword="null"/> surfaces no
+    /// evidence, so a <c>trusted_authorities</c> constraint on a <c>dc+sd-jwt</c> query fails closed.
+    /// </param>
+    /// <param name="credentialStatusPolicy">
+    /// Optional relying-party verdict over a presentation's surfaced credential-status outcomes, threaded to
+    /// both <see cref="HaipOid4VpVerifierExecutor.Create"/> and <see cref="SiopVerifierExecutor.Register"/>.
+    /// <see langword="null"/> uses <see cref="Verifiable.Core.StatusList.CredentialStatusPolicies.Surface"/>
+    /// (the shipped default).
+    /// </param>
+    /// <param name="statusListFreshnessPolicy">
+    /// Optional Section 8.3 step 4.b freshness policy, threaded to both seats. <see langword="null"/> skips
+    /// the check (the shipped default).
+    /// </param>
+    /// <param name="statusListCachingBounds">
+    /// Optional Section 11.5 refresh-interval bounds, threaded to both seats. <see langword="null"/> leaves
+    /// the resolved token's <c>ttl</c> unclamped (the shipped default).
+    /// </param>
+    /// <param name="unsupportedStatusMechanisms">
+    /// What both seats do with a credential whose <c>status</c> claim names only status mechanisms the
+    /// library does not evaluate. Defaults to
+    /// <see cref="Verifiable.Core.StatusList.UnsupportedStatusMechanismDisposition.Refuse"/>, the shipped
+    /// default.
+    /// </param>
+    /// <param name="vpTokenCredentialQueryId">
+    /// The <see cref="CredentialQueryId"/> the SIOPv2 §12 combined-response seat publishes its
+    /// <c>vp_token</c> under, threaded to <see cref="SiopVerifierExecutor.Register"/>.
+    /// <see langword="null"/> leaves <see cref="SiopVerifierExecutor.SiopCombinedResponseCredentialQueryId"/>
+    /// as the default.
+    /// </param>
     public static HostedAuthorizationServer Build(
         string name,
         TimeProvider timeProvider,
@@ -151,7 +188,15 @@ internal sealed class HostedAuthorizationServer
         CommitmentReuseDetectionSeam? saltReuseSeam = null,
         TimingPolicy? timings = null,
         Verifiable.OAuth.Siop.ResolveDidVerificationKeyDelegate? resolveDidVerificationKey = null,
-        Verifiable.Core.StatusList.ResolveVerifiedStatusListTokenDelegate? resolveVerifiedStatusListToken = null)
+        Verifiable.Core.StatusList.ResolveVerifiedStatusListTokenDelegate? resolveVerifiedStatusListToken = null,
+        Verifiable.Cryptography.Pki.ParseX5cDelegate? parseX5c = null,
+        ResolveTrustedAuthorityEvidenceDelegate? resolveTrustedAuthorityEvidence = null,
+        Verifiable.Core.StatusList.CredentialStatusPolicy? credentialStatusPolicy = null,
+        Verifiable.Core.StatusList.StatusListFreshnessPolicy? statusListFreshnessPolicy = null,
+        Verifiable.Core.StatusList.StatusListCachingBounds? statusListCachingBounds = null,
+        Verifiable.Core.StatusList.UnsupportedStatusMechanismDisposition unsupportedStatusMechanisms =
+            Verifiable.Core.StatusList.UnsupportedStatusMechanismDisposition.Refuse,
+        CredentialQueryId? vpTokenCredentialQueryId = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(timeProvider);
@@ -163,6 +208,8 @@ internal sealed class HostedAuthorizationServer
 
         AuthorizationServerIntegration integration = new()
         {
+            MemoryPool = BaseMemoryPool.Shared,
+
             ExtractTenantIdAsync = (ctx, ct) =>
                 ValueTask.FromResult(ctx.TenantId),
 
@@ -295,12 +342,12 @@ internal sealed class HostedAuthorizationServer
                     }
                     case JtiSeenState jti:
                     {
-                        //RFC 9449 §11.1 replay defense. The flowId arrives already
-                        //composed as "{issuer}:{jti}" so the AS-side handler can
-                        //pre-resolve via ResolveCorrelationKeyAsync without rebuilding
-                        //the composite key. The index value is the same composite key
-                        //and presence in the dictionary is the replay signal.
-                        host.JtiIndex[$"{jti.Issuer}:{jti.Jti}"] = flowId;
+                        //RFC 9449 §11.1 replay defense. The index key is the state's own
+                        //JtiSeenState.CorrelationKey (JtiReplayGuard.CorrelationKey composed
+                        //once, never re-derived here) so the guard's post-save self-check
+                        //resolves exactly what was just saved. Presence in the dictionary is
+                        //the replay signal.
+                        host.JtiIndex[jti.CorrelationKey] = flowId;
                         break;
                     }
                     case ServerTokenIssuedState:
@@ -329,6 +376,9 @@ internal sealed class HostedAuthorizationServer
                 return ValueTask.CompletedTask;
             },
 
+            //The (FlowState?) cast is load-bearing: ValueTask.FromResult<TResult> infers TResult from
+            //the ternary's own natural type, and a bare null branch here has no type of its own to
+            //unify with the other branch's (FlowState, int) — the cast is what makes it (FlowState?, int).
             LoadFlowStateAsync = (tenantId, flowId, ctx, ct) =>
                 ValueTask.FromResult(
                     host.FlowStates.TryGetValue(flowId, out var entry)
@@ -506,7 +556,7 @@ internal sealed class HostedAuthorizationServer
             ResolveCapabilitiesAsync = DefaultCapabilityResolver.ResolveAsync,
             InspectAsync = DefaultInspector.NoOpAsync,
             ResolveSubjectIdentifierAsync = DefaultSubjectIdentifierResolver.PublicAsync,
-            GenerateIdentifierAsync = DefaultIdentifierGenerator.ForTimeProvider(timeProvider),
+            GenerateIdentifierAsync = DefaultIdentifierGenerator.For(timeProvider, TestEntropy.NewCounterStream(), BaseMemoryPool.Shared),
 
             //Dynamic registration delegates. The parser uses JsonDocument to
             //read the few fields the canonical test exercises directly into a
@@ -639,7 +689,7 @@ internal sealed class HostedAuthorizationServer
         {
             Encoder = TestSetup.Base64UrlEncoder,
             Decoder = TestSetup.Base64UrlDecoder,
-            ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
 
             //The library signs access tokens via the registered token producers.
             //TestHostShell supplies the two JSON serialization delegates; tests
@@ -692,10 +742,10 @@ internal sealed class HostedAuthorizationServer
             encoder: TestSetup.Base64UrlEncoder,
             resolveIssuerKey: resolveIssuerKey,
             parseSdJwtToken: static s => SdJwtSerializer.ParseToken(
-                s, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared, TestSalts.TestSaltTag),
+                s, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared, TestSalts.TestSaltTag),
             computeSdJwtHashInput: static t => SdJwtSerializer.GetSdJwtForHashing(
                 t, TestSetup.Base64UrlEncoder),
-            computeDigest: MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            computeDigest: MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             vpValidators: BuildVpValidators(vpValidator, mdocSeams, sdCwtSeams, timeProvider),
             keyAgreementDecryptDelegate:
                 BouncyCastleKeyAgreementFunctions.EcdhKeyAgreementDecryptP256Async,
@@ -717,28 +767,37 @@ internal sealed class HostedAuthorizationServer
                 DcqlDisclosureResult<IReadOnlyDictionary<CredentialPath, object?>> result =
                     await DcqlDisclosure.ComputeStrategyAsync(
                         assessContext.CredentialQuery,
-                        assessContext.DisclosedClaims,
-                        //Supply the verified issuer so DcqlEvaluator can enforce a
-                        //trusted_authorities constraint fail-closed; without it the
-                        //evaluator skips the check (it has no authority to compare).
+                        assessContext.Credential.Disclosed,
+                        //Supply the verified trust evidence and the credential's own declared
+                        //type so DcqlEvaluator can enforce trusted_authorities and
+                        //meta.vct_values fail-closed; with neither, a credential with no
+                        //evidence at all does not match (OpenID for Verifiable Presentations
+                        //1.0 §6.4.2 MUST NOT).
                         DisclosedClaimsDcqlAdapter.CreateMetadataExtractor(
-                            assessContext.CredentialQuery.Format!, issuer: assessContext.Issuer),
+                            assessContext.CredentialQuery.Format!,
+                            credentialType: assessContext.Credential.CredentialType,
+                            additionalTypes: assessContext.Credential.AdditionalTypes,
+                            trustedAuthorityEvidence: assessContext.Credential.TrustedAuthorityEvidence),
                         DisclosedClaimsDcqlAdapter.ClaimExtractor,
+                        new FakeTimeProvider(TestClock.CanonicalEpoch),
                         cancellationToken: cancellationToken).ConfigureAwait(false);
 
                 //Satisfaction is result.Satisfied — the DCQL match verdict (format / type /
                 //trusted_authorities / claim values) ANDed with lattice disclosure adequacy.
-                //Over-disclosure is any disclosed path the engine did not select as appropriate.
+                //Over-disclosure is any SELECTIVELY disclosable path the engine did not select as
+                //appropriate. OpenID for Verifiable Presentations 1.0 Section 6.4 governs only
+                //what the wallet chooses to send, so a claim the credential carries
+                //unconditionally — vct, iss, any claim the Issuer left plain — is never counted.
                 DisclosureStrategyGraph<IReadOnlyDictionary<CredentialPath, object?>> graph = result.Graph;
                 bool satisfied = result.Satisfied;
-                bool overDisclosed;
+                bool overDisclosed = false;
                 if(graph.Decisions.Count > 0)
                 {
                     IReadOnlySet<CredentialPath> selected = graph.Decisions[0].SelectedPaths;
-                    overDisclosed = false;
-                    foreach(CredentialPath disclosedPath in assessContext.DisclosedClaims.Keys)
+                    foreach(CredentialPath disclosedPath in assessContext.Credential.Disclosed.Keys)
                     {
-                        if(!selected.Contains(disclosedPath))
+                        if(!selected.Contains(disclosedPath)
+                            && !assessContext.Credential.UnconditionallyDisclosed.Contains(disclosedPath))
                         {
                             overDisclosed = true;
                             break;
@@ -748,7 +807,14 @@ internal sealed class HostedAuthorizationServer
                 else
                 {
                     //No decision -> the query's required claims were not met.
-                    overDisclosed = assessContext.DisclosedClaims.Count > 0;
+                    foreach(CredentialPath disclosedPath in assessContext.Credential.Disclosed.Keys)
+                    {
+                        if(!assessContext.Credential.UnconditionallyDisclosed.Contains(disclosedPath))
+                        {
+                            overDisclosed = true;
+                            break;
+                        }
+                    }
                 }
 
                 return new Oid4VpDisclosureAssessment
@@ -757,7 +823,13 @@ internal sealed class HostedAuthorizationServer
                     OverDisclosed = overDisclosed
                 };
             },
-            resolveVerifiedStatusListToken: resolveVerifiedStatusListToken);
+            resolveVerifiedStatusListToken: resolveVerifiedStatusListToken,
+            parseX5c: parseX5c,
+            resolveTrustedAuthorityEvidence: resolveTrustedAuthorityEvidence,
+            credentialStatusPolicy: credentialStatusPolicy,
+            statusListFreshnessPolicy: statusListFreshnessPolicy,
+            statusListCachingBounds: statusListCachingBounds,
+            unsupportedStatusMechanisms: unsupportedStatusMechanisms);
 
         //SIOPv2 RP flow's §11.1 ValidateSelfIssuedIdToken handler AND the §12 combined-response
         //ValidateCombinedSiopResponse handler, contributed onto the shared executor alongside the
@@ -780,11 +852,17 @@ internal sealed class HostedAuthorizationServer
             resolveDidVerificationKey: resolveDidVerificationKey,
             resolveIssuerKey: resolveIssuerKey,
             parseSdJwtToken: static s => SdJwtSerializer.ParseToken(
-                s, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared, TestSalts.TestSaltTag),
+                s, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared, TestSalts.TestSaltTag),
             computeSdJwtHashInput: static t => SdJwtSerializer.GetSdJwtForHashing(
                 t, TestSetup.Base64UrlEncoder),
-            computeDigest: MicrosoftCryptographicFunctions.ComputeDigestAsync,
-            saltReuseSeam: saltReuseSeam);
+            computeDigest: MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
+            saltReuseSeam: saltReuseSeam,
+            resolveVerifiedStatusListToken: resolveVerifiedStatusListToken,
+            credentialStatusPolicy: credentialStatusPolicy,
+            statusListFreshnessPolicy: statusListFreshnessPolicy,
+            statusListCachingBounds: statusListCachingBounds,
+            unsupportedStatusMechanisms: unsupportedStatusMechanisms,
+            vpTokenCredentialQueryId: vpTokenCredentialQueryId);
 
         //The OAuth family configuration the endpoints read — cryptography, codecs,
         //timings, token producers, the claim issuer, and the OAuth action executor —

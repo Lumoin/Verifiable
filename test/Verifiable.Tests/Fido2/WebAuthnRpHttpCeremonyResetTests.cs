@@ -5,6 +5,7 @@ using System.Net.Http;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Time.Testing;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Cbor.Fido2;
 using Verifiable.Cryptography;
@@ -72,7 +73,14 @@ internal sealed class WebAuthnRpHttpCeremonyResetTests
         await using MinimalHttpHost host = await MinimalHttpHost.StartAsync(skin.HandleAsync, cancellationToken).ConfigureAwait(false);
         using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(host.Certificate, host.BaseAddress);
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("webauthn-rp-http-reset-authenticator");
+        //A fixed, never-advanced clock: this capstone's own narrative exercises the reset RESPONSE, not
+        //CTAP 2.3 section 6.6's 10-second power-up window (already pinned over the real APDU transport by
+        //CtapAuthenticatorResetFlowTests.PowerUpWindowGatesResetOverRealApduTransport) -- real wall-clock
+        //delay across the PIN establishment, token issuance, and HTTP ceremonies below must never make
+        //this reset compete against that window.
+        var timeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator(
+            "webauthn-rp-http-reset-authenticator", BaseMemoryPool.Shared, timeProvider: timeProvider);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         await EstablishPinAsync(harness, pool, cancellationToken).ConfigureAwait(false);

@@ -1,7 +1,9 @@
-using System.Formats.Cbor;
+using System.Buffers;
+using Lumoin.Veritas.Cbor;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Verifiable.BouncyCastle;
+using Verifiable.Cbor;
 using Verifiable.Cbor.Fido2;
 using Verifiable.Cbor.Mdoc;
 using Verifiable.Cryptography;
@@ -11,6 +13,7 @@ using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Microsoft;
 using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Fido2;
 
@@ -244,26 +247,15 @@ internal sealed class FidoU2fAttestationTests
             ExpectedOrigins = new HashSet<string> { ValidOrigin },
             ExpectedRpIdHash = Fido2TestVectors.WrapRpIdHash(rpIdHash, BaseMemoryPool.Shared),
             UserVerification = UserVerificationRequirement.Required,
-            ExpectedPubKeyCredParams = [new PublicKeyCredentialParameters { Type = WellKnownPublicKeyCredentialTypes.PublicKey, Alg = WellKnownCoseAlgorithms.Es256 }]
+            ExpectedPubKeyCredParams = [new PublicKeyCredentialParameters { Type = WellKnownPublicKeyCredentialTypes.PublicKey, Alg = WellKnownCoseAlgorithms.Es256 }],
+            ExtensionProcessingPool = BaseMemoryPool.Shared
         };
 
         using PkiCertificateMemory rootPki = Fido2AttestationTestVectors.ToPkiCertificateMemory(rootCert.RawData);
         SelectAttestationVerifierDelegate selectVerifier = Fido2AttestationSelectors.FromFormats(
             (WellKnownWebAuthnAttestationFormats.FidoU2f, BuildVerifier(FidoU2fAttestationStatementCborReader.Parse)));
 
-        Fido2RegistrationOutcome outcome = await Fido2RegistrationVerifier.VerifyAsync(
-            WellKnownWebAuthnAttestationFormats.FidoU2f,
-            attestationStatement: parts.AttestationStatement,
-            authenticatorDataBytes: parts.AuthenticatorData,
-            clientDataJson,
-            ceremonyInput,
-            selectVerifier,
-            AlwaysUnique,
-            trustAnchors: [rootPki],
-            validationTime: TestClock.CanonicalEpoch,
-            CorrelationId,
-            BaseMemoryPool.Shared,
-            cancellationToken: TestContext.CancellationToken);
+        Fido2RegistrationOutcome outcome = await Fido2RegistrationVerifier.VerifyAsync(WellKnownWebAuthnAttestationFormats.FidoU2f, attestationStatement: parts.AttestationStatement, authenticatorDataBytes: parts.AuthenticatorData, clientDataJson, ceremonyInput, selectVerifier, AlwaysUnique, trustAnchors: [rootPki], validationTime: TestClock.CanonicalEpoch, CorrelationId, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         Assert.IsInstanceOfType<CertifiedAttestationResult>(outcome.AttestationResult);
         Assert.IsTrue(outcome.IsAcceptable);
@@ -639,14 +631,16 @@ internal sealed class FidoU2fAttestationTests
     {
         //Hand-encoded directly: the shipped writer always writes both required members, so a map missing
         //sig is a shape only a raw, writer-independent encoder can produce.
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(1);
         writer.WriteTextString("x5c");
         writer.WriteStartArray(1);
         writer.WriteByteString([1, 2, 3]);
         writer.WriteEndArray();
         writer.WriteEndMap();
-        byte[] cbor = writer.Encode();
+        byte[] cbor = writerBuffer.WrittenSpan.ToArray();
 
         Fido2FormatException exception = Assert.ThrowsExactly<Fido2FormatException>(() => FidoU2fAttestationStatementCborReader.Parse(cbor, BaseMemoryPool.Shared));
 
@@ -660,12 +654,14 @@ internal sealed class FidoU2fAttestationTests
     {
         //Hand-encoded directly: the shipped writer always writes both required members, so a map missing
         //x5c is a shape only a raw, writer-independent encoder can produce.
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(1);
         writer.WriteTextString("sig");
         writer.WriteByteString([1, 2, 3]);
         writer.WriteEndMap();
-        byte[] cbor = writer.Encode();
+        byte[] cbor = writerBuffer.WrittenSpan.ToArray();
 
         Fido2FormatException exception = Assert.ThrowsExactly<Fido2FormatException>(() => FidoU2fAttestationStatementCborReader.Parse(cbor, BaseMemoryPool.Shared));
 
@@ -679,7 +675,9 @@ internal sealed class FidoU2fAttestationTests
     {
         //Hand-encoded directly: the shipped writer only ever emits sig/x5c, so a map carrying an
         //unrecognised member is a shape only a raw, writer-independent encoder can produce.
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(3);
         writer.WriteTextString("foo");
         writer.WriteBoolean(true);
@@ -690,7 +688,7 @@ internal sealed class FidoU2fAttestationTests
         writer.WriteByteString([9, 9, 9]);
         writer.WriteEndArray();
         writer.WriteEndMap();
-        byte[] cbor = writer.Encode();
+        byte[] cbor = writerBuffer.WrittenSpan.ToArray();
 
         Fido2FormatException exception = Assert.ThrowsExactly<Fido2FormatException>(() => FidoU2fAttestationStatementCborReader.Parse(cbor, BaseMemoryPool.Shared));
 
@@ -722,6 +720,9 @@ internal sealed class FidoU2fAttestationTests
         using PkiCertificateMemory certificate = Fido2AttestationTestVectors.ToPkiCertificateMemory(certificateBytes);
         TaggedMemory<byte> cbor = FidoU2fAttestationStatementCborWriter.Write(signature, [certificate]);
 
+        //statement.X5c is a collection of disposables, not one disposable value: a using declaration
+        //disposes one variable's own value, not a collection's elements, so the foreach below in the
+        //finally block is the release point.
         FidoU2fAttestationStatement statement = FidoU2fAttestationStatementCborReader.Parse(cbor.Memory, BaseMemoryPool.Shared);
         try
         {

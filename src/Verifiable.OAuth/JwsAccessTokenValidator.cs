@@ -237,6 +237,8 @@ public static class JwsAccessTokenValidator
         }
         catch
         {
+            //The token is client-supplied wire input, structurally unverified at this point; any
+            //decode/parse failure is an invalid header rather than an internal fault.
             return SignedJwtValidationOutcome.Failure(
                 JwsAccessTokenValidationFailureReason.InvalidHeader,
                 "Failed to parse JWS header.");
@@ -272,17 +274,15 @@ public static class JwsAccessTokenValidator
         //keeps an ID Token (typ "JWT") or another JWT profile from being confused for an access
         //token. Comparison follows the existing WellKnownMediaTypes helpers, case-insensitive
         //per RFC 7515 §4.1.9 (media type values are case insensitive per RFC 2045).
-        if(typeEnforcement is JwtTypeEnforcement.RequireAtJwt)
-        {
-            if(!header.TryGetValue(WellKnownJoseHeaderNames.Typ, out object? typValue)
+        if(typeEnforcement is JwtTypeEnforcement.RequireAtJwt
+            && (!header.TryGetValue(WellKnownJoseHeaderNames.Typ, out object? typValue)
                 || typValue is not string typ
                 || string.IsNullOrEmpty(typ)
-                || !(WellKnownMediaTypes.Jwt.IsAtJwt(typ) || WellKnownMediaTypes.Application.IsAtJwt(typ)))
-            {
-                return SignedJwtValidationOutcome.Failure(
-                    JwsAccessTokenValidationFailureReason.InvalidType,
-                    "JWS header typ must be 'at+jwt' or 'application/at+jwt' per RFC 9068 §4.");
-            }
+                || !(WellKnownMediaTypes.Jwt.IsAtJwt(typ) || WellKnownMediaTypes.Application.IsAtJwt(typ))))
+        {
+            return SignedJwtValidationOutcome.Failure(
+                JwsAccessTokenValidationFailureReason.InvalidType,
+                "JWS header typ must be 'at+jwt' or 'application/at+jwt' per RFC 9068 §4.");
         }
 
         //The ID Token profile does the reverse (RFC 8725 §3.11 explicit typing): it refuses the
@@ -343,6 +343,8 @@ public static class JwsAccessTokenValidator
         }
         catch
         {
+            //Same rationale as the header parse above: the token is untrusted wire input, so any
+            //decode/parse failure here is malformed rather than an internal fault.
             return SignedJwtValidationOutcome.Failure(
                 JwsAccessTokenValidationFailureReason.Malformed,
                 "Failed to parse JWS payload.");

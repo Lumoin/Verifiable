@@ -9,6 +9,8 @@ using Verifiable.Cbor.Fido2;
 using Verifiable.Cryptography;
 using Verifiable.Fido2;
 using Verifiable.Json;
+using Microsoft.Extensions.Time.Testing;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.TestInfrastructure;
 
@@ -57,34 +59,34 @@ internal sealed class WebAuthnRelyingPartyCeremonySkin
     private const string JsonContentType = "application/json";
 
     /// <summary>The relying party identifier every ceremony is scoped to.</summary>
-    private readonly string rpId;
+    private string RpId { get; }
 
     /// <summary>The relying party origin every ceremony's <c>clientDataJSON</c> is checked against.</summary>
-    private readonly string origin;
+    private string Origin { get; }
 
     /// <summary>The single test user's WebAuthn user handle bytes.</summary>
-    private readonly byte[] userIdSeed;
+    private byte[] UserIdSeed { get; }
 
     /// <summary>The single test user's account name.</summary>
-    private readonly string userName;
+    private string UserName { get; }
 
     /// <summary>The single test user's display name.</summary>
-    private readonly string userDisplayName;
+    private string UserDisplayName { get; }
 
     /// <summary>The memory pool every ceremony's working buffers rent from.</summary>
-    private readonly BaseMemoryPool pool;
+    private BaseMemoryPool Pool { get; }
 
     /// <summary>The user verification requirement every ceremony's options and verification input carry.</summary>
-    private readonly UserVerificationRequirement userVerification;
+    private UserVerificationRequirement UserVerification { get; }
 
     /// <summary>The resident-key requirement the registration ceremony's options carry, or <see langword="null"/> for the builder's own default.</summary>
-    private readonly ResidentKeyRequirement? residentKey;
+    private ResidentKeyRequirement? ResidentKey { get; }
 
     /// <summary>Builds the registration ceremony's <c>PublicKeyCredentialCreationOptions</c>.</summary>
-    private readonly Fido2RegistrationOptionsBuilder registrationOptionsBuilder = new();
+    private Fido2RegistrationOptionsBuilder RegistrationOptionsBuilder { get; } = new();
 
     /// <summary>Builds the authentication ceremony's <c>PublicKeyCredentialRequestOptions</c>.</summary>
-    private readonly Fido2AssertionOptionsBuilder assertionOptionsBuilder = new();
+    private Fido2AssertionOptionsBuilder AssertionOptionsBuilder { get; } = new();
 
     /// <summary>The challenge issued by the most recent <see cref="HandleAttestationOptionsAsync"/> call, or <see langword="null"/> once consumed.</summary>
     private string? pendingRegistrationChallenge;
@@ -137,14 +139,14 @@ internal sealed class WebAuthnRelyingPartyCeremonySkin
         ArgumentException.ThrowIfNullOrWhiteSpace(userDisplayName);
         ArgumentNullException.ThrowIfNull(pool);
 
-        this.rpId = rpId;
-        this.origin = origin;
-        this.userIdSeed = userIdSeed;
-        this.userName = userName;
-        this.userDisplayName = userDisplayName;
-        this.pool = pool;
-        this.userVerification = userVerification;
-        this.residentKey = residentKey;
+        this.RpId = rpId;
+        this.Origin = origin;
+        this.UserIdSeed = userIdSeed;
+        this.UserName = userName;
+        this.UserDisplayName = userDisplayName;
+        this.Pool = pool;
+        this.UserVerification = userVerification;
+        this.ResidentKey = residentKey;
     }
 
 
@@ -235,17 +237,17 @@ internal sealed class WebAuthnRelyingPartyCeremonySkin
     /// </summary>
     private async Task<MinimalHttpResponse> HandleAttestationOptionsAsync(CancellationToken cancellationToken)
     {
-        using UserHandle registrationUserId = UserHandle.Create(userIdSeed, pool);
+        using UserHandle registrationUserId = UserHandle.Create(UserIdSeed, Pool);
 
-        PublicKeyCredentialCreationOptions options = await registrationOptionsBuilder.BuildAsync(
-            rpId: rpId,
-            rpName: rpId,
+        PublicKeyCredentialCreationOptions options = await RegistrationOptionsBuilder.BuildAsync(
+            rpId: RpId,
+            rpName: RpId,
             userId: registrationUserId,
-            userName: userName,
-            userDisplayName: userDisplayName,
-            pool: pool,
-            userVerification: userVerification,
-            residentKey: residentKey,
+            userName: UserName,
+            userDisplayName: UserDisplayName,
+            pool: Pool,
+            userVerification: UserVerification,
+            residentKey: ResidentKey,
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
         pendingRegistrationChallenge = options.Challenge;
@@ -274,40 +276,36 @@ internal sealed class WebAuthnRelyingPartyCeremonySkin
             return new MinimalHttpResponse { StatusCode = 400, ContentType = JsonContentType, Body = """{"verified":false,"error":"no pending registration"}""" };
         }
 
+        //envelope is declared null and assigned once inside the try body below; a using declaration cannot
+        //target a variable assigned after its declaration (CS1656).
         WebAuthnRegistrationResponseEnvelope? envelope = null;
         try
         {
-            envelope = RegistrationResponseJsonReader.Read(Encoding.UTF8.GetBytes(request.Body), pool);
+            envelope = RegistrationResponseJsonReader.Read(Encoding.UTF8.GetBytes(request.Body), Pool);
             AttestationObjectParts attestationParts = AttestationObjectCborReader.Parse(envelope.AttestationObject.AsReadOnlyMemory());
-            AuthenticatorData authenticatorData = AuthenticatorDataReader.Read(attestationParts.AuthenticatorData, CredentialPublicKeyCborReader.Read, pool);
+            AuthenticatorData authenticatorData = AuthenticatorDataReader.Read(attestationParts.AuthenticatorData, CredentialPublicKeyCborReader.Read, Pool);
 
             using RegistrationCeremonyInput ceremonyInput = new()
             {
                 ClientData = ClientDataJsonReader.Read(envelope.ClientDataJson.AsReadOnlyMemory()),
                 AuthenticatorData = authenticatorData,
                 ExpectedChallenge = expectedChallenge,
-                ExpectedOrigins = new HashSet<string> { origin },
-                ExpectedRpIdHash = CtapCapstoneFixtures.ComputeExpectedRpIdHash(rpId, pool),
-                UserVerification = userVerification,
-                ExpectedPubKeyCredParams = expectedPubKeyCredParams
+                ExpectedOrigins = new HashSet<string> { Origin },
+                ExpectedRpIdHash = CtapCapstoneFixtures.ComputeExpectedRpIdHash(RpId, Pool),
+                UserVerification = UserVerification,
+                ExpectedPubKeyCredParams = expectedPubKeyCredParams,
+                ExtensionProcessingPool = Pool
             };
 
             SelectAttestationVerifierDelegate selectAttestationVerifier = Fido2AttestationSelectors.FromFormats(
                 (WellKnownWebAuthnAttestationFormats.None, NoneAttestation.Build()));
 
-            Fido2RegistrationOutcome outcome = await Fido2RegistrationVerifier.VerifyAsync(
-                attestationParts.Format,
-                attestationParts.AttestationStatement,
-                attestationParts.AuthenticatorData,
-                envelope.ClientDataJson.AsReadOnlyMemory(),
-                ceremonyInput,
-                selectAttestationVerifier,
-                static (_, _) => ValueTask.FromResult(true),
+            Fido2RegistrationOutcome outcome = await Fido2RegistrationVerifier.VerifyAsync(attestationParts.Format, attestationParts.AttestationStatement, attestationParts.AuthenticatorData, envelope.ClientDataJson.AsReadOnlyMemory(), ceremonyInput, selectAttestationVerifier, static (_, _) => ValueTask.FromResult(true),
                 trustAnchors: [],
                 validationTime: TestClock.CanonicalEpoch,
                 correlationId: "webauthn-rp-ceremony-skin-registration",
-                pool,
-                cancellationToken: cancellationToken).ConfigureAwait(false);
+                Pool,
+                cancellationToken: cancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch)).ConfigureAwait(false);
 
             pendingRegistrationChallenge = null;
             pendingRegistrationPubKeyCredParams = null;
@@ -346,11 +344,11 @@ internal sealed class WebAuthnRelyingPartyCeremonySkin
             ? [credential]
             : null;
 
-        PublicKeyCredentialRequestOptions options = await assertionOptionsBuilder.BuildAsync(
-            rpId: rpId,
-            pool: pool,
+        PublicKeyCredentialRequestOptions options = await AssertionOptionsBuilder.BuildAsync(
+            rpId: RpId,
+            pool: Pool,
             allowedCredentials: allowedCredentials,
-            userVerification: userVerification,
+            userVerification: UserVerification,
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
         pendingAssertionChallenge = options.Challenge;
@@ -377,24 +375,26 @@ internal sealed class WebAuthnRelyingPartyCeremonySkin
             return new MinimalHttpResponse { StatusCode = 400, ContentType = JsonContentType, Body = """{"verified":false,"error":"no pending assertion"}""" };
         }
 
+        //envelope is declared null and assigned once inside the try body below; a using declaration cannot
+        //target a variable assigned after its declaration (CS1656).
         WebAuthnAssertionResponseEnvelope? envelope = null;
         try
         {
-            envelope = AuthenticationResponseJsonReader.Read(Encoding.UTF8.GetBytes(request.Body), pool);
-            AuthenticatorData authenticatorData = AuthenticatorDataReader.Read(envelope.AuthenticatorData.AsReadOnlyMemory(), CredentialPublicKeyCborReader.Read, pool);
+            envelope = AuthenticationResponseJsonReader.Read(Encoding.UTF8.GetBytes(request.Body), Pool);
+            AuthenticatorData authenticatorData = AuthenticatorDataReader.Read(envelope.AuthenticatorData.AsReadOnlyMemory(), CredentialPublicKeyCborReader.Read, Pool);
 
-            using UserHandle storedUserHandle = UserHandle.Create(userIdSeed, pool);
-            using CredentialId allowedCredentialId = CredentialId.Create(credential.Id.AsReadOnlySpan(), pool);
-            using CredentialId assertedCredentialId = CredentialId.Create(envelope.RawId.AsReadOnlySpan(), pool);
+            using UserHandle storedUserHandle = UserHandle.Create(UserIdSeed, Pool);
+            using CredentialId allowedCredentialId = CredentialId.Create(credential.Id.AsReadOnlySpan(), Pool);
+            using CredentialId assertedCredentialId = CredentialId.Create(envelope.RawId.AsReadOnlySpan(), Pool);
 
             using AssertionCeremonyInput ceremonyInput = new()
             {
                 ClientData = ClientDataJsonReader.Read(envelope.ClientDataJson.AsReadOnlyMemory()),
                 AuthenticatorData = authenticatorData,
                 ExpectedChallenge = expectedChallenge,
-                ExpectedOrigins = new HashSet<string> { origin },
-                ExpectedRpIdHash = CtapCapstoneFixtures.ComputeExpectedRpIdHash(rpId, pool),
-                UserVerification = userVerification,
+                ExpectedOrigins = new HashSet<string> { Origin },
+                ExpectedRpIdHash = CtapCapstoneFixtures.ComputeExpectedRpIdHash(RpId, Pool),
+                UserVerification = UserVerification,
                 AllowedCredentialIds = [allowedCredentialId],
                 CredentialId = assertedCredentialId,
                 StoredSignCount = credential.SignCount,
@@ -402,20 +402,13 @@ internal sealed class WebAuthnRelyingPartyCeremonySkin
                 StoredBackupEligible = credential.BackupEligible,
                 StoredBackupState = credential.BackupState,
                 ResponseUserHandle = envelope.UserHandle is UserHandle responseUserHandle
-                    ? UserHandle.Create(responseUserHandle.AsReadOnlySpan(), pool)
+                    ? UserHandle.Create(responseUserHandle.AsReadOnlySpan(), Pool)
                     : null,
-                StoredUserHandle = UserHandle.Create(storedUserHandle.AsReadOnlySpan(), pool)
+                StoredUserHandle = UserHandle.Create(storedUserHandle.AsReadOnlySpan(), Pool),
+                ExtensionProcessingPool = Pool
             };
 
-            Fido2AssertionOutcome outcome = await Fido2AssertionVerifier.VerifyAsync(
-                credential.PublicKey,
-                envelope.Signature.AsReadOnlyMemory(),
-                envelope.AuthenticatorData.AsReadOnlyMemory(),
-                envelope.ClientDataJson.AsReadOnlyMemory(),
-                ceremonyInput,
-                correlationId: "webauthn-rp-ceremony-skin-assertion",
-                pool,
-                cancellationToken: cancellationToken).ConfigureAwait(false);
+            Fido2AssertionOutcome outcome = await Fido2AssertionVerifier.VerifyAsync(credential.PublicKey, envelope.Signature.AsReadOnlyMemory(), envelope.AuthenticatorData.AsReadOnlyMemory(), envelope.ClientDataJson.AsReadOnlyMemory(), ceremonyInput, correlationId: "webauthn-rp-ceremony-skin-assertion", Pool, cancellationToken: cancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch)).ConfigureAwait(false);
 
             pendingAssertionChallenge = null;
 

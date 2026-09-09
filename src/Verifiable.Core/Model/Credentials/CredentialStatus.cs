@@ -108,7 +108,15 @@ public class CredentialStatus: IEquatable<CredentialStatus>
     public IDictionary<string, object>? AdditionalData { get; set; }
 
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Determines whether this status entry is equal to <paramref name="other"/> by comparing
+    /// <see cref="Id"/>, <see cref="Type"/>, <see cref="StatusPurpose"/>, <see cref="StatusListIndex"/>
+    /// and <see cref="StatusListCredential"/>. Equality is exact-type, not polymorphic over
+    /// subtypes: a derived type adding further identity-bearing members is never equal to a
+    /// same-valued instance of this type.
+    /// </summary>
+    /// <param name="other">The credential status to compare against.</param>
+    /// <returns><see langword="true"/> if the status entries are equal; otherwise <see langword="false"/>.</returns>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public bool Equals(CredentialStatus? other)
     {
@@ -122,6 +130,11 @@ public class CredentialStatus: IEquatable<CredentialStatus>
             return true;
         }
 
+        if(GetType() != other.GetType())
+        {
+            return false;
+        }
+
         return string.Equals(Id, other.Id, StringComparison.Ordinal)
             && string.Equals(Type, other.Type, StringComparison.Ordinal)
             && string.Equals(StatusPurpose, other.StatusPurpose, StringComparison.Ordinal)
@@ -132,7 +145,8 @@ public class CredentialStatus: IEquatable<CredentialStatus>
 
     /// <inheritdoc/>
     [EditorBrowsable(EditorBrowsableState.Never)]
-    public override bool Equals([NotNullWhen(true)] object? obj) => obj is CredentialStatus other && Equals(other);
+    public override bool Equals([NotNullWhen(true)] object? obj) =>
+        obj is CredentialStatus other && Equals(other);
 
 
     /// <inheritdoc/>

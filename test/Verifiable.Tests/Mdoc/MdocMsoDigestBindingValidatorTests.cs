@@ -1,6 +1,7 @@
 using System.Buffers;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Tests.TestInfrastructure;
+using Verifiable.Cbor;
 using Verifiable.Cbor.Mdoc;
 using Verifiable.Core.Model.Mdoc;
 using Verifiable.Cryptography;
@@ -91,7 +92,7 @@ internal sealed class MdocMsoDigestBindingValidatorTests
                 BaseMemoryPool.Shared,
                 TestContext.CancellationToken).ConfigureAwait(false);
 
-            MdocDigestBindingResult result = signed.VerifyDigestBinding();
+            MdocDigestBindingResult result = signed.VerifyDigestBinding(BaseMemoryPool.Shared);
 
             Assert.IsTrue(result.IsValid,
                 $"EUDI PID-shape document must validate. Top-level failure: {result.FailureReason}.");
@@ -171,7 +172,7 @@ internal sealed class MdocMsoDigestBindingValidatorTests
             //Construct the tampered IssuerSigned but never dispose it — its
             //items share Salt ownership with the original signed document.
             MdocIssuerSigned tampered = new(tamperedNameSpaces, signed.IssuerSigned.IssuerAuth);
-            MdocDigestBindingResult result = MdocMsoDigestBindingValidator.Validate(tampered);
+            MdocDigestBindingResult result = MdocMsoDigestBindingValidator.Validate(tampered,BaseMemoryPool.Shared);
 
             Assert.IsFalse(result.IsValid);
             Assert.AreEqual(MdocDigestBindingFailureReason.ItemBindingFailed, result.FailureReason);
@@ -229,7 +230,7 @@ internal sealed class MdocMsoDigestBindingValidatorTests
             mso, EncodedCoseSign1.FromBytes(new byte[1], BaseMemoryPool.Shared));
         using MdocIssuerSigned issuerSigned = new(nameSpaces, issuerAuth);
 
-        MdocDigestBindingResult result = MdocMsoDigestBindingValidator.Validate(issuerSigned);
+        MdocDigestBindingResult result = MdocMsoDigestBindingValidator.Validate(issuerSigned,BaseMemoryPool.Shared);
 
         Assert.IsFalse(result.IsValid);
         Assert.AreEqual(MdocDigestBindingFailureReason.UnsupportedDigestAlgorithm, result.FailureReason);
@@ -256,7 +257,7 @@ internal sealed class MdocMsoDigestBindingValidatorTests
                 BaseMemoryPool.Shared,
                 TestContext.CancellationToken).ConfigureAwait(false);
 
-            MdocDigestBindingResult result = signed.VerifyDigestBinding();
+            MdocDigestBindingResult result = signed.VerifyDigestBinding(BaseMemoryPool.Shared);
 
             Assert.IsTrue(result.IsValid,
                 $"Freshly-signed document under {digestAlgorithm} must validate. Got: {result}");
@@ -288,8 +289,8 @@ internal sealed class MdocMsoDigestBindingValidatorTests
 
 
     //Bit-identical to TestClock.CanonicalEpoch.AddDays(-8) (2026-05-24T12:00:00Z).
-    private static readonly DateTimeOffset SampleValiditySigned = TestClock.CanonicalEpoch.AddDays(-8);
-    private static readonly DateTimeOffset SampleValidityValidUntil = SampleValiditySigned.AddYears(1);
+    private static DateTimeOffset SampleValiditySigned { get; } = TestClock.CanonicalEpoch.AddDays(-8);
+    private static DateTimeOffset SampleValidityValidUntil { get; } = SampleValiditySigned.AddYears(1);
 
 
     private static MdocValidityInfo SampleValidity() =>
@@ -321,18 +322,20 @@ internal sealed class MdocMsoDigestBindingValidatorTests
 
     private static byte[] CborText(string value)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteTextString(value);
 
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
     }
 
 
     private static byte[] CborBool(bool value)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteBoolean(value);
 
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
     }
 }

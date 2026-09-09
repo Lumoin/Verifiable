@@ -19,20 +19,15 @@ namespace Verifiable.Core.Model.Did;
 public static class DidBuilderExtensions
 {
     /// <summary>
-    /// Gets the default JSON-LD context for DID documents as specified by the DID Core specification.
+    /// Gets the default JSON-LD context for DID documents as specified by the DID Core specification: the
+    /// DID v1 context, which is <see href="https://w3c-ccg.github.io/did-method-key/#document-creation-algorithm">
+    /// REQUIRED to be the first array entry</see>, followed by the cryptographic suite context
+    /// <see href="https://w3c-ccg.github.io/did-method-key/#context-creation-algorithm">the document-creation
+    /// algorithm adds for the verification method's suite</see>.
     /// </summary>
-    private static Context DefaultContext { get; } = new Context
-    {
-        Contexts =
-        [
-            //This should be the first entry in the array.
-            //See https://w3c-ccg.github.io/did-method-key/#document-creation-algorithm.
-            "https://www.w3.org/ns/did/v1",
-            //These come from the cryptographic suite/context.
-            //See https://w3c-ccg.github.io/did-method-key/#context-creation-algorithm.
-            "https://w3id.org/security/suites/jws-2020/v1"
-        ]
-    };
+    private static Context DefaultContext { get; } = Context.FromIris(
+        "https://www.w3.org/ns/did/v1",
+        "https://w3id.org/security/suites/jws-2020/v1");
 
 
     /// <summary>
@@ -190,7 +185,7 @@ public static class DidBuilderExtensions
         /// </remarks>
         /// <example>
         /// <code>
-        /// var b = new WebDidBuilder()
+        /// var b = new WebDidBuilder(BaseMemoryPool.Shared)
         ///     .AddServices(buildState =>
         ///     [
         ///         new Service
@@ -301,10 +296,7 @@ public static class DidBuilderExtensions
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="context"/> is null.</exception>
     /// <example>
     /// <code>
-    /// var customContext = new Context
-    /// {
-    ///     Contexes = ["https://www.w3.org/ns/did/v1", "https://example.com/custom/v1"]
-    /// };
+    /// var customContext = Context.FromIris("https://www.w3.org/ns/did/v1", "https://example.com/custom/v1");
     /// var builder = new KeyDidBuilder()
     ///     .With(DidBuilderExtensions.CreateContextTransformation&lt;KeyDidBuilder, KeyDidBuildState&gt;(customContext));
     /// </code>
@@ -330,6 +322,7 @@ public static class DidBuilderExtensions
     /// <param name="verificationMethodType">The verification method type that determines the key format representation.</param>
     /// <param name="verificationMethodId">The identifier for the verification method.</param>
     /// <param name="controller">The controller identifier for the verification method.</param>
+    /// <param name="pool">The memory pool the key format's encoding is rented from.</param>
     /// <returns>A fully configured verification method.</returns>
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="publicKey"/> or <paramref name="verificationMethodType"/> is null.
@@ -341,14 +334,15 @@ public static class DidBuilderExtensions
         PublicKeyMemory publicKey,
         VerificationMethodTypeInfo verificationMethodType,
         string verificationMethodId,
-        string controller)
+        string controller,
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(publicKey);
         ArgumentNullException.ThrowIfNull(verificationMethodType);
         ArgumentException.ThrowIfNullOrWhiteSpace(verificationMethodId);
         ArgumentException.ThrowIfNullOrWhiteSpace(controller);
 
-        KeyFormat keyFormat = verificationMethodType.CreateKeyFormat(publicKey);
+        KeyFormat keyFormat = verificationMethodType.CreateKeyFormat(publicKey, pool);
 
         return new VerificationMethod
         {

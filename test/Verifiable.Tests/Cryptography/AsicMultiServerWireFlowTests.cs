@@ -553,14 +553,14 @@ internal sealed class AsicMultiServerWireFlowTests
     private sealed class WireTimestampTransport
     {
         /// <summary>The client, already pinned to the Time-Stamping Authority host's certificate.</summary>
-        private readonly HttpClient httpClient;
+        private HttpClient WireClient { get; }
 
 
         /// <summary>Initializes a new <see cref="WireTimestampTransport"/> over a pinned client.</summary>
         /// <param name="httpClient">The client, already pinned to the Time-Stamping Authority host's certificate.</param>
         internal WireTimestampTransport(HttpClient httpClient)
         {
-            this.httpClient = httpClient;
+            this.WireClient = httpClient;
         }
 
 
@@ -577,7 +577,7 @@ internal sealed class AsicMultiServerWireFlowTests
             HttpResponseMessage httpResponse;
             try
             {
-                httpResponse = await httpClient.PostAsync(new Uri(context.TsaUri), content, cancellationToken).ConfigureAwait(false);
+                httpResponse = await WireClient.PostAsync(new Uri(context.TsaUri), content, cancellationToken).ConfigureAwait(false);
             }
             catch(HttpRequestException)
             {
@@ -608,14 +608,14 @@ internal sealed class AsicMultiServerWireFlowTests
     private sealed class WireOcspTransport
     {
         /// <summary>The client, already pinned to the OCSP responder host's certificate.</summary>
-        private readonly HttpClient httpClient;
+        private HttpClient WireClient { get; }
 
 
         /// <summary>Initializes a new <see cref="WireOcspTransport"/> over a pinned client.</summary>
         /// <param name="httpClient">The client, already pinned to the OCSP responder host's certificate.</param>
         internal WireOcspTransport(HttpClient httpClient)
         {
-            this.httpClient = httpClient;
+            this.WireClient = httpClient;
         }
 
 
@@ -632,7 +632,7 @@ internal sealed class AsicMultiServerWireFlowTests
             HttpResponseMessage httpResponse;
             try
             {
-                httpResponse = await httpClient.PostAsync(new Uri(context.ResponderUri), content, cancellationToken).ConfigureAwait(false);
+                httpResponse = await WireClient.PostAsync(new Uri(context.ResponderUri), content, cancellationToken).ConfigureAwait(false);
             }
             catch(HttpRequestException)
             {

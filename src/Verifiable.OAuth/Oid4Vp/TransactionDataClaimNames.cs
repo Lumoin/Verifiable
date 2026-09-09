@@ -29,7 +29,7 @@ public static class TransactionDataClaimNames
     /// <summary>The <c>type</c> field inside a decoded transaction_data
     /// descriptor — identifies the transaction semantic the Wallet must
     /// understand to consent (e.g. <c>qes_authorization</c>).</summary>
-    public static readonly string Type = Utf8Constants.ToInternedString(TypeUtf8);
+    public static string Type { get; } = Utf8Constants.ToInternedString(TypeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="CredentialIds"/>.</summary>
     public static ReadOnlySpan<byte> CredentialIdsUtf8 => "credential_ids"u8;
@@ -38,7 +38,7 @@ public static class TransactionDataClaimNames
     /// transaction_data descriptor — the DCQL credential identifiers the
     /// transaction is bound to. Each value must reference a credential the
     /// Verifier requested in <c>dcql_query</c>.</summary>
-    public static readonly string CredentialIds = Utf8Constants.ToInternedString(CredentialIdsUtf8);
+    public static string CredentialIds { get; } = Utf8Constants.ToInternedString(CredentialIdsUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="HashesAlg"/>.</summary>
     public static ReadOnlySpan<byte> HashesAlgUtf8 => "transaction_data_hashes_alg"u8;
@@ -47,7 +47,7 @@ public static class TransactionDataClaimNames
     /// an optional field inside a transaction_data descriptor (Verifier-
     /// permitted hash algorithms; defaults to <c>["sha-256"]</c>) and as
     /// an optional claim on the KB-JWT (Wallet-selected algorithm).</summary>
-    public static readonly string HashesAlg = Utf8Constants.ToInternedString(HashesAlgUtf8);
+    public static string HashesAlg { get; } = Utf8Constants.ToInternedString(HashesAlgUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Hashes"/>.</summary>
     public static ReadOnlySpan<byte> HashesUtf8 => "transaction_data_hashes"u8;
@@ -56,7 +56,7 @@ public static class TransactionDataClaimNames
     /// KB-JWT — an array of base64url-encoded digests of the original
     /// base64url-encoded transaction_data entries, positionally aligned
     /// with the <c>transaction_data</c> array the Verifier sent.</summary>
-    public static readonly string Hashes = Utf8Constants.ToInternedString(HashesUtf8);
+    public static string Hashes { get; } = Utf8Constants.ToInternedString(HashesUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="DefaultHashesAlg"/>.</summary>
     public static ReadOnlySpan<byte> DefaultHashesAlgUtf8 => "sha-256"u8;
@@ -64,5 +64,5 @@ public static class TransactionDataClaimNames
     /// <summary>The default hash algorithm identifier used when a
     /// transaction_data descriptor does not specify
     /// <see cref="HashesAlg"/>, per OID4VP 1.0 §8.4.</summary>
-    public static readonly string DefaultHashesAlg = Utf8Constants.ToInternedString(DefaultHashesAlgUtf8);
+    public static string DefaultHashesAlg { get; } = Utf8Constants.ToInternedString(DefaultHashesAlgUtf8);
 }

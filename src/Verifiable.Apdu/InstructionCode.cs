@@ -89,7 +89,7 @@ public readonly struct InstructionCode : IEquatable<InstructionCode>
     public static InstructionCode GenerateAsymmetricKeyPair { get; } = new(0x47);
 
 
-    private static List<InstructionCode> codes { get; } =
+    private static List<InstructionCode> RegisteredCodes { get; } =
     [
         Select, GetResponse, GetDataSimple, GetDataBerTlv, PutData,
         Verify, ChangeReferenceData, ResetRetryCounter,
@@ -98,7 +98,7 @@ public readonly struct InstructionCode : IEquatable<InstructionCode>
     ];
 
     /// <summary>Gets all registered instruction code values.</summary>
-    public static IReadOnlyList<InstructionCode> Codes => codes.AsReadOnly();
+    public static IReadOnlyList<InstructionCode> Codes => RegisteredCodes.AsReadOnly();
 
 
     /// <summary>
@@ -114,16 +114,16 @@ public readonly struct InstructionCode : IEquatable<InstructionCode>
     {
         ArgumentNullException.ThrowIfNull(name);
 
-        for(int i = 0; i < codes.Count; ++i)
+        for(int i = 0; i < RegisteredCodes.Count; ++i)
         {
-            if(codes[i].Code == code)
+            if(RegisteredCodes[i].Code == code)
             {
                 throw new ArgumentException($"Instruction code 0x{code:X2} is already registered.", nameof(code));
             }
         }
 
         var newCode = new InstructionCode(code);
-        codes.Add(newCode);
+        RegisteredCodes.Add(newCode);
         InstructionCodeNames.Register(code, name);
         return newCode;
     }
@@ -164,7 +164,7 @@ public readonly struct InstructionCode : IEquatable<InstructionCode>
 /// <summary>Provides human-readable names for <see cref="InstructionCode"/> values.</summary>
 public static class InstructionCodeNames
 {
-    private static Dictionary<byte, string> customNames { get; } = [];
+    private static Dictionary<byte, string> CustomNames { get; } = [];
 
     /// <summary>Gets the name for the specified instruction code.</summary>
     public static string GetName(InstructionCode instruction) => GetName(instruction.Code);
@@ -172,7 +172,7 @@ public static class InstructionCodeNames
     /// <summary>Gets the name for the specified instruction byte value.</summary>
     public static string GetName(byte code)
     {
-        if(customNames.TryGetValue(code, out string? customName))
+        if(CustomNames.TryGetValue(code, out string? customName))
         {
             return customName;
         }
@@ -203,6 +203,6 @@ public static class InstructionCodeNames
     /// <summary>Registers a custom name for a vendor-specific instruction code.</summary>
     internal static void Register(byte code, string name)
     {
-        customNames[code] = name;
+        CustomNames[code] = name;
     }
 }

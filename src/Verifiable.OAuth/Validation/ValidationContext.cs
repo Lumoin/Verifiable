@@ -126,6 +126,19 @@ public sealed record ValidationContext
     public bool SessionTranscriptValid { get; init; }
 
     /// <summary>
+    /// Whether the credential declares its own type — the SD-JWT VC <c>vct</c> claim
+    /// (defined in
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-sd-jwt-vc-18#section-2.2.2.1">
+    /// SD-JWT VC §2.2.2.1</see> and designated REQUIRED in
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-sd-jwt-vc-18#section-2.2.2.3">
+    /// §2.2.2.3</see> for a <c>dc+sd-jwt</c> credential). Derived in the verify
+    /// step from <see cref="Oid4Vp.Server.VpTokenParsed.CredentialType"/>. Defaults to
+    /// <see langword="true"/> so the axis is a no-op for validators that do not include
+    /// <see cref="Oid4Vp.Server"/>'s credential-type-present rule.
+    /// </summary>
+    public bool CredentialTypePresent { get; init; } = true;
+
+    /// <summary>
     /// Whether the presentation satisfies the DCQL query — every claim the
     /// credential query requested is present in the disclosed/extracted claims.
     /// Derived in the verify step (the executor compares the query's requested

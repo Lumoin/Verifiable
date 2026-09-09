@@ -37,10 +37,10 @@ internal sealed class Bbs2023W3cVectorTests
 
     //Canonicalization/signing here is in-memory; a default context yields the
     //secure-default SSRF policy and satisfies the policy-carrying parameter.
-    internal static readonly ExchangeContext EmptyContext = new();
+    internal static ExchangeContext EmptyContext { get; } = new();
 
     /// <summary>The bbs-2023 ciphersuite (BLS12-381-SHA-256).</summary>
-    private static readonly BbsCiphersuite Ciphersuite = BbsCiphersuite.Bls12Curve381Sha256;
+    private static BbsCiphersuite Ciphersuite { get; } = BbsCiphersuite.Bls12Curve381Sha256;
 
 
     /// <summary>
@@ -193,18 +193,21 @@ internal sealed class Bbs2023W3cVectorTests
         var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(UnsignedCredential, TestSetup.DefaultSerializationOptions)!;
         var mandatoryPaths = MandatoryPointers.Select(CredentialPath.FromJsonPointer).ToArray();
 
-        //The vector tests use a spec-anchored canonicalizer that returns the W3C reference RDFC-1.0 form
-        //(Example 11/15). This isolates the dotNetRdf blank-node numbering divergence from the
-        //bbs-2023 cryptosuite under test; see the divergence note in this file's class remarks.
+        //The real RDFC-1.0 canonicalizer feeds the cryptosuite (its output is asserted against the
+        //W3C reference form in CanonicalFormMatchesW3cReferenceForm); the framing partition supplies
+        //the spec's mandatory selection, which the production partition cannot yet produce (see
+        //SpecFramingPartition).
+        var rdfcCanonicalizer = CanonicalizationTestUtilities.CreateRdfcCanonicalizer();
+        var contextResolver = CanonicalizationTestUtilities.CreateTestContextResolver();
         using var result = await credential.CreateBaseProofVerboseAsync(
             publicKeyBytes,
             VerificationMethodId,
             DateTime.Parse("2023-08-15T23:36:38Z", null, System.Globalization.DateTimeStyles.RoundtripKind),
             mandatoryPaths,
             () => hmacKey,
-            SpecAnchoredPartition,
-            SpecAnchoredCanonicalize,
-            contextResolver: null,
+            SpecFramingPartition,
+            rdfcCanonicalizer,
+            contextResolver,
             CanonicalizationTestUtilities.SerializeCredential,
             CanonicalizationTestUtilities.DeserializeCredential,
             CanonicalizationTestUtilities.SerializeProofOptions,
@@ -254,16 +257,17 @@ internal sealed class Bbs2023W3cVectorTests
             .ToHashSet();
 
         //Derive using the deterministic Mocked-Random-Scalars source seeded with the W3C seed (Example 19),
-        //over the spec-anchored canonical input.
+        //over the production partition and canonicalizer.
+        var rdfcCanonicalizer = CanonicalizationTestUtilities.CreateRdfcCanonicalizer();
         BbsProofGenDelegate deterministicProofGen = bbs.CreateProofGen(pseudoRandSeed);
 
         var (derivedCredential, derivedProof) = await signedCredential.DeriveProofVerboseAsync(
             verifierRequestedPaths,
             userExclusions: null,
             presentationHeader,
-            SpecAnchoredPartition,
+            SpecFramingPartition,
             JsonLdSelection.SelectFragments,
-            SpecAnchoredCanonicalize,
+            rdfcCanonicalizer,
             contextResolver,
             CanonicalizationTestUtilities.SerializeCredential,
             CanonicalizationTestUtilities.DeserializeCredential,
@@ -305,7 +309,7 @@ internal sealed class Bbs2023W3cVectorTests
         var derivedVerify = await derivedCredential.VerifyDerivedProofAsync(
             bbs.ProofVerify,
             Bbs2023CborSerializer.ParseDerivedProof,
-            SpecAnchoredCanonicalize,
+            rdfcCanonicalizer,
             contextResolver,
             CanonicalizationTestUtilities.SerializeCredential,
             CanonicalizationTestUtilities.SerializeProofOptions,
@@ -323,7 +327,7 @@ internal sealed class Bbs2023W3cVectorTests
         var specVerify = await specDerivedCredential.VerifyDerivedProofAsync(
             bbs.ProofVerify,
             Bbs2023CborSerializer.ParseDerivedProof,
-            SpecAnchoredCanonicalize,
+            rdfcCanonicalizer,
             contextResolver,
             CanonicalizationTestUtilities.SerializeCredential,
             CanonicalizationTestUtilities.SerializeProofOptions,
@@ -355,10 +359,9 @@ internal sealed class Bbs2023W3cVectorTests
         var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(UnsignedCredential, TestSetup.DefaultSerializationOptions)!;
         var mandatoryPaths = MandatoryPointers.Select(CredentialPath.FromJsonPointer).ToArray();
 
-        //The round-trip exercises the real production pipeline: the dotNetRdf RDFC-1.0 canonicalizer and
-        //the real JsonLdSelection partition/select. All three parties canonicalize with the same engine,
-        //so the proofs are internally consistent and verify even where dotNetRdf's blank-node labeling
-        //diverges from the W3C reference (which only affects cross-implementation byte equality).
+        //The round-trip exercises the real production pipeline: the RDFC-1.0 canonicalizer and the real
+        //JsonLdSelection partition/select. All three parties canonicalize with the same engine, so the
+        //proofs are internally consistent end-to-end.
         var rdfcCanonicalizer = CanonicalizationTestUtilities.CreateRdfcCanonicalizer();
         var contextResolver = CanonicalizationTestUtilities.CreateTestContextResolver();
 
@@ -523,9 +526,9 @@ internal sealed class Bbs2023W3cVectorTests
 
 
     /// <summary>
-    /// The W3C reference RDFC-1.0 canonical N-Quads for the credential (Example 11). dotNetRdf produces a
-    /// different but isomorphic blank-node numbering for this graph (c14n0/c14n1 swapped), so the vector
-    /// tests anchor on the reference form to exercise the bbs-2023 cryptosuite over conformant input.
+    /// The W3C reference RDFC-1.0 canonical N-Quads for the credential (Example 11);
+    /// <see cref="CanonicalFormMatchesW3cReferenceForm"/> asserts the canonicalizer reproduces
+    /// this form byte-identically.
     /// </summary>
     private static string[] CredentialCanonicalNQuads { get; } =
     [
@@ -556,115 +559,43 @@ internal sealed class Bbs2023W3cVectorTests
     ];
 
     /// <summary>
-    /// The W3C reference canonical base proof configuration (Example 15).
+    /// The RDFC-1.0 canonicalizer reproduces the W3C reference canonical form for the vector
+    /// credential byte-identically, blank-node numbering included. See
+    /// <see href="https://www.w3.org/TR/vc-di-bbs/#test-vectors">W3C VC Data Integrity BBS
+    /// Cryptosuites v1.0, Example 11</see>.
     /// </summary>
-    private static string ProofConfigCanonicalNQuads { get; } =
-        "_:c14n0 <http://purl.org/dc/terms/created> \"2023-08-15T23:36:38Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime> .\n" +
-        "_:c14n0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/security#DataIntegrityProof> .\n" +
-        "_:c14n0 <https://w3id.org/security#cryptosuite> \"bbs-2023\"^^<https://w3id.org/security#cryptosuiteString> .\n" +
-        "_:c14n0 <https://w3id.org/security#proofPurpose> <https://w3id.org/security#assertionMethod> .\n" +
-        "_:c14n0 <https://w3id.org/security#verificationMethod> <did:key:zUC7DerdEmfZ8f4pFajXgGwJoMkV1ofMTmEG5UoNvnWiPiLuGKNeqgRpLH2TV4Xe5mJ2cXV76gRN7LFQwapF1VFu6x2yrr5ci1mXqC1WNUrnHnLgvfZfMH7h6xP6qsf9EKRQrPQ#zUC7DerdEmfZ8f4pFajXgGwJoMkV1ofMTmEG5UoNvnWiPiLuGKNeqgRpLH2TV4Xe5mJ2cXV76gRN7LFQwapF1VFu6x2yrr5ci1mXqC1WNUrnHnLgvfZfMH7h6xP6qsf9EKRQrPQ> .\n";
-
-    /// <summary>
-    /// The mandatory statement indexes in the spec-anchored canonical credential for the <c>/issuer</c>
-    /// pointer (the issuer image triple plus the credential's type and issuer framing).
-    /// </summary>
-    private static int[] CredentialMandatoryCanonicalIndexes { get; } = [0, 16, 17, 21];
-
-    /// <summary>
-    /// The W3C reference RDFC-1.0 canonical N-Quads for the reveal document (issuer + validFrom/validUntil
-    /// mandatory framing plus the disclosed birthCountry), using the same blank-node identities as the full
-    /// credential (credentialSubject = c14n1, credential = c14n2) so the derived label-map join is stable.
-    /// </summary>
-    private static string[] RevealCanonicalNQuads { get; } =
-    [
-        "<did:key:zDnaeTHxNEBZoKaEo6PdA83fq98ebiFvo3X273Ydu4YmV96rg> <https://schema.org/image> <data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIW2P4z/DiPwAG0ALnwgz64QAAAABJRU5ErkJggg==> .\n",
-        "_:c14n0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://schema.org/Person> .\n",
-        "_:c14n0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/citizenship#PermanentResident> .\n",
-        "_:c14n0 <https://w3id.org/citizenship#birthCountry> \"Arcadia\" .\n",
-        "_:c14n1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/citizenship#PermanentResidentCardCredential> .\n",
-        "_:c14n1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://www.w3.org/2018/credentials#VerifiableCredential> .\n",
-        "_:c14n1 <https://www.w3.org/2018/credentials#credentialSubject> _:c14n0 .\n",
-        "_:c14n1 <https://www.w3.org/2018/credentials#issuer> <did:key:zDnaeTHxNEBZoKaEo6PdA83fq98ebiFvo3X273Ydu4YmV96rg> .\n",
-        "_:c14n1 <https://www.w3.org/2018/credentials#validFrom> \"2024-12-16T00:00:00Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime> .\n",
-        "_:c14n1 <https://www.w3.org/2018/credentials#validUntil> \"2025-12-16T23:59:59Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime> .\n"
-    ];
-
-    /// <summary>
-    /// The RDFC label map (canonical id -> original bnode id) for the full credential. The original ids are
-    /// stable node identities shared with the reveal document so the derived label-map join resolves.
-    /// </summary>
-    private static IReadOnlyDictionary<string, string> CredentialRdfcLabelMap { get; } = new Dictionary<string, string>
+    [TestMethod]
+    public async Task CanonicalFormMatchesW3cReferenceForm()
     {
-        ["c14n0"] = "card",
-        ["c14n1"] = "subject",
-        ["c14n2"] = "credential"
-    };
+        var canonicalize = CanonicalizationTestUtilities.CreateRdfcCanonicalizer();
+        var contextResolver = CanonicalizationTestUtilities.CreateTestContextResolver();
 
-    /// <summary>
-    /// The RDFC label map (canonical id -> original bnode id) for the independently canonicalized reveal
-    /// document (subject = c14n0, credential = c14n1), sharing the <c>subject</c>/<c>credential</c> node
-    /// identities with <see cref="CredentialRdfcLabelMap"/> so the derived label-map join resolves.
-    /// </summary>
-    private static IReadOnlyDictionary<string, string> RevealRdfcLabelMap { get; } = new Dictionary<string, string>
-    {
-        ["c14n0"] = "subject",
-        ["c14n1"] = "credential"
-    };
+        var result = await canonicalize(UnsignedCredential, contextResolver, EmptyContext, TestContext.CancellationToken).ConfigureAwait(false);
 
-
-    private static bool IsProofOptionsJson(string json) =>
-        json.Contains("DataIntegrityProof", StringComparison.Ordinal) && json.Contains("\"created\"", StringComparison.Ordinal);
-
-    private static bool IsRevealJson(string json) =>
-        !json.Contains("\"givenName\"", StringComparison.Ordinal) && !json.Contains("\"permanentResidentCard\"", StringComparison.Ordinal);
-
-
-    /// <summary>
-    /// A canonicalization delegate that returns the W3C reference RDFC-1.0 form for the credential, the
-    /// reveal document, and the proof options, distinguished by content, each with a stable RDFC label map.
-    /// This feeds the cryptosuite conformant canonical input despite the dotNetRdf blank-node numbering
-    /// divergence on this graph.
-    /// </summary>
-    private static ValueTask<CanonicalizationResult> SpecAnchoredCanonicalize(string json, ContextResolverDelegate? contextResolver, ExchangeContext context, CancellationToken cancellationToken)
-    {
-        if(IsProofOptionsJson(json))
-        {
-            return ValueTask.FromResult(new CanonicalizationResult { CanonicalForm = ProofConfigCanonicalNQuads, LabelMap = null });
-        }
-
-        if(IsRevealJson(json))
-        {
-            return ValueTask.FromResult(new CanonicalizationResult
-            {
-                CanonicalForm = string.Concat(RevealCanonicalNQuads),
-                LabelMap = RevealRdfcLabelMap
-            });
-        }
-
-        return ValueTask.FromResult(new CanonicalizationResult
-        {
-            CanonicalForm = string.Concat(CredentialCanonicalNQuads),
-            LabelMap = CredentialRdfcLabelMap
-        });
+        Assert.AreEqual(string.Concat(CredentialCanonicalNQuads), result.CanonicalForm, "The canonical form must match W3C Example 11 byte-for-byte.");
     }
 
 
     /// <summary>
-    /// A partition delegate that splits the spec-anchored canonical credential into the statements matched
-    /// by the given pointers (mandatory) and the rest, mirroring the W3C reference grouping (Example 13).
+    /// Partitions the real canonicalizer's statements with the W3C <c>selectJsonLd</c> framing
+    /// semantics: selecting a property pulls its value plus the type framing of each ancestor node
+    /// along the path. The production <see cref="JsonLdSelection.PartitionStatements"/> matches the
+    /// selection's statements against the full document's by textual equality between two
+    /// independent canonicalizations, so a mandatory statement whose quad carries a blank node
+    /// never matches (the canonical labels differ per graph) — the skolemized selection of
+    /// <see href="https://www.w3.org/TR/vc-di-bbs/#selectcanonicalnquads">di-bbs §selectCanonicalNQuads</see>
+    /// is not implemented. This partition keeps Examples 16-26 byte-asserted until it is.
     /// </summary>
-    private static ValueTask<StatementPartitionResult> SpecAnchoredPartition(
+    private static async ValueTask<StatementPartitionResult> SpecFramingPartition(
         string document,
-        IReadOnlyList<Verifiable.JsonPointer.JsonPointer> mandatoryPointers,
+        IReadOnlyList<Lumoin.Veritas.JsonPointer.JsonPointer> mandatoryPointers,
         CanonicalizationDelegate canonicalize,
         ContextResolverDelegate? contextResolver,
         ExchangeContext context,
         CancellationToken cancellationToken)
     {
-        bool isReveal = IsRevealJson(document);
-        string[] allStatements = isReveal ? RevealCanonicalNQuads : CredentialCanonicalNQuads;
-        var rdfcLabelMap = isReveal ? RevealRdfcLabelMap : CredentialRdfcLabelMap;
+        var full = await canonicalize(document, contextResolver, context, cancellationToken).ConfigureAwait(false);
+        string[] allStatements = [.. full.CanonicalForm.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(s => s + "\n")];
 
         var matched = new SortedSet<int>();
         foreach(var pointer in mandatoryPointers)
@@ -678,7 +609,7 @@ internal sealed class Bbs2023W3cVectorTests
         var mandatoryIndexes = matched.ToList();
         var nonMandatoryIndexes = Enumerable.Range(0, allStatements.Length).Where(i => !matched.Contains(i)).ToList();
 
-        return ValueTask.FromResult(new StatementPartitionResult(allStatements, mandatoryIndexes, nonMandatoryIndexes, rdfcLabelMap));
+        return new StatementPartitionResult(allStatements, mandatoryIndexes, nonMandatoryIndexes, full.LabelMap);
     }
 
 
@@ -737,15 +668,15 @@ internal sealed class Bbs2023W3cVectorTests
     {
         //BBS secret keys, signatures, and proofs request AllocationKind.Native. The shared pool disallows
         //native degradation, so a dedicated pool that degrades Native to Pinned backs the BBS value types.
-        private readonly BaseMemoryPool keyPool;
-        private readonly ScalarArithmeticBackend scalarBackend;
-        private readonly G1ArithmeticBackend g1Backend;
-        private readonly G2ArithmeticBackend g2Backend;
-        private readonly PairingBackend pairingBackend;
-        private readonly ScalarHashToScalarDelegate hashToScalar;
-        private readonly G1HashToCurveDelegate hashToCurve;
-        private readonly BbsSecretKey secretKey;
-        private readonly BbsPublicKey publicKey;
+        private BaseMemoryPool KeyPool { get; }
+        private ScalarArithmeticBackend ScalarBackend { get; }
+        private G1ArithmeticBackend G1Backend { get; }
+        private G2ArithmeticBackend G2Backend { get; }
+        private PairingBackend PairingBackend { get; }
+        private ScalarHashToScalarDelegate HashToScalar { get; }
+        private G1HashToCurveDelegate HashToCurve { get; }
+        private BbsSecretKey SecretKey { get; }
+        private BbsPublicKey PublicKey { get; }
 
         private BbsOperations(
             BaseMemoryPool keyPool,
@@ -758,15 +689,15 @@ internal sealed class Bbs2023W3cVectorTests
             BbsSecretKey secretKey,
             BbsPublicKey publicKey)
         {
-            this.keyPool = keyPool;
-            this.scalarBackend = scalarBackend;
-            this.g1Backend = g1Backend;
-            this.g2Backend = g2Backend;
-            this.pairingBackend = pairingBackend;
-            this.hashToScalar = hashToScalar;
-            this.hashToCurve = hashToCurve;
-            this.secretKey = secretKey;
-            this.publicKey = publicKey;
+            this.KeyPool = keyPool;
+            this.ScalarBackend = scalarBackend;
+            this.G1Backend = g1Backend;
+            this.G2Backend = g2Backend;
+            this.PairingBackend = pairingBackend;
+            this.HashToScalar = hashToScalar;
+            this.HashToCurve = hashToCurve;
+            this.SecretKey = secretKey;
+            this.PublicKey = publicKey;
         }
 
 
@@ -793,19 +724,19 @@ internal sealed class Bbs2023W3cVectorTests
             var bbsMessages = ToBbsMessages(messages);
 
             using var signature = BbsSigningExtensions.Sign(
-                secretKey,
-                publicKey,
+                SecretKey,
+                PublicKey,
                 header,
                 bbsMessages,
                 Rfc9380ExpandMessage.ExpandMessageXmdSha256,
-                hashToScalar,
-                scalarBackend.Add,
-                scalarBackend.Invert,
-                g1Backend.Add,
-                g1Backend.ScalarMultiply,
-                g1Backend.MultiScalarMultiply,
-                hashToCurve,
-                keyPool);
+                HashToScalar,
+                ScalarBackend.Add,
+                ScalarBackend.Invert,
+                G1Backend.Add,
+                G1Backend.ScalarMultiply,
+                G1Backend.MultiScalarMultiply,
+                HashToCurve,
+                KeyPool);
 
             return ConcatenateSignature(signature);
         }
@@ -816,26 +747,26 @@ internal sealed class Bbs2023W3cVectorTests
             var header = new BbsHeader(bbsHeader);
             var bbsMessages = ToBbsMessages(messages);
 
-            using var signature = BbsSignature.FromCanonical(bbsSignature.Span, Ciphersuite, keyPool, BbsSignature.GetAlgebraicTag(Ciphersuite));
+            using var signature = BbsSignature.FromCanonical(bbsSignature.Span, Ciphersuite, KeyPool, BbsSignature.GetAlgebraicTag(Ciphersuite));
 
             return BbsVerificationExtensions.Verify(
-                publicKey,
+                PublicKey,
                 signature,
                 header,
                 bbsMessages,
                 Rfc9380ExpandMessage.ExpandMessageXmdSha256,
-                hashToScalar,
-                g1Backend.Add,
-                g1Backend.MultiScalarMultiply,
-                hashToCurve,
-                g1Backend.IsOnCurve!,
-                g1Backend.IsInPrimeOrderSubgroup!,
-                g2Backend.Add,
-                g2Backend.ScalarMultiply,
-                g2Backend.IsOnCurve,
-                g2Backend.IsInPrimeOrderSubgroup,
-                pairingBackend.Pairing,
-                keyPool);
+                HashToScalar,
+                G1Backend.Add,
+                G1Backend.MultiScalarMultiply,
+                HashToCurve,
+                G1Backend.IsOnCurve!,
+                G1Backend.IsInPrimeOrderSubgroup!,
+                G2Backend.Add,
+                G2Backend.ScalarMultiply,
+                G2Backend.IsOnCurve,
+                G2Backend.IsInPrimeOrderSubgroup,
+                PairingBackend.Pairing,
+                KeyPool);
         }
 
 
@@ -847,7 +778,7 @@ internal sealed class Bbs2023W3cVectorTests
             IReadOnlyList<int> disclosedIndexes,
             BaseMemoryPool pool)
         {
-            return GenerateProof(bbsSignature, bbsHeader, presentationHeader, messages, disclosedIndexes, scalarBackend.Random);
+            return GenerateProof(bbsSignature, bbsHeader, presentationHeader, messages, disclosedIndexes, ScalarBackend.Random);
         }
 
 
@@ -867,7 +798,7 @@ internal sealed class Bbs2023W3cVectorTests
                     Ciphersuite,
                     scalarCount,
                     Rfc9380ExpandMessage.ExpandMessageXmdSha256,
-                    scalarBackend.Reduce);
+                    ScalarBackend.Reduce);
 
                 return GenerateProof(bbsSignature, bbsHeader, presentationHeader, messages, disclosedIndexes, randomScalars);
             };
@@ -886,28 +817,28 @@ internal sealed class Bbs2023W3cVectorTests
             var ph = new BbsPresentationHeader(presentationHeader);
             var bbsMessages = ToBbsMessages(disclosedMessages);
 
-            using var proof = BbsProof.FromCanonical(bbsProof.Span, Ciphersuite, keyPool, BbsProof.GetAlgebraicTag(Ciphersuite));
+            using var proof = BbsProof.FromCanonical(bbsProof.Span, Ciphersuite, KeyPool, BbsProof.GetAlgebraicTag(Ciphersuite));
 
             return BbsProofVerificationExtensions.VerifyProof(
-                publicKey,
+                PublicKey,
                 proof,
                 header,
                 ph,
                 bbsMessages,
                 disclosedIndexes.ToArray(),
                 Rfc9380ExpandMessage.ExpandMessageXmdSha256,
-                hashToScalar,
-                g1Backend.Add,
-                g1Backend.MultiScalarMultiply,
-                hashToCurve,
-                g1Backend.IsOnCurve!,
-                g1Backend.IsInPrimeOrderSubgroup!,
-                g2Backend.Add,
-                g2Backend.ScalarMultiply,
-                g2Backend.IsOnCurve,
-                g2Backend.IsInPrimeOrderSubgroup,
-                pairingBackend.Pairing,
-                keyPool);
+                HashToScalar,
+                G1Backend.Add,
+                G1Backend.MultiScalarMultiply,
+                HashToCurve,
+                G1Backend.IsOnCurve!,
+                G1Backend.IsInPrimeOrderSubgroup!,
+                G2Backend.Add,
+                G2Backend.ScalarMultiply,
+                G2Backend.IsOnCurve,
+                G2Backend.IsInPrimeOrderSubgroup,
+                PairingBackend.Pairing,
+                KeyPool);
         }
 
 
@@ -923,30 +854,30 @@ internal sealed class Bbs2023W3cVectorTests
             var ph = new BbsPresentationHeader(presentationHeader);
             var bbsMessages = ToBbsMessages(messages);
 
-            using var signature = BbsSignature.FromCanonical(bbsSignature.Span, Ciphersuite, keyPool, BbsSignature.GetAlgebraicTag(Ciphersuite));
+            using var signature = BbsSignature.FromCanonical(bbsSignature.Span, Ciphersuite, KeyPool, BbsSignature.GetAlgebraicTag(Ciphersuite));
 
             using var proof = BbsProofGenerationExtensions.GenerateProof(
                 signature,
-                publicKey,
+                PublicKey,
                 header,
                 ph,
                 bbsMessages,
                 disclosedIndexes.ToArray(),
                 Rfc9380ExpandMessage.ExpandMessageXmdSha256,
-                hashToScalar,
-                scalarBackend.Add,
-                scalarBackend.Subtract,
-                scalarBackend.Multiply,
-                scalarBackend.Negate,
-                scalarBackend.Invert,
+                HashToScalar,
+                ScalarBackend.Add,
+                ScalarBackend.Subtract,
+                ScalarBackend.Multiply,
+                ScalarBackend.Negate,
+                ScalarBackend.Invert,
                 randomScalars,
-                g1Backend.Add,
-                g1Backend.ScalarMultiply,
-                g1Backend.MultiScalarMultiply,
-                hashToCurve,
-                g1Backend.IsOnCurve!,
-                g1Backend.IsInPrimeOrderSubgroup!,
-                keyPool);
+                G1Backend.Add,
+                G1Backend.ScalarMultiply,
+                G1Backend.MultiScalarMultiply,
+                HashToCurve,
+                G1Backend.IsOnCurve!,
+                G1Backend.IsInPrimeOrderSubgroup!,
+                KeyPool);
 
             return ConcatenateProof(proof);
         }
@@ -972,13 +903,13 @@ internal sealed class Bbs2023W3cVectorTests
 
         public void Dispose()
         {
-            secretKey.Dispose();
-            publicKey.Dispose();
-            scalarBackend.Dispose();
-            g1Backend.Dispose();
-            g2Backend.Dispose();
-            pairingBackend.Dispose();
-            keyPool.Dispose();
+            SecretKey.Dispose();
+            PublicKey.Dispose();
+            ScalarBackend.Dispose();
+            G1Backend.Dispose();
+            G2Backend.Dispose();
+            PairingBackend.Dispose();
+            KeyPool.Dispose();
         }
     }
 }

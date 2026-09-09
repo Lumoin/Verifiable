@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Cbor.Fido2;
 using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
@@ -48,10 +48,10 @@ public static class CtapClientPinRequestCborReader
                 throw new Fido2FormatException(Fido2FormatFailureKind.MissingRequiredParameter, "The authenticatorClientPIN request is missing the required 'subCommand' (0x02) member.");
             }
 
-            int subCommand = checked((int)new CborReader(subCommandCbor, CborConformanceMode.Ctap2Canonical).ReadInt64());
+            int subCommand = checked((int)new CborReader(subCommandCbor, CborOptions.Ctap2Canonical).ReadInt64());
 
             int? pinUvAuthProtocol = parameters.TryGetValue(WellKnownCtapClientPinRequestKeys.PinUvAuthProtocol, out ReadOnlyMemory<byte> pinUvAuthProtocolCbor)
-                ? checked((int)new CborReader(pinUvAuthProtocolCbor, CborConformanceMode.Ctap2Canonical).ReadInt64())
+                ? checked((int)new CborReader(pinUvAuthProtocolCbor, CborOptions.Ctap2Canonical).ReadInt64())
                 : null;
 
             CoseKey? keyAgreement = parameters.TryGetValue(WellKnownCtapClientPinRequestKeys.KeyAgreement, out ReadOnlyMemory<byte> keyAgreementCbor)
@@ -63,16 +63,16 @@ public static class CtapClientPinRequestCborReader
             ReadOnlyMemory<byte>? pinHashEnc = ReadOptionalByteString(parameters, WellKnownCtapClientPinRequestKeys.PinHashEnc);
 
             int? permissions = parameters.TryGetValue(WellKnownCtapClientPinRequestKeys.Permissions, out ReadOnlyMemory<byte> permissionsCbor)
-                ? checked((int)new CborReader(permissionsCbor, CborConformanceMode.Ctap2Canonical).ReadInt64())
+                ? checked((int)new CborReader(permissionsCbor, CborOptions.Ctap2Canonical).ReadInt64())
                 : null;
 
             string? rpId = parameters.TryGetValue(WellKnownCtapClientPinRequestKeys.RpId, out ReadOnlyMemory<byte> rpIdCbor)
-                ? new CborReader(rpIdCbor, CborConformanceMode.Ctap2Canonical).ReadTextString()
+                ? new CborReader(rpIdCbor, CborOptions.Ctap2Canonical).ReadTextString()
                 : null;
 
             return new CtapClientPinRequest(subCommand, pinUvAuthProtocol, keyAgreement, pinUvAuthParam, newPinEnc, pinHashEnc, permissions, rpId);
         }
-        catch(CborContentException exception)
+        catch(CborException exception)
         {
             throw new Fido2FormatException(Fido2FormatFailureKind.MalformedCbor, "The authenticatorClientPIN request parameter bytes are not valid CTAP2 canonical CBOR.", exception);
         }
@@ -89,7 +89,7 @@ public static class CtapClientPinRequestCborReader
         {
             if(parameters.TryGetValue(key, out ReadOnlyMemory<byte> valueCbor))
             {
-                return new CborReader(valueCbor, CborConformanceMode.Ctap2Canonical).ReadByteString();
+                return new CborReader(valueCbor, CborOptions.Ctap2Canonical).ReadByteString();
             }
 
             return null;

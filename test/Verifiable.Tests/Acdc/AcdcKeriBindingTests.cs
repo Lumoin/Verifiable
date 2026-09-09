@@ -35,7 +35,7 @@ namespace Verifiable.Tests.Acdc;
 internal sealed class AcdcKeriBindingTests
 {
     /// <summary>The Blake3-256 CESR digest code the minter stamps SAIDs with.</summary>
-    private static readonly string Code = CesrDigestCodes.Blake3Bits256;
+    private static string Code { get; } = CesrDigestCodes.Blake3Bits256;
 
     /// <summary>The KERI JSON version string with a zeroed size, used to measure a serialization before its size is stamped.</summary>
     private const string ProbeVersion = "KERI10JSON000000_";
@@ -48,7 +48,7 @@ internal sealed class AcdcKeriBindingTests
 
 
     /// <summary>Decodes a KERI event's JSON bytes into a neutral field map for the production KEL replay.</summary>
-    private static readonly KeriEventFieldMapDecoder JsonDecoder = (serialization, serializationKind) => KeriEventJson.DecodeFieldMap(serialization);
+    private static KeriEventFieldMapDecoder JsonDecoder { get; } = (serialization, serializationKind) => KeriEventJson.DecodeFieldMap(serialization);
 
 
     /// <summary>

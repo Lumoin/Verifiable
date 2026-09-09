@@ -19,7 +19,7 @@ public static class AttestationProofParameterNames
     /// is an array containing exactly one <c>key-attestation+jwt</c> standing alone (no separate
     /// key proof).
     /// </summary>
-    public static readonly string AttestationProofType = Utf8Constants.ToInternedString(AttestationProofTypeUtf8);
+    public static string AttestationProofType { get; } = Utf8Constants.ToInternedString(AttestationProofTypeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="KeyAttestation"/>.</summary>
     public static ReadOnlySpan<byte> KeyAttestationUtf8 => "key_attestation"u8;
@@ -28,13 +28,13 @@ public static class AttestationProofParameterNames
     /// The <c>key_attestation</c> JOSE header (Appendix D / §F.2) carried on a <c>jwt</c> key
     /// proof, conveying a <c>key-attestation+jwt</c> for the key the proof possesses.
     /// </summary>
-    public static readonly string KeyAttestation = Utf8Constants.ToInternedString(KeyAttestationUtf8);
+    public static string KeyAttestation { get; } = Utf8Constants.ToInternedString(KeyAttestationUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="KeyAttestationJwtType"/>.</summary>
     public static ReadOnlySpan<byte> KeyAttestationJwtTypeUtf8 => "key-attestation+jwt"u8;
 
     /// <summary>The REQUIRED <c>typ</c> header value of a key attestation JWT (Appendix D.1).</summary>
-    public static readonly string KeyAttestationJwtType = Utf8Constants.ToInternedString(KeyAttestationJwtTypeUtf8);
+    public static string KeyAttestationJwtType { get; } = Utf8Constants.ToInternedString(KeyAttestationJwtTypeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="AttestedKeys"/>.</summary>
     public static ReadOnlySpan<byte> AttestedKeysUtf8 => "attested_keys"u8;
@@ -43,7 +43,7 @@ public static class AttestationProofParameterNames
     /// <c>attested_keys</c> — REQUIRED (Appendix D.1). A non-empty array of attested public keys
     /// (JWK syntax) from the same key storage component.
     /// </summary>
-    public static readonly string AttestedKeys = Utf8Constants.ToInternedString(AttestedKeysUtf8);
+    public static string AttestedKeys { get; } = Utf8Constants.ToInternedString(AttestedKeysUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="KeyStorage"/>.</summary>
     public static ReadOnlySpan<byte> KeyStorageUtf8 => "key_storage"u8;
@@ -52,7 +52,7 @@ public static class AttestationProofParameterNames
     /// <c>key_storage</c> — OPTIONAL (Appendix D.1/D.2). A non-empty array asserting the attack
     /// potential resistance of the key storage component.
     /// </summary>
-    public static readonly string KeyStorage = Utf8Constants.ToInternedString(KeyStorageUtf8);
+    public static string KeyStorage { get; } = Utf8Constants.ToInternedString(KeyStorageUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="UserAuthentication"/>.</summary>
     public static ReadOnlySpan<byte> UserAuthenticationUtf8 => "user_authentication"u8;
@@ -61,13 +61,13 @@ public static class AttestationProofParameterNames
     /// <c>user_authentication</c> — OPTIONAL (Appendix D.1/D.2). A non-empty array asserting the
     /// attack potential resistance of the user-authentication methods guarding the attested keys.
     /// </summary>
-    public static readonly string UserAuthentication = Utf8Constants.ToInternedString(UserAuthenticationUtf8);
+    public static string UserAuthentication { get; } = Utf8Constants.ToInternedString(UserAuthenticationUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Certification"/>.</summary>
     public static ReadOnlySpan<byte> CertificationUtf8 => "certification"u8;
 
     /// <summary><c>certification</c> — OPTIONAL (Appendix D.1). A URL to the key storage component's certification.</summary>
-    public static readonly string Certification = Utf8Constants.ToInternedString(CertificationUtf8);
+    public static string Certification { get; } = Utf8Constants.ToInternedString(CertificationUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="KeyAttestationsRequired"/>.</summary>
     public static ReadOnlySpan<byte> KeyAttestationsRequiredUtf8 => "key_attestations_required"u8;
@@ -78,7 +78,7 @@ public static class AttestationProofParameterNames
     /// attestation for that proof type; its object may carry <c>key_storage</c> /
     /// <c>user_authentication</c> constraints, or be empty.
     /// </summary>
-    public static readonly string KeyAttestationsRequired = Utf8Constants.ToInternedString(KeyAttestationsRequiredUtf8);
+    public static string KeyAttestationsRequired { get; } = Utf8Constants.ToInternedString(KeyAttestationsRequiredUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="ProofTypesSupported"/>.</summary>
     public static ReadOnlySpan<byte> ProofTypesSupportedUtf8 => "proof_types_supported"u8;
@@ -88,5 +88,5 @@ public static class AttestationProofParameterNames
     /// configuration object mapping each supported proof type to its constraints (including
     /// <see cref="KeyAttestationsRequired"/>).
     /// </summary>
-    public static readonly string ProofTypesSupported = Utf8Constants.ToInternedString(ProofTypesSupportedUtf8);
+    public static string ProofTypesSupported { get; } = Utf8Constants.ToInternedString(ProofTypesSupportedUtf8);
 }

@@ -16,6 +16,7 @@ using Verifiable.OAuth.IdJag;
 using Verifiable.OAuth.JwtBearer;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.TokenExchange;
+using Verifiable.Server;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -95,7 +96,7 @@ internal sealed class IdJagGrantTests
     /// members (<c>nameid_format</c>, <c>sp_name_qualifier</c>); <c>name_qualifier</c> and
     /// <c>sp_provided_id</c> are omitted so the §3.2.2 exactly-when-present rule is observable.
     /// </summary>
-    private static readonly SamlNameIdSubjectIdentifier SamlSubjectId = new()
+    private static SamlNameIdSubjectIdentifier SamlSubjectId { get; } = new()
     {
         Issuer = SamlIssuer,
         NameId = SamlNameId,
@@ -139,12 +140,12 @@ internal sealed class IdJagGrantTests
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     /// <summary>Serialises a client-assertion protected header to UTF-8 JSON bytes for the OAuthClient.IdJag flow test.</summary>
-    private static readonly JwtHeaderSerializer ClientAssertionHeaderSerializer =
+    private static JwtHeaderSerializer ClientAssertionHeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)header, TestSetup.DefaultSerializationOptions);
 
     /// <summary>Serialises a client-assertion payload to UTF-8 JSON bytes for the OAuthClient.IdJag flow test.</summary>
-    private static readonly JwtPayloadSerializer ClientAssertionPayloadSerializer =
+    private static JwtPayloadSerializer ClientAssertionPayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)payload, TestSetup.DefaultSerializationOptions);
 
@@ -731,6 +732,66 @@ internal sealed class IdJagGrantTests
         string secondBody = await second.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)second.StatusCode, secondBody);
         Assert.Contains(OAuthErrors.InvalidGrant, secondBody);
+    }
+
+
+    /// <summary>
+    /// RFC 7523 §3 rule 7 over the real HTTP wire: a store that records the assertion <c>jti</c> but
+    /// never resolves what it saved under <c>FlowKind.JtiReplay</c> cannot maintain the used-<c>jti</c>
+    /// set, so <see cref="JtiReplayGuard"/> answers <see cref="JtiReplayOutcome.StoreUnavailable"/> and
+    /// the jwt-bearer redemption refuses the very FIRST redemption with <c>server_error</c> — the silent
+    /// no-op the half-wiring would otherwise produce is caught rather than admitted.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523, Section 3</see>.
+    /// </summary>
+    [TestMethod]
+    public async Task RedeemFailsClosedWhenStoreCannotProveItself()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = RegisterIdJagClient(app);
+        WireMintSeams(app, ChatScope, resourceClientId: null);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        HttpClient http = host.SharedHttpClient!;
+        string segment = material.Registration.TenantId.Value;
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{segment}/token");
+
+        ServerVerificationKeyResolverDelegate jwksResolver =
+            await BuildJwksKeyResolverAsync(http, host.HttpBaseAddress!, segment).ConfigureAwait(false);
+        app.Server.OAuth().ValidateJwtBearerAssertionAsync =
+            async (assertion, requestedScope, registration, context, ct) =>
+                await ValidateIdJagAsync(assertion, registration, jwksResolver, ResourceAsIssuer).ConfigureAwait(false);
+
+        using HttpResponseMessage mintResponse = await PostMintAsync(http, tokenUrl, ResourceAsIssuer).ConfigureAwait(false);
+        string mintBody = await mintResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, (int)mintResponse.StatusCode, mintBody);
+        using JsonDocument mintDoc = JsonDocument.Parse(mintBody);
+        string jag = mintDoc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
+
+        HalfWireJtiReplayStore(app.Server);
+
+        //The store saves the assertion jti but never resolves it under FlowKind.JtiReplay, so the guard
+        //cannot prove the replay defense ran and the first redemption fails closed.
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(http, tokenUrl, BuildRedeemForm(jag), TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(500, (int)response.StatusCode, body);
+        Assert.Contains(OAuthErrors.ServerError, body);
+    }
+
+
+    /// <summary>
+    /// Rewires the host's replay store so it saves normally but never resolves anything under
+    /// <c>FlowKind.JtiReplay</c>, while every other correlation kind still resolves through the host's
+    /// real resolver. This is the half-wired store the guard's post-save self-check must catch.
+    /// </summary>
+    /// <param name="server">The hosted server whose OAuth integration resolver is wrapped.</param>
+    private static void HalfWireJtiReplayStore(EndpointServer server)
+    {
+        ResolveCorrelationKeyDelegate original = server.OAuth().ResolveCorrelationKeyAsync!;
+        server.OAuth().ResolveCorrelationKeyAsync = (tenantId, flowKind, externalHandle, ctx, ct) =>
+            flowKind == FlowKind.JtiReplay
+                ? ValueTask.FromResult<string?>(null)
+                : original(tenantId, flowKind, externalHandle, ctx, ct);
     }
 
 
@@ -3928,7 +3989,7 @@ internal sealed class IdJagGrantTests
 
         return await DpopProofConstruction.BuildAsync(
             claims, dpopKey, TestHostShell.Base64UrlEncoder, DpopTestSupport.Serializer,
-            MicrosoftCryptographicFunctions.SignP256Async, TestHostShell.MemoryPool,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async, TestHostShell.MemoryPool,
             TestContext.CancellationToken).ConfigureAwait(false);
     }
 
@@ -3959,7 +4020,7 @@ internal sealed class IdJagGrantTests
 
 
     /// <summary>The capability set an ID-JAG client needs: token-exchange + jwt-bearer + id-jag, plus discovery/jwks.</summary>
-    private static readonly ImmutableHashSet<CapabilityIdentifier> IdJagClientCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> IdJagClientCapabilities { get; } =
         ImmutableHashSet.Create(
             WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
             WellKnownCapabilityIdentifiers.OAuthClientCredentials,
@@ -4054,7 +4115,7 @@ internal sealed class IdJagGrantTests
 
         bool signatureValid = await Jws.VerifyAsync(
             assertion, TestSetup.Base64UrlDecoder, Pool, key,
-            MicrosoftCryptographicFunctions.VerifyP256Async, TestContext.CancellationToken).ConfigureAwait(false);
+            MicrosoftCryptographicFunctionsAdapter.VerifyP256Async, TestContext.CancellationToken).ConfigureAwait(false);
         if(!signatureValid)
         {
             return null;
@@ -4199,7 +4260,7 @@ internal sealed class IdJagGrantTests
             expectedIssuer,
             ResourceServerAudience,
             resolver,
-            MicrosoftCryptographicFunctions.VerifyP256Async,
+            MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             JwsAccessTokenTestSupport.Parser,
             TestSetup.Base64UrlDecoder,
             TimeProvider,

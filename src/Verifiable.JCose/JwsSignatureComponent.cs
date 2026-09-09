@@ -79,7 +79,7 @@ public sealed class JwsSignatureComponent: IEquatable<JwsSignatureComponent>, ID
     {
         get
         {
-            string alg = ProtectedHeader.TryGetValue("alg", out object? algValue)
+            string alg = ProtectedHeader.TryGetValue(WellKnownJoseHeaderNames.Alg, out object? algValue)
                 ? algValue?.ToString() ?? "?"
                 : "?";
             return $"JwsSignature[alg={alg}, {Signature.AsReadOnlySpan().Length} bytes]";
@@ -144,7 +144,7 @@ public sealed class JwsSignatureComponent: IEquatable<JwsSignatureComponent>, ID
     /// <inheritdoc/>
     public override string ToString()
     {
-        string alg = ProtectedHeader.TryGetValue("alg", out object? algValue)
+        string alg = ProtectedHeader.TryGetValue(WellKnownJoseHeaderNames.Alg, out object? algValue)
             ? algValue?.ToString() ?? "unknown"
             : "unknown";
         return $"JwsSignature[alg={alg}, {Signature.AsReadOnlySpan().Length} bytes]";

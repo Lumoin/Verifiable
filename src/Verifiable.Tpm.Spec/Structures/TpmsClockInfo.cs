@@ -23,7 +23,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// } TPMS_CLOCK_INFO;
 /// </code>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 10.11.1, Table 165.
+/// Specification reference: TPM 2.0 Library Part 2, clause 10.10.1, Table 142.
 /// </para>
 /// </remarks>
 /// <param name="Clock">Time in milliseconds since the last <c>TPM2_Clear()</c>.</param>

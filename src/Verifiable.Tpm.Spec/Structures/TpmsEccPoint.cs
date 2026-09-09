@@ -26,7 +26,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// Each coordinate is a TPM2B with a 2-byte size prefix followed by the coordinate bytes.
 /// </para>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 11.2.5.2.
+/// Specification reference: TPM 2.0 Library Part 2, clause 11.2.5.2.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -90,16 +90,28 @@ public sealed class TpmsEccPoint: IDisposable
     }
 
     /// <summary>
-    /// Parses an ECC point from a TPM reader.
+    /// Parses an ECC point from a TPM reader. The X coordinate's rental is disposed and the exception rethrown
+    /// if the Y coordinate's parse then throws (a truncated or over-long Y), so a refused frame never orphans
+    /// the already-rented X.
     /// </summary>
     /// <param name="reader">The reader.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The parsed ECC point.</returns>
-    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "TpmsEndpoint and Tpm2bEccParameter implement IDiposable and the purpose is to return these values.")]
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the parsed x and y coordinates transfers to the returned TpmsEccPoint, or to the shared Empty singleton when both are empty; the dispose-on-throw guard around y's parse releases x if y's parse fails, so no path loses the rental.")]
     public static TpmsEccPoint Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         Tpm2bEccParameter x = Tpm2bEccParameter.Parse(ref reader, pool);
-        Tpm2bEccParameter y = Tpm2bEccParameter.Parse(ref reader, pool);
+        Tpm2bEccParameter y;
+        try
+        {
+            y = Tpm2bEccParameter.Parse(ref reader, pool);
+        }
+        catch
+        {
+            x.Dispose();
+            throw;
+        }
+
         if(x.IsEmpty && y.IsEmpty)
         {
             return Empty;
@@ -109,12 +121,15 @@ public sealed class TpmsEccPoint: IDisposable
     }
 
     /// <summary>
-    /// Creates an ECC point from the specified coordinates.
+    /// Creates an ECC point from the specified coordinates. The X rental is disposed and the exception rethrown
+    /// if the Y coordinate's creation then throws (Y wider than <see cref="Tpm2bEccParameter"/>'s maximum), so a
+    /// caller error on Y never orphans the already-rented X.
     /// </summary>
     /// <param name="x">The X coordinate bytes.</param>
     /// <param name="y">The Y coordinate bytes.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The created ECC point.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the created xParam and yParam coordinates transfers to the returned TpmsEccPoint, or to the shared Empty singleton when both spans are empty; the dispose-on-throw guard around y's creation releases xParam if y's creation fails, so no path loses the rental.")]
     public static TpmsEccPoint Create(ReadOnlySpan<byte> x, ReadOnlySpan<byte> y, BaseMemoryPool pool)
     {
         if(x.IsEmpty && y.IsEmpty)
@@ -123,7 +138,16 @@ public sealed class TpmsEccPoint: IDisposable
         }
 
         Tpm2bEccParameter xParam = Tpm2bEccParameter.Create(x, pool);
-        Tpm2bEccParameter yParam = Tpm2bEccParameter.Create(y, pool);
+        Tpm2bEccParameter yParam;
+        try
+        {
+            yParam = Tpm2bEccParameter.Create(y, pool);
+        }
+        catch
+        {
+            xParam.Dispose();
+            throw;
+        }
 
         return new TpmsEccPoint(xParam, yParam);
     }

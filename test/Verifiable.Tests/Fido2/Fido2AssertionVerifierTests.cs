@@ -290,7 +290,8 @@ internal sealed class Fido2AssertionVerifierTests
             StoredSignCount = storedSignCount,
             StoredUvInitialized = true,
             ResponseUserHandle = responseUserHandle,
-            StoredUserHandle = storedUserHandle
+            StoredUserHandle = storedUserHandle,
+            ExtensionProcessingPool = BaseMemoryPool.Shared
         };
 
         return await Fido2AssertionVerifier.VerifyAsync(

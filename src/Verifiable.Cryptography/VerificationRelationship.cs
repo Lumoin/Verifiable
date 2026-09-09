@@ -38,10 +38,10 @@ public readonly struct VerificationRelationship: IEquatable<VerificationRelation
     public static VerificationRelationship SignerCertificate { get; } = new(2);
 
 
-    private static IReadOnlyList<VerificationRelationship> relationships { get; } = [Authentication, AssertionMethod, SignerCertificate];
+    private static IReadOnlyList<VerificationRelationship> RegisteredRelationships { get; } = [Authentication, AssertionMethod, SignerCertificate];
 
     /// <summary>Gets all verification relationship values — a closed set; see the type remarks.</summary>
-    public static IReadOnlyList<VerificationRelationship> Relationships => relationships;
+    public static IReadOnlyList<VerificationRelationship> Relationships => RegisteredRelationships;
 
 
     /// <inheritdoc/>

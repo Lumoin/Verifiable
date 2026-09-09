@@ -54,14 +54,14 @@ internal sealed class VcalmExchangeEndpointTests
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private const string ClientId = "https://exchange.client.test";
-    private static readonly Uri ClientBaseUri = new("https://exchange.client.test");
+    private static Uri ClientBaseUri { get; } = new("https://exchange.client.test");
 
-    private static readonly ImmutableHashSet<CapabilityIdentifier> ExchangeCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> ExchangeCapabilities { get; } =
         ImmutableHashSet.Create(WellKnownVcalmCapabilities.VcalmExchange);
 
     //The §3.6.5 round-trip needs the holder presentation signing too (the holder signs the
     //presentation the engine requested), so the registration also carries the holder capability.
-    private static readonly ImmutableHashSet<CapabilityIdentifier> ExchangeAndHolderCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> ExchangeAndHolderCapabilities { get; } =
         ImmutableHashSet.Create(
             WellKnownVcalmCapabilities.VcalmExchange, WellKnownVcalmCapabilities.VcalmHolder);
 
@@ -87,7 +87,7 @@ internal sealed class VcalmExchangeEndpointTests
     private static ProofOptionsSerializeDelegate SerializeProofOptions { get; } =
         ProofOptionsSerializer.Create(JsonOptions);
 
-    private static readonly ExchangeContext EmptyContext = new();
+    private static ExchangeContext EmptyContext { get; } = new();
 
     private List<VerifierKeyMaterial> RegisteredMaterials { get; } = [];
     private List<IDisposable> OwnedKeys { get; } = [];
@@ -538,7 +538,7 @@ internal sealed class VcalmExchangeEndpointTests
                 SerializePresentation = SerializePresentation,
                 SerializeProofOptions = SerializeProofOptions,
                 Decoder = TestSetup.Base58Decoder,
-                ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync,
+                ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
                 MemoryPool = Pool
             };
 
@@ -582,6 +582,7 @@ internal sealed class VcalmExchangeEndpointTests
         DidDocument holderDidDocument = await KeyDidBuilder.BuildAsync(
             keyPair.PublicKey,
             MultikeyVerificationMethodTypeInfo.Instance,
+            BaseMemoryPool.Shared,
             includeDefaultContext: false,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -603,7 +604,7 @@ internal sealed class VcalmExchangeEndpointTests
             DeserializePresentation = DeserializePresentation,
             SerializeProofOptions = SerializeProofOptions,
             Encoder = TestSetup.Base58Encoder,
-            ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             MemoryPool = Pool
         };
 
@@ -617,7 +618,7 @@ internal sealed class VcalmExchangeEndpointTests
     {
         VerifiablePresentation unproofed = new()
         {
-            Context = new Context { Contexts = [Context.Credentials20] },
+            Context = Context.FromIris(Context.Credentials20),
             Type = ["VerifiablePresentation"],
             Holder = holder.HolderDid
         };

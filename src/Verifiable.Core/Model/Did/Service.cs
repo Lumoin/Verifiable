@@ -120,7 +120,14 @@ namespace Verifiable.Core.Model.Did
         public IDictionary<string, object>? AdditionalData { get; set; }
 
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Determines whether this service is equal to <paramref name="other"/> by comparing
+        /// <see cref="Id"/>, <see cref="Type"/> and <see cref="ServiceEndpoint"/>. Equality is
+        /// exact-type, not polymorphic over subtypes: a derived type adding further
+        /// identity-bearing members is never equal to a same-valued instance of this type.
+        /// </summary>
+        /// <param name="other">The service to compare against.</param>
+        /// <returns><see langword="true"/> if the services are equal; otherwise <see langword="false"/>.</returns>
         [EditorBrowsable(EditorBrowsableState.Never)]
         public bool Equals(Service? other)
         {
@@ -134,6 +141,11 @@ namespace Verifiable.Core.Model.Did
                 return true;
             }
 
+            if(GetType() != other.GetType())
+            {
+                return false;
+            }
+
             return Equals(Id, other.Id)
                 && string.Equals(Type, other.Type, StringComparison.Ordinal)
                 && string.Equals(ServiceEndpoint, other.ServiceEndpoint, StringComparison.Ordinal);
@@ -142,7 +154,8 @@ namespace Verifiable.Core.Model.Did
 
         /// <inheritdoc />
         [EditorBrowsable(EditorBrowsableState.Never)]
-        public override bool Equals([NotNullWhen(true)] object? obj) => obj is Service service && Equals(service);
+        public override bool Equals([NotNullWhen(true)] object? obj) =>
+            obj is Service other && Equals(other);
 
 
         /// <inheritdoc />

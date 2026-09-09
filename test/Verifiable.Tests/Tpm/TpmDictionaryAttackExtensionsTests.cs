@@ -8,6 +8,7 @@ using Verifiable.Tpm;
 using Verifiable.Tpm.Extensions.DictionaryAttack;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Spec.Constants;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -88,7 +89,7 @@ internal sealed class TpmDictionaryAttackExtensionsTests
             return ValueTask.FromResult(SuccessFrame(frame, pool));
         }
 
-        using var device = TpmDevice.Create(Handler);
+        using var device = TpmDevice.Create(Handler, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         TpmResult<TpmDictionaryAttackParameters> result = await device.GetDictionaryAttackParametersAsync(
@@ -124,7 +125,7 @@ internal sealed class TpmDictionaryAttackExtensionsTests
             return ValueTask.FromResult(SuccessFrame(frame, pool));
         }
 
-        using var device = TpmDevice.Create(Handler);
+        using var device = TpmDevice.Create(Handler, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         TpmResult<TpmDictionaryAttackParameters> result = await device.GetDictionaryAttackParametersAsync(
@@ -145,7 +146,7 @@ internal sealed class TpmDictionaryAttackExtensionsTests
             return ValueTask.FromResult(TpmResult<TpmResponse>.TransportError(0x1234u));
         }
 
-        using var device = TpmDevice.Create(Handler);
+        using var device = TpmDevice.Create(Handler, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         TpmResult<TpmDictionaryAttackParameters> result = await device.GetDictionaryAttackParametersAsync(
@@ -173,7 +174,7 @@ internal sealed class TpmDictionaryAttackExtensionsTests
     /// <summary>
     /// Verifies <c>maxAuthFail == 0</c> is fail-CLOSED (permanently locked out), not the "DA protection
     /// disabled" fail-open reading a naive zero-guard would give — <c>LockoutCounter</c> is a <c>uint</c>, so
-    /// <c>LockoutCounter &gt;= 0</c> holds even at a zero counter (TPM 2.0 Library Part 1, clause 17.8.3).
+    /// <c>LockoutCounter &gt;= 0</c> holds even at a zero counter (TPM 2.0 Library Part 1, clause 16.8.3).
     /// </summary>
     [TestMethod]
     public void IsLockedOutTrueWhenMaxAuthFailIsZeroEvenWithAZeroCounter()

@@ -22,7 +22,7 @@ namespace Verifiable.Foundation;
 /// </para>
 /// <code>
 /// //Owner holds the data.
-/// using Tpm2bNonce nonce = Tpm2bNonce.CreateRandom(32, pool);
+/// using Tpm2bNonce nonce = Tpm2bNonce.CreateRandom(32, rng, pool);
 ///
 /// //Create a view for serialization.
 /// var bufferRef = new BufferRef(nonce);

@@ -1,6 +1,7 @@
 using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using Verifiable.JCose;
 
 namespace Verifiable.Cbor;
@@ -120,7 +121,7 @@ public static class CborReaderExtensions
         CborTag tag = reader.ReadTag();
         if(tag != CborTag.Uri)
         {
-            CborThrowHelper.ThrowCborContentException($"Expected CBOR tag {(ulong)CborTag.Uri} (URI), but got tag {(ulong)tag}.");
+            CborThrowHelper.ThrowCborContentException($"Expected CBOR tag {CborTag.Uri.Value} (URI), but got tag {tag.Value}.");
         }
 
         string text = reader.ReadTextString();
@@ -149,53 +150,111 @@ public static class CborReaderExtensions
     /// <exception cref="CborContentException">
     /// Thrown when the key does not sort strictly after <paramref name="previousKey"/> under canonical order.
     /// </exception>
+    /// <remarks>
+    /// Under a deterministic reader (<see cref="CborConformanceMode.RfcCanonical"/>,
+    /// <see cref="CborConformanceMode.Ctap2Canonical"/> or <see cref="CborConformanceMode.Cde"/>) the
+    /// enclosing <see cref="CborReader.ReadStartMap"/> frame already refuses an out-of-order key as it is
+    /// read, so this method trusts <see cref="CborReader.ReadInt32"/> to have thrown first and only tracks
+    /// <paramref name="previousKey"/>. Under <see cref="CborConformanceMode.Lax"/> or
+    /// <see cref="CborConformanceMode.Strict"/> — neither of which orders map keys on the reader's own
+    /// behalf — this method still performs the comparison itself, through
+    /// <see cref="IsAfterInCanonicalOrder"/>.
+    /// </remarks>
     public static int ReadAscendingMapKey(this CborReader reader, ref int previousKey)
     {
         ArgumentNullException.ThrowIfNull(reader);
 
         int key = reader.ReadInt32();
-        if(!IsAfterInCanonicalOrder(key, previousKey))
+
+        bool readerAlreadyOrdersKeys = reader.Options.ConformanceMode
+            is CborConformanceMode.RfcCanonical or CborConformanceMode.Ctap2Canonical or CborConformanceMode.Cde;
+
+        if(!readerAlreadyOrdersKeys && !IsAfterInCanonicalOrder(key, previousKey))
         {
             CborThrowHelper.ThrowMapKeysNotAscending(previousKey, key);
         }
 
         previousKey = key;
+
         return key;
+    }
 
-        /// <summary>
-        /// Determines whether <paramref name="candidateKey"/> sorts strictly after
-        /// <paramref name="precedingKey"/> under the canonical CBOR integer encoding .NET's
-        /// <see cref="CborConformanceMode.Canonical"/> writer actually produces. Both operands are re-encoded
-        /// through a scratch canonical <see cref="CborWriter"/> so the comparison is provably identical to what
-        /// the write side (e.g. <see cref="Verifiable.Cbor.CBAdESSignatureSerialization.EncodeCBAdESProtectedHeader"/>)
-        /// produces.
-        /// </summary>
-        /// <param name="candidateKey">The candidate key.</param>
-        /// <param name="precedingKey">The previously read key (or the caller's sentinel before the first entry).</param>
-        /// <returns><see langword="true"/> when <paramref name="candidateKey"/> sorts strictly after <paramref name="precedingKey"/>.</returns>
-        static bool IsAfterInCanonicalOrder(int candidateKey, int precedingKey)
+
+    /// <summary>
+    /// Determines whether <paramref name="candidateKey"/> sorts strictly after
+    /// <paramref name="precedingKey"/> under the RFC 8949 §4.2.3 canonical map-key order: the shorter
+    /// encoded header sorts first, ties broken bytewise. Each key is hand-encoded to its minimal RFC 8949
+    /// integer header — no scratch <see cref="CborWriter"/> is constructed, since <see cref="ReadAscendingMapKey"/>
+    /// runs this comparison only under <see cref="CborConformanceMode.Lax"/> and
+    /// <see cref="CborConformanceMode.Strict"/>, neither of which enforces minimal headers on its own.
+    /// </summary>
+    /// <param name="candidateKey">The candidate key.</param>
+    /// <param name="precedingKey">The previously read key (or the caller's sentinel before the first entry).</param>
+    /// <returns><see langword="true"/> when <paramref name="candidateKey"/> sorts strictly after <paramref name="precedingKey"/>.</returns>
+    internal static bool IsAfterInCanonicalOrder(int candidateKey, int precedingKey)
+    {
+        Span<byte> candidateBuffer = stackalloc byte[5];
+        Span<byte> precedingBuffer = stackalloc byte[5];
+
+        int candidateLength = EncodeCanonicalInt32(candidateKey, candidateBuffer);
+        int precedingLength = EncodeCanonicalInt32(precedingKey, precedingBuffer);
+
+        return IsEncodedKeyAfterInCanonicalOrder(candidateBuffer[..candidateLength], precedingBuffer[..precedingLength]);
+    }
+
+
+    /// <summary>
+    /// Hand-encodes <paramref name="value"/> to the minimal RFC 8949 integer header: major type 0
+    /// (unsigned) for a nonnegative value, major type 1 (negative, argument <c>-1-n</c>) otherwise, with
+    /// the argument inlined in the initial byte when it is under 24 and otherwise carried in 1, 2 or 4
+    /// following bytes — the smallest width that holds it.
+    /// </summary>
+    /// <param name="value">The integer key to encode.</param>
+    /// <param name="destination">The buffer to encode into; at least 5 bytes for any <see cref="int"/> value.</param>
+    /// <returns>The number of bytes written to <paramref name="destination"/>.</returns>
+    private static int EncodeCanonicalInt32(int value, Span<byte> destination)
+    {
+        byte majorType;
+        ulong argument;
+
+        if(value >= 0)
         {
-            Span<byte> candidateBuffer = stackalloc byte[5];
-            Span<byte> precedingBuffer = stackalloc byte[5];
-
-            int candidateLength = EncodeCanonicalInt32(candidateKey, candidateBuffer);
-            int precedingLength = EncodeCanonicalInt32(precedingKey, precedingBuffer);
-
-            return IsEncodedKeyAfterInCanonicalOrder(candidateBuffer[..candidateLength], precedingBuffer[..precedingLength]);
-
-            static int EncodeCanonicalInt32(int value, Span<byte> destination)
-            {
-                var scratchWriter = new CborWriter(CborConformanceMode.Canonical);
-                scratchWriter.WriteInt32(value);
-                if(!scratchWriter.TryEncode(destination, out int bytesWritten))
-                {
-                    CborThrowHelper.ThrowCborContentException(
-                        "Canonical map-key comparison encoding overflowed the 5-byte scratch buffer.");
-                }
-
-                return bytesWritten;
-            }
+            majorType = 0;
+            argument = (ulong)value;
         }
+        else
+        {
+            majorType = 1;
+            argument = (ulong)(-1L - value);
+        }
+
+        if(argument < 24)
+        {
+            destination[0] = (byte)((majorType << 5) | (int)argument);
+
+            return 1;
+        }
+
+        if(argument <= byte.MaxValue)
+        {
+            destination[0] = (byte)((majorType << 5) | 24);
+            destination[1] = (byte)argument;
+
+            return 2;
+        }
+
+        if(argument <= ushort.MaxValue)
+        {
+            destination[0] = (byte)((majorType << 5) | 25);
+            BinaryPrimitives.WriteUInt16BigEndian(destination[1..], (ushort)argument);
+
+            return 3;
+        }
+
+        destination[0] = (byte)((majorType << 5) | 26);
+        BinaryPrimitives.WriteUInt32BigEndian(destination[1..], (uint)argument);
+
+        return 5;
     }
 
 
@@ -353,7 +412,7 @@ public static class CborReaderExtensions
             state = reader.PeekState();
             return true;
         }
-        catch(CborContentException)
+        catch(CborException)
         {
             state = default;
             return false;
@@ -424,21 +483,6 @@ public static class CborReaderExtensions
 
         reader.ReadEndMap();
         return result;
-    }
-
-
-    /// <summary>
-    /// Skips the current CBOR value, including any nested structures.
-    /// </summary>
-    /// <param name="reader">The CBOR reader.</param>
-    /// <remarks>
-    /// This is useful for skipping unknown properties when <see cref="CborSerializerOptions.IgnoreUnknownProperties"/>
-    /// is enabled.
-    /// </remarks>
-    public static void SkipValue(this CborReader reader)
-    {
-        ArgumentNullException.ThrowIfNull(reader);
-        reader.SkipValue();
     }
 
 

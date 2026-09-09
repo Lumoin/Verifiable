@@ -22,7 +22,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// } TPMS_SIGNATURE_HASH_MLDSA;
 /// </code>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 11.3.4, Table 218 (v1.85).
+/// Specification reference: TPM 2.0 Library Part 2, clause 11.2.7.2, Table 209.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -71,8 +71,10 @@ public readonly struct TpmsSignatureHashMlDsa: IDisposable, IEquatable<TpmsSigna
     /// <param name="reader">The reader.</param>
     /// <param name="pool">The memory pool to allocate from.</param>
     /// <returns>The parsed Pre-Hash ML-DSA signature.</returns>
-    public static TpmsSignatureHashMlDsa Parse(ref TpmReader reader, BaseMemoryPool? pool = null)
+    public static TpmsSignatureHashMlDsa Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
+        ArgumentNullException.ThrowIfNull(pool);
+
         var hashAlg = (TpmAlgIdConstants)reader.ReadUInt16();
         var signature = Tpm2bSignatureMlDsa.Parse(ref reader, pool);
 

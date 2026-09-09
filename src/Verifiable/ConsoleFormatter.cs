@@ -19,14 +19,14 @@ namespace Verifiable;
 /// </remarks>
 internal static partial class ConsoleFormatter
 {
-    private static bool colorsSupported { get; } = DetectColorSupport();
-    private static bool trueColorSupported { get; } = DetectTrueColorSupport();
+    private static bool DetectedColorsSupported { get; } = DetectColorSupport();
+    private static bool TrueColorSupported { get; } = DetectTrueColorSupport();
     private static bool colorsDisabled;
 
     /// <summary>
     /// Gets whether ANSI colors are supported in the current terminal.
     /// </summary>
-    public static bool ColorsSupported => colorsSupported && !colorsDisabled;
+    public static bool ColorsSupported => DetectedColorsSupported && !colorsDisabled;
 
     /// <summary>
     /// Disables colors for the current process. Used by --no-color flag.
@@ -121,7 +121,7 @@ internal static partial class ConsoleFormatter
             return text;
         }
 
-        string colorCode = trueColorSupported ? rgbCode : code256;
+        string colorCode = TrueColorSupported ? rgbCode : code256;
 
         return $"{Esc}{colorCode}m{text}{Reset}";
     }
@@ -200,7 +200,8 @@ internal static partial class ConsoleFormatter
         return false;
     }
 
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "<Pending>")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types",
+        Justification = "The Windows console-mode P/Invoke calls are a platform boundary; any failure to enable ANSI processing falls back to the caller's non-ANSI formatting rather than escaping as an exception.")]
     private static bool TryEnableWindowsAnsi()
     {
         //Only call Windows APIs on Windows.
@@ -230,6 +231,8 @@ internal static partial class ConsoleFormatter
         }
         catch
         {
+            //See this method's own SuppressMessage rationale: any failure enabling ANSI processing falls
+            //back to non-ANSI formatting.
             return false;
         }
     }

@@ -2,6 +2,7 @@ using Verifiable.Core.Assessment;
 using Verifiable.JCose;
 using Verifiable.OAuth.Federation;
 using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Federation;
 
@@ -42,7 +43,7 @@ internal sealed class TrustMarkValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        ClaimIssueResult result = await TrustMarkValidator.Default()
+        ClaimIssueResult result = await TrustMarkValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch))
             .ValidateAsync(context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.HasCount(6, result.Claims);
@@ -83,7 +84,7 @@ internal sealed class TrustMarkValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        ClaimIssueResult result = await TrustMarkValidator.Default()
+        ClaimIssueResult result = await TrustMarkValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch))
             .ValidateAsync(context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
         Claim algClaim = result.Claims.Single(c => c.Id.Code == WellKnownFederationClaimIds.TrustMarkAlgPresent.Code);
@@ -116,7 +117,7 @@ internal sealed class TrustMarkValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        ClaimIssueResult result = await TrustMarkValidator.Default()
+        ClaimIssueResult result = await TrustMarkValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch))
             .ValidateAsync(context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
         Claim iatClaim = result.Claims.Single(c => c.Id.Code == WellKnownFederationClaimIds.TrustMarkIatInRange.Code);
@@ -150,7 +151,7 @@ internal sealed class TrustMarkValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        ClaimIssueResult result = await TrustMarkValidator.Default()
+        ClaimIssueResult result = await TrustMarkValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch))
             .ValidateAsync(context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
         Claim expClaim = result.Claims.Single(c =>
@@ -186,7 +187,7 @@ internal sealed class TrustMarkValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        ClaimIssueResult result = await TrustMarkValidator.Default()
+        ClaimIssueResult result = await TrustMarkValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch))
             .ValidateAsync(context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
         Claim expAfterIat = result.Claims.Single(c =>
@@ -224,7 +225,7 @@ internal sealed class TrustMarkValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        ClaimIssueResult result = await TrustMarkValidator.Default()
+        ClaimIssueResult result = await TrustMarkValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch))
             .ValidateAsync(context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
         Claim expClaim = result.Claims.Single(c =>
@@ -255,7 +256,7 @@ internal sealed class TrustMarkValidatorTests
             ClockSkew = TimeSpan.FromMinutes(5),
         };
 
-        ClaimIssueResult result = await TrustMarkValidator.Default()
+        ClaimIssueResult result = await TrustMarkValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch))
             .ValidateAsync(context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
         Claim sigClaim = result.Claims.Single(c =>

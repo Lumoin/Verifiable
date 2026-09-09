@@ -55,6 +55,9 @@ internal sealed class AesSymmetricPrimitivesTests
     }
 
 
+    /// <summary><c>encrypted</c> and <c>recovered</c> are tuple-deconstruction targets, disposed in their
+    /// own <see langword="finally"/> blocks because a <see langword="using"/> declaration cannot target a
+    /// tuple-deconstruction assignment.</summary>
     [TestMethod]
     public async Task Aes128CbcEncryptsTheNistKnownAnswerAndRoundTrips()
     {
@@ -94,6 +97,9 @@ internal sealed class AesSymmetricPrimitivesTests
     }
 
 
+    /// <summary><c>result</c> is a tuple-deconstruction target, disposed in the <see langword="finally"/>
+    /// block because a <see langword="using"/> declaration cannot target a tuple-deconstruction
+    /// assignment.</summary>
     private async Task AssertCmac(string messageHex, string expectedMacHex)
     {
         byte[] message = messageHex.Length == 0 ? [] : Convert.FromHexString(messageHex);

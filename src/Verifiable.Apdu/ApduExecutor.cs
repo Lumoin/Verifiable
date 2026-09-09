@@ -84,6 +84,10 @@ public static class ApduExecutor
         //by an Le-corrected copy if the card answers 6Cxx. The CLA and originally-requested Le
         //of this command drive any subsequent GET RESPONSE (see HandleResponseChainingAsync).
         ReadOnlyMemory<byte> currentCommand = commandApdu;
+
+        //Not a using declaration: correctedCommandOwner is reassigned once Le correction fires
+        //(a using-declared local cannot be reassigned, CS1656), so the try/finally below disposes
+        //whatever the loop last assigned exactly once, on every exit path including a thrown exception.
         IMemoryOwner<byte>? correctedCommandOwner = null;
         bool hasAttemptedLeCorrection = false;
 

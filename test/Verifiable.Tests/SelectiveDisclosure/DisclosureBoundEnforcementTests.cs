@@ -1,9 +1,13 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Text;
+using System.Text.Json;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Core.Model.SelectiveDisclosure.Strategy;
 using Verifiable.Cryptography;
+using Verifiable.Json;
 using Verifiable.Json.Sd;
 using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.SelectiveDisclosure;
 
@@ -33,6 +37,13 @@ namespace Verifiable.Tests.SelectiveDisclosure;
 /// because a flat credential with no mandatory paths makes the clamp vacuous.
 /// </para>
 /// </remarks>
+[SuppressMessage(
+    "Reliability", "CA2000:Dispose objects before losing scope",
+    Justification =
+        "The fixture builders construct Salt/SdDisclosure instances that transfer ownership " +
+        "into the SdToken built from them (SdJwtSerializer.ParseToken), which the tests dispose " +
+        "via using declarations; the analyzer cannot see ownership transfer through the wire " +
+        "round-trip.")]
 [TestClass]
 internal sealed class DisclosureBoundEnforcementTests
 {
@@ -88,7 +99,7 @@ internal sealed class DisclosureBoundEnforcementTests
             return proposed;
         });
 
-        var computation = new DisclosureComputation<string>([assessor]);
+        var computation = new DisclosureComputation<string>([assessor], new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         var graph = await computation.ComputeAsync([NestedMatch()],
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -124,7 +135,7 @@ internal sealed class DisclosureBoundEnforcementTests
     {
         var assessor = Assessor<string>("FloorEscape", _ => [GivenName]);
 
-        var computation = new DisclosureComputation<string>([assessor]);
+        var computation = new DisclosureComputation<string>([assessor], new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         var graph = await computation.ComputeAsync([NestedMatch()],
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -161,7 +172,7 @@ internal sealed class DisclosureBoundEnforcementTests
             return proposed;
         });
 
-        var computation = new DisclosureComputation<string>([assessor]);
+        var computation = new DisclosureComputation<string>([assessor], new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         var graph = await computation.ComputeAsync([NestedMatch()],
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -203,7 +214,7 @@ internal sealed class DisclosureBoundEnforcementTests
                 AssessorName = "Rejecter"
             }));
 
-        var computation = new DisclosureComputation<string>([rejecter]);
+        var computation = new DisclosureComputation<string>([rejecter], new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         var graph = await computation.ComputeAsync([NestedMatch()],
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -238,7 +249,7 @@ internal sealed class DisclosureBoundEnforcementTests
             return proposed;
         });
 
-        var computation = new DisclosureComputation<string>([assessor]);
+        var computation = new DisclosureComputation<string>([assessor], new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         var graph = await computation.ComputeAsync([NestedMatch()],
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -278,7 +289,7 @@ internal sealed class DisclosureBoundEnforcementTests
             return proposed;
         });
 
-        var computation = new DisclosureComputation<string>([assessor]);
+        var computation = new DisclosureComputation<string>([assessor], new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         var graph = await computation.ComputeAsync([NestedMatch()],
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -314,7 +325,7 @@ internal sealed class DisclosureBoundEnforcementTests
             return rewritten;
         });
 
-        var computation = new DisclosureComputation<string>([], crossCredentialOptimizers: [optimizer]);
+        var computation = new DisclosureComputation<string>([], new FakeTimeProvider(TestClock.CanonicalEpoch), crossCredentialOptimizers: [optimizer]);
 
         var graph = await computation.ComputeAsync([NestedMatch()],
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -345,7 +356,7 @@ internal sealed class DisclosureBoundEnforcementTests
     {
         var optimizer = Optimizer(_ => [GivenName]);
 
-        var computation = new DisclosureComputation<string>([], crossCredentialOptimizers: [optimizer]);
+        var computation = new DisclosureComputation<string>([], new FakeTimeProvider(TestClock.CanonicalEpoch), crossCredentialOptimizers: [optimizer]);
 
         var graph = await computation.ComputeAsync([NestedMatch()],
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -378,7 +389,7 @@ internal sealed class DisclosureBoundEnforcementTests
             return rewritten;
         });
 
-        var computation = new DisclosureComputation<string>([], crossCredentialOptimizers: [optimizer]);
+        var computation = new DisclosureComputation<string>([], new FakeTimeProvider(TestClock.CanonicalEpoch), crossCredentialOptimizers: [optimizer]);
 
         var graph = await computation.ComputeAsync([NestedMatch()],
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -410,7 +421,7 @@ internal sealed class DisclosureBoundEnforcementTests
             return rewritten;
         });
 
-        var computation = new DisclosureComputation<string>([], crossCredentialOptimizers: [optimizer]);
+        var computation = new DisclosureComputation<string>([], new FakeTimeProvider(TestClock.CanonicalEpoch), crossCredentialOptimizers: [optimizer]);
 
         var graph = await computation.ComputeAsync([NestedMatch()],
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -453,8 +464,7 @@ internal sealed class DisclosureBoundEnforcementTests
                 return Task.FromResult<IReadOnlyList<CredentialDisclosureDecision<string>>>(swapped);
             });
 
-        var computation = new DisclosureComputation<string>(
-            [], crossCredentialOptimizers: [swapAcrossCredentials]);
+        var computation = new DisclosureComputation<string>([], new FakeTimeProvider(TestClock.CanonicalEpoch), crossCredentialOptimizers: [swapAcrossCredentials]);
 
         //Two credentials whose available paths are disjoint, so every path one decision receives
         //from the other lies above its own ceiling.
@@ -526,8 +536,7 @@ internal sealed class DisclosureBoundEnforcementTests
             return rewritten;
         });
 
-        var computation = new DisclosureComputation<string>(
-            [], crossCredentialOptimizers: [passThrough, escaping]);
+        var computation = new DisclosureComputation<string>([], new FakeTimeProvider(TestClock.CanonicalEpoch), crossCredentialOptimizers: [passThrough, escaping]);
 
         var graph = await computation.ComputeAsync([NestedMatch()],
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -550,7 +559,7 @@ internal sealed class DisclosureBoundEnforcementTests
         var assessor = Assessor<string>("BoundBreaker", _ => [Ssn, Email]);
         var optimizer = Optimizer(_ => [PassportNumber, AddressCity]);
 
-        var computation = new DisclosureComputation<string>([assessor], crossCredentialOptimizers: [optimizer]);
+        var computation = new DisclosureComputation<string>([assessor], new FakeTimeProvider(TestClock.CanonicalEpoch), crossCredentialOptimizers: [optimizer]);
 
         var graph = await computation.ComputeAsync([NestedMatch()],
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -577,7 +586,7 @@ internal sealed class DisclosureBoundEnforcementTests
         var assessor = Assessor<string>("FloorStripper", _ => [GivenName]);
         var optimizer = Optimizer(_ => [GivenName]);
 
-        var computation = new DisclosureComputation<string>([assessor], crossCredentialOptimizers: [optimizer]);
+        var computation = new DisclosureComputation<string>([assessor], new FakeTimeProvider(TestClock.CanonicalEpoch), crossCredentialOptimizers: [optimizer]);
 
         var graph = await computation.ComputeAsync([NestedMatch()],
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -599,7 +608,7 @@ internal sealed class DisclosureBoundEnforcementTests
     [TestMethod]
     public async Task MinimalityHoldsWhenNoPolicyComponentRuns()
     {
-        var computation = new DisclosureComputation<string>();
+        var computation = new DisclosureComputation<string>([], new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         var verifierRequested = new HashSet<CredentialPath> { GivenName, Ssn };
         var userExcluded = new HashSet<CredentialPath> { Iss, Email };
@@ -646,7 +655,7 @@ internal sealed class DisclosureBoundEnforcementTests
         var assessor = Assessor<string>("NestedSelector", _ => [AddressCity]);
         var optimizer = Optimizer(_ => [AddressStreet]);
 
-        var computation = new DisclosureComputation<string>([assessor], crossCredentialOptimizers: [optimizer]);
+        var computation = new DisclosureComputation<string>([assessor], new FakeTimeProvider(TestClock.CanonicalEpoch), crossCredentialOptimizers: [optimizer]);
 
         var graph = await computation.ComputeAsync([NestedMatch()],
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -682,7 +691,7 @@ internal sealed class DisclosureBoundEnforcementTests
         var returnedByAssessor = new HashSet<CredentialPath> { AddressCity, Ssn };
         var assessor = Assessor<string>("UnboundedProposal", _ => new HashSet<CredentialPath>(returnedByAssessor));
 
-        var computation = new DisclosureComputation<string>([assessor]);
+        var computation = new DisclosureComputation<string>([assessor], new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         var graph = await computation.ComputeAsync([NestedMatch()],
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -722,7 +731,7 @@ internal sealed class DisclosureBoundEnforcementTests
             return proposed;
         });
 
-        var computation = new DisclosureComputation<string>([assessor]);
+        var computation = new DisclosureComputation<string>([assessor], new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         var exclusions = new Dictionary<string, IReadOnlySet<CredentialPath>>
         {
@@ -744,8 +753,9 @@ internal sealed class DisclosureBoundEnforcementTests
     /// <summary>
     /// The clamped set reaches the wire. An assessor strips the mandatory floor, the clamp
     /// restores it, and the restored path's disclosure is the one
-    /// <see cref="SdDisclosureSelection.SelectDisclosures"/> emits, survives serialization to the
-    /// SD-JWT wire format, and is present again after parsing the wire form back.
+    /// <see cref="SdDisclosureSelection.SelectDisclosures(SdDisclosurePaths, IReadOnlySet{CredentialPath})"/>
+    /// emits, survives serialization to the SD-JWT wire format, and is present again after
+    /// parsing the wire form back.
     /// </summary>
     [SuppressMessage(
         "Reliability", "CA2000:Dispose objects before losing scope",
@@ -758,20 +768,11 @@ internal sealed class DisclosureBoundEnforcementTests
     {
         var nationality = CredentialPath.FromJsonPointer("/nationality");
 
-        using SdToken<string> issuedToken = new(
-            "issuer.signed.jwt",
-            [
-                SdDisclosure.CreateProperty(
-                    TestSalts.Generate(TestSalts.TestSaltTag, Pool), "given_name", "Erika"),
-                SdDisclosure.CreateProperty(
-                    TestSalts.Generate(TestSalts.TestSaltTag, Pool), "family_name", "Mustermann"),
-                SdDisclosure.CreateProperty(
-                    TestSalts.Generate(TestSalts.TestSaltTag, Pool), "nationality", "DE")
-            ]);
+        using SdToken<string> issuedToken = BuildFlatParsedToken();
 
         //The issuer made nationality always-visible, so it is the lattice bottom for this token.
         var assessor = Assessor<SdToken<string>>("NationalityStripper", _ => [GivenName]);
-        var computation = new DisclosureComputation<SdToken<string>>([assessor]);
+        var computation = new DisclosureComputation<SdToken<string>>([assessor], new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         var match = new DisclosureMatch<SdToken<string>>
         {
@@ -790,7 +791,7 @@ internal sealed class DisclosureBoundEnforcementTests
         Assert.Contains(nationality, decision.SelectedPaths, "The clamp restored the stripped mandatory path.");
         AssertLatticeAdmitsSelection(decision);
 
-        var selected = SdDisclosureSelection.SelectDisclosures(issuedToken.Disclosures, decision.SelectedPaths);
+        var selected = SdDisclosureSelection.SelectDisclosures(issuedToken.DisclosurePaths, decision.SelectedPaths);
         var emittedClaimNames = selected.Select(d => d.ClaimName!).ToHashSet(StringComparer.Ordinal);
 
         Assert.HasCount(2, selected, "The emitted disclosures are the clamped set's disclosures.");
@@ -801,7 +802,7 @@ internal sealed class DisclosureBoundEnforcementTests
         string wireFormat = SdJwtSerializer.SerializeToken(presentationToken, TestSetup.Base64UrlEncoder);
 
         using SdToken<string> parsed = SdJwtSerializer.ParseToken(
-            wireFormat, TestSetup.Base64UrlDecoder, Pool, TestSalts.TestSaltTag);
+            wireFormat, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag);
 
         var claimNamesOnTheWire = parsed.Disclosures
             .Select(d => d.ClaimName!)
@@ -826,7 +827,7 @@ internal sealed class DisclosureBoundEnforcementTests
         var narrowed = new HashSet<CredentialPath> { GivenName };
         var assessor = Assessor<string>("DataMinimization", _ => new HashSet<CredentialPath>(narrowed));
 
-        var computation = new DisclosureComputation<string>([assessor]);
+        var computation = new DisclosureComputation<string>([assessor], new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         //A flat credential with no mandatory floor: the shape of an ordinary narrowing policy.
         var matches = new[]
@@ -863,6 +864,122 @@ internal sealed class DisclosureBoundEnforcementTests
     /// </summary>
     /// <typeparam name="TCredential">The credential representation the decision carries.</typeparam>
     /// <param name="decision">The decision whose selected paths are checked.</param>
+    /// <summary>
+    /// Builds a genuinely parsed, flat SD-JWT token with three top-level disclosures
+    /// (<c>given_name</c>, <c>family_name</c>, <c>nationality</c>) — only a parsed token carries
+    /// <see cref="SdToken{TEnvelope}.DisclosurePaths"/>, which
+    /// <see cref="SdDisclosureSelection.SelectDisclosures(SdDisclosurePaths, IReadOnlySet{CredentialPath})"/>
+    /// reads.
+    /// </summary>
+    private static SdToken<string> BuildFlatParsedToken()
+    {
+        SdDisclosure givenName = CreateFlatDisclosure("salt-given-name", "given_name", "Erika");
+        SdDisclosure familyName = CreateFlatDisclosure("salt-family-name", "family_name", "Mustermann");
+        SdDisclosure nationality = CreateFlatDisclosure("salt-nationality", "nationality", "DE");
+
+        string givenNameEncoded = SdJwtSerializer.SerializeDisclosure(givenName, TestSetup.Base64UrlEncoder);
+        string familyNameEncoded = SdJwtSerializer.SerializeDisclosure(familyName, TestSetup.Base64UrlEncoder);
+        string nationalityEncoded = SdJwtSerializer.SerializeDisclosure(nationality, TestSetup.Base64UrlEncoder);
+
+        string givenNameDigest = SdJwtPathExtraction.ComputeDisclosureDigest(
+            givenNameEncoded, WellKnownHashAlgorithms.Sha256Iana, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        string familyNameDigest = SdJwtPathExtraction.ComputeDisclosureDigest(
+            familyNameEncoded, WellKnownHashAlgorithms.Sha256Iana, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        string nationalityDigest = SdJwtPathExtraction.ComputeDisclosureDigest(
+            nationalityEncoded, WellKnownHashAlgorithms.Sha256Iana, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+
+        string payloadJson = /*lang=json,strict*/ $$"""
+        {
+            "_sd_alg": "sha-256",
+            "iss": "https://issuer.example.com",
+            "_sd": ["{{givenNameDigest}}", "{{familyNameDigest}}", "{{nationalityDigest}}"]
+        }
+        """;
+
+        string header = /*lang=json,strict*/ """{"alg":"ES256","typ":"JWT"}""";
+        string headerEncoded = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(header));
+        string payloadEncoded = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(payloadJson));
+        string fakeSignature = TestSetup.Base64UrlEncoder(new byte[64]);
+        string jwt = $"{headerEncoded}.{payloadEncoded}.{fakeSignature}";
+
+        string wireFormat = $"{jwt}~{givenNameEncoded}~{familyNameEncoded}~{nationalityEncoded}~";
+
+        return SdJwtSerializer.ParseToken(
+            wireFormat, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag);
+    }
+
+
+    /// <summary>
+    /// <see cref="SdDisclosurePaths.TryFindEnclosingDisclosurePath"/> resolves a node to the
+    /// INNERMOST enclosing disclosure position, never a farther ancestor: releasing the nearest
+    /// disclosure reveals the node, and releasing a farther one would disclose more than the path
+    /// requires (RFC 9901 Section 7.2 step 2.b — the disclosable ancestor a selection carries).
+    /// The map's ancestor walk is nearest-first over <see cref="CredentialPath.Parent"/>, so the
+    /// result does not depend on the root-first order of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9901">RFC 9901</see>-path ancestry enumeration.
+    /// </summary>
+    [TestMethod]
+    public void EnclosingDisclosureIsTheInnermostAncestorPosition()
+    {
+        using SdDisclosure address = CreateFlatDisclosure("salt-address", "address", "outer");
+        using SdDisclosure streetAddress = CreateFlatDisclosure("salt-street", "street_address", "inner");
+        using SdDisclosure shallow = CreateFlatDisclosure("salt-shallow", "shallow", "a");
+        using SdDisclosure deep = CreateFlatDisclosure("salt-deep", "deep", "c");
+
+        var paths = new SdDisclosurePaths(new Dictionary<SdDisclosure, CredentialPath>
+        {
+            [address] = CredentialPath.FromJsonPointer("/address"),
+            [streetAddress] = CredentialPath.FromJsonPointer("/address/street_address"),
+            [shallow] = CredentialPath.FromJsonPointer("/a"),
+            [deep] = CredentialPath.FromJsonPointer("/a/b/c")
+        });
+
+        Assert.IsTrue(
+            paths.TryFindEnclosingDisclosurePath(CredentialPath.FromJsonPointer("/address/region"), out CredentialPath interiorOwner),
+            "A node inside a disclosure resolves to the disclosure that carries it.");
+        Assert.AreEqual(CredentialPath.FromJsonPointer("/address"), interiorOwner,
+            "The enclosing position of /address/region is the /address disclosure (Section 7.2 step 2.b).");
+
+        Assert.IsTrue(
+            paths.TryFindEnclosingDisclosurePath(CredentialPath.FromJsonPointer("/a/b/c/d"), out CredentialPath deepOwner),
+            "A deeply nested node resolves to a disclosure position that encloses it.");
+        Assert.AreEqual(CredentialPath.FromJsonPointer("/a/b/c"), deepOwner,
+            "The INNERMOST enclosing disclosure (/a/b/c) is chosen, not the farther /a — releasing the nearest discloses least.");
+
+        Assert.IsTrue(
+            paths.TryFindEnclosingDisclosurePath(CredentialPath.FromJsonPointer("/address/street_address"), out CredentialPath positionOwner),
+            "A position that is itself a disclosure still has an enclosing disclosure — its nearest ancestor position.");
+        Assert.AreEqual(CredentialPath.FromJsonPointer("/address"), positionOwner,
+            "The walk is over STRICT ancestors, so /address/street_address encloses to /address, not to itself.");
+
+        Assert.IsFalse(
+            paths.TryFindEnclosingDisclosurePath(CredentialPath.FromJsonPointer("/nowhere"), out _),
+            "A path with no disclosure ancestor has no enclosing disclosure.");
+    }
+
+
+    /// <summary>
+    /// Creates a top-level object-property disclosure (RFC 9901 Section 4.2.1's three-element
+    /// array) from a deterministic salt, for the hand-minted wire form the reach test parses.
+    /// </summary>
+    /// <param name="salt">The salt text, taken as its UTF-8 bytes.</param>
+    /// <param name="claimName">The claim name, local to the root object.</param>
+    /// <param name="claimValue">The claim's string value.</param>
+    /// <returns>The disclosure, whose ownership passes to the token parsed from the wire form.</returns>
+    private static SdDisclosure CreateFlatDisclosure(string salt, string claimName, string claimValue) =>
+        SdDisclosure.CreateProperty(
+            TestSalts.FromBytes(Encoding.UTF8.GetBytes(salt)),
+            claimName,
+            JsonDocument.Parse($"\"{claimValue}\"").RootElement);
+
+
+    /// <summary>
+    /// Re-derives the bounds from the decision's own lattice and asserts the adopted set lies
+    /// within them, so a clamped outcome is checked against the lattice algebra rather than
+    /// against the computation's account of its own work.
+    /// </summary>
+    /// <typeparam name="TCredential">The credential representation the computation ran over.</typeparam>
+    /// <param name="decision">The decision whose selected set is checked.</param>
     private static void AssertLatticeAdmitsSelection<TCredential>(
         CredentialDisclosureDecision<TCredential> decision)
     {

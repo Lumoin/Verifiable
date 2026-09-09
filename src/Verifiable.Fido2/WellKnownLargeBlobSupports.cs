@@ -23,7 +23,7 @@ public static class WellKnownLargeBlobSupports
     /// <summary>
     /// The <c>required</c> wire value.
     /// </summary>
-    public static readonly string Required = Utf8Constants.ToInternedString(RequiredUtf8);
+    public static string Required { get; } = Utf8Constants.ToInternedString(RequiredUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Preferred"/>.</summary>
     public static ReadOnlySpan<byte> PreferredUtf8 => "preferred"u8;
@@ -31,7 +31,7 @@ public static class WellKnownLargeBlobSupports
     /// <summary>
     /// The <c>preferred</c> wire value.
     /// </summary>
-    public static readonly string Preferred = Utf8Constants.ToInternedString(PreferredUtf8);
+    public static string Preferred { get; } = Utf8Constants.ToInternedString(PreferredUtf8);
 
 
     /// <summary>

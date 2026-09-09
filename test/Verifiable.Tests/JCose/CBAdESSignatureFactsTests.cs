@@ -82,7 +82,7 @@ internal sealed class CBAdESSignatureFactsTests
         using CBAdESSignatureCreationResult creationResult = await CBAdESSignatureCreation.SignAsync(
             headers, new CBAdESAttachedPayloadInput(new byte[] { 0x01 }), unsignedHeaders: null,
             CBAdESSignatureSerialization.EncodeCBAdESProtectedHeader, CBAdESSignatureSerialization.EncodeCBAdESUnprotectedHeader,
-            CoseSerialization.BuildSigStructure, privateKey, MicrosoftCryptographicFunctions.SignP256Async,
+            CoseSerialization.BuildSigStructure, privateKey, MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             dereference: null, dereferenceContext: null, unknownMechanismHandler: null,
             BaseMemoryPool.Shared, cancellationToken: cancellationToken).ConfigureAwait(false);
 

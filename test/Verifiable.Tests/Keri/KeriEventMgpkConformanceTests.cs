@@ -26,22 +26,22 @@ internal sealed class KeriEventMgpkConformanceTests
 {
     private const string Aid = "EPR7FWsN3tOM8PqfMap2FRfF4MFQ4v3ZXjBUcMVtvhmB";
 
-    private static readonly string[] SigningKeys =
+    private static string[] SigningKeys { get; } =
     [
         "DBFiIgoCOpJ_zW_OO0GdffhHfEvJWb1HxpDx95bFvufu",
         "DG-YwInLUxzVDD5z8SqZmS2FppXSB-ZX_f2bJC_ZnsM5",
         "DGIAk2jkC3xuLIe-DI9rcA0naevtZiKuU9wz91L_qBAV"
     ];
 
-    private static readonly string[] NextKeyDigests =
+    private static string[] NextKeyDigests { get; } =
     [
         "ELeFYMmuJb0hevKjhv97joA5bTfuA8E697cMzi8eoaZB",
         "ENY9GYShOjeh7qZUpIipKRHgrWcoR2WkJ7Wgj4wZx1YT",
         "EGyJ7y3TlewCW97dgBN-4pckhCqsni-zHNZ_G8zVerPG"
     ];
 
-    private static readonly string[] Backers = ["BGKV6v93ue5L5wsgk75t6j8TcdgABMN9x-eIyPi96J3B"];
-    private static readonly string[] ConfigurationTraits = ["DID"];
+    private static string[] Backers { get; } = ["BGKV6v93ue5L5wsgk75t6j8TcdgABMN9x-eIyPi96J3B"];
+    private static string[] ConfigurationTraits { get; } = ["DID"];
 
 
     /// <summary>
@@ -205,17 +205,17 @@ internal sealed class KeriEventMgpkConformanceTests
     //A minted event's MGPK serialization, carried in a pooled buffer the test owns and disposes.
     private sealed class MintedEvent: IDisposable
     {
-        private readonly IMemoryOwner<byte> owner;
-        private readonly int length;
+        private IMemoryOwner<byte> Owner { get; }
+        private int Length { get; }
 
         public MintedEvent(IMemoryOwner<byte> owner, int length)
         {
-            this.owner = owner;
-            this.length = length;
+            this.Owner = owner;
+            this.Length = length;
         }
 
-        public ReadOnlyMemory<byte> Serialization => owner.Memory[..length];
+        public ReadOnlyMemory<byte> Serialization => Owner.Memory[..Length];
 
-        public void Dispose() => owner.Dispose();
+        public void Dispose() => Owner.Dispose();
     }
 }

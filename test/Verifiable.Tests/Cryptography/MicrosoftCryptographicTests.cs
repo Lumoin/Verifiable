@@ -37,7 +37,7 @@ namespace Verifiable.Tests.Cryptography
             using var privateKey = keys.PrivateKey;
 
             await AssertSignAndVerifyAsync(privateKey, publicKey,
-                MicrosoftCryptographicFunctions.SignP256Async, MicrosoftCryptographicFunctions.VerifyP256Async).ConfigureAwait(false);
+                MicrosoftCryptographicFunctionsAdapter.SignP256Async, MicrosoftCryptographicFunctionsAdapter.VerifyP256Async).ConfigureAwait(false);
         }
 
 
@@ -61,7 +61,7 @@ namespace Verifiable.Tests.Cryptography
             using var privateKey = keys.PrivateKey;
 
             await AssertSignAndVerifyAsync(privateKey, publicKey,
-                MicrosoftCryptographicFunctions.SignP384Async, MicrosoftCryptographicFunctions.VerifyP384Async).ConfigureAwait(false);
+                MicrosoftCryptographicFunctionsAdapter.SignP384Async, MicrosoftCryptographicFunctionsAdapter.VerifyP384Async).ConfigureAwait(false);
         }
 
 
@@ -85,7 +85,7 @@ namespace Verifiable.Tests.Cryptography
             using var privateKey = keys.PrivateKey;
 
             await AssertSignAndVerifyAsync(privateKey, publicKey,
-                MicrosoftCryptographicFunctions.SignP521Async, MicrosoftCryptographicFunctions.VerifyP521Async).ConfigureAwait(false);
+                MicrosoftCryptographicFunctionsAdapter.SignP521Async, MicrosoftCryptographicFunctionsAdapter.VerifyP521Async).ConfigureAwait(false);
         }
 
 
@@ -109,7 +109,7 @@ namespace Verifiable.Tests.Cryptography
             using var privateKey = keys.PrivateKey;
 
             await AssertSignAndVerifyAsync(privateKey, publicKey,
-                MicrosoftCryptographicFunctions.SignSecp256k1Async, MicrosoftCryptographicFunctions.VerifySecp256k1Async).ConfigureAwait(false);
+                MicrosoftCryptographicFunctionsAdapter.SignSecp256k1Async, MicrosoftCryptographicFunctionsAdapter.VerifySecp256k1Async).ConfigureAwait(false);
         }
 
 
@@ -133,7 +133,7 @@ namespace Verifiable.Tests.Cryptography
             using var privateKey = keys.PrivateKey;
 
             await AssertSignAndVerifyAsync(privateKey, publicKey,
-                MicrosoftCryptographicFunctions.SignRsa2048Async, MicrosoftCryptographicFunctions.VerifyRsa2048Async).ConfigureAwait(false);
+                MicrosoftCryptographicFunctionsAdapter.SignRsa2048Async, MicrosoftCryptographicFunctionsAdapter.VerifyRsa2048Async).ConfigureAwait(false);
         }
 
 
@@ -157,7 +157,7 @@ namespace Verifiable.Tests.Cryptography
             using var privateKey = keys.PrivateKey;
 
             await AssertSignAndVerifyAsync(privateKey, publicKey,
-                MicrosoftCryptographicFunctions.SignRsa4096Async, MicrosoftCryptographicFunctions.VerifyRsa4096Async).ConfigureAwait(false);
+                MicrosoftCryptographicFunctionsAdapter.SignRsa4096Async, MicrosoftCryptographicFunctionsAdapter.VerifyRsa4096Async).ConfigureAwait(false);
         }
 
 
@@ -169,7 +169,7 @@ namespace Verifiable.Tests.Cryptography
             using var privateKey = keys.PrivateKey;
 
             await AssertSignAndVerifyAsync(privateKey, publicKey,
-                MicrosoftCryptographicFunctions.SignRsaSha256Pkcs1Async, MicrosoftCryptographicFunctions.VerifyRsaSha256Pkcs1Async).ConfigureAwait(false);
+                MicrosoftCryptographicFunctionsAdapter.SignRsaSha256Pkcs1Async, MicrosoftCryptographicFunctionsAdapter.VerifyRsaSha256Pkcs1Async).ConfigureAwait(false);
         }
 
 
@@ -181,7 +181,7 @@ namespace Verifiable.Tests.Cryptography
             using var privateKey = keys.PrivateKey;
 
             await AssertSignAndVerifyAsync(privateKey, publicKey,
-                MicrosoftCryptographicFunctions.SignRsaSha256PssAsync, MicrosoftCryptographicFunctions.VerifyRsaSha256PssAsync).ConfigureAwait(false);
+                MicrosoftCryptographicFunctionsAdapter.SignRsaSha256PssAsync, MicrosoftCryptographicFunctionsAdapter.VerifyRsaSha256PssAsync).ConfigureAwait(false);
         }
 
 
@@ -193,7 +193,7 @@ namespace Verifiable.Tests.Cryptography
             using var privateKey = keys.PrivateKey;
 
             await AssertSignAndVerifyAsync(privateKey, publicKey,
-                MicrosoftCryptographicFunctions.SignRsaSha384Pkcs1Async, MicrosoftCryptographicFunctions.VerifyRsaSha384Pkcs1Async).ConfigureAwait(false);
+                MicrosoftCryptographicFunctionsAdapter.SignRsaSha384Pkcs1Async, MicrosoftCryptographicFunctionsAdapter.VerifyRsaSha384Pkcs1Async).ConfigureAwait(false);
         }
 
 
@@ -205,7 +205,7 @@ namespace Verifiable.Tests.Cryptography
             using var privateKey = keys.PrivateKey;
 
             await AssertSignAndVerifyAsync(privateKey, publicKey,
-                MicrosoftCryptographicFunctions.SignRsaSha384PssAsync, MicrosoftCryptographicFunctions.VerifyRsaSha384PssAsync).ConfigureAwait(false);
+                MicrosoftCryptographicFunctionsAdapter.SignRsaSha384PssAsync, MicrosoftCryptographicFunctionsAdapter.VerifyRsaSha384PssAsync).ConfigureAwait(false);
         }
 
 
@@ -217,7 +217,7 @@ namespace Verifiable.Tests.Cryptography
             using var privateKey = keys.PrivateKey;
 
             await AssertSignAndVerifyAsync(privateKey, publicKey,
-                MicrosoftCryptographicFunctions.SignRsaSha512Pkcs1Async, MicrosoftCryptographicFunctions.VerifyRsaSha512Pkcs1Async).ConfigureAwait(false);
+                MicrosoftCryptographicFunctionsAdapter.SignRsaSha512Pkcs1Async, MicrosoftCryptographicFunctionsAdapter.VerifyRsaSha512Pkcs1Async).ConfigureAwait(false);
         }
 
 
@@ -229,7 +229,7 @@ namespace Verifiable.Tests.Cryptography
             using var privateKey = keys.PrivateKey;
 
             await AssertSignAndVerifyAsync(privateKey, publicKey,
-                MicrosoftCryptographicFunctions.SignRsaSha512PssAsync, MicrosoftCryptographicFunctions.VerifyRsaSha512PssAsync).ConfigureAwait(false);
+                MicrosoftCryptographicFunctionsAdapter.SignRsaSha512PssAsync, MicrosoftCryptographicFunctionsAdapter.VerifyRsaSha512PssAsync).ConfigureAwait(false);
         }
 
 

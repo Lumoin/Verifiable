@@ -78,7 +78,7 @@ public readonly record struct PkiDigestAlgorithm(AlgorithmIdentifier Identifier,
             var n when n == HashAlgorithmName.SHA256 => Sha256,
             var n when n == HashAlgorithmName.SHA384 => Sha384,
             var n when n == HashAlgorithmName.SHA512 => Sha512,
-            _ => (PkiDigestAlgorithm?)null
+            _ => null
         };
     }
 }
@@ -515,6 +515,13 @@ public sealed class TimestampTokenInfo: IDisposable
     /// <see cref="VerifyCmsSignedDataDelegate"/> performs above — so <see cref="EmbeddedCertificates"/>,
     /// <see cref="EmbeddedCrls"/> and <see cref="SignerCertificate"/> read identically whichever verification
     /// backend a host has registered, rather than through that backend's own <see cref="CmsVerifiedContent"/>.
+    /// </para>
+    /// <para>
+    /// <strong>Manual disposal, not <see langword="using"/> declarations.</strong> <c>carrier</c> and
+    /// <c>embeddedMaterial</c> are declared <see langword="null"/> ahead of the try body and assigned only
+    /// once each is built, staged through their own nullable locals rather than a single-declaration
+    /// <see langword="using"/> target; the <see langword="finally"/> disposes whichever still holds a value
+    /// on every failing path, and both are already <see langword="null"/> on the success path.
     /// </para>
     /// </remarks>
     public static async ValueTask<TimestampTokenInfo> ReadFromTokenAsync(

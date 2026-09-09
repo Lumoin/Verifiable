@@ -1,4 +1,5 @@
-using System.Formats.Cbor;
+using System.Buffers;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Fido2;
 
@@ -54,7 +55,8 @@ public static class PackedAttestationStatementCborWriter
             throw new ArgumentException("The self-attestation signature must not be empty.", nameof(signature));
         }
 
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.Ctap2Canonical);
         writer.WriteStartMap(2);
 
         writer.WriteTextString(AlgKey);
@@ -65,7 +67,7 @@ public static class PackedAttestationStatementCborWriter
 
         writer.WriteEndMap();
 
-        byte[] encoded = writer.Encode();
+        byte[] encoded = buffer.WrittenSpan.ToArray();
 
         return new TaggedMemory<byte>(encoded, Fido2BufferTags.PackedAttestationStatementPayload);
     }
@@ -94,7 +96,8 @@ public static class PackedAttestationStatementCborWriter
             throw new ArgumentException("The certified attestation statement's x5c chain must not be empty.", nameof(x5c));
         }
 
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.Ctap2Canonical);
         writer.WriteStartMap(3);
 
         writer.WriteTextString(AlgKey);
@@ -113,7 +116,7 @@ public static class PackedAttestationStatementCborWriter
 
         writer.WriteEndMap();
 
-        byte[] encoded = writer.Encode();
+        byte[] encoded = buffer.WrittenSpan.ToArray();
 
         return new TaggedMemory<byte>(encoded, Fido2BufferTags.PackedAttestationStatementPayload);
     }

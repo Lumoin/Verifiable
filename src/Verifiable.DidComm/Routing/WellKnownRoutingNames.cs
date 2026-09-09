@@ -25,7 +25,7 @@ public static class WellKnownRoutingNames
     /// Routing Protocol 2.0 forward message (DIDComm v2.1 §Routing Protocol 2.0 §Messages: "The only
     /// message in this protocol is the forward message.").
     /// </summary>
-    public static readonly string ForwardType = Utf8Constants.ToInternedString(ForwardTypeUtf8);
+    public static string ForwardType { get; } = Utf8Constants.ToInternedString(ForwardTypeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Next"/>.</summary>
     public static ReadOnlySpan<byte> NextUtf8 => "next"u8;
@@ -35,7 +35,7 @@ public static class WellKnownRoutingNames
     /// message to, typically a DID and, for the last hop of a route, possibly a key (DIDComm v2.1
     /// §Routing Protocol 2.0 §Messages).
     /// </summary>
-    public static readonly string Next = Utf8Constants.ToInternedString(NextUtf8);
+    public static string Next { get; } = Utf8Constants.ToInternedString(NextUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Profile"/>.</summary>
     public static ReadOnlySpan<byte> ProfileUtf8 => "didcomm/v2"u8;
@@ -45,5 +45,5 @@ public static class WellKnownRoutingNames
     /// <c>accept</c> array lists to advertise v2 support; the sender selects the service accepting this
     /// profile (DIDComm v2.1 §DID Document Service Endpoint).
     /// </summary>
-    public static readonly string Profile = Utf8Constants.ToInternedString(ProfileUtf8);
+    public static string Profile { get; } = Utf8Constants.ToInternedString(ProfileUtf8);
 }

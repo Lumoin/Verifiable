@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
-using System.Net;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
@@ -79,7 +78,7 @@ internal delegate Task<BinaryHttpResponse> BinaryHttpHandlerDelegate(
 /// </remarks>
 internal sealed class BinaryHttpHost: IAsyncDisposable
 {
-    private readonly WebApplication app;
+    private WebApplication App { get; }
 
     /// <summary>The loopback base address Kestrel bound (ephemeral port).</summary>
     public Uri BaseAddress { get; }
@@ -90,7 +89,7 @@ internal sealed class BinaryHttpHost: IAsyncDisposable
 
     private BinaryHttpHost(WebApplication app, Uri baseAddress, X509Certificate2 certificate)
     {
-        this.app = app;
+        this.App = app;
         BaseAddress = baseAddress;
         Certificate = certificate;
     }
@@ -106,12 +105,12 @@ internal sealed class BinaryHttpHost: IAsyncDisposable
         X509Certificate2 certificate = LoopbackTls.CreateServerCertificate("binary-loopback-test-host");
 
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
-        builder.Logging.ClearProviders();
+        LoopbackKestrel.ConfigureLoopbackLogging(builder.Logging);
 
         //A single explicit HTTPS Listen call — no UseUrls — so there is no plaintext fallback on
         //this host at all.
         builder.WebHost.ConfigureKestrel(options =>
-            options.Listen(IPAddress.Loopback, port: 0, listenOptions => listenOptions.UseHttps(certificate)));
+            LoopbackKestrel.ConfigureLoopbackListener(options, certificate));
 
         WebApplication app = builder.Build();
 
@@ -132,8 +131,8 @@ internal sealed class BinaryHttpHost: IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        await app.StopAsync(CancellationToken.None).ConfigureAwait(false);
-        await app.DisposeAsync().ConfigureAwait(false);
+        await App.StopAsync(CancellationToken.None).ConfigureAwait(false);
+        await App.DisposeAsync().ConfigureAwait(false);
         Certificate.Dispose();
     }
 
@@ -142,12 +141,12 @@ internal sealed class BinaryHttpHost: IAsyncDisposable
     //DelegatedApplication, with no UTF-8 encode/decode step on either side of the body.
     private sealed class DelegatedApplication
     {
-        private readonly BinaryHttpHandlerDelegate handler;
+        private BinaryHttpHandlerDelegate Handler { get; }
 
 
         public DelegatedApplication(BinaryHttpHandlerDelegate handler)
         {
-            this.handler = handler;
+            this.Handler = handler;
         }
 
 
@@ -160,7 +159,7 @@ internal sealed class BinaryHttpHost: IAsyncDisposable
                 body = buffer.ToArray();
             }
 
-            BinaryHttpResponse response = await handler(
+            BinaryHttpResponse response = await Handler(
                 new BinaryHttpRequest
                 {
                     Path = context.Request.Path.HasValue ? context.Request.Path.Value! : string.Empty,

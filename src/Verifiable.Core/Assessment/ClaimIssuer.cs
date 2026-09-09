@@ -156,10 +156,7 @@ namespace Verifiable.Core.Assessment
         /// </summary>
         /// <param name="issuerId">Unique identifier for this <see cref="ClaimIssuer{TInput}"/>.</param>
         /// <param name="validationRules">List of validation rules to apply.</param>
-        /// <param name="timeProvider">
-        /// Time provider for generating timestamps. If <see langword="null"/>,
-        /// <see cref="TimeProvider.System"/> is used.
-        /// </param>
+        /// <param name="timeProvider">Time provider for generating timestamps.</param>
         /// <param name="claimIdGenerator">
         /// Optional delegate to generate <see cref="ClaimIssueResult.ClaimIssueResultId"/> values.
         /// If <see langword="null"/>, <see cref="DefaultClaimIdGenerator"/> is used.
@@ -173,15 +170,16 @@ namespace Verifiable.Core.Assessment
         public ClaimIssuer(
             string issuerId,
             IList<ClaimDelegate<TInput>> validationRules,
-            TimeProvider? timeProvider = null,
+            TimeProvider timeProvider,
             GenerateClaimIdAsync? claimIdGenerator = null)
         {
             ArgumentException.ThrowIfNullOrEmpty(issuerId, nameof(issuerId));
             ArgumentNullException.ThrowIfNull(validationRules, nameof(validationRules));
+            ArgumentNullException.ThrowIfNull(timeProvider, nameof(timeProvider));
 
             IssuerId = issuerId;
             ValidationRules = validationRules;
-            TimeProvider = timeProvider ?? TimeProvider.System;
+            TimeProvider = timeProvider;
             ClaimIdGenerator = claimIdGenerator ?? DefaultClaimIdGenerator;
         }
 

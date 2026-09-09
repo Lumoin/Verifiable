@@ -34,13 +34,13 @@ internal sealed class Oidc10IdTokenNonceAudienceScenarioTests
     private const string EstablishedAcr = "urn:example:acr:established-loa";
     private const string EstablishedSessionId = "session-oidc-nonce-aud-01";
 
-    private static readonly Uri ClientBaseUri = new(ClientId);
-    private static readonly Uri RedirectUri = new("https://client.example.com/callback");
-    private static readonly TimeSpan IatSkew = TimeSpan.FromSeconds(60);
+    private static Uri ClientBaseUri { get; } = new(ClientId);
+    private static Uri RedirectUri { get; } = new("https://client.example.com/callback");
+    private static TimeSpan IatSkew { get; } = TimeSpan.FromSeconds(60);
 
     //Test-local claim id for the deployment contributor adding a second audience; the
     //WellKnownClaimIds registry holds the library-shipped ones.
-    private static readonly ClaimId SecondAudienceClaimId = ClaimId.Create(9110, "TestSecondAudience");
+    private static ClaimId SecondAudienceClaimId { get; } = ClaimId.Create(9110, "TestSecondAudience");
 
     public TestContext TestContext { get; set; } = null!;
 
@@ -363,7 +363,7 @@ internal sealed class Oidc10IdTokenNonceAudienceScenarioTests
             expectedIssuerOverride ?? material.Registration.IssuerUri!.OriginalString,
             expectedAudienceOverride ?? ClientId,
             resolveKey,
-            MicrosoftCryptographicFunctions.VerifyP256Async,
+            MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             JwsAccessTokenTestSupport.Parser,
             TestSetup.Base64UrlDecoder,
             TimeProvider,

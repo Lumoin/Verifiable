@@ -3,6 +3,7 @@ using System.Buffers;
 using System.Collections.Immutable;
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using Verifiable.BouncyCastle;
 using Verifiable.Core;
 using Verifiable.Cryptography;
@@ -44,23 +45,23 @@ internal sealed class SiopEncryptedResponseFlowTests
     private const string RelyingPartyClientId = "https://rp.example.com";
     private const string SiopNonce = "n-siop-encrypted-01";
 
-    private static readonly Uri RelyingPartyBaseUri = new("https://rp.example.com");
+    private static Uri RelyingPartyBaseUri { get; } = new("https://rp.example.com");
 
-    private static readonly ImmutableHashSet<CapabilityIdentifier> SiopCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> SiopCapabilities { get; } =
         ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.SiopSelfIssuedOp);
 
-    private static readonly string[] AllowedSiopAlgorithms = [WellKnownJwaValues.Es256];
+    private static string[] AllowedSiopAlgorithms { get; } = [WellKnownJwaValues.Es256];
 
     //The RP's advertised content-encryption algorithms — the HAIP-mandated A128GCM/A256GCM set.
-    private static readonly string[] AllowedEncAlgorithms =
+    private static string[] AllowedEncAlgorithms { get; } =
         [WellKnownJweEncryptionAlgorithms.A128Gcm, WellKnownJweEncryptionAlgorithms.A256Gcm];
 
-    private static readonly JwtHeaderSerializer HeaderSerializer =
+    private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)header,
             TestSetup.DefaultSerializationOptions);
 
-    private static readonly JwtPayloadSerializer PayloadSerializer =
+    private static JwtPayloadSerializer PayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)payload,
             TestSetup.DefaultSerializationOptions);
@@ -170,12 +171,123 @@ internal sealed class SiopEncryptedResponseFlowTests
             new ExchangeContext(),
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreNotEqual((int)HttpStatusCode.OK, response.StatusCode, response.Body);
+        Assert.AreEqual((int)HttpStatusCode.BadRequest, response.StatusCode,
+            "RFC 6749 §4.1.2.1: an unadvertised JWE 'enc' is a Wallet-attributable malformed response, "
+            + "answered as HTTP 400, not as an HTTP 500 Verifier fault.");
+
+        (string wireError, _) = ReadOAuthErrorBody(response.Body);
+        Assert.AreEqual(OAuthErrors.InvalidRequest, wireError,
+            "RFC 6749 §4.1.2.1: an otherwise malformed request is invalid_request.");
 
         (FlowState state, _) = host.GetFlowState(requestHandle);
         SiopVerifierFlowFailedState failed =
             Assert.IsInstanceOfType<SiopVerifierFlowFailedState>(state);
         Assert.Contains(WellKnownJweEncryptionAlgorithms.A128Gcm, failed.Reason);
+        Assert.AreEqual(VerifierFlowRefusalKind.Malformed, failed.Refusal!.Value.Kind,
+            "SIOPv2 §11.1: an unadvertised encrypted-response 'enc' is the Malformed refusal class.");
+    }
+
+
+    /// <summary>
+    /// An encrypted Self-Issued ID Token carrying exactly four dots — so the response endpoint's own
+    /// <c>IsCompactJwe</c> segment-count discriminator routes it to the encrypted path — but whose IV
+    /// segment holds a character outside the base64url alphabet is not a well-formed compact JWE per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7516#section-3.1">RFC 7516, Section 3.1</see>, a
+    /// shape no conformant Wallet produces. <c>JweParsing.ParseCompact</c>'s <see cref="FormatException"/>
+    /// routes the presentation to the Malformed refusal class (RFC 6749 §4.1.2.1 <c>invalid_request</c>,
+    /// HTTP 400) rather than a Verifier fault.
+    /// </summary>
+    [TestMethod]
+    public async Task NonCompactEncryptedIdTokenIsRefusedAsInvalidRequestNotServerError()
+    {
+        await using TestHostShell host = new(TimeProvider);
+
+        using VerifierKeyMaterial rpKeys = host.RegisterClient(
+            RelyingPartyClientId, RelyingPartyBaseUri, SiopCapabilities);
+        string tenant = rpKeys.Registration.TenantId.Value;
+
+        (KeyId encryptionKeyId, PublicKeyMemory rpEncryptionPublicKey) = host.RegisterRpEncryptionKey();
+        using PublicKeyMemory rpEncryptionPublicKeyOwner = rpEncryptionPublicKey;
+
+        (string requestHandle, _) = await host.HandleSiopRequestPreparationAsync(
+            rpKeys, SiopNonce, RelyingPartyClientId, AllowedSiopAlgorithms,
+            useStaticDiscoveryAudience: false,
+            encryptionKeyId: encryptionKeyId.Value,
+            allowedEncAlgorithms: AllowedEncAlgorithms,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        var siopKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory siopPublic = siopKeys.PublicKey;
+        using PrivateKeyMemory siopPrivate = siopKeys.PrivateKey;
+
+        string compactJwe = await MintAndEncryptIdTokenAsync(
+            siopPrivate, siopPublic, rpEncryptionPublicKey, SiopNonce,
+            WellKnownJweEncryptionAlgorithms.A128Gcm).ConfigureAwait(false);
+        string notCompactJwe = MalformIvSegment(compactJwe);
+
+        Assert.AreEqual(4, CountDots(notCompactJwe),
+            "The segment count must stay 4 dots so the response endpoint still routes this as an encrypted response.");
+
+        ServerHttpResponse response = await host.DispatchAtEndpointAsync(
+            tenant,
+            WellKnownEndpointNames.SiopResponse,
+            "POST",
+            new RequestFields
+            {
+                [OAuthRequestParameterNames.IdToken] = notCompactJwe,
+                [OAuthRequestParameterNames.State] = requestHandle
+            },
+            new ExchangeContext(),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual((int)HttpStatusCode.BadRequest, response.StatusCode,
+            "RFC 6749 §4.1.2.1: a non-compact encrypted Self-Issued ID Token is answered as HTTP 400, "
+            + "not as an HTTP 500 Verifier fault.");
+
+        (string wireError, _) = ReadOAuthErrorBody(response.Body);
+        Assert.AreEqual(OAuthErrors.InvalidRequest, wireError,
+            "RFC 6749 §4.1.2.1: an otherwise malformed request is invalid_request.");
+
+        (FlowState state, _) = host.GetFlowState(requestHandle);
+        SiopVerifierFlowFailedState failed =
+            Assert.IsInstanceOfType<SiopVerifierFlowFailedState>(state);
+        Assert.AreEqual(VerifierFlowRefusalKind.Malformed, failed.Refusal!.Value.Kind,
+            "SIOPv2 §11.1: a non-compact encrypted Self-Issued ID Token is the Malformed refusal class.");
+    }
+
+
+    //Replaces the first character of the IV segment (index 2 of the five compact-JWE segments) with
+    //'!', a character outside the base64url alphabet — RFC 7516 §3.1's compact serialization rejects
+    //it at parse time, before any cryptographic operation, distinct from TamperCiphertext's
+    //still-valid-base64url tag-verification failure.
+    private static string MalformIvSegment(string compactJwe)
+    {
+        string[] segments = compactJwe.Split('.');
+        segments[2] = "!" + segments[2][1..];
+
+        return string.Join('.', segments);
+    }
+
+
+    /// <summary>
+    /// Reads the <c>error</c> member of an RFC 6749 §4.1.2.1 error object, failing the test when the
+    /// body is not that object.
+    /// </summary>
+    /// <param name="body">The response body the SIOP response endpoint wrote.</param>
+    /// <returns>The error code and its description.</returns>
+    private static (string Error, string? Description) ReadOAuthErrorBody(string body)
+    {
+        using JsonDocument document = JsonDocument.Parse(body);
+
+        Assert.AreEqual(JsonValueKind.Object, document.RootElement.ValueKind,
+            "RFC 6749 §4.1.2.1: the error response body is a JSON object.");
+        Assert.IsTrue(
+            document.RootElement.TryGetProperty(OAuthRequestParameterNames.Error, out JsonElement error),
+            "RFC 6749 §4.1.2.1: error is REQUIRED in the error response.");
+        document.RootElement.TryGetProperty(
+            OAuthRequestParameterNames.ErrorDescription, out JsonElement description);
+
+        return (error.GetString()!, description.ValueKind == JsonValueKind.String ? description.GetString() : null);
     }
 
 

@@ -234,12 +234,14 @@ internal static class TcgEventLogFormatter
     /// <summary>
     /// Attempts to read and parse the system event log.
     /// </summary>
+    /// <param name="pool">The memory pool the event log's transient buffers are rented from.</param>
+    /// <param name="error">The failure description when reading did not succeed; otherwise <see langword="null"/>.</param>
     /// <returns>The parsed event log, or null if reading failed.</returns>
-    public static TcgEventLog? TryReadEventLog(out string? error)
+    public static TcgEventLog? TryReadEventLog(BaseMemoryPool pool, out string? error)
     {
+        ArgumentNullException.ThrowIfNull(pool);
         error = null;
 
-        using var pool = BaseMemoryPool.Shared;
         var result = TpmEventLogExtensions.ReadAndParseEventLog(pool);
 
         if(result.IsSuccess)

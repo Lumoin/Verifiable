@@ -97,12 +97,16 @@ public sealed record CtapPinUvAuthTokenState(
     /// 2.3's <c>resetPinUvAuthToken()</c> (§6.5.6 line 6171 / §6.5.7 line 6230-6237), also the shape
     /// <c>initialize()</c> (§6.5.5.1) uses at power-on.
     /// </summary>
-    /// <param name="pool">The memory pool the token is minted from. Defaults to <see cref="BaseMemoryPool.Shared"/>.</param>
+    /// <param name="pool">The memory pool the token is minted from.</param>
     /// <returns>A freshly minted, not-in-use token state.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the freshly minted SymmetricKeyMemory transfers to the returned CtapPinUvAuthTokenState's Token, which the record's Dispose releases.")]
-    public static CtapPinUvAuthTokenState Initial(BaseMemoryPool? pool = null) =>
-        new(MintToken(pool ?? BaseMemoryPool.Shared), null, 0, false, false, false, null, null);
+    public static CtapPinUvAuthTokenState Initial(BaseMemoryPool pool)
+    {
+        ArgumentNullException.ThrowIfNull(pool);
+
+        return new(MintToken(pool), null, 0, false, false, false, null, null);
+    }
 
 
     /// <summary>
@@ -110,13 +114,15 @@ public sealed record CtapPinUvAuthTokenState(
     /// value and resets every state variable to its §6.5.2.1 initial value, disposing the token this
     /// instance previously held.
     /// </summary>
-    /// <param name="pool">The memory pool the fresh token is minted from. Defaults to <see cref="BaseMemoryPool.Shared"/>.</param>
+    /// <param name="pool">The memory pool the fresh token is minted from.</param>
     /// <returns>The reset state, holding a brand-new token value.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the freshly minted SymmetricKeyMemory transfers to the returned CtapPinUvAuthTokenState's Token, which the record's Dispose releases.")]
-    public CtapPinUvAuthTokenState ResetToken(BaseMemoryPool? pool = null)
+    public CtapPinUvAuthTokenState ResetToken(BaseMemoryPool pool)
     {
-        SymmetricKeyMemory freshToken = MintToken(pool ?? BaseMemoryPool.Shared);
+        ArgumentNullException.ThrowIfNull(pool);
+
+        SymmetricKeyMemory freshToken = MintToken(pool);
         Token.Dispose();
 
         return this with

@@ -151,6 +151,9 @@ public sealed class SecureMessagingSession: IDisposable
         IncrementSendSequenceCounter();
 
         //DO'87' (public): the encrypted, padded command data, if any.
+        //Not a using declaration: cryptogramObject is conditionally assigned by a tuple deconstruction
+        //inside the try body, a shape the using declaration syntax does not accept (it permits only the
+        //declaration's own single initializer); the try/finally disposes it exactly once on every exit path.
         IMemoryOwner<byte>? cryptogramObject = null;
         int cryptogramObjectLength = 0;
         try
@@ -242,6 +245,9 @@ public sealed class SecureMessagingSession: IDisposable
             (DecryptedContent padded, _) = await Decrypt(
                 responseApdu.Slice(parsed.CryptogramStart, parsed.CryptogramLength), EncryptionKey.AsReadOnlyMemory(),
                 iv.Memory, Profile.DecryptedContentTag, pool, null, cancellationToken).ConfigureAwait(false);
+
+            //Not a using declaration: padded comes out of a tuple deconstruction, a shape the using
+            //declaration syntax does not accept; the try/finally disposes it exactly once on every exit path.
             try
             {
                 data = RightSizeUnpadded(padded.AsReadOnlySpan(), pool);
@@ -271,6 +277,9 @@ public sealed class SecureMessagingSession: IDisposable
         (Ciphertext cryptogram, _) = await Encrypt(
             paddedData.Memory, EncryptionKey.AsReadOnlyMemory(), iv.Memory,
             Profile.CipherTag, pool, null, cancellationToken).ConfigureAwait(false);
+
+        //Not a using declaration: cryptogram comes out of a tuple deconstruction, a shape the using
+        //declaration syntax does not accept; the try/finally disposes it exactly once on every exit path.
         try
         {
             int length = CryptogramObjectLength(cryptogram.AsReadOnlySpan().Length);
@@ -299,6 +308,9 @@ public sealed class SecureMessagingSession: IDisposable
     {
         (MacValue mac, _) = await ComputeMac(
             macInput, MacKey.AsReadOnlyMemory(), Profile.MacLength, Profile.MacTag, pool, null, cancellationToken).ConfigureAwait(false);
+
+        //Not a using declaration: mac comes out of a tuple deconstruction, a shape the using
+        //declaration syntax does not accept; the try/finally disposes it exactly once on every exit path.
         try
         {
             int macObjectLength = 2 + mac.AsReadOnlySpan().Length;
@@ -369,6 +381,9 @@ public sealed class SecureMessagingSession: IDisposable
         (Ciphertext derived, _) = await Encrypt(
             SendSequenceCounter.Memory, EncryptionKey.AsReadOnlyMemory(), zeroIv.Memory,
             Profile.CipherTag, pool, null, cancellationToken).ConfigureAwait(false);
+
+        //Not a using declaration: derived comes out of a tuple deconstruction, a shape the using
+        //declaration syntax does not accept; the try/finally disposes it exactly once on every exit path.
         try
         {
             IMemoryOwner<byte> iv = pool.Rent(derived.AsReadOnlySpan().Length, AllocationKind.Pinned);

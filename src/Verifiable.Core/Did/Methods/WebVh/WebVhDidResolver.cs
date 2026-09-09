@@ -12,6 +12,7 @@ using Verifiable.Core.Did.Methods.Web;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.OutboundFetch;
 using Verifiable.Core.Resolvers;
+using Verifiable.Core.Transport;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Core.Did.Methods.WebVh;
@@ -313,6 +314,9 @@ public static class WebVhDidResolver
             }
             catch
             {
+                //ParseEntries walks untrusted fetched bytes through the caller-supplied line parser; any
+                //failure to parse them is an invalid DID from the resolver's perspective, cancellation
+                //excepted above.
                 return DidResolutionResult.Failure(DidResolutionErrors.InvalidDid);
             }
 
@@ -429,6 +433,9 @@ public static class WebVhDidResolver
             }
             catch
             {
+                //documentIdentityReader is a caller-supplied delegate over untrusted entry bytes; any failure
+                //to read an identity from them is an invalid DID from the resolver's perspective, cancellation
+                //excepted above.
                 return DidResolutionResult.Failure(DidResolutionErrors.InvalidDid);
             }
 
@@ -461,6 +468,8 @@ public static class WebVhDidResolver
             }
             catch
             {
+                //stateDeserializer is a caller-supplied delegate over untrusted canonical bytes; any failure
+                //to parse them is an invalid DID from the resolver's perspective, cancellation excepted above.
                 return DidResolutionResult.Failure(DidResolutionErrors.InvalidDid);
             }
 
@@ -586,6 +595,8 @@ public static class WebVhDidResolver
         }
         catch
         {
+            //A transport/network failure is a not-found from this helper's perspective, cancellation
+            //excepted above.
             return null;
         }
 
@@ -633,6 +644,8 @@ public static class WebVhDidResolver
         }
         catch
         {
+            //A transport/network failure fetching the witness file fails resolution closed, cancellation
+            //excepted above.
             return DidResolutionErrors.InvalidDid;
         }
 
@@ -684,6 +697,7 @@ public static class WebVhDidResolver
         }
         catch
         {
+            //A failure verifying the witness file fails resolution closed, cancellation excepted above.
             return DidResolutionErrors.InvalidDid;
         }
         finally
@@ -705,7 +719,7 @@ public static class WebVhDidResolver
     /// <returns><see langword="true"/> when the Content-Type is acceptable or absent.</returns>
     private static bool IsAcceptableJsonContentType(OutboundResponse response)
     {
-        if(!response.TryGetHeader("Content-Type", out string? contentType) || contentType is not { Length: > 0 })
+        if(!response.Headers.TryGetValue(WellKnownHttpHeaderNames.ContentType, out string? contentType) || contentType is not { Length: > 0 })
         {
             return true;
         }
@@ -1000,6 +1014,9 @@ public static class WebVhDidResolver
     {
         if(entry.Operation is not WebVhRawEntry rawEntry)
         {
+            //The (string?) cast is load-bearing: ValueTask.FromResult<TResult> infers TResult from
+            //the argument alone, so a bare string literal would infer a non-nullable tuple element
+            //and fail to convert to the declared ValueTask<(LogState<WebVhState>, string?)> return type.
             return ValueTask.FromResult((currentState, (string?)"The did:webvh log entry carries no parsed content."));
         }
 

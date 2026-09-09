@@ -9,6 +9,8 @@ using Verifiable.Tpm.Infrastructure.Sessions;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
+using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -66,7 +68,7 @@ internal sealed class TpmInHouseSimulatorRsaOnlyDispatchTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateRsaOnlyOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse subject = await CreateRsaSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
@@ -103,7 +105,7 @@ internal sealed class TpmInHouseSimulatorRsaOnlyDispatchTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateRsaOnlyOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryInput eccInput = CreatePrimaryInput.ForEccSigningKey(
@@ -132,7 +134,7 @@ internal sealed class TpmInHouseSimulatorRsaOnlyDispatchTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateRsaOnlyOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse ek = await CreateRsaEndorsementKeyAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -170,7 +172,7 @@ internal sealed class TpmInHouseSimulatorRsaOnlyDispatchTests
             return await simulator.SubmitAsync(command, commandPool, ct).ConfigureAwait(false);
         }
 
-        using TpmDevice policySecretCapturingTpm = TpmDevice.Create(CapturePolicySecretAsync);
+        using TpmDevice policySecretCapturingTpm = TpmDevice.Create(CapturePolicySecretAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResult<PolicySecretResponse> secretResult = await policySecretCapturingTpm.PolicySecretAsync(
             (uint)TpmRh.TPM_RH_ENDORSEMENT, policyHandle, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(secretResult.IsSuccess, $"PolicySecret failed: '{secretResult.ResponseCode}'.");
@@ -190,7 +192,7 @@ internal sealed class TpmInHouseSimulatorRsaOnlyDispatchTests
         using ActivateCredentialInput activateInput = ActivateCredentialInput.Create(
             ak.ObjectHandle, ek.ObjectHandle, made.CredentialBlob.Span, made.Secret.Span, pool);
         using TpmPasswordSession activateAuth = TpmPasswordSession.CreateEmpty(pool);
-        using TpmPolicySession keySession = TpmPolicySession.ForSession(policyHandle, SessionAlg, pool);
+        using TpmPolicySession keySession = TpmPolicySession.ForSession(policyHandle, SessionAlg, TestEntropy.NewCounterStream(), pool);
         ReadOnlyMemory<byte>[] handleNames = [ak.Name.Span.ToArray(), ek.Name.Span.ToArray()];
 
         TpmResult<ActivateCredentialResponse> activateResult = await TpmCommandExecutor.ExecuteAsync<ActivateCredentialResponse>(
@@ -216,7 +218,7 @@ internal sealed class TpmInHouseSimulatorRsaOnlyDispatchTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateRsaOnlyOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         //An RSA SIGNING key (SIGN_ENCRYPT, not RESTRICTED|DECRYPT) stands in for the credential key — a valid
@@ -230,7 +232,7 @@ internal sealed class TpmInHouseSimulatorRsaOnlyDispatchTests
 
         Assert.IsFalse(makeResult.IsSuccess, "A non-storage RSA key must not be usable as a MakeCredential credential key.");
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_TYPE,
+            HmacKeyHarness.HandleEncodedRc(TpmRcConstants.TPM_RC_TYPE, 0),
             makeResult.ResponseCode,
             "A credential key that is not a Storage Key must be rejected with TPM_RC_TYPE (Part 3, clause 12.6).");
     }
@@ -289,7 +291,7 @@ internal sealed class TpmInHouseSimulatorRsaOnlyDispatchTests
         var simulator = new TpmSimulator(
             "tpm-in-house-rsa-only-dispatch",
             signingBackend: null,
-            rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create());
+            rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await BringOperationalAsync(simulator, pool).ConfigureAwait(false);
 

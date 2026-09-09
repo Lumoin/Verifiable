@@ -462,7 +462,7 @@ internal sealed class JAdESLifecycleFlowTests
             CounterSignerHeaderEncoder,
             TestSetup.Base64UrlEncoder,
             counterPrivateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             BaseMemoryPool.Shared,
             counterSignerUnprotectedHeader: null,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false))
@@ -774,7 +774,7 @@ internal sealed class JAdESLifecycleFlowTests
         JAdESSignatureCreation.SignAsync(
             headers, payloadInput, unsignedHeaders,
             JAdESProtectedHeaderJson.Encode, JAdESEtsiUJson.Encode, TestSetup.Base64UrlEncoder,
-            privateKey, MicrosoftCryptographicFunctions.SignP256Async,
+            privateKey, MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             dereference: null, dereferenceContext: null, unknownMechanismHandler: null,
             BaseMemoryPool.Shared, cancellationToken: cancellationToken);
 
@@ -794,7 +794,7 @@ internal sealed class JAdESLifecycleFlowTests
             JAdESProtectedHeaderJson.DetectX5tPresence,
             JAdESEtsiUJson.TryParse,
             publicKey,
-            MicrosoftCryptographicFunctions.VerifyP256Async,
+            MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             TestSetup.Base64UrlDecoder,
             TestSetup.Base64UrlEncoder,
             dereference: null, dereferenceContext: null, externalDetachedPayload: null,
@@ -952,10 +952,10 @@ internal sealed class JAdESLifecycleFlowTests
     //Never read by JwsSerialization -- JwsSignatureComponent.Protected is the wire truth for every serialization
     //form (never a re-derived encoding of the decoded model), mirroring JAdESSignatureAugmentation's own
     //identically-purposed private field.
-    private static readonly Dictionary<string, object> EmptyProtectedHeaderDictionary = [];
+    private static Dictionary<string, object> EmptyProtectedHeaderDictionary { get; } = [];
 
 
-    private static readonly JwtPartEncoder<Dictionary<string, object>> CounterSignerHeaderEncoder =
+    private static JwtPartEncoder<Dictionary<string, object>> CounterSignerHeaderEncoder { get; } =
         static header => new TaggedMemory<byte>(JsonSerializer.SerializeToUtf8Bytes(header), Tag.Create(Purpose.Data));
 
 
@@ -1058,7 +1058,7 @@ internal sealed class JAdESLifecycleFlowTests
     //standard-base64 tstToken.val (JA-5.4.3.3-12) -- a decode-side non-issue either way (System.Text.Json's own
     //JsonElement.GetString()/GetBytesFromBase64() unescape \uXXXX transparently), so this is purely a test-side
     //wire-text-search convenience, not a conformance concession.
-    private static readonly JsonSerializerOptions RelaxedJsonOptions = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+    private static JsonSerializerOptions RelaxedJsonOptions { get; } = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
 
     private static byte[] JsonSerialize(object value) => JsonSerializer.SerializeToUtf8Bytes(value, RelaxedJsonOptions);
@@ -1067,19 +1067,19 @@ internal sealed class JAdESLifecycleFlowTests
     /// <summary>A genuine in-process Time-Stamping Authority: a root CA, a TSA leaf certificate under it, and <see cref="MintingTimestampResponder"/> minting real RFC 3161 tokens over whatever message imprint a call sends — no network socket involved. Mirrors <c>JAdESSignatureAugmentationTests.TsaFixture</c>.</summary>
     private sealed class TsaFixture: IDisposable
     {
-        private readonly X509ChainTestRingNode root;
-        private readonly X509ChainTestRingNode authority;
+        private X509ChainTestRingNode Root { get; }
+        private X509ChainTestRingNode AuthorityNode { get; }
 
         public MintingTimestampResponder Responder { get; }
 
         /// <summary>The Time-Stamping Authority node whose key signs every token <see cref="Responder"/> mints — the same node a directly-minted token (bypassing the responder) is signed by.</summary>
-        public X509ChainTestRingNode Authority => authority;
+        public X509ChainTestRingNode Authority => AuthorityNode;
 
 
         private TsaFixture(X509ChainTestRingNode root, X509ChainTestRingNode authority, MintingTimestampResponder responder)
         {
-            this.root = root;
-            this.authority = authority;
+            this.Root = root;
+            this.AuthorityNode = authority;
             Responder = responder;
         }
 
@@ -1096,13 +1096,13 @@ internal sealed class JAdESLifecycleFlowTests
 
 
         /// <summary>A DER-encoded X.509 certificate carrier (the root's own) suitable for <c>SigningCertificate</c>.</summary>
-        public PkiCertificateMemory SignerCertificate() => OcspTestFixtures.ToCertificateCarrier(root.Certificate);
+        public PkiCertificateMemory SignerCertificate() => OcspTestFixtures.ToCertificateCarrier(Root.Certificate);
 
 
         public void Dispose()
         {
-            authority.Dispose();
-            root.Dispose();
+            AuthorityNode.Dispose();
+            Root.Dispose();
         }
     }
 }

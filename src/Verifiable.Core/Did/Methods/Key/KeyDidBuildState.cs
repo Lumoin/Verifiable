@@ -85,6 +85,11 @@ namespace Verifiable.Core.Did.Methods.Key
         public int CurrentVerificationMethodIndex { get; set; }
 
         /// <summary>
+        /// Gets the memory pool the verification methods' key-format encodings are rented from.
+        /// </summary>
+        public required BaseMemoryPool Pool { get; init; }
+
+        /// <summary>
         /// Determines whether the specified <see cref="KeyDidBuildState"/> is equal to the current instance.
         /// Two build states are considered equal if they have the same encoded key, equivalent public key material,
         /// the same cryptographic suite, and equivalent key inputs.

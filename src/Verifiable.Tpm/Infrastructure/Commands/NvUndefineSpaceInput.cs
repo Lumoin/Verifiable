@@ -16,7 +16,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </list>
 /// <para>
 /// There are no parameters and no response parameters. This command is authorized, so it is sent with
-/// <c>TPM_ST_SESSIONS</c>. See TPM 2.0 Library Part 3, Section 31.4 (Table 230). It does not undefine indices
+/// <c>TPM_ST_SESSIONS</c>. See TPM 2.0 Library Part 3, clause 31.4 (Table 247). It does not undefine indices
 /// with the <c>TPMA_NV_POLICY_DELETE</c> attribute set (those use TPM2_NV_UndefineSpaceSpecial).
 /// </para>
 /// </remarks>

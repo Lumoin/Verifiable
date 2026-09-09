@@ -9,7 +9,7 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// <summary>
 /// An in-memory, single-tier test double for <see cref="CtapPinRetriesCustody"/>: models
 /// <c>TPM_NT_PIN_FAIL</c>'s own <c>pinCount</c>/<c>pinLimit</c> semantics (TPM 2.0 Library Part 1, clause
-/// 37.2.6.6) entirely in-process, exactly as package C's TPM-backed <c>TpmNvPinRetriesCustody</c> would
+/// 34.2.6.6) entirely in-process, exactly as package C's TPM-backed <c>TpmNvPinRetriesCustody</c> would
 /// over a real NV Index — success resets <c>pinCount</c> to 0, mismatch increments it, and once
 /// <c>pinCount</c> reaches <see cref="PinLimit"/> even a subsequently CORRECT candidate is refused without
 /// ever being compared (mirroring the pre-gate a real Index's own authorization failure enforces).
@@ -35,10 +35,10 @@ internal sealed class InMemoryCtapPinRetriesCustodyStore
     public const int PinLimit = 8;
 
     /// <summary>The order every custody operation ran in, one entry per call.</summary>
-    private readonly List<string> operationLog = [];
+    private List<string> OperationLogEntries { get; } = [];
 
     /// <summary>Every <see cref="ProvisionPinAsync"/> call's exact <c>pinHash</c> bytes, in call order.</summary>
-    private readonly List<byte[]> provisionedPinHashes = [];
+    private List<byte[]> ProvisionedPinHashList { get; } = [];
 
     /// <summary>The currently provisioned PIN hash, or <see langword="null"/> if none has ever been provisioned or the tier was retired.</summary>
     private byte[]? provisionedPinHash;
@@ -48,10 +48,10 @@ internal sealed class InMemoryCtapPinRetriesCustodyStore
 
 
     /// <summary>The order every custody operation ran in, one entry per call. Never <see langword="null"/>.</summary>
-    public IReadOnlyList<string> OperationLog => operationLog;
+    public IReadOnlyList<string> OperationLog => OperationLogEntries;
 
     /// <summary>Every <see cref="ProvisionPinAsync"/> call's exact <c>pinHash</c> bytes, in call order.</summary>
-    public IReadOnlyList<byte[]> ProvisionedPinHashes => provisionedPinHashes;
+    public IReadOnlyList<byte[]> ProvisionedPinHashes => ProvisionedPinHashList;
 
     /// <summary>The persistent tier's current retry budget, computed directly from <see cref="pinCount"/> — a test-only shortcut around a wire round trip.</summary>
     public int CurrentRetriesRemaining => PinLimit - pinCount;
@@ -90,9 +90,9 @@ internal sealed class InMemoryCtapPinRetriesCustodyStore
     {
         byte[] copy = pinHash.ToArray();
         provisionedPinHash = copy;
-        provisionedPinHashes.Add(copy);
+        ProvisionedPinHashList.Add(copy);
         pinCount = 0;
-        operationLog.Add("Provision");
+        OperationLogEntries.Add("Provision");
 
         return ValueTask.CompletedTask;
     }
@@ -106,7 +106,7 @@ internal sealed class InMemoryCtapPinRetriesCustodyStore
     /// <param name="cancellationToken">A cancellation token.</param>
     private ValueTask<CtapPinAttemptVerdict> VerifyPinAttemptAsync(ReadOnlyMemory<byte> candidatePinHash, CancellationToken cancellationToken)
     {
-        operationLog.Add("Verify");
+        OperationLogEntries.Add("Verify");
 
         //This pre-gate: once the tier is exhausted, even the correct candidate is refused
         //without ever being compared — mirrors TPM_RC_AUTH_UNAVAILABLE's own refusal semantics.
@@ -130,7 +130,7 @@ internal sealed class InMemoryCtapPinRetriesCustodyStore
     /// <param name="cancellationToken">A cancellation token.</param>
     private ValueTask<CtapPinAttemptVerdict> PenalizeAttemptAsync(CancellationToken cancellationToken)
     {
-        operationLog.Add("Penalize");
+        OperationLogEntries.Add("Penalize");
 
         pinCount = Math.Min(pinCount + 1, PinLimit);
         int retriesRemaining = PinLimit - pinCount;
@@ -143,7 +143,7 @@ internal sealed class InMemoryCtapPinRetriesCustodyStore
     /// <param name="cancellationToken">A cancellation token.</param>
     private ValueTask<CtapPinAttemptVerdict> ReadRetriesAsync(CancellationToken cancellationToken)
     {
-        operationLog.Add("Read");
+        OperationLogEntries.Add("Read");
         int retriesRemaining = PinLimit - pinCount;
 
         return ValueTask.FromResult(new CtapPinAttemptVerdict(IsMatch: false, retriesRemaining, retriesRemaining == 0, IsProvisioned: provisionedPinHash is not null));
@@ -154,7 +154,7 @@ internal sealed class InMemoryCtapPinRetriesCustodyStore
     /// <param name="cancellationToken">A cancellation token.</param>
     private ValueTask RetirePinAsync(CancellationToken cancellationToken)
     {
-        operationLog.Add("Retire");
+        OperationLogEntries.Add("Retire");
         provisionedPinHash = null;
         pinCount = 0;
 

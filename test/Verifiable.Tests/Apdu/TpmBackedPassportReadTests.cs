@@ -14,6 +14,8 @@ using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Spec.Constants;
+using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Apdu;
 
@@ -61,12 +63,12 @@ internal sealed class TpmBackedPassportReadTests
     {
         //The TPM-equipped terminal: an operational in-house TPM exposed as an auditable entropy source.
         using TpmDevice tpm = await CreateOperationalTpmAsync("capstone-tpm").ConfigureAwait(false);
-        var entropy = new TpmEntropyProvider(tpm, BaseMemoryPool.Shared, emittedBy: "capstone-tpm");
+        var entropy = new TpmEntropyProvider(tpm, BaseMemoryPool.Shared, new FakeTimeProvider(TestClock.CanonicalEpoch), emittedBy: "capstone-tpm");
 
         //The passport: an in-house eMRTD card holding EF.COM and EF.DG1.
         using ElementaryFile efCom = EfCom.Write("0106", "040000", [0x61, 0x75], BaseMemoryPool.Shared);
         using ElementaryFile dataGroup1 = DataGroup1.Write(Td2MachineReadableZone, BaseMemoryPool.Shared);
-        using var card = new CardSimulator("capstone-passport", [efCom, dataGroup1]);
+        using var card = new CardSimulator("capstone-passport", [efCom, dataGroup1], rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         using ApduDevice device = ApduDevice.Create(card.TransceiveAsync);
 
         //The terminal draws its BAC session secrets (RND.IFD, KIFD) from the TPM; the events prove provenance.
@@ -109,7 +111,7 @@ internal sealed class TpmBackedPassportReadTests
         //An "extra secure" terminal assesses the TPM RNG health (TPM2_SelfTest) before trusting its output
         //for session key material — a degraded source surfaces rather than silently weakening the session.
         using TpmDevice tpm = await CreateOperationalTpmAsync("capstone-tpm-health").ConfigureAwait(false);
-        var entropy = new TpmEntropyProvider(tpm, BaseMemoryPool.Shared, emittedBy: "capstone-tpm-health");
+        var entropy = new TpmEntropyProvider(tpm, BaseMemoryPool.Shared, new FakeTimeProvider(TestClock.CanonicalEpoch), emittedBy: "capstone-tpm-health");
 
         (EntropyHealthObservation observation, _) = await entropy.AssessHealthAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -140,7 +142,7 @@ internal sealed class TpmBackedPassportReadTests
         Justification = "The simulator is the test class's durable chip: its ownership rides the returned TpmDevice's submit delegate for the rest of the test, and its pooled state is reclaimed with the suite's process-wide pool.")]
     private async Task<TpmDevice> CreateOperationalTpmAsync(string tpmId)
     {
-        var simulator = new TpmSimulator(tpmId, TpmSelfTestBehavior.Passes);
+        var simulator = new TpmSimulator(tpmId,selfTest: TpmSelfTestBehavior.Passes, rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         using IMemoryOwner<byte> command = FrameSessionlessCommand(new StartupInput(TpmSuConstants.TPM_SU_CLEAR), BaseMemoryPool.Shared, out int length);
@@ -149,7 +151,7 @@ internal sealed class TpmBackedPassportReadTests
 
         Assert.AreEqual(TpmLifecyclePhase.Operational, simulator.CurrentPhase, "The TPM must reach the operational phase before drawing entropy.");
 
-        return TpmDevice.Create(simulator.SubmitAsync);
+        return TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
     }
 
 

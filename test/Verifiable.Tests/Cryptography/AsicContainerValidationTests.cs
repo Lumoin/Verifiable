@@ -1206,7 +1206,7 @@ internal sealed class AsicContainerValidationTests
     private sealed class ValidationWorld: IDisposable
     {
         /// <summary>The carriers this world rented, released in reverse order.</summary>
-        private readonly List<IDisposable> owned = [];
+        private List<IDisposable> Owned { get; } = [];
 
         /// <summary>Whether <see cref="Dispose"/> has already run.</summary>
         private bool disposed;
@@ -1276,12 +1276,12 @@ internal sealed class AsicContainerValidationTests
             }
 
             disposed = true;
-            for(int i = owned.Count - 1; i >= 0; --i)
+            for(int i = Owned.Count - 1; i >= 0; --i)
             {
-                owned[i].Dispose();
+                Owned[i].Dispose();
             }
 
-            owned.Clear();
+            Owned.Clear();
         }
 
 
@@ -1368,7 +1368,7 @@ internal sealed class AsicContainerValidationTests
         /// <returns>The same carrier.</returns>
         private T Own<T>(T carrier) where T: IDisposable
         {
-            owned.Add(carrier);
+            Owned.Add(carrier);
 
             return carrier;
         }

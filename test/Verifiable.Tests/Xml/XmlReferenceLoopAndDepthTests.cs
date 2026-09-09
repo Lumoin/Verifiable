@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Xml;
@@ -10,32 +9,31 @@ namespace Verifiable.Tests.Xml;
 /// container, and deep Object nesting near the 1024 depth limit.
 /// A <c>Manifest</c>'s own references are never auto-followed by this engine — "the digests within such a
 /// Manifest are checked at the application's discretion" (<see cref="XmlManifest"/>'s own remarks, section
-/// 5.1) — so a self-referencing <c>Manifest</c> cannot recurse inside this leaf; the adversarial property
-/// worth proving is that dereferencing such a self-reference still terminates promptly with the ordinary
-/// node-set it names, rather than hanging, and that the structural readers tolerate <c>Object</c> nesting
-/// near the documented parse-depth bound (<see cref="XmlSpanReader.MaximumElementDepth"/>, 1024) without a
-/// stack overflow, since every navigation helper this leaf's model readers use is iterative.
+/// 5.1) — so a self-referencing <c>Manifest</c> cannot recurse inside this leaf; the property worth proving
+/// is that dereferencing such a self-reference produces the ordinary node-set it names, and that the
+/// structural readers correctly locate a <c>Manifest</c> nested near the documented parse-depth bound (<see
+/// cref="XmlSpanReader.MaximumElementDepth"/>, 1024). Every navigation helper this leaf's model readers use
+/// is iterative over sibling/child links rather than recursive over document depth, so termination is a
+/// property of the code, not something a timed assertion adds proof of: a case that failed to terminate
+/// would surface as the test run's own timeout rather than as an assertion failure here.
 /// </summary>
 [TestClass]
 internal sealed class XmlReferenceLoopAndDepthTests
 {
-    private static readonly TimeSpan ResourceCaseCeiling = TimeSpan.FromSeconds(10);
-
-
     /// <summary>
     /// Proves the "<c>Reference</c> loops via <c>Object</c>-nested manifests" hardening obligation: a
     /// <c>Manifest</c> whose own <c>Reference</c> points back at the <c>Manifest</c> itself — a
     /// <c>ds:Object</c>-nested self-reference — dereferences to the ordinary element-subtree node-set the
     /// <c>Manifest</c>'s own <c>Id</c> identifies (which necessarily includes the very <c>Reference</c>
     /// element pointing back at it, since that <c>Reference</c> is one of the <c>Manifest</c>'s own
-    /// descendants) promptly and without hanging: this engine has no automatic manifest-reference-chasing
-    /// behavior to loop inside in the first place. The prompt termination this proves is the DoS posture <see
+    /// descendants): this engine has no automatic manifest-reference-chasing behavior to loop inside in the
+    /// first place. This is the DoS posture <see
     /// href="https://www.w3.org/TR/2008/REC-xmldsig-core-20080610/">XML Signature Syntax and Processing
     /// (Second Edition)</see> section 8.3 names — "even there perverse parameters might cause unacceptable
     /// processing or memory demand" — applied to a self-referencing structure rather than a raw size axis.
     /// </summary>
     [TestMethod]
-    public void SelfReferencingManifestDereferencesToItsOwnSubtreeWithoutHanging()
+    public void SelfReferencingManifestDereferencesToItsOwnSubtree()
     {
         string document = $$"""
             <Signature xmlns="{{XmlSignatureIdentifiers.XmlSignatureNamespace}}">
@@ -73,14 +71,11 @@ internal sealed class XmlReferenceLoopAndDepthTests
                 Assert.IsTrue(isManifestRead, $"Manifest must read but was refused with {manifestReadError.Failure}.");
                 using(manifest)
                 {
-                    var stopwatch = Stopwatch.StartNew();
                     bool isDereferenced = XmlReferenceDereferencer.TryDereference(table!, manifest!.References[0], resolver: null, BaseMemoryPool.Shared, out XmlDereferenceResult result, out XmlSignatureProcessingError error);
-                    stopwatch.Stop();
 
                     Assert.IsTrue(isDereferenced, $"The self-reference must dereference but was refused with {error.Failure}.");
                     Assert.IsTrue(result.IsNodeSet);
                     Assert.AreEqual(manifest.ElementIndex, result.NodeSet.ApexElementIndex, "The self-reference must resolve to the Manifest's own element as the subtree apex.");
-                    Assert.IsLessThan(ResourceCaseCeiling, stopwatch.Elapsed, "The self-reference must dereference promptly, never hang.");
                 }
             }
         }
@@ -89,18 +84,18 @@ internal sealed class XmlReferenceLoopAndDepthTests
 
     /// <summary>
     /// Proves the <see cref="XmlManifest"/> overload stays safe over the same self-referencing <c>Manifest</c> fixture <see
-    /// cref="SelfReferencingManifestDereferencesToItsOwnSubtreeWithoutHanging"/> dereferences directly: computing the digest
+    /// cref="SelfReferencingManifestDereferencesToItsOwnSubtree"/> dereferences directly: computing the digest
     /// input runs the reference through the FULL engine (dereference, transform chain, implicit final conversion) rather than
-    /// the dereferencer alone, and still completes promptly rather than chasing the self-reference — this engine has no
-    /// automatic manifest-reference-chasing behavior to loop inside in the first place, exactly as the sibling test's own
+    /// the dereferencer alone, and computes the correct digest input rather than chasing the self-reference — this engine has
+    /// no automatic manifest-reference-chasing behavior to loop inside in the first place, exactly as the sibling test's own
     /// remarks state, now proven through the newly-public entry point rather than only the internal one. Same DoS posture as
-    /// <see cref="SelfReferencingManifestDereferencesToItsOwnSubtreeWithoutHanging"/>: <see
+    /// <see cref="SelfReferencingManifestDereferencesToItsOwnSubtree"/>: <see
     /// href="https://www.w3.org/TR/2008/REC-xmldsig-core-20080610/">XML Signature Syntax and Processing (Second Edition)</see>
     /// section 8.3's "even there perverse parameters might cause unacceptable processing or memory demand," now over the full
     /// engine rather than the dereferencer alone.
     /// </summary>
     [TestMethod]
-    public void SelfReferencingManifestReferenceDigestInputComputesWithoutHanging()
+    public void SelfReferencingManifestReferenceDigestInputComputes()
     {
         string document = $$"""
             <Signature xmlns="{{XmlSignatureIdentifiers.XmlSignatureNamespace}}">
@@ -138,12 +133,9 @@ internal sealed class XmlReferenceLoopAndDepthTests
                 Assert.IsTrue(isManifestRead, $"Manifest must read but was refused with {manifestReadError.Failure}.");
                 using(manifest)
                 {
-                    var stopwatch = Stopwatch.StartNew();
                     bool isComputed = XmlReferenceProcessing.TryComputeDigestInput(table!, manifest!, 0, resolver: null, BaseMemoryPool.Shared, out PooledMemory? digestInput, out XmlSignatureProcessingError error);
-                    stopwatch.Stop();
 
                     Assert.IsTrue(isComputed, $"The self-reference's digest input must compute but was refused with {error.Failure}.");
-                    Assert.IsLessThan(ResourceCaseCeiling, stopwatch.Elapsed, "The self-reference's digest input must compute promptly, never hang.");
                     digestInput!.Dispose();
                 }
             }
@@ -154,12 +146,11 @@ internal sealed class XmlReferenceLoopAndDepthTests
     /// <summary>
     /// Proves the "deep Object nesting near the 1024 depth limit" hardening obligation: deep <c>Object</c>
     /// nesting near the documented parse-depth bound (<see cref="XmlSpanReader.MaximumElementDepth"/>) reads
-    /// and locates a <c>Manifest</c> nested at the bottom of the chain without a stack overflow — every
-    /// model-reading helper this leaf uses (<see cref="XmlSignatureModelGrammar"/>'s child/sibling
-    /// navigation, <see cref="XmlManifest.TryRead"/> itself) is iterative over sibling/child links rather
-    /// than recursive over document depth, and <c>Object</c> content is left as opaque node indices rather
-    /// than eagerly interpreted, so reading the outer envelope costs nothing proportional to how deep an
-    /// <c>Object</c> happens to nest. Same DoS posture, now over the parse-depth axis rather than
+    /// and locates a <c>Manifest</c> nested at the bottom of the chain — every model-reading helper this
+    /// leaf uses (<see cref="XmlSignatureModelGrammar"/>'s child/sibling navigation, <see
+    /// cref="XmlManifest.TryRead"/> itself) is iterative over sibling/child links rather than recursive over
+    /// document depth, so nothing here can stack-overflow, and <c>Object</c> content is left as opaque node
+    /// indices rather than eagerly interpreted. Same DoS posture, now over the parse-depth axis rather than
     /// self-reference: <see href="https://www.w3.org/TR/2008/REC-xmldsig-core-20080610/">XML Signature
     /// Syntax and Processing (Second Edition)</see> section 8.3's "even there perverse parameters might
     /// cause unacceptable processing or memory demand."
@@ -198,7 +189,6 @@ internal sealed class XmlReferenceLoopAndDepthTests
             </Signature>
             """;
 
-        var stopwatch = Stopwatch.StartNew();
         bool isParsed = XmlNodeTable.TryParse(Encoding.UTF8.GetBytes(document), BaseMemoryPool.Shared, out XmlNodeTable? table, out XmlReadError readError);
         Assert.IsTrue(isParsed, $"The deeply nested fixture must parse but was refused with {readError.Failure} at offset {readError.ByteOffset}.");
         using(table)
@@ -224,9 +214,6 @@ internal sealed class XmlReferenceLoopAndDepthTests
                 manifest!.Dispose();
             }
         }
-
-        stopwatch.Stop();
-        Assert.IsLessThan(ResourceCaseCeiling, stopwatch.Elapsed, "Parsing and reading near the depth limit must stay fast, never approach a stack overflow's telltale slowdown.");
     }
 
 

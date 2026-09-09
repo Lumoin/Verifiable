@@ -1,7 +1,8 @@
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Cbor;
@@ -978,10 +979,11 @@ internal sealed class CBAdESLevelRulesTests
     {
         //An empty array violates CB-5.3.1-07 (uHeaders shall be non-empty) -- TryParseUnsignedHeaders rejects
         //it, so the whole parse fails closed.
-        var emptyArrayWriter = new CborWriter(CborConformanceMode.Canonical);
+        var emptyArrayWriterBuffer = new ArrayBufferWriter<byte>();
+        var emptyArrayWriter = new CborWriter(emptyArrayWriterBuffer, CborOptions.RfcCanonical);
         emptyArrayWriter.WriteStartArray(0);
         emptyArrayWriter.WriteEndArray();
-        byte[] malformedUHeadersBytes = emptyArrayWriter.Encode();
+        byte[] malformedUHeadersBytes = emptyArrayWriterBuffer.WrittenSpan.ToArray();
 
         byte[] wireBytes = BuildCoseSign1WireBytes(malformedUHeadersBytes);
 
@@ -1126,37 +1128,41 @@ internal sealed class CBAdESLevelRulesTests
     private static byte[] BuildMinimalUHeadersArrayBytes()
     {
         //DocOrLocalURI group, sigPolLocalURI arm: {2: #6.32(tstr)} (Table 9).
-        var docOrLocalUriWriter = new CborWriter(CborConformanceMode.Canonical);
+        var docOrLocalUriWriterBuffer = new ArrayBufferWriter<byte>();
+        var docOrLocalUriWriter = new CborWriter(docOrLocalUriWriterBuffer, CborOptions.RfcCanonical);
         docOrLocalUriWriter.WriteStartMap(1);
         docOrLocalUriWriter.WriteInt32(2);
-        docOrLocalUriWriter.WriteTag((CborTag)32);
+        docOrLocalUriWriter.WriteTag(new CborTag((ulong)32));
         docOrLocalUriWriter.WriteTextString("https://policy.example.org/sp");
         docOrLocalUriWriter.WriteEndMap();
-        byte[] docOrLocalUriBytes = docOrLocalUriWriter.Encode();
+        byte[] docOrLocalUriBytes = docOrLocalUriWriterBuffer.WrittenSpan.ToArray();
 
         //sigPSt map: {1: DocOrLocalURI} (Table 9).
-        var sigPStWriter = new CborWriter(CborConformanceMode.Canonical);
+        var sigPStWriterBuffer = new ArrayBufferWriter<byte>();
+        var sigPStWriter = new CborWriter(sigPStWriterBuffer, CborOptions.RfcCanonical);
         sigPStWriter.WriteStartMap(1);
         sigPStWriter.WriteInt32(1);
         sigPStWriter.WriteEncodedValue(docOrLocalUriBytes);
         sigPStWriter.WriteEndMap();
-        byte[] sigPStBytes = sigPStWriter.Encode();
+        byte[] sigPStBytes = sigPStWriterBuffer.WrittenSpan.ToArray();
 
         //UHeaderInstance one-entry map: {7: sigPSt} (Table 8, sigPSt label 7).
-        var uHeaderInstanceWriter = new CborWriter(CborConformanceMode.Canonical);
+        var uHeaderInstanceWriterBuffer = new ArrayBufferWriter<byte>();
+        var uHeaderInstanceWriter = new CborWriter(uHeaderInstanceWriterBuffer, CborOptions.RfcCanonical);
         uHeaderInstanceWriter.WriteStartMap(1);
         uHeaderInstanceWriter.WriteInt32(7);
         uHeaderInstanceWriter.WriteEncodedValue(sigPStBytes);
         uHeaderInstanceWriter.WriteEndMap();
-        byte[] uHeaderInstanceBytes = uHeaderInstanceWriter.Encode();
+        byte[] uHeaderInstanceBytes = uHeaderInstanceWriterBuffer.WrittenSpan.ToArray();
 
         //uHeaders = [+bstr .cbor UHeaderInstance] (clause 5.3.1).
-        var uHeadersWriter = new CborWriter(CborConformanceMode.Canonical);
+        var uHeadersWriterBuffer = new ArrayBufferWriter<byte>();
+        var uHeadersWriter = new CborWriter(uHeadersWriterBuffer, CborOptions.RfcCanonical);
         uHeadersWriter.WriteStartArray(1);
         uHeadersWriter.WriteByteString(uHeaderInstanceBytes);
         uHeadersWriter.WriteEndArray();
 
-        return uHeadersWriter.Encode();
+        return uHeadersWriterBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -1170,15 +1176,17 @@ internal sealed class CBAdESLevelRulesTests
     /// <returns>The encoded <c>COSE_Sign1</c> wire bytes.</returns>
     private static byte[] BuildCoseSign1WireBytes(byte[]? uHeadersArrayBytes)
     {
-        var protectedHeaderWriter = new CborWriter(CborConformanceMode.Canonical);
+        var protectedHeaderWriterBuffer = new ArrayBufferWriter<byte>();
+        var protectedHeaderWriter = new CborWriter(protectedHeaderWriterBuffer, CborOptions.RfcCanonical);
         protectedHeaderWriter.WriteStartMap(1);
         protectedHeaderWriter.WriteInt32(1); //alg (RFC 9052 section 3.1, label 1).
         protectedHeaderWriter.WriteInt32(-7); //an arbitrary IANA COSE Algorithms identifier (ES256).
         protectedHeaderWriter.WriteEndMap();
-        byte[] protectedHeaderBytes = protectedHeaderWriter.Encode();
+        byte[] protectedHeaderBytes = protectedHeaderWriterBuffer.WrittenSpan.ToArray();
 
-        var messageWriter = new CborWriter(CborConformanceMode.Canonical);
-        messageWriter.WriteTag((CborTag)18); //COSE_Sign1_Tagged (RFC 9052 section 2, clause 4.3).
+        var messageWriterBuffer = new ArrayBufferWriter<byte>();
+        var messageWriter = new CborWriter(messageWriterBuffer, CborOptions.RfcCanonical);
+        messageWriter.WriteTag(new CborTag((ulong)18)); //COSE_Sign1_Tagged (RFC 9052 section 2, clause 4.3).
         messageWriter.WriteStartArray(4);
         messageWriter.WriteByteString(protectedHeaderBytes);
 
@@ -1199,7 +1207,7 @@ internal sealed class CBAdESLevelRulesTests
         messageWriter.WriteByteString(new byte[] { 0x01, 0x02, 0x03, 0x04 }); //signature.
         messageWriter.WriteEndArray();
 
-        return messageWriter.Encode();
+        return messageWriterBuffer.WrittenSpan.ToArray();
     }
 
 

@@ -1,6 +1,6 @@
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Cbor;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -37,7 +37,7 @@ internal sealed class CoseTests
             payload,
             CoseSerialization.BuildSigStructure,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -49,7 +49,7 @@ internal sealed class CoseTests
             message,
             CoseSerialization.BuildSigStructure,
             publicKey,
-            MicrosoftCryptographicFunctions.VerifyP256Async,
+            MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "COSE_Sign1 signature verification must succeed.");
@@ -116,7 +116,7 @@ internal sealed class CoseTests
             payload,
             CoseSerialization.BuildSigStructure,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP384Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP384Async,
             BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -124,7 +124,7 @@ internal sealed class CoseTests
             message,
             CoseSerialization.BuildSigStructure,
             publicKey,
-            MicrosoftCryptographicFunctions.VerifyP384Async,
+            MicrosoftCryptographicFunctionsAdapter.VerifyP384Async,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "P-384 COSE_Sign1 signature verification must succeed.");
@@ -148,7 +148,7 @@ internal sealed class CoseTests
             payload,
             CoseSerialization.BuildSigStructure,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP521Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP521Async,
             BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -156,7 +156,7 @@ internal sealed class CoseTests
             message,
             CoseSerialization.BuildSigStructure,
             publicKey,
-            MicrosoftCryptographicFunctions.VerifyP521Async,
+            MicrosoftCryptographicFunctionsAdapter.VerifyP521Async,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "P-521 COSE_Sign1 signature verification must succeed.");
@@ -184,7 +184,7 @@ internal sealed class CoseTests
             payload,
             CoseSerialization.BuildSigStructure,
             signingPrivateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -192,7 +192,7 @@ internal sealed class CoseTests
             message,
             CoseSerialization.BuildSigStructure,
             wrongPublicKey,
-            MicrosoftCryptographicFunctions.VerifyP256Async,
+            MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(isValid, "Verification with wrong key must fail.");
@@ -216,7 +216,7 @@ internal sealed class CoseTests
             payload,
             CoseSerialization.BuildSigStructure,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -231,7 +231,7 @@ internal sealed class CoseTests
             parsed,
             CoseSerialization.BuildSigStructure,
             publicKey,
-            MicrosoftCryptographicFunctions.VerifyP256Async,
+            MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "Parsed COSE_Sign1 must verify successfully.");
@@ -262,7 +262,7 @@ internal sealed class CoseTests
             payload,
             CoseSerialization.BuildSigStructure,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -277,7 +277,7 @@ internal sealed class CoseTests
             parsed,
             CoseSerialization.BuildSigStructure,
             publicKey,
-            MicrosoftCryptographicFunctions.VerifyP256Async,
+            MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "The parsed message with a zero-length protected header must still verify.");
@@ -288,8 +288,9 @@ internal sealed class CoseTests
     [TestMethod]
     public void ParseCoseSign1AllowingNilPayloadAcceptsGenuinelyZeroLengthProtectedHeader()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
-        writer.WriteTag((CborTag)CoseTags.Sign1);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
+        writer.WriteTag(new CborTag((ulong)CoseTags.Sign1));
         writer.WriteStartArray(4);
         writer.WriteByteString([]);
         writer.WriteStartMap(0);
@@ -297,7 +298,7 @@ internal sealed class CoseTests
         writer.WriteNull();
         writer.WriteByteString([1, 2, 3, 4]);
         writer.WriteEndArray();
-        byte[] wireBytes = writer.Encode();
+        byte[] wireBytes = writerBuffer.WrittenSpan.ToArray();
 
         using CoseSign1Message parsed = CoseSerialization.ParseCoseSign1AllowingNilPayload(wireBytes, BaseMemoryPool.Shared);
 
@@ -323,7 +324,7 @@ internal sealed class CoseTests
             payload,
             CoseSerialization.BuildSigStructure,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -363,7 +364,7 @@ internal sealed class CoseTests
             payload,
             CoseSerialization.BuildSigStructure,
             signingPrivateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -470,14 +471,15 @@ internal sealed class CoseTests
     /// </summary>
     private static byte[] BuildTestPayload()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(2);
         writer.WriteInt32(WellKnownCwtClaimNames.Iss);
         writer.WriteTextString("did:example:issuer");
         writer.WriteInt32(WellKnownCwtClaimNames.Iat);
         writer.WriteInt64(1718452800);
         writer.WriteEndMap();
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -519,7 +521,7 @@ internal sealed class CoseTests
         int state,
         CancellationToken cancellationToken)
     {
-        return ValueTask.FromResult(new PrivateKey(material, "test-key", MicrosoftCryptographicFunctions.SignP256Async));
+        return ValueTask.FromResult(new PrivateKey(material, "test-key", MicrosoftCryptographicFunctionsAdapter.SignP256Async));
     }
 
 
@@ -530,6 +532,6 @@ internal sealed class CoseTests
         int state,
         CancellationToken cancellationToken)
     {
-        return ValueTask.FromResult(new PublicKey(material, "test-key", MicrosoftCryptographicFunctions.VerifyP256Async));
+        return ValueTask.FromResult(new PublicKey(material, "test-key", MicrosoftCryptographicFunctionsAdapter.VerifyP256Async));
     }
 }

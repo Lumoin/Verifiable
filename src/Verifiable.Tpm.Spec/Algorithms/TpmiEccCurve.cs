@@ -18,7 +18,7 @@ namespace Verifiable.Tpm.Spec.Algorithms;
 /// Unmarshaling any other value is <c>TPM_RC_CURVE</c>.
 /// </para>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 11.2.5.5, Table 200.
+/// Specification reference: TPM 2.0 Library Part 2, clause 11.2.5.5, Table 201.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]

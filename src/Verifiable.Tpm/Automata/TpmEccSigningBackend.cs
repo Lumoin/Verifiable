@@ -29,7 +29,7 @@ public delegate ValueTask<TpmGeneratedEccKey> TpmEccKeyGenerationDelegate(
 
 /// <summary>
 /// Signs a pre-computed digest with an ECC private scalar, modelling <c>TPM2_Sign()</c> over an
-/// externally-computed digest with a NULL validation ticket (TPM 2.0 Library Part 3, clause 20.2).
+/// externally-computed digest with a NULL validation ticket (TPM 2.0 Library Part 3, clause 20.5).
 /// </summary>
 /// <remarks>
 /// The digest is signed <strong>directly</strong> — the backend must not hash it again, since the caller
@@ -53,8 +53,8 @@ public delegate ValueTask<Signature> TpmEccDigestSignDelegate(
 /// <summary>
 /// Computes an elliptic-curve Diffie-Hellman shared value: the x-coordinate of the point
 /// <c>privateScalar · peerPublicPoint</c>, modelling the secret exchange a TPM performs for the credential
-/// protection of <c>TPM2_MakeCredential</c> / <c>TPM2_ActivateCredential</c> (TPM 2.0 Library Part 1, clause 24;
-/// the shared value <c>Z</c> then seeds <c>KDFe</c>, Part 1, clause 9.4.10.3).
+/// protection of <c>TPM2_MakeCredential</c> / <c>TPM2_ActivateCredential</c> (TPM 2.0 Library Part 1, clause 21;
+/// the shared value <c>Z</c> then seeds <c>KDFe</c>, Part 1, clause 8.4.10.3).
 /// </summary>
 /// <remarks>
 /// The curves the backend models have cofactor one, so the plain point multiplication yields the same shared
@@ -80,7 +80,7 @@ public delegate ValueTask<IMemoryOwner<byte>> TpmEccSharedSecretDelegate(
 
 /// <summary>
 /// Verifies that a signature over a pre-computed digest is valid for an elliptic-curve public key, modelling
-/// the public-key operation <c>TPM2_VerifySignature()</c> performs (TPM 2.0 Library Part 3, clause 20.1).
+/// the public-key operation <c>TPM2_VerifySignature()</c> performs (TPM 2.0 Library Part 3, clause 20.2).
 /// </summary>
 /// <remarks>
 /// The digest is verified <strong>directly</strong> — the backend must not hash it again, mirroring
@@ -102,6 +102,33 @@ public delegate ValueTask<bool> TpmEccDigestVerifyDelegate(
     CancellationToken cancellationToken);
 
 /// <summary>
+/// Derives the public point <c>f(x) = x · G</c> a private scalar carries, modelling the public/private key
+/// pair consistency check <c>TPM2_LoadExternal()</c> runs over an ECC sensitive area (TPM 2.0 Library Part 3,
+/// clause 12.3.1: "public/private key pair consistency checks"; clause 12.2.1: "For an ECC key, the public
+/// point shall be <c>f(x)</c> where <c>x</c> is the private key").
+/// </summary>
+/// <remarks>
+/// Returns <see langword="null"/> rather than throwing when <paramref name="privateScalar"/> is not a valid
+/// private key for <paramref name="curve"/> — outside <c>[1, n − 1]</c>, <c>n</c> being the curve order (Part
+/// 4, <c>CryptEccIsValidPrivateKey</c>) — so the caller can answer <c>TPM_RC_KEY_SIZE</c> without an
+/// exception-driven control path; the derived point is then compared against the loaded object's own
+/// <c>unique</c> to answer <c>TPM_RC_BINDING</c> on a mismatch.
+/// </remarks>
+/// <param name="privateScalar">The candidate private scalar, unsigned big-endian.</param>
+/// <param name="curve">The ECC curve the scalar is claimed to lie on.</param>
+/// <param name="pool">The memory pool backing the returned point.</param>
+/// <param name="cancellationToken">A cancellation token.</param>
+/// <returns>
+/// The derived public point, SEC1 uncompressed (<c>0x04 ‖ X ‖ Y</c>); <see langword="null"/> when the scalar
+/// is not a valid private key for the curve. The caller owns and disposes a non-null result.
+/// </returns>
+public delegate ValueTask<EncodedEcPoint?> TpmEccPublicPointDelegate(
+    ReadOnlyMemory<byte> privateScalar,
+    TpmEccCurveConstants curve,
+    BaseMemoryPool pool,
+    CancellationToken cancellationToken);
+
+/// <summary>
 /// The elliptic-curve signing backend the simulator drives for <c>TPM2_CreatePrimary()</c>,
 /// <c>TPM2_Sign()</c>, and <c>TPM2_VerifySignature()</c>: a key generator paired with a digest signer, an ECDH
 /// shared-secret function, and a digest verifier.
@@ -116,14 +143,19 @@ public delegate ValueTask<bool> TpmEccDigestVerifyDelegate(
 /// <param name="SignDigest">Signs a digest with a retained key for <c>TPM2_Sign()</c>.</param>
 /// <param name="ComputeSharedSecret">
 /// Computes the ECDH shared value the credential protection of <c>TPM2_MakeCredential</c> /
-/// <c>TPM2_ActivateCredential</c> transports the seed with (TPM 2.0 Library Part 1, clause 24).
+/// <c>TPM2_ActivateCredential</c> transports the seed with (TPM 2.0 Library Part 1, clause 21).
 /// </param>
 /// <param name="VerifyDigest">Verifies a digest/signature pair against a public point for <c>TPM2_VerifySignature()</c>.</param>
+/// <param name="DerivePublicPoint">
+/// Derives the public point a private scalar carries, for <c>TPM2_LoadExternal()</c>'s public/private key
+/// pair consistency check over a loaded ECC sensitive area (TPM 2.0 Library Part 3, clause 12.3.1).
+/// </param>
 public sealed record TpmEccSigningBackend(
     TpmEccKeyGenerationDelegate GenerateKey,
     TpmEccDigestSignDelegate SignDigest,
     TpmEccSharedSecretDelegate ComputeSharedSecret,
-    TpmEccDigestVerifyDelegate VerifyDigest);
+    TpmEccDigestVerifyDelegate VerifyDigest,
+    TpmEccPublicPointDelegate DerivePublicPoint);
 
 /// <summary>
 /// The key material a <see cref="TpmEccKeyGenerationDelegate"/> produces: the private scalar the TPM

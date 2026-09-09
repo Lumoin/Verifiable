@@ -1,4 +1,5 @@
-using System.Formats.Cbor;
+using System.Buffers;
+using Lumoin.Veritas.Cbor;
 using System.Globalization;
 using CsCheck;
 using Verifiable.Cbor;
@@ -51,7 +52,8 @@ internal sealed class SdCwtIssuancePropertyTests
 
             var (_, disclosures) = SdCwtClaimRedaction.Redact(
                 cborBytes, paths, TestSalts.DefaultGenerator(),
-                WellKnownHashAlgorithms.Sha256Iana);
+                WellKnownHashAlgorithms.Sha256Iana,
+                BaseMemoryPool.Shared);
 
             Assert.HasCount(disclosable.Count, disclosures);
         });
@@ -71,7 +73,8 @@ internal sealed class SdCwtIssuancePropertyTests
 
             var (payload, disclosures) = SdCwtClaimRedaction.Redact(
                 cborBytes, paths, TestSalts.DefaultGenerator(),
-                WellKnownHashAlgorithms.Sha256Iana);
+                WellKnownHashAlgorithms.Sha256Iana,
+                BaseMemoryPool.Shared);
 
             var disclosureNames = new HashSet<string>(disclosures.Select(d => d.ClaimName!));
 
@@ -103,7 +106,8 @@ internal sealed class SdCwtIssuancePropertyTests
 
             var (_, disclosures) = SdCwtClaimRedaction.Redact(
                 cborBytes, paths, TestSalts.DefaultGenerator(),
-                WellKnownHashAlgorithms.Sha256Iana);
+                WellKnownHashAlgorithms.Sha256Iana,
+                BaseMemoryPool.Shared);
 
             var saltSet = new HashSet<string>(
                 disclosures.Select(d => Convert.ToHexString(d.Salt.AsReadOnlySpan())));
@@ -121,7 +125,8 @@ internal sealed class SdCwtIssuancePropertyTests
 
             var (payload, disclosures) = SdCwtClaimRedaction.Redact(
                 cborBytes, new HashSet<CredentialPath>(), TestSalts.DefaultGenerator(),
-                WellKnownHashAlgorithms.Sha256Iana);
+                WellKnownHashAlgorithms.Sha256Iana,
+                BaseMemoryPool.Shared);
 
             Assert.HasCount(0, disclosures);
             Assert.HasCount(claims.Count, payload);
@@ -141,7 +146,8 @@ internal sealed class SdCwtIssuancePropertyTests
 
             var (payload, disclosures) = SdCwtClaimRedaction.Redact(
                 cborBytes, paths, TestSalts.DefaultGenerator(),
-                WellKnownHashAlgorithms.Sha256Iana);
+                WellKnownHashAlgorithms.Sha256Iana,
+                BaseMemoryPool.Shared);
 
             Assert.HasCount(claims.Count, disclosures);
 
@@ -194,7 +200,8 @@ internal sealed class SdCwtIssuancePropertyTests
     /// </summary>
     private static byte[] SerializeIntStringMap(Dictionary<int, string> claims)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(claims.Count);
         foreach(KeyValuePair<int, string> entry in claims)
         {
@@ -203,6 +210,6 @@ internal sealed class SdCwtIssuancePropertyTests
         }
 
         writer.WriteEndMap();
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
     }
 }

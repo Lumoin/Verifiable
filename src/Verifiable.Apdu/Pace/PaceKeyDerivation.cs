@@ -203,6 +203,9 @@ public static class PaceKeyDerivation
 
         (DigestValue value, _) = await digest(
             new ReadOnlySequence<byte>(input), Sha1Length, Sha1DigestTag, pool, null, cancellationToken).ConfigureAwait(false);
+
+        //Not a using declaration: value comes out of a tuple deconstruction, a shape the using
+        //declaration syntax does not accept; the try/finally disposes it exactly once on every exit path.
         try
         {
             IMemoryOwner<byte> owner = pool.Rent(Sha1Length, AllocationKind.Pinned);

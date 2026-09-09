@@ -24,7 +24,7 @@ namespace Verifiable.Tests.JCose;
 /// <para>
 /// <strong>Key material.</strong> Every signing key is P-256, minted through
 /// <see cref="TestKeyMaterialProvider.CreateP256KeyMaterial"/>, signed via the explicit-delegate
-/// <see cref="JAdESSignatureCreation.SignAsync"/> overload with <see cref="MicrosoftCryptographicFunctions.SignP256Async"/> —
+/// <see cref="JAdESSignatureCreation.SignAsync"/> overload with <see cref="MicrosoftCryptographicFunctionsAdapter.SignP256Async"/> —
 /// mirroring <c>CBAdESSignatureCreationTests</c>'s own explicit-delegate composition pattern.
 /// </para>
 /// <para>
@@ -63,7 +63,7 @@ internal sealed class JAdESSignatureCreationTests
             new JAdESAttachedPayloadInput(new byte[] { 0x01, 0x02, 0x03 }),
             unsignedHeaders: null,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             dereference: null,
             dereferenceContext: null,
             unknownMechanismHandler: null,
@@ -101,7 +101,7 @@ internal sealed class JAdESSignatureCreationTests
             new JAdESAttachedPayloadInput(new byte[] { 0x01 }),
             unsignedHeaders,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             dereference: null,
             dereferenceContext: null,
             unknownMechanismHandler: null,
@@ -136,7 +136,7 @@ internal sealed class JAdESSignatureCreationTests
                 new JAdESAttachedPayloadInput(new byte[] { 0x01 }),
                 unsignedHeaders: null,
                 privateKey,
-                MicrosoftCryptographicFunctions.SignP256Async,
+                MicrosoftCryptographicFunctionsAdapter.SignP256Async,
                 dereference: null,
                 dereferenceContext: null,
                 unknownMechanismHandler: null,
@@ -175,7 +175,7 @@ internal sealed class JAdESSignatureCreationTests
                 new JAdESDetachedExternalPayloadInput(new byte[] { 0x01 }),
                 unsignedHeaders: null,
                 privateKey,
-                MicrosoftCryptographicFunctions.SignP256Async,
+                MicrosoftCryptographicFunctionsAdapter.SignP256Async,
                 dereference: null,
                 dereferenceContext: null,
                 unknownMechanismHandler: null,
@@ -221,7 +221,7 @@ internal sealed class JAdESSignatureCreationTests
             new JAdESDetachedHttpHeadersPayloadInput(["digest"], context),
             unsignedHeaders: null,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             dereference: null,
             dereferenceContext: null,
             unknownMechanismHandler: null,
@@ -264,7 +264,7 @@ internal sealed class JAdESSignatureCreationTests
             ]),
             unsignedHeaders: null,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             DereferenceFromStoreAsync,
             context,
             unknownMechanismHandler: null,
@@ -302,7 +302,7 @@ internal sealed class JAdESSignatureCreationTests
             new JAdESDetachedObjectIdByUriHashPayloadInput(WellKnownHashAlgorithms.Sha256, [new JAdESDetachedObjectReferenceInput("urn:test:a", null)]),
             unsignedHeaders: null,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             DereferenceFromStoreAsync,
             context,
             unknownMechanismHandler: null,
@@ -333,7 +333,7 @@ internal sealed class JAdESSignatureCreationTests
                 new JAdESDetachedUnknownMechanismPayloadInput("urn:example:custom", [new JAdESDetachedObjectReferenceInput("urn:test:a", null)]),
                 unsignedHeaders: null,
                 privateKey,
-                MicrosoftCryptographicFunctions.SignP256Async,
+                MicrosoftCryptographicFunctionsAdapter.SignP256Async,
                 dereference: null,
                 context,
                 unknownMechanismHandler: null,
@@ -362,7 +362,7 @@ internal sealed class JAdESSignatureCreationTests
             new JAdESDetachedUnknownMechanismPayloadInput("urn:example:custom", [new JAdESDetachedObjectReferenceInput("urn:test:a", null)]),
             unsignedHeaders: null,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             dereference: null,
             context,
             HandleUnknownMechanismAsync,
@@ -414,7 +414,7 @@ internal sealed class JAdESSignatureCreationTests
                 JAdESEtsiUJson.Encode,
                 TestSetup.Base64UrlEncoder,
                 privateKey,
-                MicrosoftCryptographicFunctions.SignP256Async,
+                MicrosoftCryptographicFunctionsAdapter.SignP256Async,
                 dereference: null,
                 dereferenceContext: null,
                 unknownMechanismHandler: null,

@@ -1,6 +1,7 @@
 using System;
 using System.Buffers;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
+using Verifiable.Cbor;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
@@ -93,14 +94,16 @@ internal sealed class CtapMakeCredentialResponseCborReaderTests
     public void ThrowsWhenFmtMemberIsMissing()
     {
         using IMemoryOwner<byte> authDataOwner = RentAuthDataBytes();
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(1);
         writer.WriteInt32(WellKnownCtapMakeCredentialResponseKeys.AuthData);
         writer.WriteByteString(authDataOwner.Memory.Span[..4]);
         writer.WriteEndMap();
 
         Fido2FormatException exception = Assert.ThrowsExactly<Fido2FormatException>(
-            () => CtapMakeCredentialResponseCborReader.Read(writer.Encode()));
+            () => CtapMakeCredentialResponseCborReader.Read(writerBuffer.WrittenSpan.ToArray()));
 
         Assert.Contains("fmt", exception.Message, StringComparison.Ordinal);
     }
@@ -110,14 +113,16 @@ internal sealed class CtapMakeCredentialResponseCborReaderTests
     [TestMethod]
     public void ThrowsWhenAuthDataMemberIsMissing()
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(1);
         writer.WriteInt32(WellKnownCtapMakeCredentialResponseKeys.Fmt);
         writer.WriteTextString(WellKnownWebAuthnAttestationFormats.None);
         writer.WriteEndMap();
 
         Fido2FormatException exception = Assert.ThrowsExactly<Fido2FormatException>(
-            () => CtapMakeCredentialResponseCborReader.Read(writer.Encode()));
+            () => CtapMakeCredentialResponseCborReader.Read(writerBuffer.WrittenSpan.ToArray()));
 
         Assert.Contains("authData", exception.Message, StringComparison.Ordinal);
     }
@@ -128,7 +133,9 @@ internal sealed class CtapMakeCredentialResponseCborReaderTests
     public void ThrowsWhenFmtHasWrongCborType()
     {
         using IMemoryOwner<byte> authDataOwner = RentAuthDataBytes();
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(2);
         writer.WriteInt32(WellKnownCtapMakeCredentialResponseKeys.Fmt);
         writer.WriteByteString([0x01]);
@@ -136,7 +143,7 @@ internal sealed class CtapMakeCredentialResponseCborReaderTests
         writer.WriteByteString(authDataOwner.Memory.Span[..4]);
         writer.WriteEndMap();
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => CtapMakeCredentialResponseCborReader.Read(writer.Encode()));
+        Assert.ThrowsExactly<Fido2FormatException>(() => CtapMakeCredentialResponseCborReader.Read(writerBuffer.WrittenSpan.ToArray()));
     }
 
 
@@ -173,7 +180,9 @@ internal sealed class CtapMakeCredentialResponseCborReaderTests
     public void IgnoresUnrecognizedTopLevelMemberKey()
     {
         using IMemoryOwner<byte> authDataOwner = RentAuthDataBytes();
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(3);
         writer.WriteInt32(WellKnownCtapMakeCredentialResponseKeys.Fmt);
         writer.WriteTextString(WellKnownWebAuthnAttestationFormats.None);
@@ -183,7 +192,7 @@ internal sealed class CtapMakeCredentialResponseCborReaderTests
         writer.WriteBoolean(true);
         writer.WriteEndMap();
 
-        CtapMakeCredentialResponse decoded = CtapMakeCredentialResponseCborReader.Read(writer.Encode());
+        CtapMakeCredentialResponse decoded = CtapMakeCredentialResponseCborReader.Read(writerBuffer.WrittenSpan.ToArray());
 
         Assert.AreEqual(WellKnownWebAuthnAttestationFormats.None, decoded.Fmt);
     }

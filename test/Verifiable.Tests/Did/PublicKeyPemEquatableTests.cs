@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Core.Model.Did;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Did
 {
@@ -346,6 +347,28 @@ MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE4f7jGC8Y4A8L2Y9XZGx8QY4Y8A8L2Y9XZGx8QY4Y8A8L
             Assert.IsTrue(pem1.Equals(pem2));
             Assert.IsTrue(pem1 == pem2);
             Assert.IsFalse(pem1 != pem2);
+        }
+
+
+        /// <summary>
+        /// The <see cref="object.Equals(object?)"/>/<see cref="object.GetHashCode"/> contract requires
+        /// that <see cref="PublicKeyPem.GetHashCode"/> be computed with the same comparison basis as
+        /// <see cref="PublicKeyPem.Equals(KeyFormat?)"/> (ordinal, exact content). A soft hyphen
+        /// (U+00AD, a Unicode default-ignorable code point) inserted into the key produces a
+        /// byte-different string that a culture-aware comparison could still treat as equal; both
+        /// halves of the contract — <c>Equals</c> returning <see langword="false"/> and
+        /// <c>GetHashCode</c> differing — must hold for the type to behave correctly in hash
+        /// containers.
+        /// </summary>
+        [TestMethod]
+        public void KeyWithIgnorableCodePointIsNotEqualToOriginalAndHashesDiffer()
+        {
+            var original = new PublicKeyPem("-----BEGIN PUBLIC KEY-----test-----END PUBLIC KEY-----");
+            var tampered = new PublicKeyPem(original.Key.InsertIgnorableCodePointAt(30));
+
+            Assert.IsFalse(original.Equals(tampered));
+            Assert.IsFalse(original == tampered);
+            Assert.AreNotEqual(original.GetHashCode(), tampered.GetHashCode());
         }
     }
 }

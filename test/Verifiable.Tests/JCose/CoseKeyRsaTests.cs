@@ -11,6 +11,8 @@ using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
+using Microsoft.Extensions.Time.Testing;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.JCose;
 
@@ -86,9 +88,7 @@ internal sealed class CoseKeyRsaTests
         CoseKey coseKey = new(kty: CoseKeyTypes.Rsa, n: modulus, e: exponent);
         PublicKeyMemory reconstructed = coseKey.ToPublicKeyMemory(BaseMemoryPool.Shared);
 
-        (Signature signature, CryptoEvent? _) = await BouncyCastleCryptographicFunctions.SignRsa2048Async(
-            bcPrivateKey.AsReadOnlyMemory(), TestData, BaseMemoryPool.Shared,
-            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        (Signature signature, CryptoEvent? _) = await BouncyCastleCryptographicFunctions.SignRsa2048Async(bcPrivateKey.AsReadOnlyMemory(), TestData, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch)).ConfigureAwait(false);
         using var disposableSignature = signature;
 
         using PublicKey verifierKey = CryptographicKeyFactory.CreatePublicKey(
@@ -115,9 +115,7 @@ internal sealed class CoseKeyRsaTests
         CoseKey coseKey = new(kty: CoseKeyTypes.Rsa, n: modulus, e: exponent);
         PublicKeyMemory reconstructed = coseKey.ToPublicKeyMemory(BaseMemoryPool.Shared);
 
-        (Signature signature, CryptoEvent? _) = await BouncyCastleCryptographicFunctions.SignRsa2048Async(
-            bcPrivateKey.AsReadOnlyMemory(), TestData, BaseMemoryPool.Shared,
-            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        (Signature signature, CryptoEvent? _) = await BouncyCastleCryptographicFunctions.SignRsa2048Async(bcPrivateKey.AsReadOnlyMemory(), TestData, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch)).ConfigureAwait(false);
         using var disposableSignature = signature;
 
         using PublicKey verifierKey = CryptographicKeyFactory.CreatePublicKey(
@@ -166,9 +164,7 @@ internal sealed class CoseKeyRsaTests
         CoseKey coseKey = new(kty: CoseKeyTypes.Rsa, n: modulus, e: exponent);
         PublicKeyMemory reconstructed = coseKey.ToPublicKeyMemory(BaseMemoryPool.Shared);
 
-        (Signature signature, CryptoEvent? _) = await BouncyCastleCryptographicFunctions.SignRsa4096Async(
-            bcPrivateKey.AsReadOnlyMemory(), TestData, BaseMemoryPool.Shared,
-            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        (Signature signature, CryptoEvent? _) = await BouncyCastleCryptographicFunctions.SignRsa4096Async(bcPrivateKey.AsReadOnlyMemory(), TestData, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch)).ConfigureAwait(false);
         using var disposableSignature = signature;
 
         using PublicKey verifierKey = CryptographicKeyFactory.CreatePublicKey(
@@ -197,9 +193,7 @@ internal sealed class CoseKeyRsaTests
 
         Assert.AreEqual(CryptoTags.Rsa2048PublicKey, reconstructed.Tag);
 
-        (Signature signature, CryptoEvent? _) = await BouncyCastleCryptographicFunctions.SignRsa2048Async(
-            privateKeyDer.Memory, TestData, BaseMemoryPool.Shared,
-            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        (Signature signature, CryptoEvent? _) = await BouncyCastleCryptographicFunctions.SignRsa2048Async(privateKeyDer.Memory, TestData, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch)).ConfigureAwait(false);
         using var disposableSignature = signature;
 
         using PublicKey verifierKey = CryptographicKeyFactory.CreatePublicKey(

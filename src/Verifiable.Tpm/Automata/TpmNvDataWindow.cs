@@ -5,7 +5,7 @@ namespace Verifiable.Tpm.Automata;
 /// <summary>
 /// The <c>offset</c>/<c>size</c> window of a defined NV Index's data area that a read answers with, framed on
 /// the wire as the <c>TPM2B_MAX_NV_BUFFER data</c> parameter of <c>TPM2_NV_Read()</c> (TPM 2.0 Library Part 3,
-/// clause 31.13.2, Table 249; Part 2, clause 10.4.9, Table 99).
+/// clause 31.13.2, Table 266; Part 2, clause 10.3.9, Table 97).
 /// </summary>
 /// <remarks>
 /// <see cref="Data"/> is a BORROW of the carrier the durable Index state owns, never a rental of this record's:

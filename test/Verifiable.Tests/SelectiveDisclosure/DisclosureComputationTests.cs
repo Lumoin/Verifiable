@@ -1,6 +1,7 @@
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Core.Model.SelectiveDisclosure.Strategy;
 using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.SelectiveDisclosure;
 
@@ -23,10 +24,38 @@ internal sealed class DisclosureComputationTests
     private static CredentialPath Type { get; } = CredentialPath.FromJsonPointer("/type");
 
 
+    /// <summary>
+    /// <see cref="DisclosureComputation{TCredential}.ComputeAsync"/>'s audit-trail
+    /// <c>DecisionRecord.Timestamp</c> is the exact instant the passed <see cref="TimeProvider"/> reports,
+    /// not wall time.
+    /// </summary>
+    [TestMethod]
+    public async Task ComputeAsyncDecisionRecordTimestampIsThePassedTimeProvidersInstant()
+    {
+        var fakeTimeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch);
+        var computation = new DisclosureComputation<string>([], fakeTimeProvider);
+
+        var matches = new[]
+        {
+            CreateMatch("cred-1", "req-1",
+                required: [GivenName, FamilyName],
+                available: [GivenName, FamilyName, Email, Birthdate])
+        };
+
+        var graph = await computation.ComputeAsync(matches,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsNotNull(graph.DecisionRecord, "The audit-trail decision record must be present.");
+        Assert.AreEqual(
+            TestClock.CanonicalEpoch, graph.DecisionRecord.Timestamp,
+            "DecisionRecord.Timestamp must equal the passed TimeProvider's instant exactly.");
+    }
+
+
     [TestMethod]
     public async Task ComputesSingleCredentialDisclosure()
     {
-        var computation = new DisclosureComputation<string>();
+        var computation = new DisclosureComputation<string>([], new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         var matches = new[]
         {
@@ -49,7 +78,7 @@ internal sealed class DisclosureComputationTests
     [TestMethod]
     public async Task MinimizesDisclosureToRequiredPaths()
     {
-        var computation = new DisclosureComputation<string>();
+        var computation = new DisclosureComputation<string>([], new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         var matches = new[]
         {
@@ -75,7 +104,7 @@ internal sealed class DisclosureComputationTests
     [TestMethod]
     public async Task IncludesMandatoryPathsEvenWhenNotRequested()
     {
-        var computation = new DisclosureComputation<string>();
+        var computation = new DisclosureComputation<string>([], new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         var mandatory = new HashSet<CredentialPath> { Iss, Type };
         var matches = new[]
@@ -101,7 +130,7 @@ internal sealed class DisclosureComputationTests
     [TestMethod]
     public async Task RespectsUserExclusions()
     {
-        var computation = new DisclosureComputation<string>();
+        var computation = new DisclosureComputation<string>([], new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         var matches = new[]
         {
@@ -138,7 +167,7 @@ internal sealed class DisclosureComputationTests
                 AssessorName = "RejectAll"
             }));
 
-        var computation = new DisclosureComputation<string>([rejectAll]);
+        var computation = new DisclosureComputation<string>([rejectAll], new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         var matches = new[]
         {
@@ -169,7 +198,7 @@ internal sealed class DisclosureComputationTests
                 AssessorName = "NarrowPolicy"
             }));
 
-        var computation = new DisclosureComputation<string>([narrowToGivenNameOnly]);
+        var computation = new DisclosureComputation<string>([narrowToGivenNameOnly], new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         var matches = new[]
         {
@@ -217,7 +246,7 @@ internal sealed class DisclosureComputationTests
             });
         };
 
-        var computation = new DisclosureComputation<string>([first, second]);
+        var computation = new DisclosureComputation<string>([first, second], new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         var matches = new[]
         {
@@ -260,7 +289,7 @@ internal sealed class DisclosureComputationTests
             });
         };
 
-        var computation = new DisclosureComputation<string>([rejecter, shouldNotRun]);
+        var computation = new DisclosureComputation<string>([rejecter, shouldNotRun], new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         var matches = new[]
         {
@@ -280,7 +309,7 @@ internal sealed class DisclosureComputationTests
     [TestMethod]
     public async Task DecisionRecordCapturesAllPhases()
     {
-        var computation = new DisclosureComputation<string>();
+        var computation = new DisclosureComputation<string>([], new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         var matches = new[]
         {
@@ -307,7 +336,7 @@ internal sealed class DisclosureComputationTests
     [TestMethod]
     public async Task DecisionRecordCapturesLatticeDetails()
     {
-        var computation = new DisclosureComputation<string>();
+        var computation = new DisclosureComputation<string>([], new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         var mandatory = new HashSet<CredentialPath> { Iss };
         var matches = new[]
@@ -348,7 +377,7 @@ internal sealed class DisclosureComputationTests
                 Reason = "Approved for testing."
             }));
 
-        var computation = new DisclosureComputation<string>([assessor]);
+        var computation = new DisclosureComputation<string>([assessor], new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         var matches = new[]
         {
@@ -373,7 +402,7 @@ internal sealed class DisclosureComputationTests
     [TestMethod]
     public async Task EmptyMatchListProducesSatisfiedEmptyGraph()
     {
-        var computation = new DisclosureComputation<string>();
+        var computation = new DisclosureComputation<string>([], new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         var graph = await computation.ComputeAsync([],
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -386,7 +415,7 @@ internal sealed class DisclosureComputationTests
     [TestMethod]
     public async Task LatticeIsExposedOnDecision()
     {
-        var computation = new DisclosureComputation<string>();
+        var computation = new DisclosureComputation<string>([], new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         var matches = new[]
         {
@@ -407,7 +436,7 @@ internal sealed class DisclosureComputationTests
     [TestMethod]
     public async Task GraphAlwaysHasSelectedStrategyAndFrontier()
     {
-        var computation = new DisclosureComputation<string>();
+        var computation = new DisclosureComputation<string>([], new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         var matches = new[]
         {
@@ -428,7 +457,7 @@ internal sealed class DisclosureComputationTests
     [TestMethod]
     public async Task EntropyWeightsAffectStrategyScoring()
     {
-        var computation = new DisclosureComputation<string>();
+        var computation = new DisclosureComputation<string>([], new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         //All three paths are required so the lattice keeps them all.
         var matches = new[]
@@ -458,7 +487,7 @@ internal sealed class DisclosureComputationTests
     [TestMethod]
     public async Task LowestEntropyStrategyIsSelectedByDefault()
     {
-        var computation = new DisclosureComputation<string>();
+        var computation = new DisclosureComputation<string>([], new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         //Both credentials provide given_name. National ID also discloses SSN
         //(required by its match), driver's license discloses address (required
@@ -518,8 +547,8 @@ internal sealed class DisclosureComputationTests
             [Birthdate] = 4.3
         };
 
-        var withPolicy = new DisclosureComputation<string>([narrower]);
-        var withoutPolicy = new DisclosureComputation<string>();
+        var withPolicy = new DisclosureComputation<string>([narrower], new FakeTimeProvider(TestClock.CanonicalEpoch));
+        var withoutPolicy = new DisclosureComputation<string>([], new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         var matches = new[]
         {
@@ -559,7 +588,7 @@ internal sealed class DisclosureComputationTests
             return total * 2.0;
         };
 
-        var computation = new DisclosureComputation<string>([], entropyCompute: doubleEntropy);
+        var computation = new DisclosureComputation<string>([], new FakeTimeProvider(TestClock.CanonicalEpoch), entropyCompute: doubleEntropy);
 
         var matches = new[]
         {
@@ -584,7 +613,7 @@ internal sealed class DisclosureComputationTests
     [TestMethod]
     public async Task GraphEnumerationIsAccessibleForDebugging()
     {
-        var computation = new DisclosureComputation<string>();
+        var computation = new DisclosureComputation<string>([], new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         var matches = new[]
         {
@@ -629,8 +658,7 @@ internal sealed class DisclosureComputationTests
         var optimizer = BuildSatOptimizer(
             sensitivePathPairs: [(Ssn, AccountNumber)]);
 
-        var computation = new DisclosureComputation<string>(
-            [], crossCredentialOptimizers: [optimizer]);
+        var computation = new DisclosureComputation<string>([], new FakeTimeProvider(TestClock.CanonicalEpoch), crossCredentialOptimizers: [optimizer]);
 
         var matches = new[]
         {
@@ -694,8 +722,7 @@ internal sealed class DisclosureComputationTests
                 return Task.FromResult(decisions);
             });
 
-        var computation = new DisclosureComputation<string>(
-            [], crossCredentialOptimizers: [signalAwareOptimizer]);
+        var computation = new DisclosureComputation<string>([], new FakeTimeProvider(TestClock.CanonicalEpoch), crossCredentialOptimizers: [signalAwareOptimizer]);
 
         var requestingPartySignals = new Dictionary<Type, object>
         {

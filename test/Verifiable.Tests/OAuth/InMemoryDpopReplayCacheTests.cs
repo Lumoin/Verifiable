@@ -16,7 +16,7 @@ internal sealed class InMemoryDpopReplayCacheTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly ExchangeContext Context = new();
+    private static ExchangeContext Context { get; } = new();
 
 
     /// <summary>A jti never persisted is not seen.</summary>

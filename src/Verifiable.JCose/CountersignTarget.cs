@@ -175,6 +175,11 @@ public readonly record struct CountersignStructureInput(
     {
         ArgumentNullException.ThrowIfNull(target);
 
+        //The (ReadOnlyMemory<byte>?) casts are load-bearing, not redundant: ReadOnlyMemory<byte> has
+        //its own implicit conversion from a null array, so without the cast the switch's inferred
+        //common type for this position is the non-nullable ReadOnlyMemory<byte> and a "null" arm
+        //silently becomes an empty-but-present memory (HasValue true, Length 0) instead of "absent"
+        //(HasValue false) — collapsing the has-other_fields distinction this input carries.
         (ReadOnlyMemory<byte> bodyProtected, ReadOnlyMemory<byte> payload, ReadOnlyMemory<byte>? otherFieldsSignature) = target switch
         {
             CoseSignatureCountersignTarget signatureTarget =>

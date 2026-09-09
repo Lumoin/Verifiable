@@ -13,7 +13,7 @@ namespace Verifiable.Tpm.Spec.Attributes;
 /// These bits are present in each authorization session entry for commands and are reflected in responses.
 /// </para>
 /// <para>
-/// Specification: <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2: Structures, section 8.4 (TPMA_SESSION).
+/// Specification: <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2: Structures, clause 8.4 (TPMA_SESSION).
 /// </para>
 /// </remarks>
 [Flags]

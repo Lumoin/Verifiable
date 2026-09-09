@@ -1,6 +1,6 @@
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
@@ -8,6 +8,7 @@ using System.Text.Json;
 using Verifiable.BouncyCastle;
 using Verifiable.Cbor;
 using Verifiable.Core;
+using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did;
@@ -73,7 +74,7 @@ internal sealed class CredentialSecuringMethodsTests
     }
     """;
 
-    private static readonly DateTime ProofCreated = new(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+    private static DateTime ProofCreated { get; } = new(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
 
     /// <summary>
@@ -105,7 +106,7 @@ internal sealed class CredentialSecuringMethodsTests
             DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -126,7 +127,7 @@ internal sealed class CredentialSecuringMethodsTests
             SerializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Decoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -193,7 +194,7 @@ internal sealed class CredentialSecuringMethodsTests
         //Holder receives credential and verifies issuer signature.
         var holderVerifyResult = await signedCredential.VerifyBaseProofAsync(
             P256IssuerKeys.PublicKey,
-            BouncyCastleCryptographicFunctions.VerifyP256Async,
+            BouncyCastleCryptographicFunctionsAdapter.VerifyP256Async,
             EcdsaSd2023CborSerializer.ParseBaseProof,
             JsonLdSelection.PartitionStatements,
             RdfcCanonicalizer,
@@ -247,7 +248,7 @@ internal sealed class CredentialSecuringMethodsTests
         //Verifier receives derived credential and verifies the selective disclosure proof.
         var verificationResult = await derivedCredential.VerifyDerivedProofAsync(
             P256IssuerKeys.PublicKey,
-            BouncyCastleCryptographicFunctions.VerifyP256Async,
+            BouncyCastleCryptographicFunctionsAdapter.VerifyP256Async,
             EcdsaSd2023CborSerializer.ParseDerivedProof,
             RdfcCanonicalizer,
             ContextResolver,
@@ -293,7 +294,7 @@ internal sealed class CredentialSecuringMethodsTests
             DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -314,7 +315,295 @@ internal sealed class CredentialSecuringMethodsTests
             SerializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Decoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
+            BaseMemoryPool.Shared,
+            EmptyContext,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(verificationResult.IsValid);
+    }
+
+
+    /// <summary>
+    /// An eddsa-jcs-2022 proof over a credential whose <c>@context</c> is a two-IRI array plus an
+    /// inline definition containing a <see langword="null"/>-valued member survives a
+    /// serialize→parse→re-serialize cycle byte-identically and the proof still verifies.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// eddsa-jcs-2022 canonicalizes by JSON Canonicalization Scheme (RFC 8785), not RDF Dataset
+    /// Canonicalization — see
+    /// <see href="https://www.w3.org/TR/vc-di-eddsa/#eddsa-jcs-2022">VC Data Integrity EdDSA
+    /// Cryptosuites: eddsa-jcs-2022, the "Transformation" and "Proof Configuration" algorithms</see>,
+    /// which serialize the credential (transformed document) and the proof options document as JCS
+    /// and hash the concatenated bytes; the canonical bytes therefore have to be exactly what was
+    /// signed, which is what this test proves for the array-plus-inline-definition-with-null shape a
+    /// literal JSON re-serialization has to reproduce.
+    /// </para>
+    /// <para>
+    /// The pre-signing re-serialization is checked against a JSON literal authored by hand, in the
+    /// exact member order <see cref="Verifiable.Json.Converters.VerifiableCredentialConverter"/> and
+    /// <see cref="Verifiable.Json.Converters.JsonLdContextConverter"/> write, rather than against a
+    /// value the sign/verify round trip below produced: a deterministic wire-form change (member
+    /// order, a dropped null, an escaped character) fails this assertion even in a build where the
+    /// round trip below would still pass.
+    /// </para>
+    /// </remarks>
+    [TestMethod]
+    public async ValueTask EddsaJcs2022DataIntegrityProofSucceedsWithArrayContextAndInlineDefinitionContainingNull()
+    {
+        const string UnsignedCredentialWithNullInDefinitionJson = /*lang=json,strict*/ """
+        {"@context":["https://www.w3.org/ns/credentials/v2","https://www.w3.org/ns/credentials/examples/v2",{"@vocab":null}],"id":"http://university.example/credentials/3733","type":["VerifiableCredential","ExampleDegreeCredential"],"issuer":{"id":"did:example:76e12ec712ebc6f1c221ebfeb1f","name":"Example University"},"credentialSubject":{"id":"did:example:ebfeb1f712ebc6f1c276e12ec21","degree":{"type":"ExampleBachelorDegree","name":"Bachelor of Science and Arts"}},"validFrom":"2010-01-01T19:23:24Z"}
+        """;
+
+        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(UnsignedCredentialWithNullInDefinitionJson, JsonOptions)!;
+
+        //The credential round-trips byte-identically before signing is even attempted, against the
+        //hand-authored literal above rather than a value this test produced: the null-valued member
+        //inside the inline definition is data (JSON-LD 1.1's way to clear @vocab), not something
+        //ManualJsonReader may drop, and no member may move from the order the converter writes.
+        string reserializedCredential = SerializeCredential(credential);
+        Assert.AreEqual(UnsignedCredentialWithNullInDefinitionJson, reserializedCredential, "The unsigned credential must re-serialize byte-identically to the authored literal.");
+
+        using(var beforeSigningDocument = JsonDocument.Parse(reserializedCredential))
+        {
+            Assert.IsTrue(beforeSigningDocument.RootElement.GetProperty("@context")[2].TryGetProperty("@vocab", out JsonElement vocabElement));
+            Assert.AreEqual(JsonValueKind.Null, vocabElement.ValueKind);
+        }
+
+        var privateKeyBytes = MultibaseSerializer.Decode(
+            Ed25519SecretKeyMultibase,
+            MulticodecHeaders.Ed25519PrivateKey.Length,
+            TestSetup.Base58Decoder,
+            BaseMemoryPool.Shared);
+        using PrivateKeyMemory privateKeyMemory = new(privateKeyBytes, CryptoTags.Ed25519PrivateKey);
+
+        var didDocument = CreateDidDocument(Ed25519VerificationMethodId, Ed25519PublicKeyMultibase);
+
+        var signedCredential = await credential.SignAsync(
+            privateKeyMemory,
+            Ed25519VerificationMethodId,
+            EddsaJcs2022CryptosuiteInfo.Instance,
+            ProofCreated,
+            JcsCanonicalizer,
+            contextResolver: null,
+            ProofValueCodecs.EncodeBase58Btc,
+            SerializeCredential,
+            DeserializeCredential,
+            SerializeProofOptions,
+            TestSetup.Base58Encoder,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
+            BaseMemoryPool.Shared,
+            EmptyContext,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        //Serialize, then parse and re-serialize again — the shape a signed credential actually
+        //travels through on the wire — before verifying.
+        string firstSerialization = SerializeCredential(signedCredential);
+        var reparsedCredential = (DataIntegritySecuredCredential)DeserializeCredential(firstSerialization);
+        string secondSerialization = SerializeCredential(reparsedCredential);
+        Assert.AreEqual(firstSerialization, secondSerialization, "The array-plus-inline-definition-with-null @context must survive a parse→re-serialize cycle byte-identically.");
+
+        var verificationResult = await reparsedCredential.VerifyAsync(
+            didDocument,
+            JcsCanonicalizer,
+            contextResolver: null,
+            ProofValueCodecs.DecodeBase58Btc,
+            SerializeCredential,
+            SerializeProofOptions,
+            TestSetup.Base58Decoder,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
+            BaseMemoryPool.Shared,
+            EmptyContext,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(verificationResult.IsValid);
+    }
+
+
+    /// <summary>
+    /// An eddsa-jcs-2022 proof over a credential whose <c>@context</c> is authored as a bare
+    /// scalar URL string, not an array, survives a serialize-&gt;parse-&gt;re-serialize cycle
+    /// preserving that scalar wire shape byte-identically, and the proof still verifies.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#contexts">VC Data Model 2.0 4.3
+    /// Contexts</see> requires the array ("ordered set") form: "The value of the @context
+    /// property MUST be an ordered set where the first item is a URL with the value
+    /// https://www.w3.org/ns/credentials/v2." This library's
+    /// <see cref="Verifiable.Core.Model.Common.Context"/> additionally accepts the more
+    /// permissive bare-IRI-string shape JSON-LD contexts also take, the same scalar form
+    /// <see cref="Verifiable.Json.Converters.JsonLdContextConverter"/> already round-trips for
+    /// DID documents, and records which shape was read as
+    /// <see cref="ContextForm.Scalar"/> so the writer reproduces it rather than upgrading it to
+    /// a one-element array.
+    /// </para>
+    /// <para>
+    /// Per <see href="https://www.w3.org/TR/vc-di-eddsa/#eddsa-jcs-2022">VC Data Integrity
+    /// EdDSA Cryptosuites: eddsa-jcs-2022, the "Transformation" algorithm</see>: "Let
+    /// canonicalDocument be the result of applying the JSON Canonicalization Scheme [RFC8785]
+    /// to a JSON serialization of the unsecuredDocument." A writer that silently wraps a scalar
+    /// @context into an array before that step would sign and verify against different bytes
+    /// than the document as authored; this test proves the scalar branch survives the whole
+    /// proof path unchanged.
+    /// </para>
+    /// </remarks>
+    [TestMethod]
+    public async ValueTask EddsaJcs2022DataIntegrityProofSucceedsWithScalarContext()
+    {
+        const string UnsignedCredentialWithScalarContextJson = /*lang=json,strict*/ """
+        {"@context":"https://www.w3.org/ns/credentials/v2","id":"http://university.example/credentials/3736","type":["VerifiableCredential"],"issuer":{"id":"did:example:76e12ec712ebc6f1c221ebfeb1f","name":"Example University"},"credentialSubject":{"id":"did:example:ebfeb1f712ebc6f1c276e12ec21"},"validFrom":"2010-01-01T19:23:24Z"}
+        """;
+
+        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(UnsignedCredentialWithScalarContextJson, JsonOptions)!;
+        Assert.AreEqual(ContextForm.Scalar, credential.Context!.Form);
+        Assert.HasCount(1, credential.Context!.Entries);
+
+        //The scalar @context round-trips byte-identically before signing is even attempted,
+        //against the hand-authored literal above: the writer must reproduce the bare-string
+        //shape rather than upgrading it to a one-element array.
+        string reserializedCredential = SerializeCredential(credential);
+        Assert.AreEqual(UnsignedCredentialWithScalarContextJson, reserializedCredential, "The scalar-form @context must survive a parse->re-serialize cycle byte-identically before any signing.");
+
+        var privateKeyBytes = MultibaseSerializer.Decode(
+            Ed25519SecretKeyMultibase,
+            MulticodecHeaders.Ed25519PrivateKey.Length,
+            TestSetup.Base58Decoder,
+            BaseMemoryPool.Shared);
+        using PrivateKeyMemory privateKeyMemory = new(privateKeyBytes, CryptoTags.Ed25519PrivateKey);
+
+        var didDocument = CreateDidDocument(Ed25519VerificationMethodId, Ed25519PublicKeyMultibase);
+
+        var signedCredential = await credential.SignAsync(
+            privateKeyMemory,
+            Ed25519VerificationMethodId,
+            EddsaJcs2022CryptosuiteInfo.Instance,
+            ProofCreated,
+            JcsCanonicalizer,
+            contextResolver: null,
+            ProofValueCodecs.EncodeBase58Btc,
+            SerializeCredential,
+            DeserializeCredential,
+            SerializeProofOptions,
+            TestSetup.Base58Encoder,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
+            BaseMemoryPool.Shared,
+            EmptyContext,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        string firstSerialization = SerializeCredential(signedCredential);
+        var reparsedCredential = (DataIntegritySecuredCredential)DeserializeCredential(firstSerialization);
+        string secondSerialization = SerializeCredential(reparsedCredential);
+        Assert.AreEqual(firstSerialization, secondSerialization, "The signed credential's scalar-form @context must survive a parse->re-serialize cycle byte-identically.");
+        Assert.AreEqual(ContextForm.Scalar, reparsedCredential.Context!.Form, "The scalar form must not be upgraded to an array by the sign/verify round trip.");
+
+        var verificationResult = await reparsedCredential.VerifyAsync(
+            didDocument,
+            JcsCanonicalizer,
+            contextResolver: null,
+            ProofValueCodecs.DecodeBase58Btc,
+            SerializeCredential,
+            SerializeProofOptions,
+            TestSetup.Base58Decoder,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
+            BaseMemoryPool.Shared,
+            EmptyContext,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(verificationResult.IsValid);
+    }
+
+
+    /// <summary>
+    /// An eddsa-jcs-2022 proof over a credential whose <c>credentialSubject</c> carries a
+    /// top-level <see langword="null"/>-valued member survives a
+    /// serialize-&gt;parse-&gt;re-serialize cycle byte-identically, both before and after
+    /// signing, and the proof still verifies.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#credential-subject">VC Data Model
+    /// 2.0 4.8 Credential Subject</see> lets a subject carry arbitrary claims; a claim whose
+    /// value is JSON <see langword="null"/> is a claim asserting that value, not an absent
+    /// claim, so <see cref="Verifiable.Json.Converters.CredentialSubjectConverter"/> keeps it in
+    /// <see cref="CredentialSubject.AdditionalData"/> and re-emits the <c>null</c> literal on
+    /// write.
+    /// </para>
+    /// <para>
+    /// Dropping that member on re-serialization would corrupt the canonicalization input
+    /// eddsa-jcs-2022 signs: per
+    /// <see href="https://www.w3.org/TR/vc-di-eddsa/#eddsa-jcs-2022">VC Data Integrity EdDSA
+    /// Cryptosuites: eddsa-jcs-2022, the "Transformation" algorithm</see>, "Let
+    /// canonicalDocument be the result of applying the JSON Canonicalization Scheme [RFC8785]
+    /// to a JSON serialization of the unsecuredDocument" - a member missing from that JSON
+    /// serialization is a member the canonicalized, signed bytes never saw, so a verifier
+    /// re-deriving the digest from a document an issuer authored with the null present would
+    /// compute a different digest than one re-serialized with it dropped. This test proves the
+    /// null member neither disappears nor changes the digest across the whole proof path.
+    /// </para>
+    /// </remarks>
+    [TestMethod]
+    public async ValueTask EddsaJcs2022DataIntegrityProofSucceedsWithNullValuedCredentialSubjectMember()
+    {
+        const string UnsignedCredentialWithNullValuedSubjectMemberJson = /*lang=json,strict*/ """
+        {"@context":["https://www.w3.org/ns/credentials/v2","https://www.w3.org/ns/credentials/examples/v2"],"id":"http://university.example/credentials/3737","type":["VerifiableCredential","ExampleDegreeCredential"],"issuer":{"id":"did:example:76e12ec712ebc6f1c221ebfeb1f","name":"Example University"},"credentialSubject":{"id":"did:example:ebfeb1f712ebc6f1c276e12ec21","name":null},"validFrom":"2010-01-01T19:23:24Z"}
+        """;
+
+        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(UnsignedCredentialWithNullValuedSubjectMemberJson, JsonOptions)!;
+
+        //The credential round-trips byte-identically before signing is even attempted, against
+        //the hand-authored literal above: the credentialSubject's null-valued "name" member is
+        //data, not an absent member, and CredentialSubjectConverter must not drop it.
+        string reserializedCredential = SerializeCredential(credential);
+        Assert.AreEqual(UnsignedCredentialWithNullValuedSubjectMemberJson, reserializedCredential, "The credentialSubject's null-valued member must survive a parse->re-serialize cycle byte-identically before any signing.");
+
+        var privateKeyBytes = MultibaseSerializer.Decode(
+            Ed25519SecretKeyMultibase,
+            MulticodecHeaders.Ed25519PrivateKey.Length,
+            TestSetup.Base58Decoder,
+            BaseMemoryPool.Shared);
+        using PrivateKeyMemory privateKeyMemory = new(privateKeyBytes, CryptoTags.Ed25519PrivateKey);
+
+        var didDocument = CreateDidDocument(Ed25519VerificationMethodId, Ed25519PublicKeyMultibase);
+
+        var signedCredential = await credential.SignAsync(
+            privateKeyMemory,
+            Ed25519VerificationMethodId,
+            EddsaJcs2022CryptosuiteInfo.Instance,
+            ProofCreated,
+            JcsCanonicalizer,
+            contextResolver: null,
+            ProofValueCodecs.EncodeBase58Btc,
+            SerializeCredential,
+            DeserializeCredential,
+            SerializeProofOptions,
+            TestSetup.Base58Encoder,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
+            BaseMemoryPool.Shared,
+            EmptyContext,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        string firstSerialization = SerializeCredential(signedCredential);
+        var reparsedCredential = (DataIntegritySecuredCredential)DeserializeCredential(firstSerialization);
+        string secondSerialization = SerializeCredential(reparsedCredential);
+        Assert.AreEqual(firstSerialization, secondSerialization, "The signed credential's null-valued credentialSubject member must survive a parse->re-serialize cycle byte-identically.");
+
+        using(var signedDocument = JsonDocument.Parse(secondSerialization))
+        {
+            Assert.IsTrue(signedDocument.RootElement.GetProperty("credentialSubject").TryGetProperty("name", out JsonElement nameElement));
+            Assert.AreEqual(JsonValueKind.Null, nameElement.ValueKind);
+        }
+
+        var verificationResult = await reparsedCredential.VerifyAsync(
+            didDocument,
+            JcsCanonicalizer,
+            contextResolver: null,
+            ProofValueCodecs.DecodeBase58Btc,
+            SerializeCredential,
+            SerializeProofOptions,
+            TestSetup.Base58Decoder,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -371,31 +660,34 @@ internal sealed class CredentialSecuringMethodsTests
             Ed25519SecretKeyMultibase, MulticodecHeaders.Ed25519PrivateKey.Length, TestSetup.Base58Decoder, BaseMemoryPool.Shared);
         using PrivateKeyMemory privateKeyMemory = new(privateKeyBytes, CryptoTags.Ed25519PrivateKey);
 
-        var protectedHeader = new CborWriter(CborConformanceMode.Canonical);
+        var protectedHeaderBuffer = new ArrayBufferWriter<byte>();
+        var protectedHeader = new CborWriter(protectedHeaderBuffer, CborOptions.RfcCanonical);
         protectedHeader.WriteStartMap(2);
         protectedHeader.WriteInt32(CoseHeaderParameters.Alg);
         protectedHeader.WriteInt32(WellKnownCoseAlgorithms.EdDsa);
         protectedHeader.WriteInt32(CoseHeaderParameters.Kid);
         protectedHeader.WriteTextString(Ed25519VerificationMethodId);
         protectedHeader.WriteEndMap();
-        var protectedHeaderBytes = protectedHeader.Encode();
+        var protectedHeaderBytes = protectedHeaderBuffer.WrittenSpan.ToArray();
 
         var payloadBytes = JsonSerializerExtensions.SerializeToUtf8Bytes(credential, JsonOptions);
 
-        var sigStructure = new CborWriter(CborConformanceMode.Canonical);
+        var sigStructureBuffer = new ArrayBufferWriter<byte>();
+        var sigStructure = new CborWriter(sigStructureBuffer, CborOptions.RfcCanonical);
         sigStructure.WriteStartArray(4);
         sigStructure.WriteTextString("Signature1");
         sigStructure.WriteByteString(protectedHeaderBytes);
         sigStructure.WriteByteString([]);
         sigStructure.WriteByteString(payloadBytes);
         sigStructure.WriteEndArray();
-        var sigStructureBytes = sigStructure.Encode();
+        var sigStructureBytes = sigStructureBuffer.WrittenSpan.ToArray();
 
         using var signature = await privateKeyMemory.SignAsync(
-            sigStructureBytes, BouncyCastleCryptographicFunctions.SignEd25519Async, BaseMemoryPool.Shared).ConfigureAwait(false);
+            sigStructureBytes, BouncyCastleCryptographicFunctionsAdapter.SignEd25519Async, BaseMemoryPool.Shared).ConfigureAwait(false);
 
-        var coseSign1 = new CborWriter(CborConformanceMode.Canonical);
-        coseSign1.WriteTag((CborTag)CoseTags.Sign1);
+        var coseSign1Buffer = new ArrayBufferWriter<byte>();
+        var coseSign1 = new CborWriter(coseSign1Buffer, CborOptions.RfcCanonical);
+        coseSign1.WriteTag(new CborTag((ulong)CoseTags.Sign1));
         coseSign1.WriteStartArray(4);
         coseSign1.WriteByteString(protectedHeaderBytes);
         coseSign1.WriteStartMap(0);
@@ -403,14 +695,14 @@ internal sealed class CredentialSecuringMethodsTests
         coseSign1.WriteByteString(payloadBytes);
         coseSign1.WriteByteString(signature.AsReadOnlySpan());
         coseSign1.WriteEndArray();
-        var coseSign1Bytes = coseSign1.Encode();
+        var coseSign1Bytes = coseSign1Buffer.WrittenSpan.ToArray();
 
         Assert.IsNotNull(coseSign1Bytes);
         Assert.IsGreaterThan(100, coseSign1Bytes.Length, "COSE_Sign1 should have substantial length.");
 
-        var reader = new CborReader(coseSign1Bytes, CborConformanceMode.Lax);
+        var reader = new CborReader(coseSign1Bytes, CborOptions.Lax);
         var tag = reader.ReadTag();
-        Assert.AreEqual((CborTag)CoseTags.Sign1, tag);
+        Assert.AreEqual(new CborTag((ulong)CoseTags.Sign1), tag);
 
         reader.ReadStartArray();
         var readProtectedHeader = reader.ReadByteString();
@@ -430,7 +722,7 @@ internal sealed class CredentialSecuringMethodsTests
         var signatureMemory = BaseMemoryPool.Shared.Rent(readSignature.Length);
         readSignature.CopyTo(signatureMemory.Memory.Span);
         using var signatureToVerify = new Signature(signatureMemory, CryptoTags.Ed25519Signature);
-        bool isValid = await publicKeyMemory.VerifyAsync(sigStructureBytes, signatureToVerify, BouncyCastleCryptographicFunctions.VerifyEd25519Async).ConfigureAwait(false);
+        bool isValid = await publicKeyMemory.VerifyAsync(sigStructureBytes, signatureToVerify, BouncyCastleCryptographicFunctionsAdapter.VerifyEd25519Async).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "COSE_Sign1 signature verification must succeed.");
     }
@@ -487,7 +779,7 @@ internal sealed class CredentialSecuringMethodsTests
         var signingInput = $"{headerBase64Url}.{payloadBase64Url}";
 
         var signature = await privateKeyMemory.SignAsync(
-            Encoding.ASCII.GetBytes(signingInput), BouncyCastleCryptographicFunctions.SignEd25519Async, BaseMemoryPool.Shared).ConfigureAwait(false);
+            Encoding.ASCII.GetBytes(signingInput), BouncyCastleCryptographicFunctionsAdapter.SignEd25519Async, BaseMemoryPool.Shared).ConfigureAwait(false);
 
         var issuerSignedJwt = $"{signingInput}.{TestSetup.Base64UrlEncoder(signature.AsReadOnlySpan())}";
         var sdJwt = $"{issuerSignedJwt}{SdConstants.JwtSeparator}{encodedDisclosure1}{SdConstants.JwtSeparator}{encodedDisclosure2}{SdConstants.JwtSeparator}";
@@ -509,7 +801,7 @@ internal sealed class CredentialSecuringMethodsTests
         var verificationInput = Encoding.ASCII.GetBytes($"{jwtParts[0]}.{jwtParts[1]}");
         using var signatureBytesFromJwt = TestSetup.Base64UrlDecoder(jwtParts[2], BaseMemoryPool.Shared);
         using var signatureToVerify = new Signature(signatureBytesFromJwt, CryptoTags.Ed25519Signature);
-        bool isValid = await publicKeyMemory.VerifyAsync(verificationInput, signatureToVerify, BouncyCastleCryptographicFunctions.VerifyEd25519Async).ConfigureAwait(false);
+        bool isValid = await publicKeyMemory.VerifyAsync(verificationInput, signatureToVerify, BouncyCastleCryptographicFunctionsAdapter.VerifyEd25519Async).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "SD-JWT signature verification must succeed.");
     }
@@ -534,17 +826,18 @@ internal sealed class CredentialSecuringMethodsTests
         var protectedHeader = BuildSdCwtProtectedHeader();
         byte[] payload = BuildCwtPayload(credential);
 
-        var sigStructure = new CborWriter(CborConformanceMode.Canonical);
+        var sigStructureBuffer = new ArrayBufferWriter<byte>();
+        var sigStructure = new CborWriter(sigStructureBuffer, CborOptions.RfcCanonical);
         sigStructure.WriteStartArray(4);
         sigStructure.WriteTextString("Signature1");
         sigStructure.WriteByteString(protectedHeader);
         sigStructure.WriteByteString([]);
         sigStructure.WriteByteString(payload);
         sigStructure.WriteEndArray();
-        var sigStructureBytes = sigStructure.Encode();
+        var sigStructureBytes = sigStructureBuffer.WrittenSpan.ToArray();
 
         using var signature = await privateKeyMemory.SignAsync(
-            sigStructureBytes, BouncyCastleCryptographicFunctions.SignEd25519Async, BaseMemoryPool.Shared).ConfigureAwait(false);
+            sigStructureBytes, BouncyCastleCryptographicFunctionsAdapter.SignEd25519Async, BaseMemoryPool.Shared).ConfigureAwait(false);
 
         var sdCwtMessage = new SdCwtMessage(
             payload.AsMemory(), protectedHeader.AsMemory(), signature.AsReadOnlySpan().ToArray(), [disclosure1, disclosure2]);
@@ -566,7 +859,7 @@ internal sealed class CredentialSecuringMethodsTests
         var signatureMemory = BaseMemoryPool.Shared.Rent(parsedMessage.Signature.Length);
         parsedMessage.Signature.Span.CopyTo(signatureMemory.Memory.Span);
         using var signatureToVerify = new Signature(signatureMemory, CryptoTags.Ed25519Signature);
-        bool isValid = await publicKeyMemory.VerifyAsync(sigStructureBytes, signatureToVerify, BouncyCastleCryptographicFunctions.VerifyEd25519Async).ConfigureAwait(false);
+        bool isValid = await publicKeyMemory.VerifyAsync(sigStructureBytes, signatureToVerify, BouncyCastleCryptographicFunctionsAdapter.VerifyEd25519Async).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "SD-CWT signature verification must succeed.");
     }
@@ -577,7 +870,7 @@ internal sealed class CredentialSecuringMethodsTests
 
     //Canonicalization/signing here is in-memory; a default context yields the
     //secure-default SSRF policy and satisfies the policy-carrying parameter.
-    private static readonly ExchangeContext EmptyContext = new();
+    private static ExchangeContext EmptyContext { get; } = new();
 
     private static CanonicalizationDelegate RdfcCanonicalizer { get; } = CanonicalizationTestUtilities.CreateRdfcCanonicalizer();
 
@@ -645,7 +938,8 @@ internal sealed class CredentialSecuringMethodsTests
 
     private static byte[] BuildCwtPayload(VerifiableCredential credential)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(3);
         writer.WriteInt32(WellKnownCwtClaimNames.Iss);
         writer.WriteTextString(credential.Issuer!.Id!);
@@ -654,18 +948,19 @@ internal sealed class CredentialSecuringMethodsTests
         writer.WriteInt32(WellKnownCwtClaimNames.Iat);
         writer.WriteInt64(!string.IsNullOrEmpty(credential.ValidFrom) ? DateTimeOffset.Parse(credential.ValidFrom, CultureInfo.InvariantCulture).ToUnixTimeSeconds() : 0L);
         writer.WriteEndMap();
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
     }
 
     private static byte[] BuildSdCwtProtectedHeader()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(2);
         writer.WriteInt32(CoseHeaderParameters.Alg);
         writer.WriteInt32(WellKnownCoseAlgorithms.EdDsa);
         writer.WriteInt32(CoseHeaderParameters.Typ);
         writer.WriteTextString(SdCwtSerializer.SdCwtMediaType);
         writer.WriteEndMap();
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
     }
 }

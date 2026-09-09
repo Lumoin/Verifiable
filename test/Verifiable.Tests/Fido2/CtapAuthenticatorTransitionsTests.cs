@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Time.Testing;
 using Verifiable.Cryptography;
 using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
@@ -28,17 +29,18 @@ internal sealed class CtapAuthenticatorTransitionsTests
     /// <summary>
     /// Builds a fresh automaton over the transitions under test, seeded with the given AAGUID, or with
     /// <paramref name="initialState"/> directly when the test needs a state shape
-    /// <see cref="CtapAuthenticatorState.Initial(Guid, DateTimeOffset, IReadOnlyList{string}?, int, BaseMemoryPool?)"/>
+    /// <see cref="CtapAuthenticatorState.Initial(Guid, DateTimeOffset, BaseMemoryPool, IReadOnlyList{string}?, int, CtapEnterpriseAttestationProvisioning?, int)"/>
     /// alone cannot produce (e.g. a pre-set PIN).
     /// </summary>
     private static PushdownAutomaton<CtapAuthenticatorState, CtapAuthenticatorInput, CtapAuthenticatorStackSymbol> BuildAutomaton(
         Guid aaguid, IReadOnlyList<string>? supportedExtensions = null, CtapAuthenticatorState? initialState = null) =>
         new(
             runId: "transitions-test",
-            initialState: initialState ?? CtapAuthenticatorState.Initial(aaguid, TestClock.CanonicalEpoch, supportedExtensions),
+            initialState: initialState ?? CtapAuthenticatorState.Initial(aaguid, TestClock.CanonicalEpoch, BaseMemoryPool.Shared, supportedExtensions),
             initialStackSymbol: CtapAuthenticatorStackSymbol.Session,
             transition: CtapAuthenticatorTransitions.Create(),
-            acceptPredicate: static _ => true);
+            acceptPredicate: static _ => true,
+            timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
 
 
     /// <summary>Builds a fixed-content <see cref="DigestValue"/> standing in for a stored PIN hash, without a full <c>setPIN</c> round trip.</summary>
@@ -225,7 +227,7 @@ internal sealed class CtapAuthenticatorTransitionsTests
     {
         Guid aaguid = Guid.NewGuid();
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        CtapEnterpriseAttestationProvisioning provisioning = CtapEnterpriseAttestationFixtures.BuildProvisioning(pool);
+        using CtapEnterpriseAttestationProvisioning provisioning = CtapEnterpriseAttestationFixtures.BuildProvisioning(pool);
         CtapAuthenticatorState initialState = CtapAuthenticatorState.Initial(
             aaguid, TestClock.CanonicalEpoch, keyAgreementPool: pool, enterpriseAttestationProvisioning: provisioning) with
         {
@@ -241,8 +243,6 @@ internal sealed class CtapAuthenticatorTransitionsTests
         Assert.IsNotNull(intent.Response.Options!.Ep, "ep must be present for a capable authenticator.");
         Assert.AreEqual(isEnterpriseAttestationEnabled, intent.Response.Options.Ep!.Value);
         Assert.AreSequenceEqual(new List<int> { 1, 2, 3 }, new List<int>(intent.Response.AuthenticatorConfigCommands!));
-
-        provisioning.Dispose();
     }
 
 
@@ -407,7 +407,7 @@ internal sealed class CtapAuthenticatorTransitionsTests
     public async Task GetInfoRequestedAdvertisesConfiguredFirmwareVersion()
     {
         Guid aaguid = Guid.NewGuid();
-        CtapAuthenticatorState initialState = CtapAuthenticatorState.Initial(aaguid, TestClock.CanonicalEpoch, firmwareVersion: 42);
+        CtapAuthenticatorState initialState = CtapAuthenticatorState.Initial(aaguid, TestClock.CanonicalEpoch, BaseMemoryPool.Shared, firmwareVersion: 42);
         var automaton = BuildAutomaton(aaguid, initialState: initialState);
 
         await automaton.StepAsync(new GetInfoRequested(), TestContext.CancellationToken);

@@ -26,14 +26,14 @@ namespace Verifiable.Cryptography.Pki;
 public sealed class SignatureValidationResources: IDisposable
 {
     /// <summary>The carriers tracked so far, in tracking order.</summary>
-    private readonly List<IDisposable> resources = [];
+    private List<IDisposable> Resources { get; } = [];
 
     /// <summary>Whether <see cref="Dispose"/> has already run.</summary>
     private bool disposed;
 
 
     /// <summary>Gets the number of carriers tracked so far.</summary>
-    public int Count => resources.Count;
+    public int Count => Resources.Count;
 
 
     /// <summary>
@@ -49,7 +49,7 @@ public sealed class SignatureValidationResources: IDisposable
         ArgumentNullException.ThrowIfNull(resource);
         ObjectDisposedException.ThrowIf(disposed, this);
 
-        resources.Add(resource);
+        Resources.Add(resource);
 
         return resource;
     }
@@ -69,7 +69,7 @@ public sealed class SignatureValidationResources: IDisposable
 
         for(int i = 0; i < carriers.Count; ++i)
         {
-            resources.Add(carriers[i]);
+            Resources.Add(carriers[i]);
         }
     }
 
@@ -83,12 +83,12 @@ public sealed class SignatureValidationResources: IDisposable
         }
 
         disposed = true;
-        for(int i = resources.Count - 1; i >= 0; --i)
+        for(int i = Resources.Count - 1; i >= 0; --i)
         {
-            resources[i].Dispose();
+            Resources[i].Dispose();
         }
 
-        resources.Clear();
+        Resources.Clear();
     }
 }
 

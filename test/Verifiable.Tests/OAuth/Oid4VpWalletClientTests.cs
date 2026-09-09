@@ -28,6 +28,7 @@ using Verifiable.OAuth.Oid4Vp.States;
 using Verifiable.OAuth.Oid4Vp.Wallet;
 using Verifiable.OAuth.Oid4Vp.Wallet.States;
 using Verifiable.OAuth.Server;
+using Verifiable.Tests.Federation;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -47,13 +48,13 @@ internal sealed class Oid4VpWalletClientTests
     private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
     private const string VerifierClientId = "https://verifier.example.com";
-    private static readonly Uri VerifierBaseUri = new("https://verifier.example.com");
+    private static Uri VerifierBaseUri { get; } = new("https://verifier.example.com");
 
     private const string IssuerId = SdJwtVpFixture.IssuerId;
 
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
-    private static readonly ImmutableHashSet<CapabilityIdentifier> Oid4VpCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> Oid4VpCapabilities { get; } =
         ImmutableHashSet.Create(
             WellKnownCapabilityIdentifiers.VcVerifiablePresentation,
             WellKnownCapabilityIdentifiers.OAuthJwksEndpoint,
@@ -94,6 +95,72 @@ internal sealed class Oid4VpWalletClientTests
         Assert.IsInstanceOfType<PresentationVerifiedState>(
             app.GetFlowState(parHandle).State,
             "Verifier PDA must reach PresentationVerified after the wallet POSTs the encrypted response.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html">OpenID for
+    /// Verifiable Presentations 1.0, Section 8.2</see>: "Additional response parameters MAY be
+    /// defined and used. The Wallet MUST ignore any unrecognized parameters." A canned transport
+    /// answers the <c>direct_post</c> POST with a 200 JSON object carrying <c>redirect_uri</c>
+    /// alongside two members no OID4VP response ever defines; <see cref="Oid4VpWalletClient"/>
+    /// never decodes the response body at all — it reads only the HTTP status code — so the
+    /// presentation completes identically to a recognized-members-only 200, proving the MUST by
+    /// construction rather than a member-by-member allowlist.
+    /// </summary>
+    [TestMethod]
+    public async Task IgnoresUnrecognizedDirectPostResponseMembersPerSection82()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+
+        (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
+            await IssuePidCredentialAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        using PrivateKeyMemory holderKey = holderPrivateKey;
+        using PublicKeyMemory issuerKey = issuerPublicKey;
+        app.RegisterIssuerTrust(IssuerId, issuerKey);
+
+        (Uri requestUri, string _, string compactJar) = await IssueJarAsync(
+            app, verifierKeys).ConfigureAwait(false);
+
+        //The direct_post POST is the wallet client's only outbound call in this flow (PAR/JAR are
+        //driven server-side by the test host, never through this OAuthClientInfrastructure), so the
+        //decorator answers every call with the canned 200 rather than conditioning on the endpoint.
+        (OAuthClient oauthClient, _, _) = app.CreateInProcessOAuthClientAndRegistration(
+            verifierKeys.Registration,
+            "https://client.example.com/callback",
+            verifierKeys.Registration.IssuerUri!.ToString(),
+            decorateSendFormPostAsync: _ => (_, _, _, _, _) =>
+                ValueTask.FromResult(new HttpResponseData
+                {
+                    StatusCode = 200,
+                    Body = """{"redirect_uri":"https://rp.example/done","response_code":"abc","x-future":1}""",
+                    Headers = ResponseHeaders.Empty
+                }));
+
+        ProduceVpTokenPresentationsDelegate produce =
+            TestHostShell.BuildSdJwtProduceDelegate(serializedSdJwt, holderKey);
+
+        Oid4VpWalletClient walletClient = new(
+            oauthClient.Infrastructure,
+            TestHostShell.BuildSlimOid4VpWalletConfiguration(
+                produce,
+                TestHostShell.PinnedVerifierKeyResolver(verifierKeys.SigningPublicKey)));
+
+        PresentationResult result = await walletClient.PresentJarAsync(
+            new PresentJarOptions
+            {
+                CompactJar = compactJar,
+                RequestUri = requestUri,
+                ExpectedVerifierClientId = VerifierClientId,
+                FlowId = $"wallet-must-ignore-{Guid.NewGuid():N}"
+            },
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsNotNull(result.PostedResponseArtifact);
+        Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
+            "OID4VP 1.0 §8.2: unrecognized response members (response_code, x-future) must not fail the presentation.");
     }
 
 
@@ -178,9 +245,9 @@ internal sealed class Oid4VpWalletClientTests
             TestContext.CancellationToken).ConfigureAwait(false);
 
         PresentationVerifiedState verified = (PresentationVerifiedState)app.GetFlowState(parHandle).State;
-        Assert.IsTrue(verified.Claims.ContainsKey("pid"),
+        Assert.IsTrue(verified.Credentials.ContainsKey(new CredentialQueryId("pid")),
             "Verifier must surface the wallet's presentation under the 'pid' credential query identifier.");
-        Assert.IsNotNull(verified.Claims["pid"]);
+        Assert.IsNotNull(verified.Credentials[new CredentialQueryId("pid")]);
     }
 
 
@@ -380,14 +447,26 @@ internal sealed class Oid4VpWalletClientTests
     }
 
 
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-6.1.1.3">
+    /// OID4VP 1.0 §6.1.1.3</see>'s <c>openid_federation</c> match requires "a valid trust path,
+    /// including the given Entity Identifier"; the wallet resolves the issuer's evidence through
+    /// <see cref="FederationTrustPathEvidence.ResolveAsync"/> against a real minted federation chain
+    /// from the credential's issuer entity to a familiar anchor, so the issuer's own Entity
+    /// Identifier is a subject on a validated path and the query's <c>trusted_authorities</c> value
+    /// (the issuer's own identifier) matches it.
+    /// </summary>
     [TestMethod]
-    public async Task VerifierAcceptsPresentationFromTrustedAuthority()
+    public async Task VerifierAcceptsPresentationWhenIssuerIsOnAValidatedFederationTrustPath()
     {
-        //OID4VP 1.0 §6.1.1.3: the DCQL query pins the acceptable issuer via a
-        //trusted_authorities (openid_federation) constraint. The PID is issued
-        //under exactly that issuer, so the verifier's fail-closed DcqlEvaluator
-        //check passes and the flow reaches PresentationVerified.
-        await using TestHostShell app = new(TimeProvider);
+        DateTimeOffset now = TimeProvider.GetUtcNow();
+        EntityIdentifier issuerEntity = new(IssuerId);
+        EntityIdentifier familiarAnchor = new("https://anchor.example.com");
+        ResolveTrustedAuthorityEvidenceDelegate resolveTrustedAuthorityEvidence =
+            await BuildFederationTrustedAuthorityResolverAsync(
+                issuerEntity, familiarAnchor, now, TestContext.CancellationToken).ConfigureAwait(false);
+
+        await using TestHostShell app = new(TimeProvider, resolveTrustedAuthorityEvidence: resolveTrustedAuthorityEvidence);
         using VerifierKeyMaterial verifierKeys = app.RegisterClient(
             VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
 
@@ -414,18 +493,30 @@ internal sealed class Oid4VpWalletClientTests
 
         Assert.IsInstanceOfType<PresentationVerifiedState>(
             app.GetFlowState(parHandle).State,
-            "A credential from a trusted authority must verify.");
+            "The issuer's Entity Identifier is a subject on a validated OpenID Federation trust path to a familiar anchor, so the trusted_authorities constraint naming that identifier is satisfied.");
     }
 
 
+    /// <summary>
+    /// The DCQL query's <c>trusted_authorities</c> names only a stranger identifier that is not a
+    /// subject on the issuer's validated federation trust path
+    /// (<see cref="FederationTrustPathEvidence.ResolveAsync"/> resolves the SAME real chain as
+    /// <see cref="VerifierAcceptsPresentationWhenIssuerIsOnAValidatedFederationTrustPath"/>). The
+    /// wallet's own adapter does not enforce <c>trusted_authorities</c> (it presents normally), so
+    /// this is a clean verifier-side rejection: <see cref="Verifiable.Core.Dcql.DcqlEvaluator"/>
+    /// finds no entry matching and the flow must NOT verify.
+    /// </summary>
     [TestMethod]
     public async Task VerifierRejectsPresentationFromUntrustedAuthority()
     {
-        //The DCQL query's trusted_authorities lists only a stranger, so the PID's
-        //issuer is NOT trusted. The wallet's own adapter does not enforce
-        //trusted_authorities (it presents normally), so this is a clean verifier-side
-        //rejection: DcqlEvaluator fails the issuer check and the flow must NOT verify.
-        await using TestHostShell app = new(TimeProvider);
+        DateTimeOffset now = TimeProvider.GetUtcNow();
+        EntityIdentifier issuerEntity = new(IssuerId);
+        EntityIdentifier familiarAnchor = new("https://anchor.example.com");
+        ResolveTrustedAuthorityEvidenceDelegate resolveTrustedAuthorityEvidence =
+            await BuildFederationTrustedAuthorityResolverAsync(
+                issuerEntity, familiarAnchor, now, TestContext.CancellationToken).ConfigureAwait(false);
+
+        await using TestHostShell app = new(TimeProvider, resolveTrustedAuthorityEvidence: resolveTrustedAuthorityEvidence);
         using VerifierKeyMaterial verifierKeys = app.RegisterClient(
             VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
 
@@ -460,8 +551,112 @@ internal sealed class Oid4VpWalletClientTests
 
         Assert.IsNotInstanceOfType<PresentationVerifiedState>(
             app.GetFlowState(parHandle).State,
-            "A credential whose issuer is not in trusted_authorities must NOT verify.");
+            "A stranger identifier absent from the issuer's validated trust path must NOT verify.");
     }
+
+
+    /// <summary>
+    /// Mints a real two-node OpenID Federation trust chain (<paramref name="issuerEntity"/> as the
+    /// subject, <paramref name="familiarAnchor"/> as the Trust Anchor) via <see cref="FederationTestRing"/>,
+    /// wires the corresponding fetch delegates in-memory (no network I/O), and returns a
+    /// <see cref="ResolveTrustedAuthorityEvidenceDelegate"/> composed through
+    /// <see cref="TrustedAuthorityEvidenceResolution.Build"/> whose <c>openid_federation</c> arm
+    /// resolves through <see cref="FederationTrustPathEvidence.ResolveAsync"/> against that chain and
+    /// <paramref name="familiarAnchor"/> as the wallet's only familiar anchor. The <c>aki</c>/<c>etsi_tl</c>
+    /// arms are wired but never exercised (no certificate chain is presented in these tests).
+    /// </summary>
+    /// <param name="issuerEntity">The credential issuer's Entity Identifier — the chain's subject.</param>
+    /// <param name="familiarAnchor">The wallet's familiar Trust Anchor — the chain's terminus.</param>
+    /// <param name="now">The instant the minted statements are issued at and validated against.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The composed resolver.</returns>
+    private static async Task<ResolveTrustedAuthorityEvidenceDelegate> BuildFederationTrustedAuthorityResolverAsync(
+        EntityIdentifier issuerEntity,
+        EntityIdentifier familiarAnchor,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        const string AnchorFetchEndpoint = "https://anchor.example.com/federation/fetch";
+
+        using FederationTestRingNode issuerNode = FederationTestRing.CreateNode(issuerEntity);
+        using FederationTestRingNode anchorNode = FederationTestRing.CreateNode(familiarAnchor);
+
+        MintedStatement issuerEc = await FederationTestRing.MintEntityConfigurationAsync(
+            issuerNode, now, now.AddHours(1),
+            extraClaims: new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                [WellKnownFederationClaimNames.AuthorityHints] = new List<object> { familiarAnchor.Value }
+            },
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+        MintedStatement anchorEc = await FederationTestRing.MintEntityConfigurationAsync(
+            anchorNode, now, now.AddHours(1),
+            extraClaims: new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                [WellKnownFederationClaimNames.Metadata] = new Dictionary<string, object>(StringComparer.Ordinal)
+                {
+                    [WellKnownEntityTypeIdentifiers.FederationEntity.Value] = new Dictionary<string, object>(StringComparer.Ordinal)
+                    {
+                        [FederationMetadataParameterNames.FetchEndpoint] = AnchorFetchEndpoint
+                    }
+                }
+            },
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+        MintedStatement anchorAboutIssuer = await FederationTestRing.MintSubordinateStatementAsync(
+            anchorNode, issuerNode, now, now.AddHours(1), cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        Dictionary<string, string> configByEntity = new(StringComparer.Ordinal)
+        {
+            [issuerEntity.Value] = issuerEc.CompactJws,
+            [familiarAnchor.Value] = anchorEc.CompactJws
+        };
+
+        FetchEntityConfigurationDelegate fetchConfiguration = (entity, context, ct) =>
+            ValueTask.FromResult(configByEntity.TryGetValue(entity.Value, out string? jws)
+                ? FederationHttpClientTransport.TryParseFetchedStatement(jws)
+                : null);
+
+        FetchEntityStatementDelegate fetchSubordinate = (subject, fetchEndpoint, context, ct) =>
+            ValueTask.FromResult(
+                string.Equals(fetchEndpoint.ToString(), AnchorFetchEndpoint, StringComparison.Ordinal)
+                    && string.Equals(subject.Value, issuerEntity.Value, StringComparison.Ordinal)
+                    ? FederationHttpClientTransport.TryParseFetchedStatement(anchorAboutIssuer.CompactJws)
+                    : null);
+
+        ValidateTrustChainAsyncDelegate validate = TrustChainValidation.BuildInlineValidator(
+            HeaderDeserializer, PayloadDeserializer, TestSetup.Base64UrlDecoder,
+            FederationKeyResolver.BuildInChainResolver(TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared));
+
+        return TrustedAuthorityEvidenceResolution.Build(
+            MicrosoftX509Functions.GetAuthorityKeyIdentifier,
+            MicrosoftX509Functions.GetSubjectKeyIdentifier,
+            MicrosoftX509Functions.GetSubjectName,
+            heldTrustedLists: [],
+            resolveFederationTrustPath: (issuer, ct) => FederationTrustPathEvidence.ResolveAsync(
+                issuer,
+                [familiarAnchor],
+                fetchConfiguration,
+                fetchSubordinate,
+                validate,
+                new ExchangeContext(),
+                maxChainLength: 5,
+                validationTime: now,
+                clockSkew: TimeSpan.FromMinutes(5),
+                BaseMemoryPool.Shared,
+                ct));
+    }
+
+
+    /// <summary>Deserializes a compact JWS header segment for <see cref="TrustChainValidation.BuildInlineValidator"/>.</summary>
+    private static JwtHeaderDeserializer HeaderDeserializer { get; } = static bytes =>
+        JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+            bytes, TestSetup.DefaultSerializationOptions)
+        ?? throw new FormatException("Header JSON parsed to null.");
+
+    /// <summary>Deserializes a compact JWS payload segment for <see cref="TrustChainValidation.BuildInlineValidator"/>.</summary>
+    private static JwtPayloadDeserializer PayloadDeserializer { get; } = static bytes =>
+        JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+            bytes, TestSetup.DefaultSerializationOptions)
+        ?? throw new FormatException("Payload JSON parsed to null.");
 
 
     [TestMethod]
@@ -593,7 +788,7 @@ internal sealed class Oid4VpWalletClientTests
         DcqlFixtures.PidFamilyNamePrepared();
 
 
-    private static readonly Tag Sha256CommitmentTag = Tag.Create(HashAlgorithmName.SHA256);
+    private static Tag Sha256CommitmentTag { get; } = Tag.Create(HashAlgorithmName.SHA256);
 
 
     /// <summary>
@@ -603,14 +798,14 @@ internal sealed class Oid4VpWalletClientTests
     /// </summary>
     private sealed class InMemoryCommitmentStore
     {
-        private readonly HashSet<string> seen = new(StringComparer.Ordinal);
+        private HashSet<string> Seen { get; } = new(StringComparer.Ordinal);
 
         public ValueTask<bool> IsSeen(DigestValue commitment, CancellationToken cancellationToken) =>
-            ValueTask.FromResult(seen.Contains(Convert.ToHexString(commitment.AsReadOnlySpan())));
+            ValueTask.FromResult(Seen.Contains(Convert.ToHexString(commitment.AsReadOnlySpan())));
 
         public ValueTask Record(DigestValue commitment, CancellationToken cancellationToken)
         {
-            seen.Add(Convert.ToHexString(commitment.AsReadOnlySpan()));
+            Seen.Add(Convert.ToHexString(commitment.AsReadOnlySpan()));
 
             return ValueTask.CompletedTask;
         }

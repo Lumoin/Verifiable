@@ -402,42 +402,35 @@ public static class AsicZipAuthoring
         List<PlannedEntry> planned = PlanEntries(context);
         int commentByteLength = StateCommentByteLength(context.ArchiveComment);
 
-        var writer = new PooledZipWriter(pool, EstimateContainerByteLength(planned, commentByteLength), MaximumContainerByteLength);
-        try
+        using var writer = new PooledZipWriter(pool, EstimateContainerByteLength(planned, commentByteLength), MaximumContainerByteLength);
+        var written = new List<WrittenEntry>(planned.Count);
+        for(int i = 0; i < planned.Count; ++i)
         {
-            var written = new List<WrittenEntry>(planned.Count);
-            for(int i = 0; i < planned.Count; ++i)
-            {
-                written.Add(WriteEntry(writer, planned[i]));
-            }
-
-            uint centralDirectoryOffset = (uint)writer.WrittenByteLength;
-            for(int i = 0; i < written.Count; ++i)
-            {
-                WriteCentralDirectoryHeader(writer, written[i]);
-            }
-
-            uint centralDirectoryByteLength = (uint)writer.WrittenByteLength - centralDirectoryOffset;
-
-            writer.WriteUInt32(EndOfCentralDirectorySignature);
-            writer.WriteUInt16(0);
-            writer.WriteUInt16(0);
-            writer.WriteUInt16((ushort)written.Count);
-            writer.WriteUInt16((ushort)written.Count);
-            writer.WriteUInt32(centralDirectoryByteLength);
-            writer.WriteUInt32(centralDirectoryOffset);
-            writer.WriteUInt16((ushort)commentByteLength);
-            if(commentByteLength > 0)
-            {
-                _ = writer.WriteUtf8(context.ArchiveComment!);
-            }
-
-            return writer.Detach(AsicTags.Container);
+            written.Add(WriteEntry(writer, planned[i]));
         }
-        finally
+
+        uint centralDirectoryOffset = (uint)writer.WrittenByteLength;
+        for(int i = 0; i < written.Count; ++i)
         {
-            writer.Dispose();
+            WriteCentralDirectoryHeader(writer, written[i]);
         }
+
+        uint centralDirectoryByteLength = (uint)writer.WrittenByteLength - centralDirectoryOffset;
+
+        writer.WriteUInt32(EndOfCentralDirectorySignature);
+        writer.WriteUInt16(0);
+        writer.WriteUInt16(0);
+        writer.WriteUInt16((ushort)written.Count);
+        writer.WriteUInt16((ushort)written.Count);
+        writer.WriteUInt32(centralDirectoryByteLength);
+        writer.WriteUInt32(centralDirectoryOffset);
+        writer.WriteUInt16((ushort)commentByteLength);
+        if(commentByteLength > 0)
+        {
+            _ = writer.WriteUtf8(context.ArchiveComment!);
+        }
+
+        return writer.Detach(AsicTags.Container);
     }
 
 
@@ -830,10 +823,10 @@ public static class AsicZipAuthoring
     private sealed class PooledZipWriter: Stream
     {
         /// <summary>The pool every buffer of this writer is rented from.</summary>
-        private readonly BaseMemoryPool pool;
+        private BaseMemoryPool Pool { get; }
 
         /// <summary>The largest number of octets this writer accepts.</summary>
-        private readonly int maximumByteLength;
+        private int MaximumByteLength { get; }
 
         /// <summary>The current buffer, or <see langword="null"/> once it has been detached or disposed.</summary>
         private IMemoryOwner<byte>? buffer;
@@ -850,8 +843,8 @@ public static class AsicZipAuthoring
         /// <param name="maximumByteLength">The largest number of octets this writer accepts.</param>
         public PooledZipWriter(BaseMemoryPool pool, int initialByteLength, int maximumByteLength)
         {
-            this.pool = pool;
-            this.maximumByteLength = maximumByteLength;
+            this.Pool = pool;
+            this.MaximumByteLength = maximumByteLength;
             buffer = pool.Rent(initialByteLength);
         }
 
@@ -901,19 +894,19 @@ public static class AsicZipAuthoring
 
 
         /// <inheritdoc/>
-        public override void Write(byte[] buffer, int offset, int count)
+        public override void Write(byte[] source, int offset, int count)
         {
-            ArgumentNullException.ThrowIfNull(buffer);
+            ArgumentNullException.ThrowIfNull(source);
 
-            Write(new ReadOnlySpan<byte>(buffer, offset, count));
+            Write(new ReadOnlySpan<byte>(source, offset, count));
         }
 
 
         /// <inheritdoc/>
-        public override void Write(ReadOnlySpan<byte> buffer)
+        public override void Write(ReadOnlySpan<byte> source)
         {
-            Span<byte> destination = Reserve(buffer.Length);
-            buffer.CopyTo(destination);
+            Span<byte> destination = Reserve(source.Length);
+            source.CopyTo(destination);
         }
 
 
@@ -994,18 +987,18 @@ public static class AsicZipAuthoring
         private Span<byte> Reserve(int byteLength)
         {
             long required = (long)written + byteLength;
-            if(required > maximumByteLength)
+            if(required > MaximumByteLength)
             {
                 throw new AsicZipAuthoringException(
                     AsicZipAuthoringFailureKind.ContainerTooLarge,
-                    $"A container is written with at most {maximumByteLength} octets.");
+                    $"A container is written with at most {MaximumByteLength} octets.");
             }
 
             IMemoryOwner<byte> current = CurrentBuffer;
             if(required > current.Memory.Length)
             {
-                long grown = Math.Min((long)current.Memory.Length * 2, maximumByteLength);
-                IMemoryOwner<byte> replacement = pool.Rent((int)Math.Max(grown, required));
+                long grown = Math.Min((long)current.Memory.Length * 2, MaximumByteLength);
+                IMemoryOwner<byte> replacement = Pool.Rent((int)Math.Max(grown, required));
                 current.Memory.Span[..written].CopyTo(replacement.Memory.Span);
                 current.Memory.Span[..written].Clear();
                 current.Dispose();

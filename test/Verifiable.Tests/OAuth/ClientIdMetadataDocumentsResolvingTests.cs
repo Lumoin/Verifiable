@@ -506,8 +506,8 @@ internal sealed class ClientIdMetadataDocumentsResolvingTests
     //TaggedMemory<byte>, mirroring the production OutboundResponse shape.
     private sealed class ScriptedTransport
     {
-        private readonly Dictionary<string, List<ScriptedResponse>> routes = new(StringComparer.Ordinal);
-        private readonly Dictionary<string, int> callIndex = new(StringComparer.Ordinal);
+        private Dictionary<string, List<ScriptedResponse>> Routes { get; } = new(StringComparer.Ordinal);
+        private Dictionary<string, int> CallIndex { get; } = new(StringComparer.Ordinal);
 
 
         public List<OutboundRequest> Calls { get; } = [];
@@ -550,10 +550,10 @@ internal sealed class ClientIdMetadataDocumentsResolvingTests
 
         private void EnqueueRoute(string url, int status, byte[]? body, IReadOnlyDictionary<string, string> headers)
         {
-            if(!routes.TryGetValue(url, out List<ScriptedResponse>? list))
+            if(!Routes.TryGetValue(url, out List<ScriptedResponse>? list))
             {
                 list = [];
-                routes[url] = list;
+                Routes[url] = list;
             }
 
             list.Add(new ScriptedResponse(status, body, headers));
@@ -566,11 +566,11 @@ internal sealed class ClientIdMetadataDocumentsResolvingTests
 
             string url = request.Target.AbsoluteUri;
             ScriptedResponse response;
-            if(routes.TryGetValue(url, out List<ScriptedResponse>? list) && list.Count > 0)
+            if(Routes.TryGetValue(url, out List<ScriptedResponse>? list) && list.Count > 0)
             {
-                int index = callIndex.TryGetValue(url, out int current) ? current : 0;
+                int index = CallIndex.TryGetValue(url, out int current) ? current : 0;
                 response = list[Math.Min(index, list.Count - 1)];
-                callIndex[url] = index + 1;
+                CallIndex[url] = index + 1;
             }
             else
             {
@@ -581,10 +581,16 @@ internal sealed class ClientIdMetadataDocumentsResolvingTests
                 ? TaggedMemory<byte>.Empty
                 : new TaggedMemory<byte>(response.Body, BufferTags.Json);
 
+            var headerBuilder = new HttpHeaderSet.Builder();
+            foreach(KeyValuePair<string, string> header in response.Headers)
+            {
+                headerBuilder.Add(header.Key, header.Value);
+            }
+
             return ValueTask.FromResult(new OutboundResponse
             {
                 StatusCode = response.Status,
-                Headers = response.Headers,
+                Headers = headerBuilder.Build(),
                 Body = responseBody
             });
         };

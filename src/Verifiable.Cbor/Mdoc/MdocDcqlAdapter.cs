@@ -1,4 +1,4 @@
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Core.Model.Mdoc;
@@ -46,37 +46,47 @@ public static class MdocDcqlAdapter
 
 
     /// <summary>
-    /// Extracts <see cref="DcqlCredentialMetadata"/> from an
-    /// <see cref="MdocDocument"/>. Format is always <see cref="FormatIdentifier"/>;
-    /// credential type is the document's <see cref="MdocDocument.DocType"/>;
-    /// available paths enumerate every namespace × every
-    /// <see cref="MdocIssuerSignedItem.ElementIdentifier"/> in the
-    /// issuer-signed shape.
+    /// Builds a <see cref="DcqlMetadataExtractor{TCredential}"/> for an <see cref="MdocDocument"/>.
+    /// Format is always <see cref="FormatIdentifier"/>; credential type is the document's
+    /// <see cref="MdocDocument.DocType"/>; available paths enumerate every namespace × every
+    /// <see cref="MdocIssuerSignedItem.ElementIdentifier"/> in the issuer-signed shape;
+    /// <see cref="DcqlCredentialMetadata.TrustedAuthorityEvidence"/> comes from
+    /// <paramref name="trustedAuthorityEvidence"/> when supplied.
     /// </summary>
-    public static DcqlMetadataExtractor<MdocDocument> MetadataExtractor { get; } = static document =>
+    /// <param name="trustedAuthorityEvidence">
+    /// Reads the document's cached OID4VP 1.0 §6.1.1 trust evidence, or <see langword="null"/> when
+    /// the caller supplies none — a credential with no evidence fails a <c>trusted_authorities</c>
+    /// constraint closed rather than being told to skip it.
+    /// </param>
+    public static DcqlMetadataExtractor<MdocDocument> CreateMetadataExtractor(
+        TrustedAuthorityEvidenceSource<MdocDocument>? trustedAuthorityEvidence = null)
     {
-        ArgumentNullException.ThrowIfNull(document);
-
-        HashSet<CredentialPath> availablePaths = new();
-        foreach(KeyValuePair<string, IReadOnlyList<MdocIssuerSignedItem>> nsEntry in document.IssuerSigned.NameSpaces)
+        return document =>
         {
-            foreach(MdocIssuerSignedItem item in nsEntry.Value)
+            ArgumentNullException.ThrowIfNull(document);
+
+            HashSet<CredentialPath> availablePaths = new();
+            foreach(KeyValuePair<string, IReadOnlyList<MdocIssuerSignedItem>> nsEntry in document.IssuerSigned.NameSpaces)
             {
-                DcqlClaimPattern pattern = DcqlClaimPattern.ForMdoc(nsEntry.Key, item.ElementIdentifier);
-                if(pattern.TryResolve(out CredentialPath path))
+                foreach(MdocIssuerSignedItem item in nsEntry.Value)
                 {
-                    availablePaths.Add(path);
+                    DcqlClaimPattern pattern = DcqlClaimPattern.ForMdoc(nsEntry.Key, item.ElementIdentifier);
+                    if(pattern.TryResolve(out CredentialPath path))
+                    {
+                        availablePaths.Add(path);
+                    }
                 }
             }
-        }
 
-        return new DcqlCredentialMetadata
-        {
-            Format = FormatIdentifier,
-            CredentialType = document.DocType,
-            AvailablePaths = availablePaths
+            return new DcqlCredentialMetadata
+            {
+                Format = FormatIdentifier,
+                CredentialType = document.DocType,
+                TrustedAuthorityEvidence = trustedAuthorityEvidence?.Invoke(document),
+                AvailablePaths = availablePaths
+            };
         };
-    };
+    }
 
 
     /// <summary>
@@ -125,7 +135,7 @@ public static class MdocDcqlAdapter
         //Decode the CBOR-encoded element value into the native .NET shape
         //DCQL's value-constraint comparison expects. The CborValueConverter
         //handles all primitive types plus maps/arrays uniformly.
-        var reader = new CborReader(match.EncodedElementValue.ToArray(), CborConformanceMode.Lax);
+        var reader = new CborReader(match.EncodedElementValue.ToArray(), CborOptions.Lax);
         value = CborValueConverter.ReadValue(reader);
 
         return true;

@@ -38,7 +38,7 @@ public static class WellKnownWebAuthnExtensionIdentifiers
     /// an independent processor — so this getter exists for a caller decoding the wire identifier or
     /// an options writer emitting it, not for a registry registration.
     /// </remarks>
-    public static readonly string AppId = Utf8Constants.ToInternedString(AppIdUtf8);
+    public static string AppId { get; } = Utf8Constants.ToInternedString(AppIdUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="AppIdExclude"/>.</summary>
     public static ReadOnlySpan<byte> AppIdExcludeUtf8 => "appidExclude"u8;
@@ -50,7 +50,7 @@ public static class WellKnownWebAuthnExtensionIdentifiers
     /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-appid-exclude-extension">W3C Web
     /// Authentication Level 3, section 10.1.2: FIDO AppID Exclusion Extension (appidExclude)</see>.
     /// </remarks>
-    public static readonly string AppIdExclude = Utf8Constants.ToInternedString(AppIdExcludeUtf8);
+    public static string AppIdExclude { get; } = Utf8Constants.ToInternedString(AppIdExcludeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="LargeBlob"/>.</summary>
     public static ReadOnlySpan<byte> LargeBlobUtf8 => "largeBlob"u8;
@@ -62,7 +62,7 @@ public static class WellKnownWebAuthnExtensionIdentifiers
     /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-large-blob-extension">W3C Web
     /// Authentication Level 3, section 10.1.5: Large blob storage extension (largeBlob)</see>.
     /// </remarks>
-    public static readonly string LargeBlob = Utf8Constants.ToInternedString(LargeBlobUtf8);
+    public static string LargeBlob { get; } = Utf8Constants.ToInternedString(LargeBlobUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="LargeBlobKey"/>.</summary>
     public static ReadOnlySpan<byte> LargeBlobKeyUtf8 => "largeBlobKey"u8;
@@ -79,7 +79,7 @@ public static class WellKnownWebAuthnExtensionIdentifiers
     /// presence in <c>authenticatorGetInfo</c>'s <c>extensions</c> array AND <c>largeBlobs</c> mapped to
     /// <see langword="true"/> in <c>options</c> (lines 12832-12834) — the two ship together.
     /// </remarks>
-    public static readonly string LargeBlobKey = Utf8Constants.ToInternedString(LargeBlobKeyUtf8);
+    public static string LargeBlobKey { get; } = Utf8Constants.ToInternedString(LargeBlobKeyUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="CredProtect"/>.</summary>
     public static ReadOnlySpan<byte> CredProtectUtf8 => "credProtect"u8;
@@ -96,7 +96,7 @@ public static class WellKnownWebAuthnExtensionIdentifiers
     /// occurrences in the CTAP 2.3 snapshot (unlike <see cref="MinPinLength"/>, it carries no
     /// editorial-casing inconsistency to reconcile).
     /// </remarks>
-    public static readonly string CredProtect = Utf8Constants.ToInternedString(CredProtectUtf8);
+    public static string CredProtect { get; } = Utf8Constants.ToInternedString(CredProtectUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="MinPinLength"/>.</summary>
     public static ReadOnlySpan<byte> MinPinLengthUtf8 => "minPinLength"u8;
@@ -119,7 +119,7 @@ public static class WellKnownWebAuthnExtensionIdentifiers
     /// wire key stays mixed-case would desynchronize advertisement from the identifier actually on the
     /// wire, a real interop break, not a cosmetic one.
     /// </remarks>
-    public static readonly string MinPinLength = Utf8Constants.ToInternedString(MinPinLengthUtf8);
+    public static string MinPinLength { get; } = Utf8Constants.ToInternedString(MinPinLengthUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="HmacSecret"/>.</summary>
     public static ReadOnlySpan<byte> HmacSecretUtf8 => "hmac-secret"u8;
@@ -135,7 +135,7 @@ public static class WellKnownWebAuthnExtensionIdentifiers
     /// <see cref="LargeBlobKey"/>/<see cref="MinPinLength"/> — unlike <see cref="HmacSecretMc"/>, which
     /// that same registry omits.
     /// </remarks>
-    public static readonly string HmacSecret = Utf8Constants.ToInternedString(HmacSecretUtf8);
+    public static string HmacSecret { get; } = Utf8Constants.ToInternedString(HmacSecretUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="HmacSecretMc"/>.</summary>
     public static ReadOnlySpan<byte> HmacSecretMcUtf8 => "hmac-secret-mc"u8;
@@ -152,7 +152,7 @@ public static class WellKnownWebAuthnExtensionIdentifiers
     /// pure-delegation processing (section 12.8, snapshot lines 13391/13402/13408: input/processing/
     /// output are each declared "the same as the hmac secret extension's getAssertion" counterpart).
     /// </remarks>
-    public static readonly string HmacSecretMc = Utf8Constants.ToInternedString(HmacSecretMcUtf8);
+    public static string HmacSecretMc { get; } = Utf8Constants.ToInternedString(HmacSecretMcUtf8);
 
 
     /// <summary>

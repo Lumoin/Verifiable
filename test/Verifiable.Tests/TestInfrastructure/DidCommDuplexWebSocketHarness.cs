@@ -38,16 +38,16 @@ internal static class DidCommDuplexFraming
 /// </summary>
 internal sealed class DidCommDuplexMediatorHost: IAsyncDisposable
 {
-    private readonly WebApplication app;
-    private readonly X509Certificate2 certificate;
-    private readonly TaskCompletionSource<WebSocket> accepted = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private readonly TaskCompletionSource<bool> closeRequested = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private WebApplication App { get; }
+    private X509Certificate2 ListenerCertificate { get; }
+    private TaskCompletionSource<WebSocket> Accepted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private TaskCompletionSource<bool> CloseRequested { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
 
     private DidCommDuplexMediatorHost(WebApplication app, X509Certificate2 certificate)
     {
-        this.app = app;
-        this.certificate = certificate;
+        this.App = app;
+        this.ListenerCertificate = certificate;
     }
 
 
@@ -55,7 +55,7 @@ internal sealed class DidCommDuplexMediatorHost: IAsyncDisposable
     public Uri Endpoint { get; private set; } = null!;
 
     /// <summary>The self-signed leaf certificate this host's listener presents; a connecting client pins to this exact certificate.</summary>
-    public X509Certificate2 Certificate => certificate;
+    public X509Certificate2 Certificate => ListenerCertificate;
 
 
     /// <summary>Starts a loopback duplex WebSocket mediator host on an ephemeral port.</summary>
@@ -85,14 +85,14 @@ internal sealed class DidCommDuplexMediatorHost: IAsyncDisposable
         }
 
         WebSocket socket = await context.WebSockets.AcceptWebSocketAsync().ConfigureAwait(false);
-        accepted.TrySetResult(socket);
+        Accepted.TrySetResult(socket);
 
         //Wait for DisposeAsync's shutdown signal rather than returning — returning here would tear the
         //socket down while the test is still driving direct SendFrameAsync/ReceiveFrameAsync calls against
         //it. Once signaled, this returns without its own close handshake: DisposeAsync's app.StopAsync tears
         //the listener (and every accepted connection) down regardless, and by the time it is called the test
         //has already finished asserting everything it needs from this connection.
-        await closeRequested.Task.ConfigureAwait(false);
+        await CloseRequested.Task.ConfigureAwait(false);
     }
 
 
@@ -101,7 +101,7 @@ internal sealed class DidCommDuplexMediatorHost: IAsyncDisposable
     /// <returns>The frame type the peer sent it as, and its complete bytes.</returns>
     public async Task<(WebSocketMessageType Type, byte[] Payload)> ReceiveFrameAsync(CancellationToken cancellationToken)
     {
-        WebSocket socket = await accepted.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+        WebSocket socket = await Accepted.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
 
         return await DidCommDuplexFraming.ReceiveOneMessageAsync(socket, cancellationToken).ConfigureAwait(false);
     }
@@ -119,7 +119,7 @@ internal sealed class DidCommDuplexMediatorHost: IAsyncDisposable
         {
             try
             {
-                WebSocket socket = await accepted.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+                WebSocket socket = await Accepted.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
                 await socket.SendAsync(message, WebSocketMessageType.Text, endOfMessage: true, cancellationToken).ConfigureAwait(false);
 
                 return DidCommTransmitResult.Accepted();
@@ -130,6 +130,9 @@ internal sealed class DidCommDuplexMediatorHost: IAsyncDisposable
             }
             catch
             {
+                //A transport-level failure sending over this test harness's socket is fail-soft, matching
+                //the production transport's own contract: the caller treats it as TransportFailed rather
+                //than an escaping exception, cancellation excepted above.
                 return DidCommTransmitResult.TransportFailed();
             }
         };
@@ -138,10 +141,10 @@ internal sealed class DidCommDuplexMediatorHost: IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        closeRequested.TrySetResult(true);
-        await app.StopAsync(CancellationToken.None).ConfigureAwait(false);
-        await app.DisposeAsync().ConfigureAwait(false);
-        certificate.Dispose();
+        CloseRequested.TrySetResult(true);
+        await App.StopAsync(CancellationToken.None).ConfigureAwait(false);
+        await App.DisposeAsync().ConfigureAwait(false);
+        ListenerCertificate.Dispose();
     }
 }
 
@@ -153,12 +156,12 @@ internal sealed class DidCommDuplexMediatorHost: IAsyncDisposable
 /// </summary>
 internal sealed class DidCommDuplexWalletConnection: IAsyncDisposable
 {
-    private readonly ClientWebSocket client;
+    private ClientWebSocket Client { get; }
 
 
     private DidCommDuplexWalletConnection(ClientWebSocket client, WebSocketCertificatePinning pinning)
     {
-        this.client = client;
+        this.Client = client;
         Pinning = pinning;
     }
 
@@ -203,7 +206,7 @@ internal sealed class DidCommDuplexWalletConnection: IAsyncDisposable
         {
             try
             {
-                await client.SendAsync(message, WebSocketMessageType.Text, endOfMessage: true, cancellationToken).ConfigureAwait(false);
+                await Client.SendAsync(message, WebSocketMessageType.Text, endOfMessage: true, cancellationToken).ConfigureAwait(false);
 
                 return DidCommTransmitResult.Accepted();
             }
@@ -213,6 +216,9 @@ internal sealed class DidCommDuplexWalletConnection: IAsyncDisposable
             }
             catch
             {
+                //A transport-level failure sending over this test harness's socket is fail-soft, matching
+                //the production transport's own contract: the caller treats it as TransportFailed rather
+                //than an escaping exception, cancellation excepted above.
                 return DidCommTransmitResult.TransportFailed();
             }
         };
@@ -229,19 +235,19 @@ internal sealed class DidCommDuplexWalletConnection: IAsyncDisposable
     /// <param name="messageType">The WebSocket frame type to send it as.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public ValueTask SendRawFrameAsync(ReadOnlyMemory<byte> message, WebSocketMessageType messageType, CancellationToken cancellationToken) =>
-        client.SendAsync(message, messageType, endOfMessage: true, cancellationToken);
+        Client.SendAsync(message, messageType, endOfMessage: true, cancellationToken);
 
 
     /// <summary>Reads the next complete inbound frame from the mediator.</summary>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The frame type the peer sent it as, and its complete bytes.</returns>
     public Task<(WebSocketMessageType Type, byte[] Payload)> ReceiveFrameAsync(CancellationToken cancellationToken) =>
-        DidCommDuplexFraming.ReceiveOneMessageAsync(client, cancellationToken);
+        DidCommDuplexFraming.ReceiveOneMessageAsync(Client, cancellationToken);
 
 
     public async ValueTask DisposeAsync()
     {
-        if(client.State == WebSocketState.Open)
+        if(Client.State == WebSocketState.Open)
         {
             try
             {
@@ -251,7 +257,7 @@ internal sealed class DidCommDuplexWalletConnection: IAsyncDisposable
                 //server-side close-frame echo that nothing is left to send. CloseOutputAsync sends this
                 //side's close frame and returns without waiting for one back; the underlying connection is
                 //torn down regardless once the host itself is disposed.
-                await client.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "test complete", CancellationToken.None).ConfigureAwait(false);
+                await Client.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "test complete", CancellationToken.None).ConfigureAwait(false);
             }
             catch
             {
@@ -259,6 +265,6 @@ internal sealed class DidCommDuplexWalletConnection: IAsyncDisposable
             }
         }
 
-        client.Dispose();
+        Client.Dispose();
     }
 }

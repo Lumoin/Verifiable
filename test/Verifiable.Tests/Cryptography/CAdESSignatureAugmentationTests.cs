@@ -366,7 +366,7 @@ internal sealed class CAdESSignatureAugmentationTests
         AsnReader values = new AsnReader(revocationValues[0], AsnEncodingRules.DER).ReadSequence();
 
         //crlVals [0] EXPLICIT: the [0] tag encloses the crlVals SEQUENCE OF, so the inner SEQUENCE is read before
-        //the CertificateList — not the CertificateList directly (reading it directly is the pre-fix bug).
+        //the CertificateList — reading it directly would skip the crlVals wrapper.
         AsnReader crlField = values.ReadSequence(new Asn1Tag(TagClass.ContextSpecific, 0, isConstructed: true));
         AsnReader crlSequenceOf = crlField.ReadSequence();
         Assert.IsFalse(crlField.HasData, "crlVals [0] encloses exactly the SEQUENCE OF (EXPLICIT TAGS), nothing else.");
@@ -408,8 +408,8 @@ internal sealed class CAdESSignatureAugmentationTests
         byte[] basicResponseDer = ExtractBasicResponse(wholeResponse.AsReadOnlySpan().ToArray());
 
         //A tag-replacing encoder: each context tag stands in for the inner SEQUENCE OF's own tag, and otherRevVals
-        //[2] is written AS the OtherRevVals content (its first child the OID). This is what the pre-fix writer of
-        //this very library produced, and what the fixed reader must still tolerate when reading foreign input.
+        //[2] is written AS the OtherRevVals content (its first child the OID). This is a legacy tag-replacing
+        //encoder shape a conformant reader must still tolerate when reading foreign input.
         var writer = new AsnWriter(AsnEncodingRules.DER);
         using(writer.PushSequence())                                                                    //RevocationValues
         {

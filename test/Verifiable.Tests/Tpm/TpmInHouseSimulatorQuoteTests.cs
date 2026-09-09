@@ -22,6 +22,7 @@ using Verifiable.Tpm.Spec.Attributes;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -91,7 +92,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse ak = await CreateSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
@@ -108,7 +109,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
         Assert.IsNotNull(attest.Attested.Quote);
 
         //2. Qualified Name realism: qualifiedSigner must equal the AK's independent off-TPM recomputation
-        //nameAlg || H(hierarchyHandle || Name) (TPM 2.0 Library Part 1, clause 14, Table 6) — and must NOT equal the plain
+        //nameAlg || H(hierarchyHandle || Name) (TPM 2.0 Library Part 1, clause 13, Table 9) — and must NOT equal the plain
         //Name (the regression a Name/QN collapse would otherwise pass).
         byte[] expectedSignerQn = await ComputeQualifiedNameAsync(
             (uint)TpmRh.TPM_RH_OWNER, ak.Name.Span.ToArray(), pool, TestContext.CancellationToken).ConfigureAwait(false);
@@ -155,18 +156,18 @@ internal sealed class TpmInHouseSimulatorQuoteTests
 
     /// <summary>
     /// Verifies that <c>TPM2_Quote()</c> checks the signing key's own retained authValue at the sign slot
-    /// rather than accepting any <c>TPM_RS_PW</c> password unchecked (TPM 2.0 Library Part 1, clause 17.6.4.3;
+    /// rather than accepting any <c>TPM_RS_PW</c> password unchecked (TPM 2.0 Library Part 1, clause 16.6.4.3;
     /// Part 3, clause 18.1): a DA-protected AK created with a non-empty authValue quotes when the CORRECT
     /// password authorizes slot 0, leaving the dictionary-attack lockout counter unmoved, and is refused with
     /// the session-encoded <c>TPM_RC_AUTH_FAIL</c> at the same slot (Part 2, clause 6.6.2) — charging the
-    /// lockout counter by exactly one (clause 17.8.7) — when the supplied password is WRONG.
+    /// lockout counter by exactly one (Part 1, clause 16.8.7) — when the supplied password is WRONG.
     /// </summary>
     [TestMethod]
     public async Task QuoteVerifiesTheSigningKeysAuthValue()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse ak = await CreateDaProtectedSigningPrimaryWithAuthAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
@@ -193,12 +194,12 @@ internal sealed class TpmInHouseSimulatorQuoteTests
         TpmResult<TpmDictionaryAttackParameters> afterWrong = await tpm.GetDictionaryAttackParametersAsync(pool, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(
             afterCorrect.Value.LockoutCounter + 1, afterWrong.Value.LockoutCounter,
-            "A wrong authValue against the DA-protected AK's sign slot must charge the lockout counter exactly once (TPM 2.0 Library Part 1, clause 17.8.7).");
+            "A wrong authValue against the DA-protected AK's sign slot must charge the lockout counter exactly once (TPM 2.0 Library Part 1, clause 16.8.7).");
     }
 
     /// <summary>
     /// Verifies that <c>TPM2_Quote()</c> refuses a <c>TPMA_OBJECT.userWithAuth</c>-CLEAR signing key's
-    /// <c>TPM_RS_PW</c> password authorization with a bare <c>TPM_RC_POLICY_FAIL</c> even when the supplied
+    /// <c>TPM_RS_PW</c> password authorization with a <c>TPM_RC_POLICY_FAIL</c>, session-encoded to the same index even when the supplied
     /// password IS the key's own correct authValue: <c>userWithAuth</c> CLEAR means the USER role accepts
     /// only a policy session, so authValue-based authorization is never admissible for this slot, regardless
     /// of whether the value would have matched (TPM 2.0 Library Part 3, clause 5.6, check 7.1). Check 7.1
@@ -212,7 +213,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse ak = await CreateUserWithAuthClearSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
@@ -227,8 +228,8 @@ internal sealed class TpmInHouseSimulatorQuoteTests
         }
 
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_POLICY_FAIL, quoteResult.ResponseCode,
-            $"A userWithAuth-CLEAR signer must reject even its OWN correct password with a bare TPM_RC_POLICY_FAIL " +
+            HmacKeyHarness.SessionEncodedRc(TpmRcConstants.TPM_RC_POLICY_FAIL, 0), quoteResult.ResponseCode,
+            $"A userWithAuth-CLEAR signer must reject even its OWN correct password at signHandle, session 1 of Table 101, " +
             $"(TPM 2.0 Library Part 3, clause 5.6, check 7.1), never authorize it (got '{quoteResult.ResponseCode}').");
 
         TpmResult<TpmDictionaryAttackParameters> after = await tpm.GetDictionaryAttackParametersAsync(pool, TestContext.CancellationToken).ConfigureAwait(false);
@@ -243,7 +244,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse ak = await CreateSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
@@ -271,7 +272,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse ak = await CreateSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
@@ -304,15 +305,19 @@ internal sealed class TpmInHouseSimulatorQuoteTests
         Assert.IsInstanceOfType<ActiveLogState<int>>(result.State);
     }
 
+    /// <summary>
+    /// <c>TPM2_Quote()</c>'s <c>signHandle</c> is its sole handle (index 0); a transient-range value that
+    /// resolves to no loaded object answers <c>TPM_RC_REFERENCE_H0</c> (TPM 2.0 Library Part 3, clause 5.4, step
+    /// 2.1).
+    /// </summary>
     [TestMethod]
-    public async Task QuoteWithUnknownSignKeyReturnsHandle()
+    public async Task QuoteWithUnknownSignKeyAnswersReferenceH0()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
-        //No signing key was created, so the transient signHandle does not resolve (TPM 2.0 Part 3, clause 18.4).
         using TpmPasswordSession keyAuth = TpmPasswordSession.CreateEmpty(pool);
         using TpmlPcrSelection pcrSelection = TpmlPcrSelection.Create(PcrBank, PcrIndices, pool);
         using QuoteInput quoteInput = QuoteInput.ForEcdsa(
@@ -325,7 +330,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
         TpmResult<QuoteResponse> quoteResult = await TpmCommandExecutor.ExecuteAsync<QuoteResponse>(
             tpm, quoteInput, [keyAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(TpmRcConstants.TPM_RC_HANDLE, quoteResult.ResponseCode);
+        Assert.AreEqual(TpmRcConstants.TPM_RC_REFERENCE_H0, quoteResult.ResponseCode, "An unloaded transient signHandle at index 0 answers TPM_RC_REFERENCE_H0 (TPM 2.0 Library Part 3, clause 5.4, step 2.1).");
     }
 
     /// <summary>
@@ -339,7 +344,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse ak = await CreateRsaSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_ENDORSEMENT).ConfigureAwait(false);
@@ -364,7 +369,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse ak = await CreateSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
@@ -376,7 +381,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
         TpmResult<QuoteResponse> quoteResult = await TpmCommandExecutor.ExecuteAsync<QuoteResponse>(
             tpm, quoteInput, [keyAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(TpmRcConstants.TPM_RC_SCHEME, quoteResult.ResponseCode);
+        Assert.AreEqual(HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SCHEME, 1), quoteResult.ResponseCode, "Table 101: inScheme is TPM2_Quote()'s second parameter (parameter 2); a scheme mismatched to signHandle's key type is parameter-encoded TPM_RC_SCHEME at index 1.");
     }
 
     /// <summary>
@@ -389,7 +394,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
@@ -401,11 +406,11 @@ internal sealed class TpmInHouseSimulatorQuoteTests
         TpmResult<QuoteResponse> quoteResult = await TpmCommandExecutor.ExecuteAsync<QuoteResponse>(
             tpm, quoteInput, [keyAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(TpmRcConstants.TPM_RC_KEY, quoteResult.ResponseCode);
+        Assert.AreEqual(HmacKeyHarness.HandleEncodedRc(TpmRcConstants.TPM_RC_KEY, 0), quoteResult.ResponseCode, "Table 101: signHandle is TPM2_Quote()'s sole handle (handle 1); a key without the sign attribute is handle-encoded TPM_RC_KEY at index 0.");
     }
 
     /// <summary>
-    /// Verifies the TPM2B_DATA qualifyingData size bound (TPM 2.0 Library Part 2, clause 10.4.3: bounded by the
+    /// Verifies the TPM2B_DATA qualifyingData size bound (TPM 2.0 Library Part 2, clause 10.3.3: bounded by the
     /// size of a marshaled TPMT_HA, 66 octets for the largest supported digest): a 66-octet qualifyingData
     /// succeeds, and a 67-octet qualifyingData is rejected with <c>TPM_RC_SIZE</c>.
     /// </summary>
@@ -414,7 +419,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse ak = await CreateSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
@@ -436,7 +441,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
         TpmResult<QuoteResponse> overBoundResult = await TpmCommandExecutor.ExecuteAsync<QuoteResponse>(
             tpm, overBoundInput, [overBoundAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(TpmRcConstants.TPM_RC_SIZE, overBoundResult.ResponseCode);
+        Assert.AreEqual(HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SIZE, 0), overBoundResult.ResponseCode, "A 67-octet qualifyingData past the TPM2B_DATA bound must be refused with TPM_RC_SIZE at qualifyingData, parameter 1 of the Quote command table.");
     }
 
     /// <summary>
@@ -450,7 +455,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse ak = await CreateRsaSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_ENDORSEMENT).ConfigureAwait(false);
@@ -780,7 +785,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
         var simulator = new TpmSimulator(
             "tpm-in-house-quote",
             signingBackend: BouncyCastleTpmEccSigningBackend.Create(),
-            rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create());
+            rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await BringOperationalAsync(simulator, pool).ConfigureAwait(false);
 
@@ -901,7 +906,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
 
     /// <summary>
     /// Recomputes an object's Qualified Name independently: <c>nameAlg || H(hierarchyHandle || Name)</c> (TPM 2.0
-    /// Library Part 1, clause 14, Table 6), through the registered digest seam. Every object this simulator quotes with is
+    /// Library Part 1, clause 13, Table 9), through the registered digest seam. Every object this simulator quotes with is
     /// a primary created directly under a permanent hierarchy, so the hierarchy's own Qualified Name is its
     /// 4-octet big-endian handle value — this test never calls the production <c>TpmObjectName</c> helper,
     /// matching the file's firewalled, off-TPM oracle style.
@@ -967,8 +972,8 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     /// A real, unbound/unsalted HMAC session at <c>TPM2_Quote()</c>'s single authorization slot, carrying the
     /// AK's CORRECT retained authValue, attests — and a SECOND command over the SAME session likewise attests,
     /// each adopting a genuinely rolled <c>nonceTPM</c> from its own response entry: a session's nonceTPM
-    /// changes on every use, command and response alike (TPM 2.0 Library Part 1, clause 17.6.3.1), and the HMAC
-    /// that authenticates a response entry (clause 17.6.5, equation 17) verifies — and only then lets the
+    /// changes on every use, command and response alike (TPM 2.0 Library Part 1, clause 16.6.3.1), and the HMAC
+    /// that authenticates a response entry (clause 16.6.5, equation 17) verifies — and only then lets the
     /// session adopt the new value — solely when that entry is genuine (TPM 2.0 Library Part 3, clause 18.4).
     /// </summary>
     [TestMethod]
@@ -976,12 +981,12 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateHmacArmRegistry();
 
         using CreatePrimaryResponse ak = await CreateDaProtectedSigningPrimaryWithAuthAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
 
-        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(HmacSessionAlg);
+        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(HmacSessionAlg, TestEntropy.NewCounterStream(), pool);
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             tpm, startInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession failed: '{startResult.ResponseCode}'.");
@@ -991,7 +996,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
 
         try
         {
-            using TpmSession session = new(new TpmHandle(sessionHandle), started.NonceTPM, HmacSessionAlg, pool);
+            using TpmSession session = new(new TpmHandle(sessionHandle), started.NonceTPM, HmacSessionAlg, TestEntropy.NewCounterStream(), pool);
             session.SetAuthValue(SignKeyPasswordBytes, pool);
 
             ReadOnlyMemory<byte>[] handleNames = [ak.Name.Span.ToArray()];
@@ -1029,9 +1034,9 @@ internal sealed class TpmInHouseSimulatorQuoteTests
 
     /// <summary>
     /// A real, unbound/unsalted HMAC session genuinely verifies the AK's OWN authValue (TPM 2.0 Library Part 1,
-    /// clause 17.6.5, equation 17): a WRONG guess against a DA-protected AK fails the sign slot's command HMAC
+    /// clause 16.6.5, equation 17): a WRONG guess against a DA-protected AK fails the sign slot's command HMAC
     /// with the session-encoded <c>TPM_RC_AUTH_FAIL</c> and charges the lockout counter exactly once (clause
-    /// 17.8.7), the session form of the same check <c>TPM2_Quote()</c>'s password arm already applies (TPM 2.0
+    /// 16.8.7), the session form of the same check <c>TPM2_Quote()</c>'s password arm already applies (TPM 2.0
     /// Library Part 3, clause 18.4).
     /// </summary>
     [TestMethod]
@@ -1039,7 +1044,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateHmacArmRegistry();
 
         using CreatePrimaryResponse ak = await CreateDaProtectedSigningPrimaryWithAuthAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
@@ -1059,21 +1064,21 @@ internal sealed class TpmInHouseSimulatorQuoteTests
         TpmResult<TpmDictionaryAttackParameters> after = await tpm.GetDictionaryAttackParametersAsync(pool, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(
             before.Value.LockoutCounter + 1, after.Value.LockoutCounter,
-            "A wrong authValue against the DA-protected AK's sign slot must charge the lockout counter exactly once (TPM 2.0 Library Part 1, clause 17.8.7).");
+            "A wrong authValue against the DA-protected AK's sign slot must charge the lockout counter exactly once (TPM 2.0 Library Part 1, clause 16.8.7).");
     }
 
     /// <summary>
     /// The NO_DA contrast to <see cref="QuoteOverUnboundHmacSessionWithWrongAuthValueOnDaProtectedSignerChargesFailedTries"/>:
     /// a WRONG guess folded into a real sign session against a <c>noDA</c> AK answers the uncharged
     /// <c>TPM_RC_BAD_AUTH</c> rather than the DA-counted <c>TPM_RC_AUTH_FAIL</c> (TPM 2.0 Library Part 1, clause
-    /// 17.8.1), still session-encoded to the sign slot's index (Part 2, clause 6.6.2).
+    /// 16.8.7), still session-encoded to the sign slot's index (Part 2, clause 6.6.2).
     /// </summary>
     [TestMethod]
     public async Task QuoteOverUnboundHmacSessionWithWrongAuthValueOnNoDaSignerReturnsBadAuthWithoutCharging()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateHmacArmRegistry();
 
         using CreatePrimaryResponse ak = await CreateNoDaSigningPrimaryWithAuthAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
@@ -1093,12 +1098,12 @@ internal sealed class TpmInHouseSimulatorQuoteTests
         TpmResult<TpmDictionaryAttackParameters> after = await tpm.GetDictionaryAttackParametersAsync(pool, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(
             before.Value.LockoutCounter, after.Value.LockoutCounter,
-            "A noDA signer's mismatch must move no counter (TPM 2.0 Library Part 1, clause 17.8.1).");
+            "A noDA signer's mismatch must move no counter (TPM 2.0 Library Part 1, clause 16.8.1).");
     }
 
     /// <summary>
     /// A sign session BOUND TO THE SIGNING KEY ITSELF attests with no per-command authValue: binding already
-    /// incorporates the key's authValue into the session key (TPM 2.0 Library Part 1, clause 17.6.10, equation
+    /// incorporates the key's authValue into the session key (TPM 2.0 Library Part 1, clause 16.6.10, equation
     /// 20), so the command HMAC omits it (equations 21/22) — the bind-omission path for <c>TPM2_Quote()</c>'s
     /// single authorized slot (Part 3, clause 18.4).
     /// </summary>
@@ -1107,12 +1112,12 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateHmacArmRegistry();
 
         using CreatePrimaryResponse ak = await CreateDaProtectedSigningPrimaryWithAuthAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
 
-        StartAuthSessionInput startInput = StartAuthSessionInput.CreateBoundUnsaltedHmacSession(ak.ObjectHandle.Value, HmacSessionAlg);
+        StartAuthSessionInput startInput = StartAuthSessionInput.CreateBoundUnsaltedHmacSession(ak.ObjectHandle.Value, HmacSessionAlg, TestEntropy.NewCounterStream(), pool);
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             tpm, startInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession (bound to the signing key) failed: '{startResult.ResponseCode}'.");
@@ -1124,7 +1129,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
         {
             using TpmSession session = await TpmSession.CreateBoundAsync(
                 new TpmHandle(sessionHandle), SignKeyPasswordBytes, startInput.NonceCaller, started.NonceTPM,
-                HmacSessionAlg, pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+                HmacSessionAlg, TestEntropy.NewCounterStream(), pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
             session.SessionAttributes = TpmaSession.CONTINUE_SESSION;
 
             using TpmlPcrSelection pcrSelection = TpmlPcrSelection.Create(PcrBank, PcrIndices, pool);
@@ -1147,7 +1152,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
 
     /// <summary>
     /// A SALTED and BOUND sign session — bound to the signing key itself — attests: the salt folds in after the
-    /// bind authValue in the session-key KDFa (TPM 2.0 Library Part 1, clause 17.6.12, equation 25), so salting
+    /// bind authValue in the session-key KDFa (TPM 2.0 Library Part 1, clause 16.6.12, equation 25), so salting
     /// composes with the same bind-omission path <see cref="QuoteOverSignSessionBoundToTheSigningKeyItselfAttestsWithoutAPerCommandAuthValue"/>
     /// proves unsalted (TPM 2.0 Library Part 3, clause 18.4).
     /// </summary>
@@ -1156,7 +1161,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateHmacArmRegistry();
 
         using CreatePrimaryResponse ak = await CreateDaProtectedSigningPrimaryWithAuthAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
@@ -1168,7 +1173,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
         TpmRsaSigningBackend rsaBackend = MicrosoftTpmRsaSigningBackend.Create();
 
         (StartAuthSessionInput startInput, IMemoryOwner<byte> salt, int saltLength) = await StartAuthSessionInputExtensions.CreateBoundAndSaltedHmacSession(
-            tpmKeyHandle, akHandle, modulus, DefaultRsaExponent, HmacSessionAlg, HmacSessionAlg, rsaBackend.EncryptOaep, pool, TestContext.CancellationToken).ConfigureAwait(false);
+            tpmKeyHandle, akHandle, modulus, DefaultRsaExponent, HmacSessionAlg, HmacSessionAlg, rsaBackend.EncryptOaep, TestEntropy.NewCounterStream(), pool, TestContext.CancellationToken).ConfigureAwait(false);
 
         using(salt)
         {
@@ -1183,7 +1188,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
             {
                 using TpmSession session = await TpmSession.CreateBoundAsync(
                     new TpmHandle(sessionHandle), SignKeyPasswordBytes, startInput.NonceCaller, started.NonceTPM,
-                    HmacSessionAlg, pool, symmetric: TpmtSymDef.Null, salt: salt.Memory[..saltLength],
+                    HmacSessionAlg, TestEntropy.NewCounterStream(), pool, symmetric: TpmtSymDef.Null, salt: salt.Memory[..saltLength],
                     cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
                 session.SessionAttributes = TpmaSession.CONTINUE_SESSION;
 
@@ -1210,25 +1215,27 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     }
 
     /// <summary>
-    /// A session claiming the <c>AUDIT</c> attribute at <c>TPM2_Quote()</c>'s sign slot is refused with the
-    /// session-encoded <c>TPM_RC_ATTRIBUTES</c>: this arm models no command audit
-    /// (<c>ValidateSessionArea(auditIsSupported: false)</c>), so a session claiming audit is refused rather than
-    /// accepted and echoed back auditing nothing (TPM 2.0 Library Part 2, clause 8.4, Table 40), encoded to the
-    /// offending slot's index (clause 6.6.2). Audit is the attribute this gate refuses categorically, which is
-    /// what makes it the one this test pins: the decrypt and encrypt attributes name the command's parameter-
-    /// encryption gates and are admitted on their own terms.
+    /// A session claiming the <c>AUDIT</c> attribute at <c>TPM2_Quote()</c>'s sign slot is admitted (TPM 2.0
+    /// Library Part 1, clause 17.1) and the command succeeds, extending the session's audit digest to
+    /// <c>H(0…0 ‖ cpHash ‖ rpHash)</c> on its first use (equation 30) with the response echoing <c>audit</c> SET,
+    /// <c>auditExclusive</c> SET and <c>auditReset</c> CLEAR (Part 2, clause 8.4, Table 38) — proved by chaining
+    /// cpHash/rpHash from the octets this test itself sent and read, then reading the session's digest back
+    /// through <c>TPM2_GetSessionAuditDigest()</c> with the NULL signer.
+    /// <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Part 1, clause 17.1; Part 2, clause 8.4, Table 38</see>.
     /// </summary>
     [TestMethod]
-    public async Task QuoteOverSessionWithAuditAttributeSetReturnsAttributes()
+    public async Task QuoteOverSessionWithAuditAttributeSetSucceeds()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        List<(TpmCcConstants Code, byte[] Command, byte[] Response)> wire = [];
+        using TpmDevice tpm = CreateRecordingDevice(simulator, wire);
         TpmResponseRegistry registry = CreateHmacArmRegistry();
+        _ = registry.Register(TpmCcConstants.TPM_CC_GetSessionAuditDigest, TpmResponseCodec.GetSessionAuditDigest);
 
         using CreatePrimaryResponse ak = await CreateSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
 
-        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(HmacSessionAlg);
+        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(HmacSessionAlg, TestEntropy.NewCounterStream(), pool);
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             tpm, startInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession failed: '{startResult.ResponseCode}'.");
@@ -1238,7 +1245,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
 
         try
         {
-            using TpmSession session = new(new TpmHandle(sessionHandle), started.NonceTPM, HmacSessionAlg, pool);
+            using TpmSession session = new(new TpmHandle(sessionHandle), started.NonceTPM, HmacSessionAlg, TestEntropy.NewCounterStream(), pool);
             session.SessionAttributes = TpmaSession.CONTINUE_SESSION | TpmaSession.AUDIT;
 
             using TpmlPcrSelection pcrSelection = TpmlPcrSelection.Create(PcrBank, PcrIndices, pool);
@@ -1247,13 +1254,36 @@ internal sealed class TpmInHouseSimulatorQuoteTests
 
             TpmResult<QuoteResponse> result = await TpmCommandExecutor.ExecuteAsync<QuoteResponse>(
                 tpm, quoteInput, [session], handleNames, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+            using QuoteResponse? response = result.IsSuccess ? result.Value : null;
 
             Assert.AreEqual(
-                TpmRcConstants.TPM_RC_ATTRIBUTES, result.BaseError,
-                "TPM2_Quote() models no command audit, so a session claiming AUDIT must be refused with TPM_RC_ATTRIBUTES.");
+                TpmRcConstants.TPM_RC_SUCCESS, result.IsSuccess ? TpmRcConstants.TPM_RC_SUCCESS : result.ResponseCode,
+                "An audit-claiming sign session succeeds (TPM 2.0 Library Part 1, clause 17.1).");
+
+            (TpmCcConstants Code, byte[] Command, byte[] Response) audited = wire[^1];
+            byte auditedAttributes = ReadResponseSessionAttributes(audited.Response, outHandleCount: 0, sessionIndex: 0);
             Assert.AreEqual(
-                SessionEncodedRc(TpmRcConstants.TPM_RC_ATTRIBUTES, sessionIndex: 0), result.ResponseCode,
-                "The mismatch names the sign slot (index 0), so the wire code carries the session-index modifier (TPM 2.0 Library Part 2, clause 6.6.2).");
+                (byte)(TpmaSession.CONTINUE_SESSION | TpmaSession.AUDIT | TpmaSession.AUDIT_EXCLUSIVE), auditedAttributes,
+                "The response echoes audit SET and auditExclusive SET (the session's first use as an audit session), with auditReset CLEAR (TPM 2.0 Library Part 2, clause 8.4, Table 38).");
+
+            byte[] responseParameters = ReadResponseParameters(audited.Response, outHandleCount: 0);
+            byte[] cpHash = await ComputeCpHashAsync(TpmCcConstants.TPM_CC_Quote, handleNames, SerializeCommandParameters(quoteInput, handleCount: 1), pool).ConfigureAwait(false);
+            byte[] rpHash = await ComputeRpHashAsync(TpmCcConstants.TPM_CC_Quote, responseParameters, pool).ConfigureAwait(false);
+            byte[] expectedDigest = await ExtendAuditDigestAsync(priorDigest: null, cpHash, rpHash, pool).ConfigureAwait(false);
+
+            using GetSessionAuditDigestInput auditDigestInput = GetSessionAuditDigestInput.ForNullSigner(TpmiShHmac.FromValue(sessionHandle), ReadOnlySpan<byte>.Empty, pool);
+            using TpmPasswordSession endorsementForDigest = TpmPasswordSession.CreateEmpty(pool);
+            using TpmPasswordSession nullSignerSlot = TpmPasswordSession.CreateEmpty(pool);
+
+            TpmResult<GetSessionAuditDigestResponse> digestResult = await TpmCommandExecutor.ExecuteAsync<GetSessionAuditDigestResponse>(
+                tpm, auditDigestInput, [endorsementForDigest, nullSignerSlot], handleNames: null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+            using GetSessionAuditDigestResponse? auditDigestResponse = digestResult.IsSuccess ? digestResult.Value : null;
+
+            Assert.IsTrue(digestResult.IsSuccess, $"TPM2_GetSessionAuditDigest() over the freshly audited session must succeed: '{digestResult.ResponseCode}'.");
+            Assert.IsTrue(auditDigestResponse!.SessionAudit.ExclusiveSession.IsYes, "The session became the exclusive audit session on its first use (TPM 2.0 Library Part 1, clause 17.2).");
+            Assert.IsTrue(
+                expectedDigest.AsSpan().SequenceEqual(auditDigestResponse.SessionAudit.SessionDigest.AsReadOnlySpan()),
+                "The session's audit digest must equal H(0…0 ‖ cpHash ‖ rpHash) chained from the quote exchange's own wire octets (TPM 2.0 Library Part 1, clause 17.1, equation 30).");
         }
         finally
         {
@@ -1275,7 +1305,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateHmacArmRegistry();
 
         using CreatePrimaryResponse clearSigner = await CreateUserWithAuthClearSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
@@ -1291,10 +1321,10 @@ internal sealed class TpmInHouseSimulatorQuoteTests
 
         Assert.AreEqual(
             TpmRcConstants.TPM_RC_POLICY_FAIL, result.BaseError,
-            "A userWithAuth-CLEAR signer's USER-role gate must refuse a real sign session carrying a WRONG guess with the bare TPM_RC_POLICY_FAIL, never the session-encoded auth failure that guess would otherwise earn.");
+            "A userWithAuth-CLEAR signer's USER-role gate must refuse a real sign session carrying a WRONG guess with TPM_RC_POLICY_FAIL, never the session-encoded auth failure that guess would otherwise earn — BaseError strips the P/N designation, so it reads the field-independent code regardless.");
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_POLICY_FAIL, result.ResponseCode,
-            "The refusal is the bare constant: the gate runs before any command-HMAC verification is ever queued.");
+            HmacKeyHarness.SessionEncodedRc(TpmRcConstants.TPM_RC_POLICY_FAIL, 0), result.ResponseCode,
+            "The refusal is session-associated to Quote's sole authorizing slot (index 0): the gate runs before any command-HMAC verification is ever queued.");
 
         TpmResult<TpmDictionaryAttackParameters> after = await tpm.GetDictionaryAttackParametersAsync(pool, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(
@@ -1315,7 +1345,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateHmacArmRegistry();
 
         using CreatePrimaryResponse ak = await CreateDaProtectedSigningPrimaryWithAuthAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
@@ -1353,7 +1383,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse ak = await CreateSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
@@ -1367,7 +1397,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
 
         try
         {
-            using TpmSession policySlotSession = new(new TpmHandle(policySessionHandle), policyStarted.NonceTPM, HmacSessionAlg, pool);
+            using TpmSession policySlotSession = new(new TpmHandle(policySessionHandle), policyStarted.NonceTPM, HmacSessionAlg, TestEntropy.NewCounterStream(), pool);
 
             using TpmlPcrSelection pcrSelection = TpmlPcrSelection.Create(PcrBank, PcrIndices, pool);
             using QuoteInput quoteInput = QuoteInput.ForEcdsa(ak.ObjectHandle, Nonce, TpmAlgIdConstants.TPM_ALG_SHA256, pcrSelection, pool);
@@ -1397,12 +1427,12 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateHmacArmRegistry();
 
         using CreatePrimaryResponse ak = await CreateSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
 
-        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(HmacSessionAlg);
+        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(HmacSessionAlg, TestEntropy.NewCounterStream(), pool);
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             tpm, startInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession failed: '{startResult.ResponseCode}'.");
@@ -1415,7 +1445,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
         _ = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(
             tpm, FlushContextInput.ForHandle(sessionHandle), [], null, pool, registry, CancellationToken.None).ConfigureAwait(false);
 
-        using TpmSession unloadedSession = new(new TpmHandle(sessionHandle), started.NonceTPM, HmacSessionAlg, pool);
+        using TpmSession unloadedSession = new(new TpmHandle(sessionHandle), started.NonceTPM, HmacSessionAlg, TestEntropy.NewCounterStream(), pool);
         using TpmlPcrSelection pcrSelection = TpmlPcrSelection.Create(PcrBank, PcrIndices, pool);
         using QuoteInput quoteInput = QuoteInput.ForEcdsa(ak.ObjectHandle, Nonce, TpmAlgIdConstants.TPM_ALG_SHA256, pcrSelection, pool);
         ReadOnlyMemory<byte>[] handleNames = [ak.Name.Span.ToArray()];
@@ -1439,14 +1469,14 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     {
         using var trackingPool = new MeteredHousePool();
         using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateHmacArmRegistry();
 
         using CreatePrimaryResponse ak = await CreateDaProtectedSigningPrimaryWithAuthAsync(tpm, registry, trackingPool.Pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
 
         long baseline = trackingPool.OutstandingCount;
 
-        StartAuthSessionInput refusedStartInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(HmacSessionAlg);
+        StartAuthSessionInput refusedStartInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(HmacSessionAlg, TestEntropy.NewCounterStream(), BaseMemoryPool.Shared);
         TpmResult<StartAuthSessionResponse> refusedStartResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             tpm, refusedStartInput, [], null, trackingPool.Pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(refusedStartResult.IsSuccess, $"StartAuthSession failed: '{refusedStartResult.ResponseCode}'.");
@@ -1456,7 +1486,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
 
         try
         {
-            using TpmSession refusedSession = new(new TpmHandle(refusedSessionHandle), refusedStarted.NonceTPM, HmacSessionAlg, trackingPool.Pool);
+            using TpmSession refusedSession = new(new TpmHandle(refusedSessionHandle), refusedStarted.NonceTPM, HmacSessionAlg, TestEntropy.NewCounterStream(), trackingPool.Pool);
             refusedSession.SetAuthValue(WrongSignKeyPasswordBytes, trackingPool.Pool);
 
             Assert.IsGreaterThan(
@@ -1483,7 +1513,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
             baseline, trackingPool.OutstandingCount,
             "The refused area alone must return every rented carrier (the session key, the authValue, and the nonce buffers) to the pool.");
 
-        StartAuthSessionInput okStartInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(HmacSessionAlg);
+        StartAuthSessionInput okStartInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(HmacSessionAlg, TestEntropy.NewCounterStream(), BaseMemoryPool.Shared);
         TpmResult<StartAuthSessionResponse> okStartResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             tpm, okStartInput, [], null, trackingPool.Pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(okStartResult.IsSuccess, $"StartAuthSession failed: '{okStartResult.ResponseCode}'.");
@@ -1493,7 +1523,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
 
         try
         {
-            using TpmSession okSession = new(new TpmHandle(okSessionHandle), okStarted.NonceTPM, HmacSessionAlg, trackingPool.Pool);
+            using TpmSession okSession = new(new TpmHandle(okSessionHandle), okStarted.NonceTPM, HmacSessionAlg, TestEntropy.NewCounterStream(), trackingPool.Pool);
             okSession.SetAuthValue(SignKeyPasswordBytes, trackingPool.Pool);
 
             using TpmlPcrSelection okPcrSelection = TpmlPcrSelection.Create(PcrBank, PcrIndices, trackingPool.Pool);
@@ -1528,12 +1558,12 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateHmacArmRegistry();
 
         using CreatePrimaryResponse ak = await CreateSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
 
-        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(HmacSessionAlg);
+        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(HmacSessionAlg, TestEntropy.NewCounterStream(), pool);
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             tpm, startInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession failed: '{startResult.ResponseCode}'.");
@@ -1543,7 +1573,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
 
         try
         {
-            using TpmSession session = new(new TpmHandle(sessionHandle), started.NonceTPM, HmacSessionAlg, pool);
+            using TpmSession session = new(new TpmHandle(sessionHandle), started.NonceTPM, HmacSessionAlg, TestEntropy.NewCounterStream(), pool);
             using TpmlPcrSelection pcrSelection = TpmlPcrSelection.Create(PcrBank, PcrIndices, pool);
             using QuoteInput quoteInput = QuoteInput.ForEcdsa(ak.ObjectHandle, Nonce, TpmAlgIdConstants.TPM_ALG_SHA256, pcrSelection, pool);
             ReadOnlyMemory<byte>[] handleNames = [ak.Name.Span.ToArray()];
@@ -1614,7 +1644,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateHmacArmRegistry();
 
         using CreatePrimaryResponse ak = await CreateRsaSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_ENDORSEMENT).ConfigureAwait(false);
@@ -1644,7 +1674,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     private async Task QuoteOverUnboundHmacSessionAndVerifyRsaAsync(
         TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, CreatePrimaryResponse ak, RSAParameters rsaParameters, bool usePss)
     {
-        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(HmacSessionAlg);
+        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(HmacSessionAlg, TestEntropy.NewCounterStream(), pool);
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             tpm, startInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession failed: '{startResult.ResponseCode}'.");
@@ -1654,7 +1684,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
 
         try
         {
-            using TpmSession session = new(new TpmHandle(sessionHandle), started.NonceTPM, HmacSessionAlg, pool);
+            using TpmSession session = new(new TpmHandle(sessionHandle), started.NonceTPM, HmacSessionAlg, TestEntropy.NewCounterStream(), pool);
             using TpmlPcrSelection pcrSelection = TpmlPcrSelection.Create(PcrBank, PcrIndices, pool);
             using QuoteInput quoteInput = usePss
                 ? QuoteInput.ForRsaPss(ak.ObjectHandle, Nonce, TpmAlgIdConstants.TPM_ALG_SHA256, pcrSelection, pool)
@@ -1706,7 +1736,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     /// Quotes the fixed PCR selection with <paramref name="ak"/> over a fresh, real, unbound/unsalted HMAC sign
     /// session carrying <paramref name="sessionAuthValue"/>, flushing the session on the way out — the
     /// single-slot mirror of the multi-slot HMAC-arm helpers the NV-certify suite composes, sized for
-    /// <c>TPM2_Quote()</c>'s ONE authorized handle (TPM 2.0 Library Part 3, clause 18.4, Table 78).
+    /// <c>TPM2_Quote()</c>'s ONE authorized handle (TPM 2.0 Library Part 3, clause 18.4, Table 101).
     /// </summary>
     /// <param name="tpm">The TPM device.</param>
     /// <param name="registry">The response codec registry.</param>
@@ -1717,7 +1747,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     private async Task<TpmResult<QuoteResponse>> QuoteOverUnboundHmacSessionAsync(
         TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, CreatePrimaryResponse ak, ReadOnlyMemory<byte> sessionAuthValue)
     {
-        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(HmacSessionAlg);
+        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(HmacSessionAlg, TestEntropy.NewCounterStream(), pool);
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             tpm, startInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession failed: '{startResult.ResponseCode}'.");
@@ -1727,7 +1757,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
 
         try
         {
-            using TpmSession session = new(new TpmHandle(sessionHandle), started.NonceTPM, HmacSessionAlg, pool);
+            using TpmSession session = new(new TpmHandle(sessionHandle), started.NonceTPM, HmacSessionAlg, TestEntropy.NewCounterStream(), pool);
             if(!sessionAuthValue.IsEmpty)
             {
                 session.SetAuthValue(sessionAuthValue.Span, pool);
@@ -1806,5 +1836,190 @@ internal sealed class TpmInHouseSimulatorQuoteTests
         _ = registry.Register(TpmCcConstants.TPM_CC_FlushContext, TpmResponseCodec.FlushContext);
 
         return registry;
+    }
+
+    /// <summary>The digest width, in octets, of <see cref="HmacSessionAlg"/> (SHA-256) — the Zero Digest width an audit session's first extend starts from (TPM 2.0 Library Part 1, clause 17.1, equation 30).</summary>
+    private const int AuditDigestSize = 32;
+
+    /// <summary>
+    /// Wraps a device whose transport records every submitted command's raw octets alongside the raw response
+    /// octets the simulator returned, in submission order — the wire archaeology an audit digest's independent
+    /// chain needs, firewalled to the wire with no back-channel into <see cref="TpmSession"/> or simulator
+    /// internals.
+    /// </summary>
+    /// <param name="simulator">The simulator the recording transport forwards to.</param>
+    /// <param name="pairs">The list each observed triple is appended to, in submission order.</param>
+    /// <returns>A device the caller disposes; its transport records as a side effect of forwarding.</returns>
+    private static TpmDevice CreateRecordingDevice(TpmSimulator simulator, List<(TpmCcConstants Code, byte[] Command, byte[] Response)> pairs)
+    {
+        async ValueTask<TpmResult<TpmResponse>> RecordAsync(ReadOnlyMemory<byte> command, BaseMemoryPool commandPool, CancellationToken ct)
+        {
+            byte[] commandBytes = command.ToArray();
+            TpmResult<TpmResponse> result = await simulator.SubmitAsync(command, commandPool, ct).ConfigureAwait(false);
+            byte[] responseBytes = result.IsSuccess ? result.Value.AsReadOnlySpan().ToArray() : [];
+            var commandReader = new TpmReader(commandBytes);
+            TpmHeader commandHeader = TpmHeader.Parse(ref commandReader);
+            pairs.Add(((TpmCcConstants)commandHeader.Code, commandBytes, responseBytes));
+
+            return result;
+        }
+
+        return TpmDevice.Create(RecordAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
+    }
+
+    /// <summary>
+    /// Serializes an input's parameter area alone — the octets a command sends after its handle area — by
+    /// invoking the same <see cref="ITpmCommandInput.WriteParameters"/> the executor calls, a second time, over a
+    /// freshly rented buffer: a pure marshal of the input's own immutable fields, not a read of any computed or
+    /// cached wire state.
+    /// </summary>
+    /// <param name="input">The command input.</param>
+    /// <param name="handleCount">The command's handle count, so the parameter area can be sized apart from the handle area.</param>
+    /// <returns>The parameter octets, in the order <see cref="ITpmCommandInput.WriteParameters"/> writes them.</returns>
+    private static byte[] SerializeCommandParameters(QuoteInput input, int handleCount)
+    {
+        int parametersSize = input.GetSerializedSize() - (handleCount * sizeof(uint));
+        byte[] buffer = new byte[parametersSize];
+        var writer = new TpmWriter(buffer);
+        input.WriteParameters(ref writer);
+
+        return buffer;
+    }
+
+    /// <summary>
+    /// Reads the response parameter area out of a captured raw response's octets — the bytes rpHash (TPM 2.0
+    /// Library Part 1, clause 15.8, equation 16) is computed over, as actually returned on the wire, independent
+    /// of whatever the codec parsed them into.
+    /// </summary>
+    /// <param name="responseBytes">The raw response octets, tagged <c>TPM_ST_SESSIONS</c>.</param>
+    /// <param name="outHandleCount">The number of output handles the response carries before its parameter area.</param>
+    /// <returns>The response parameter octets.</returns>
+    private static byte[] ReadResponseParameters(byte[] responseBytes, int outHandleCount)
+    {
+        var reader = new TpmReader(responseBytes);
+        _ = TpmHeader.Parse(ref reader);
+        for(int i = 0; i < outHandleCount; i++)
+        {
+            _ = reader.ReadUInt32();
+        }
+
+        uint parameterSize = reader.ReadUInt32();
+
+        return reader.ReadBytes((int)parameterSize).ToArray();
+    }
+
+    /// <summary>
+    /// Reads one entry's <c>sessionAttributes</c> octet out of a captured raw response's authorization area — the
+    /// octet Table 38's <c>audit</c>/<c>auditExclusive</c>/<c>auditReset</c> echo lands in and the response HMAC
+    /// is computed over, walked directly off the wire rather than through any parsed session state.
+    /// </summary>
+    /// <param name="responseBytes">The raw response octets.</param>
+    /// <param name="outHandleCount">The number of output handles preceding the parameter area.</param>
+    /// <param name="sessionIndex">The zero-based position, in request order, of the session entry to read.</param>
+    /// <returns>The entry's raw <c>sessionAttributes</c> octet.</returns>
+    private static byte ReadResponseSessionAttributes(byte[] responseBytes, int outHandleCount, int sessionIndex)
+    {
+        var reader = new TpmReader(responseBytes);
+        _ = TpmHeader.Parse(ref reader);
+        for(int i = 0; i < outHandleCount; i++)
+        {
+            _ = reader.ReadUInt32();
+        }
+
+        uint parameterSize = reader.ReadUInt32();
+        _ = reader.ReadBytes((int)parameterSize);
+
+        byte attributes = 0;
+        for(int i = 0; i <= sessionIndex; i++)
+        {
+            ushort nonceLength = reader.ReadUInt16();
+            _ = reader.ReadBytes(nonceLength);
+            attributes = reader.ReadByte();
+            ushort hmacLength = reader.ReadUInt16();
+            _ = reader.ReadBytes(hmacLength);
+        }
+
+        return attributes;
+    }
+
+    /// <summary>
+    /// Computes <c>cpHash = H_sessionAlg(commandCode ‖ Name1 ‖ Name2 ‖ … ‖ parameters)</c> (TPM 2.0 Library Part
+    /// 1, clause 15.7, equation 15) over octets this test assembled itself from the command it sent.
+    /// </summary>
+    /// <param name="commandCode">The command code.</param>
+    /// <param name="handleNames">The handle Names, in handle order.</param>
+    /// <param name="parameters">The parameter area as sent.</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <returns>The cpHash octets.</returns>
+    private async Task<byte[]> ComputeCpHashAsync(TpmCcConstants commandCode, ReadOnlyMemory<byte>[] handleNames, ReadOnlyMemory<byte> parameters, BaseMemoryPool pool)
+    {
+        int namesLength = 0;
+        foreach(ReadOnlyMemory<byte> name in handleNames)
+        {
+            namesLength += name.Length;
+        }
+
+        byte[] input = new byte[sizeof(uint) + namesLength + parameters.Length];
+        BinaryPrimitives.WriteUInt32BigEndian(input, (uint)commandCode);
+        int offset = sizeof(uint);
+        foreach(ReadOnlyMemory<byte> name in handleNames)
+        {
+            name.Span.CopyTo(input.AsSpan(offset));
+            offset += name.Length;
+        }
+        parameters.Span.CopyTo(input.AsSpan(offset));
+
+        return await HashSha256Async(input, pool).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Computes <c>rpHash = H_sessionAlg(TPM_RC_SUCCESS ‖ commandCode ‖ parameters)</c> (TPM 2.0 Library Part 1,
+    /// clause 15.8, equation 16) over the response parameter octets as actually read off the wire.
+    /// </summary>
+    /// <param name="commandCode">The command code.</param>
+    /// <param name="responseParameters">The response parameter area as read.</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <returns>The rpHash octets.</returns>
+    private async Task<byte[]> ComputeRpHashAsync(TpmCcConstants commandCode, ReadOnlyMemory<byte> responseParameters, BaseMemoryPool pool)
+    {
+        byte[] input = new byte[sizeof(uint) + sizeof(uint) + responseParameters.Length];
+        BinaryPrimitives.WriteUInt32BigEndian(input, (uint)TpmRcConstants.TPM_RC_SUCCESS);
+        BinaryPrimitives.WriteUInt32BigEndian(input.AsSpan(sizeof(uint)), (uint)commandCode);
+        responseParameters.Span.CopyTo(input.AsSpan(2 * sizeof(uint)));
+
+        return await HashSha256Async(input, pool).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Extends an audit session digest by one round: <c>H(old ‖ cpHash ‖ rpHash)</c>, with the Zero Digest of the
+    /// session's hash width standing in for <paramref name="priorDigest"/> on the session's first use as an audit
+    /// session (TPM 2.0 Library Part 1, clause 17.1, equation 30).
+    /// </summary>
+    /// <param name="priorDigest">The digest before this extend, or <see langword="null"/> on first use.</param>
+    /// <param name="cpHash">The audited command's cpHash.</param>
+    /// <param name="rpHash">The audited command's rpHash.</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <returns>The extended digest.</returns>
+    private async Task<byte[]> ExtendAuditDigestAsync(byte[]? priorDigest, byte[] cpHash, byte[] rpHash, BaseMemoryPool pool)
+    {
+        byte[] old = priorDigest ?? new byte[AuditDigestSize];
+        byte[] input = new byte[old.Length + cpHash.Length + rpHash.Length];
+        old.CopyTo(input, 0);
+        cpHash.CopyTo(input, old.Length);
+        rpHash.CopyTo(input, old.Length + cpHash.Length);
+
+        return await HashSha256Async(input, pool).ConfigureAwait(false);
+    }
+
+    /// <summary>Computes a raw SHA-256 digest over <paramref name="input"/> through the project's own digest primitive.</summary>
+    /// <param name="input">The octets to hash.</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <returns>The digest octets.</returns>
+    private async Task<byte[]> HashSha256Async(ReadOnlyMemory<byte> input, BaseMemoryPool pool)
+    {
+        using DigestValue digest = await CryptographicKeyEvents.ComputeDigestAsync(
+            input, AuditDigestSize, CryptoTags.Sha256Digest, pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        return digest.AsReadOnlySpan().ToArray();
     }
 }

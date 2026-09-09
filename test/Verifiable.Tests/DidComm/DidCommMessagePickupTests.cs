@@ -44,9 +44,9 @@ internal sealed class DidCommMessagePickupTests
     /// <summary>The test framework's per-test context, including the cooperative cancellation token.</summary>
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly BaseMemoryPool Pool = BaseMemoryPool.Shared;
-    private static readonly Uri Endpoint = new("https://mediator.example/didcomm");
-    private static readonly Uri LoopbackEndpoint = new("https://127.0.0.1/inbox");
+    private static BaseMemoryPool Pool { get; } = BaseMemoryPool.Shared;
+    private static Uri Endpoint { get; } = new("https://mediator.example/didcomm");
+    private static Uri LoopbackEndpoint { get; } = new("https://127.0.0.1/inbox");
 
 
     private static DidCommMessage ReturnRouteAllRequest(string id = "status-request-1") =>
@@ -416,7 +416,7 @@ internal sealed class DidCommMessagePickupTests
             HeaderSerializer,
             TestSetup.Base64UrlEncoder,
             CryptoFormatConversions.DefaultTagToEpkCrvConverter,
-            MicrosoftEntropyFunctions.GenerateNonce,
+            MicrosoftEntropyFunctionsAdapter.GenerateNonce,
             Pool,
             cancellationToken).ConfigureAwait(false);
     }
@@ -450,17 +450,21 @@ internal sealed class DidCommMessagePickupTests
             //Read the raw header values (mirrors GuardedHttpClientTransport.BuildSingleHopTransport) rather than
             //round-tripping through MediaTypeHeaderValue.ToString() — the exact Content-Type string the host
             //sent MUST reach DidCommMediaTypes.IsEncrypted unchanged, since that comparison is exact (no charset
-            //tolerance).
-            var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            //tolerance). FromReceived (not the composing-side Builder) takes RFC 9110 §5.5's recipient arm
+            //rather than throwing on a hostile line.
+            List<(string Name, string Value)> responsePairs = [];
             foreach(KeyValuePair<string, IEnumerable<string>> header in httpResponse.Content.Headers)
             {
-                headers[header.Key] = string.Join(", ", header.Value);
+                foreach(string value in header.Value)
+                {
+                    responsePairs.Add((header.Key, value));
+                }
             }
 
             return new OutboundResponse
             {
                 StatusCode = (int)httpResponse.StatusCode,
-                Headers = headers,
+                Headers = HttpHeaderSet.FromReceived(responsePairs),
                 Body = responseBytes.Length == 0 ? TaggedMemory<byte>.Empty : new TaggedMemory<byte>(responseBytes, BufferTags.Json)
             };
         };
@@ -737,30 +741,24 @@ internal sealed class DidCommMessagePickupTests
 
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> mediatorKeys = MicrosoftKeyMaterialCreator.CreateP256ExchangeKeys(Pool);
         using PublicKeyMemory mediatorPublic = mediatorKeys.PublicKey;
-        PrivateKeyMemory mediatorPrivate = mediatorKeys.PrivateKey;
-        try
-        {
-            using DidCommEncryptedMessage packed = await PackAnoncryptAsync(
-                statusRequest, "did:example:pickup-mediator#key-1", mediatorPublic, TestContext.CancellationToken).ConfigureAwait(false);
+        using PrivateKeyMemory mediatorPrivate = mediatorKeys.PrivateKey;
 
-            DidCommEncryptedUnpackResult unpacked = await packed.UnpackAnoncryptAsync(
-                "did:example:pickup-mediator#key-1", mediatorPrivate, NestedSignerResolver, UnpackContext, DidCommMessageJson.Parser, DidCommSignedMessageJson.Parser,
-                TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        using DidCommEncryptedMessage packed = await PackAnoncryptAsync(
+            statusRequest, "did:example:pickup-mediator#key-1", mediatorPublic, TestContext.CancellationToken).ConfigureAwait(false);
 
-            Assert.IsTrue(unpacked.IsUnpacked, "Message Pickup carries no transport of its own — the standard anoncrypt pack/unpack pipeline is what makes a request 'encrypted during transmission'.");
-            Assert.AreEqual(WellKnownMessagePickupNames.StatusRequestType, unpacked.Message!.Type);
+        DidCommEncryptedUnpackResult unpacked = await packed.UnpackAnoncryptAsync(
+            "did:example:pickup-mediator#key-1", mediatorPrivate, NestedSignerResolver, UnpackContext, DidCommMessageJson.Parser, DidCommSignedMessageJson.Parser,
+            TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-            //A plaintext `from` claim is not an authenticated sender — anoncrypt performs no sender key
-            //agreement, so 'repudiable' is proven by the unpack pipeline's OWN authentication verdict, not by
-            //the mere presence/absence of a from header: the recipient can read who the message CLAIMS to be
-            //from but the pipeline itself reports that claim as unauthenticated.
-            Assert.AreEqual(ClaimedSender, unpacked.Message.From, "The plaintext from claim still travels with the message — anoncrypt hides nothing about the header, it just proves nothing about it.");
-            Assert.IsFalse(unpacked.IsSenderAuthenticated, "Anoncrypt performs no sender key agreement — the unpack pipeline's own verdict MUST report the sender as unauthenticated; that verdict, not an absent from field, is what makes the message repudiable.");
-        }
-        finally
-        {
-            mediatorPrivate.Dispose();
-        }
+        Assert.IsTrue(unpacked.IsUnpacked, "Message Pickup carries no transport of its own — the standard anoncrypt pack/unpack pipeline is what makes a request 'encrypted during transmission'.");
+        Assert.AreEqual(WellKnownMessagePickupNames.StatusRequestType, unpacked.Message!.Type);
+
+        //A plaintext `from` claim is not an authenticated sender — anoncrypt performs no sender key
+        //agreement, so 'repudiable' is proven by the unpack pipeline's OWN authentication verdict, not by
+        //the mere presence/absence of a from header: the recipient can read who the message CLAIMS to be
+        //from but the pipeline itself reports that claim as unauthenticated.
+        Assert.AreEqual(ClaimedSender, unpacked.Message.From, "The plaintext from claim still travels with the message — anoncrypt hides nothing about the header, it just proves nothing about it.");
+        Assert.IsFalse(unpacked.IsSenderAuthenticated, "Anoncrypt performs no sender key agreement — the unpack pipeline's own verdict MUST report the sender as unauthenticated; that verdict, not an absent from field, is what makes the message repudiable.");
     }
 
 
@@ -1768,7 +1766,7 @@ internal sealed class DidCommMessagePickupTests
 
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> recipientKeys = MicrosoftKeyMaterialCreator.CreateP256ExchangeKeys(Pool);
         using PublicKeyMemory recipientPublic = recipientKeys.PublicKey;
-        PrivateKeyMemory recipientPrivate = recipientKeys.PrivateKey;
+        using PrivateKeyMemory recipientPrivate = recipientKeys.PrivateKey;
 
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> mediatorKeys = MicrosoftKeyMaterialCreator.CreateP256ExchangeKeys(Pool);
         using PublicKeyMemory mediatorPublic = mediatorKeys.PublicKey;
@@ -1776,62 +1774,55 @@ internal sealed class DidCommMessagePickupTests
         //decrypts the inbound status-request, so the mediator's private key is not needed.
         using PrivateKeyMemory unusedMediatorPrivate = mediatorKeys.PrivateKey;
 
-        try
-        {
-            DidCommMessage statusMessage = MessagePickupExtensions.CreateStatus("status-e2e-1", expectedStatus, from: E2EMediatorDid);
-            using DidCommEncryptedMessage packedStatusReply = await PackAnoncryptAsync(
-                statusMessage, E2ERecipientKid, recipientPublic, TestContext.CancellationToken).ConfigureAwait(false);
-            string statusReplyJson = Encoding.UTF8.GetString(packedStatusReply.AsReadOnlySpan());
+        DidCommMessage statusMessage = MessagePickupExtensions.CreateStatus("status-e2e-1", expectedStatus, from: E2EMediatorDid);
+        using DidCommEncryptedMessage packedStatusReply = await PackAnoncryptAsync(
+            statusMessage, E2ERecipientKid, recipientPublic, TestContext.CancellationToken).ConfigureAwait(false);
+        string statusReplyJson = Encoding.UTF8.GetString(packedStatusReply.AsReadOnlySpan());
 
-            await using MinimalHttpHost mediatorHost = await MinimalHttpHost.StartAsync(
-                (request, cancellationToken) => Task.FromResult(new MinimalHttpResponse
-                {
-                    StatusCode = 200,
-                    ContentType = DidCommEncryptedMessage.MediaType,
-                    Body = statusReplyJson
-                }),
-                TestContext.CancellationToken).ConfigureAwait(false);
+        await using MinimalHttpHost mediatorHost = await MinimalHttpHost.StartAsync(
+            (request, cancellationToken) => Task.FromResult(new MinimalHttpResponse
+            {
+                StatusCode = 200,
+                ContentType = DidCommEncryptedMessage.MediaType,
+                Body = statusReplyJson
+            }),
+            TestContext.CancellationToken).ConfigureAwait(false);
 
-            DidCommMessage statusRequest = StatusRequest("status-request-e2e-1", recipientDid: E2ERecipientDid);
-            using DidCommEncryptedMessage packedRequest = await PackAnoncryptAsync(
-                statusRequest, E2EMediatorKid, mediatorPublic, TestContext.CancellationToken).ConfigureAwait(false);
+        DidCommMessage statusRequest = StatusRequest("status-request-e2e-1", recipientDid: E2ERecipientDid);
+        using DidCommEncryptedMessage packedRequest = await PackAnoncryptAsync(
+            statusRequest, E2EMediatorKid, mediatorPublic, TestContext.CancellationToken).ConfigureAwait(false);
 
-            using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(mediatorHost.Certificate);
-            DidCommExchangeDelegate exchange = DidCommHttpTransport.CreateExchangeDelegate(BuildExchangeTransport(httpClient), metered.Pool);
+        using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(mediatorHost.Certificate);
+        DidCommExchangeDelegate exchange = DidCommHttpTransport.CreateExchangeDelegate(BuildExchangeTransport(httpClient), metered.Pool);
 
-            DidCommExchangeResult exchangeResult = await packedRequest.ExchangeAsync(
-                statusRequest, mediatorHost.BaseAddress, NewLoopbackExchangeContext(), exchange, TestContext.CancellationToken).ConfigureAwait(false);
+        DidCommExchangeResult exchangeResult = await packedRequest.ExchangeAsync(
+            statusRequest, mediatorHost.BaseAddress, NewLoopbackExchangeContext(), exchange, TestContext.CancellationToken).ConfigureAwait(false);
 
-            Assert.IsTrue(exchangeResult.IsAccepted, $"The mediator MUST accept the status-request. Status: {exchangeResult.TransportStatusCode}, error: {exchangeResult.Error}.");
-            Assert.IsTrue(exchangeResult.HasReply, "The reply MUST arrive on the same HTTP response (return_route: all).");
-            Assert.AreEqual(1L, metered.OutstandingCount, "The reply's rented lease is outstanding until the caller disposes the result.");
+        Assert.IsTrue(exchangeResult.IsAccepted, $"The mediator MUST accept the status-request. Status: {exchangeResult.TransportStatusCode}, error: {exchangeResult.Error}.");
+        Assert.IsTrue(exchangeResult.HasReply, "The reply MUST arrive on the same HTTP response (return_route: all).");
+        Assert.AreEqual(1L, metered.OutstandingCount, "The reply's rented lease is outstanding until the caller disposes the result.");
 
-            DidCommMessageClass replyClass = DidCommInbound.Classify(exchangeResult.ReplyMediaType, exchangeResult.ReplyBody.AsReadOnlySpan(), TestSetup.Base64UrlDecoder, Pool);
-            Assert.AreEqual(DidCommMessageClass.Anoncrypt, replyClass, "The reply's Content-Type and protected-header alg MUST classify as anoncrypt.");
+        DidCommMessageClass replyClass = DidCommInbound.Classify(exchangeResult.ReplyMediaType, exchangeResult.ReplyBody.AsReadOnlySpan(), TestSetup.Base64UrlDecoder, Pool);
+        Assert.AreEqual(DidCommMessageClass.Anoncrypt, replyClass, "The reply's Content-Type and protected-header alg MUST classify as anoncrypt.");
 
-            using DidCommEncryptedMessage receivedReply = DidCommEncryptedMessage.Create(exchangeResult.ReplyBody.AsReadOnlySpan(), BufferTags.Json, Pool);
-            DidCommEncryptedUnpackResult unpacked = await receivedReply.UnpackAnoncryptAsync(
-                E2ERecipientKid, recipientPrivate, NestedSignerResolver, UnpackContext, DidCommMessageJson.Parser, DidCommSignedMessageJson.Parser,
-                TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        using DidCommEncryptedMessage receivedReply = DidCommEncryptedMessage.Create(exchangeResult.ReplyBody.AsReadOnlySpan(), BufferTags.Json, Pool);
+        DidCommEncryptedUnpackResult unpacked = await receivedReply.UnpackAnoncryptAsync(
+            E2ERecipientKid, recipientPrivate, NestedSignerResolver, UnpackContext, DidCommMessageJson.Parser, DidCommSignedMessageJson.Parser,
+            TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-            Assert.IsTrue(unpacked.IsUnpacked, $"The recipient MUST decrypt the status that crossed the wire. Error: {unpacked.Error}.");
-            Assert.IsNotNull(unpacked.Message);
-            Assert.IsTrue(unpacked.Message!.TryReadStatus(out MessagePickupStatus? status), "TryReadStatus MUST succeed on the decrypted status.");
-            Assert.AreEqual(7L, status!.MessageCount);
-            Assert.AreEqual(3600L, status.LongestWaitedSeconds);
-            Assert.AreEqual(1658085169L, status.NewestReceivedTime);
-            Assert.AreEqual(1658084293L, status.OldestReceivedTime);
-            Assert.AreEqual(8096L, status.TotalBytes);
-            Assert.IsFalse(status.LiveDelivery!.Value);
-            Assert.AreEqual(E2ERecipientDid, status.RecipientDid);
+        Assert.IsTrue(unpacked.IsUnpacked, $"The recipient MUST decrypt the status that crossed the wire. Error: {unpacked.Error}.");
+        Assert.IsNotNull(unpacked.Message);
+        Assert.IsTrue(unpacked.Message!.TryReadStatus(out MessagePickupStatus? status), "TryReadStatus MUST succeed on the decrypted status.");
+        Assert.AreEqual(7L, status!.MessageCount);
+        Assert.AreEqual(3600L, status.LongestWaitedSeconds);
+        Assert.AreEqual(1658085169L, status.NewestReceivedTime);
+        Assert.AreEqual(1658084293L, status.OldestReceivedTime);
+        Assert.AreEqual(8096L, status.TotalBytes);
+        Assert.IsFalse(status.LiveDelivery!.Value);
+        Assert.AreEqual(E2ERecipientDid, status.RecipientDid);
 
-            exchangeResult.Dispose();
-            Assert.AreEqual(0L, metered.OutstandingCount, "Disposing the exchange result returns the reply's rented lease.");
-        }
-        finally
-        {
-            recipientPrivate.Dispose();
-        }
+        exchangeResult.Dispose();
+        Assert.AreEqual(0L, metered.OutstandingCount, "Disposing the exchange result returns the reply's rented lease.");
     }
 
 
@@ -1892,11 +1883,11 @@ internal sealed class DidCommMessagePickupTests
     //relies on for the one-way send path.
     private sealed class FakeExchangeTransport
     {
-        private readonly int statusCode;
-        private readonly bool throwOnSend;
-        private readonly bool throwCancellation;
-        private readonly ReadOnlyMemory<byte> replyBody;
-        private readonly string? replyMediaType;
+        private int StatusCode { get; }
+        private bool ThrowOnSend { get; }
+        private bool ThrowCancellation { get; }
+        private ReadOnlyMemory<byte> ReplyBody { get; }
+        private string? ReplyMediaType { get; }
 
         public FakeExchangeTransport(
             int statusCode,
@@ -1905,11 +1896,11 @@ internal sealed class DidCommMessagePickupTests
             ReadOnlyMemory<byte> replyBody = default,
             string? replyMediaType = null)
         {
-            this.statusCode = statusCode;
-            this.throwOnSend = throwOnSend;
-            this.throwCancellation = throwCancellation;
-            this.replyBody = replyBody;
-            this.replyMediaType = replyMediaType;
+            this.StatusCode = statusCode;
+            this.ThrowOnSend = throwOnSend;
+            this.ThrowCancellation = throwCancellation;
+            this.ReplyBody = replyBody;
+            this.ReplyMediaType = replyMediaType;
         }
 
 
@@ -1919,25 +1910,23 @@ internal sealed class DidCommMessagePickupTests
         public ValueTask<OutboundResponse> SendAsync(OutboundRequest request, ExchangeContext context, CancellationToken cancellationToken)
         {
             Calls.Add(request);
-            if(throwCancellation)
+            if(ThrowCancellation)
             {
                 throw new OperationCanceledException(cancellationToken);
             }
 
-            if(throwOnSend)
+            if(ThrowOnSend)
             {
                 throw new InvalidOperationException("Simulated transport failure.");
             }
 
-            Dictionary<string, string> headers = new(StringComparer.OrdinalIgnoreCase);
-            if(replyMediaType is not null)
-            {
-                headers["Content-Type"] = replyMediaType;
-            }
+            HttpHeaderSet headers = ReplyMediaType is not null
+                ? HttpHeaderSet.FromPairs((WellKnownHttpHeaderNames.ContentType, ReplyMediaType))
+                : HttpHeaderSet.Empty;
 
-            OutboundResponse response = replyBody.IsEmpty
-                ? new OutboundResponse { StatusCode = statusCode, Headers = headers }
-                : new OutboundResponse { StatusCode = statusCode, Headers = headers, Body = new TaggedMemory<byte>(replyBody, BufferTags.Json) };
+            OutboundResponse response = ReplyBody.IsEmpty
+                ? new OutboundResponse { StatusCode = StatusCode, Headers = headers }
+                : new OutboundResponse { StatusCode = StatusCode, Headers = headers, Body = new TaggedMemory<byte>(ReplyBody, BufferTags.Json) };
 
             return ValueTask.FromResult(response);
         }

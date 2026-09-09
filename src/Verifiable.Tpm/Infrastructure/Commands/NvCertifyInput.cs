@@ -18,7 +18,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// TPMS_NV_DIGEST_CERTIFY_INFO form.
 /// </para>
 /// <para>
-/// Command structure (TPM 2.0 Part 3, Section 31.16, Table 238):
+/// Command structure (TPM 2.0 Library Part 3, clause 31.16, Table 271):
 /// </para>
 /// <list type="bullet">
 ///   <item><description>signHandle (TPMI_DH_OBJECT+): The signing key. Requires authorization (USER role).</description></item>
@@ -48,8 +48,8 @@ public sealed class NvCertifyInput: ITpmCommandInput, IDisposable
     /// <remarks>
     /// <c>qualifyingData</c> (<c>TPM2B_DATA</c>) is the first entry of the parameter area, ordered ahead of
     /// <c>inScheme</c>, <c>size</c> and <c>offset</c>, and carries an explicit size field (TPM 2.0 Library Part
-    /// 3, clause 31.16, Table 254), which is what TPM 2.0 Library Part 1, clause 19.1 requires of an encryptable
-    /// parameter and what clause 16.4 restates ("for a command or response parameter to be encrypted, it must be
+    /// 3, clause 31.16, Table 271), which is what TPM 2.0 Library Part 1, clause 18.1 requires of an encryptable
+    /// parameter and what clause 15.4 restates ("for a command or response parameter to be encrypted, it must be
     /// the first parameter and it must be a TPM2B type"). A session without the <c>decrypt</c> attribute is
     /// unaffected; the attribute is what asks the TPM to decrypt the parameter after the command HMACs verify, so
     /// the caller nonce this command echoes into the attestation's <c>extraData</c> never crosses the bus in the
@@ -232,12 +232,15 @@ public sealed class NvCertifyInput: ITpmCommandInput, IDisposable
     /// <inheritdoc/>
     public int GetSerializedSize()
     {
-        //TPMT_SIG_SCHEME: scheme (UINT16) + hashAlg (UINT16).
-        const int TpmtSigSchemeSize = sizeof(ushort) + sizeof(ushort);
+        //TPMT_SIG_SCHEME (TPM 2.0 Library Part 2, clause 11.2.1.5, Table 183): scheme (UINT16) selector, plus a
+        //hashAlg (UINT16) detail pair only when the scheme is not TPM_ALG_NULL — Table 183's [scheme]details
+        //is absent entirely for the NULL scheme (clause 11.2.1.4, Table 182, whose "null" row carries an empty
+        //Type column against selector TPM_ALG_NULL), so a NULL SignatureScheme omits the trailing octets.
+        int schemeSize = sizeof(ushort) + (SignatureScheme == TpmAlgIdConstants.TPM_ALG_NULL ? 0 : sizeof(ushort));
 
         return (3 * sizeof(uint)) +                          //signHandle + authHandle + nvIndex.
                sizeof(ushort) + QualifyingData.Length +      //TPM2B_DATA: size prefix + bytes.
-               TpmtSigSchemeSize +
+               schemeSize +
                sizeof(ushort) +                               //size.
                sizeof(ushort);                                //offset.
     }
@@ -258,7 +261,14 @@ public sealed class NvCertifyInput: ITpmCommandInput, IDisposable
         writer.WriteUInt16((ushort)QualifyingData.Length);
         writer.WriteBytes(QualifyingData.Span);
         writer.WriteUInt16((ushort)SignatureScheme);
-        writer.WriteUInt16((ushort)SchemeHashAlg);
+
+        //Table 183's [scheme]details is present only for a non-NULL scheme — a NULL SignatureScheme selects no
+        //TPMU_SIG_SCHEME member at all, so SchemeHashAlg is not framed for it.
+        if(SignatureScheme != TpmAlgIdConstants.TPM_ALG_NULL)
+        {
+            writer.WriteUInt16((ushort)SchemeHashAlg);
+        }
+
         writer.WriteUInt16(Size);
         writer.WriteUInt16(Offset);
     }

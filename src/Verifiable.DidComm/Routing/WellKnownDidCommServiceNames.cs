@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography.Text;
 
 namespace Verifiable.DidComm.Routing;
@@ -24,23 +25,25 @@ public static class WellKnownDidCommServiceNames
     /// The DIDComm Messaging service type — the value of a service's <c>type</c> that identifies it as a DIDComm
     /// Messaging endpoint (DIDComm v2.1 §Service Endpoint: "type - REQUIRED. MUST be DIDCommMessaging").
     /// </summary>
-    public static readonly string DidCommMessagingServiceType = Utf8Constants.ToInternedString(DidCommMessagingServiceTypeUtf8);
+    public static string DidCommMessagingServiceType { get; } = Utf8Constants.ToInternedString(DidCommMessagingServiceTypeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Uri"/>.</summary>
     public static ReadOnlySpan<byte> UriUtf8 => "uri"u8;
 
     /// <summary>The <c>serviceEndpoint.uri</c> member — REQUIRED. A transport URI, or a mediator DID (DIDComm v2.1 §Service Endpoint).</summary>
-    public static readonly string Uri = Utf8Constants.ToInternedString(UriUtf8);
+    [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
+        Justification = "This member is the JSON claim NAME literal 'uri' (a wire key compared and serialised as a string), not a dereferenceable System.Uri.")]
+    public static string Uri { get; } = Utf8Constants.ToInternedString(UriUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Accept"/>.</summary>
     public static ReadOnlySpan<byte> AcceptUtf8 => "accept"u8;
 
     /// <summary>The <c>serviceEndpoint.accept</c> member — OPTIONAL. The media-type/profile preferences of the endpoint (DIDComm v2.1 §Service Endpoint).</summary>
-    public static readonly string Accept = Utf8Constants.ToInternedString(AcceptUtf8);
+    public static string Accept { get; } = Utf8Constants.ToInternedString(AcceptUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="RoutingKeys"/>.</summary>
     public static ReadOnlySpan<byte> RoutingKeysUtf8 => "routingKeys"u8;
 
     /// <summary>The <c>serviceEndpoint.routingKeys</c> member — OPTIONAL. The ordered key refs for the forward wrap (DIDComm v2.1 §Service Endpoint).</summary>
-    public static readonly string RoutingKeys = Utf8Constants.ToInternedString(RoutingKeysUtf8);
+    public static string RoutingKeys { get; } = Utf8Constants.ToInternedString(RoutingKeysUtf8);
 }

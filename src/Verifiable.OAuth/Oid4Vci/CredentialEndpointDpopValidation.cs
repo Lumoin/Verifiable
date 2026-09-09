@@ -140,20 +140,18 @@ internal static class CredentialEndpointDpopValidation
             now + WellKnownDpopValues.DefaultReplayWindow,
             cancellationToken).ConfigureAwait(false);
 
-        if(jtiOutcome == JtiReplayOutcome.Replayed)
+        return jtiOutcome switch
         {
-            return ServerHttpResponse.BadRequest(
-                OAuthErrors.InvalidDpopProof, "The DPoP proof jti has been presented previously.");
-        }
-
-        if(jtiOutcome == JtiReplayOutcome.StoreUnavailable)
-        {
-            return ServerHttpResponse.ServerError(
+            JtiReplayOutcome.Replayed => ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidDpopProof, "The DPoP proof jti has been presented previously."),
+            JtiReplayOutcome.Unacceptable => ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidDpopProof,
+                "DPoP proof jti exceeds the length the replay guard can track."),
+            JtiReplayOutcome.StoreUnavailable => ServerHttpResponse.ServerError(
                 OAuthErrors.ServerError,
-                "DPoP proof jti replay defense is required by policy but no jti store is configured.");
-        }
-
-        return null;
+                "DPoP proof jti replay defense is required by policy but no jti store is configured."),
+            _ => null
+        };
     }
 
 

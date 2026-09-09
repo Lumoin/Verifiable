@@ -30,8 +30,8 @@ internal sealed class VerifiablePresentationRequestTests
     private const string AuthorityIssuer = "did:web:authority.example";
     private const string OtherIssuer = "did:web:other.example";
 
-    private static readonly string[] KeyAndWebMethods = ["key", "web"];
-    private static readonly string[] ReadAndWriteActions = ["read", "write"];
+    private static string[] KeyAndWebMethods { get; } = ["key", "web"];
+    private static string[] ReadAndWriteActions { get; } = ["read", "write"];
 
 
     //§3.4.2: parse a VPR with a QueryByExample query carrying example + acceptedIssuers +
@@ -542,7 +542,7 @@ internal sealed class VerifiablePresentationRequestTests
 
         return new VerifiableCredential
         {
-            Context = new Context { Contexts = [Context.Credentials20, AlumniContext] },
+            Context = Context.FromIris(Context.Credentials20, AlumniContext),
             Type = [CredentialConstants.VerifiableCredentialType, credentialType],
             Issuer = new Issuer { Id = issuer },
             CredentialSubject = [new CredentialSubject { AdditionalData = additionalData }]

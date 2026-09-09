@@ -1,7 +1,9 @@
 using System.Globalization;
-using System.Reflection;
+using System.IO;
+using System.Text.RegularExpressions;
 using Verifiable.Core.Assessment;
 using Verifiable.Core.Assessment.EArchiving;
+using Verifiable.Tests.Foundation;
 
 namespace Verifiable.Tests.EuEArk;
 
@@ -27,12 +29,12 @@ internal sealed class EArkClaimIdAllocationTests
     [TestMethod]
     public void TheEArkAllocationHoldsEveryIdentifierTheCatalogueStates()
     {
-        var allocations = AllocationsOf(typeof(EArkClaimIds));
+        var allocations = AllocationsOf(EArkClaimIdsPath);
 
         Assert.HasCount(140, allocations);
-        Assert.HasCount(116, allocations.Where(allocation => EArkClaimIds.IsMetsProfileRequirement(allocation.ClaimId)).ToList());
-        Assert.HasCount(16, allocations.Where(allocation => EArkClaimIds.IsFolderStructureRequirement(allocation.ClaimId)).ToList());
-        Assert.HasCount(8, allocations.Where(allocation => EArkClaimIds.IsHouseConvention(allocation.ClaimId)).ToList());
+        Assert.HasCount(116, allocations.Where(allocation => allocation.Code >= EArkClaimIds.MetsProfileRangeStart && allocation.Code <= EArkClaimIds.MetsProfileRangeEnd).ToList());
+        Assert.HasCount(16, allocations.Where(allocation => allocation.Code >= EArkClaimIds.FolderStructureRangeStart && allocation.Code <= EArkClaimIds.FolderStructureRangeEnd).ToList());
+        Assert.HasCount(8, allocations.Where(allocation => allocation.Code >= EArkClaimIds.HouseConventionRangeStart && allocation.Code <= EArkClaimIds.HouseConventionRangeEnd).ToList());
     }
 
 
@@ -44,12 +46,12 @@ internal sealed class EArkClaimIdAllocationTests
     [TestMethod]
     public void TheArchivalPackageAllocationHoldsEveryIdentifierTheSpecificationStates()
     {
-        var allocations = AllocationsOf(typeof(AipClaimIds));
+        var allocations = AllocationsOf(AipClaimIdsPath);
 
         Assert.HasCount(28, allocations);
-        Assert.HasCount(17, allocations.Where(allocation => AipClaimIds.IsProseRequirement(allocation.ClaimId)).ToList());
-        Assert.HasCount(7, allocations.Where(allocation => AipClaimIds.IsMetsProfileRequirement(allocation.ClaimId)).ToList());
-        Assert.HasCount(4, allocations.Where(allocation => AipClaimIds.IsNarrativeObligation(allocation.ClaimId)).ToList());
+        Assert.HasCount(17, allocations.Where(allocation => allocation.Code >= AipClaimIds.ProseRangeStart && allocation.Code <= AipClaimIds.ProseRangeEnd).ToList());
+        Assert.HasCount(7, allocations.Where(allocation => allocation.Code >= AipClaimIds.MetsProfileRangeStart && allocation.Code <= AipClaimIds.MetsProfileRangeEnd).ToList());
+        Assert.HasCount(4, allocations.Where(allocation => allocation.Code >= AipClaimIds.NarrativeRangeStart && allocation.Code <= AipClaimIds.NarrativeRangeEnd).ToList());
     }
 
 
@@ -62,9 +64,9 @@ internal sealed class EArkClaimIdAllocationTests
     [TestMethod]
     public void TheElevenUnassignedArchivalProseNumbersStayUnallocated()
     {
-        var codes = EveryEArchivingAllocation().Select(allocation => allocation.ClaimId.Code).ToHashSet();
+        var codes = EveryEArchivingAllocation().Select(allocation => allocation.Code).ToHashSet();
 
-        foreach(int unassigned in (int[])[4, 5, 6, 9, 10, 14, 19, 23, 24, 25, 26])
+        foreach(int unassigned in new int[] { 4, 5, 6, 9, 10, 14, 19, 23, 24, 25, 26 })
         {
             Assert.DoesNotContain(AipClaimIds.ProseRangeStart + unassigned, codes, $"AIP{unassigned} is allocated, and the specification never assigns it.");
         }
@@ -84,11 +86,11 @@ internal sealed class EArkClaimIdAllocationTests
     [TestMethod]
     public void ThePreservationMetadataAllocationHoldsEveryIdentifierTheSpecificationStates()
     {
-        var allocations = AllocationsOf(typeof(PremisClaimIds));
+        var allocations = AllocationsOf(PremisClaimIdsPath);
 
         Assert.HasCount(139, allocations);
-        Assert.HasCount(125, allocations.Where(allocation => PremisClaimIds.IsTableRequirement(allocation.ClaimId)).ToList());
-        Assert.HasCount(14, allocations.Where(allocation => PremisClaimIds.IsNarrativeRequirement(allocation.ClaimId)).ToList());
+        Assert.HasCount(125, allocations.Where(allocation => allocation.Code >= PremisClaimIds.TableRequirementRangeStart && allocation.Code <= PremisClaimIds.TableRequirementRangeEnd).ToList());
+        Assert.HasCount(14, allocations.Where(allocation => allocation.Code >= PremisClaimIds.NarrativeRequirementRangeStart && allocation.Code <= PremisClaimIds.NarrativeRequirementRangeEnd).ToList());
     }
 
 
@@ -99,13 +101,13 @@ internal sealed class EArkClaimIdAllocationTests
     [TestMethod]
     public void ThePreservationServiceAllocationHoldsEveryIdentifierBothSpecificationsState()
     {
-        var allocations = AllocationsOf(typeof(PreservationClaimIds));
+        var allocations = AllocationsOf(PreservationClaimIdsPath);
 
         Assert.HasCount(147, allocations);
-        Assert.HasCount(107, allocations.Where(allocation => PreservationClaimIds.IsOverallRequirement(allocation.ClaimId)).ToList());
-        Assert.HasCount(15, allocations.Where(allocation => PreservationClaimIds.IsProtocolRequirement(allocation.ClaimId)).ToList());
-        Assert.HasCount(8, allocations.Where(allocation => PreservationClaimIds.IsProtocolOperation(allocation.ClaimId)).ToList());
-        Assert.HasCount(17, allocations.Where(allocation => PreservationClaimIds.IsProtocolResult(allocation.ClaimId)).ToList());
+        Assert.HasCount(107, allocations.Where(allocation => allocation.Code >= PreservationClaimIds.OverallRequirementRangeStart && allocation.Code <= PreservationClaimIds.OverallRequirementRangeEnd).ToList());
+        Assert.HasCount(15, allocations.Where(allocation => allocation.Code >= PreservationClaimIds.ProtocolRequirementRangeStart && allocation.Code <= PreservationClaimIds.ProtocolRequirementRangeEnd).ToList());
+        Assert.HasCount(8, allocations.Where(allocation => allocation.Code >= PreservationClaimIds.ProtocolOperationRangeStart && allocation.Code <= PreservationClaimIds.ProtocolOperationRangeEnd).ToList());
+        Assert.HasCount(17, allocations.Where(allocation => allocation.Code >= PreservationClaimIds.ProtocolResultRangeStart && allocation.Code <= PreservationClaimIds.ProtocolResultRangeEnd).ToList());
     }
 
 
@@ -119,7 +121,7 @@ internal sealed class EArkClaimIdAllocationTests
         var allocations = EveryEArchivingAllocation();
 
         Assert.HasCount(454, allocations);
-        Assert.HasCount(454, allocations.Select(allocation => allocation.ClaimId.Code).Distinct().ToList());
+        Assert.HasCount(454, allocations.Select(allocation => allocation.Code).Distinct().ToList());
         Assert.HasCount(454, allocations.Select(allocation => allocation.Description).Distinct(StringComparer.Ordinal).ToList());
     }
 
@@ -171,7 +173,7 @@ internal sealed class EArkClaimIdAllocationTests
             {
                 Assert.AreEqual(
                     expectedCode,
-                    allocation.ClaimId.Code,
+                    allocation.Code,
                     $"{allocation.PropertyName} ({allocation.Description}) is not at the code its band arithmetic states.");
                 ++recomputed;
             }
@@ -193,7 +195,7 @@ internal sealed class EArkClaimIdAllocationTests
     [TestMethod]
     public void TheThreeRetiredMetsProfileNumbersStayUnallocated()
     {
-        var codes = EveryEArchivingAllocation().Select(allocation => allocation.ClaimId.Code).ToHashSet();
+        var codes = EveryEArchivingAllocation().Select(allocation => allocation.Code).ToHashSet();
 
         Assert.DoesNotContain(EArkClaimIds.MetsProfileRangeStart + 86, codes);
         Assert.DoesNotContain(EArkClaimIds.MetsProfileRangeStart + 87, codes);
@@ -240,11 +242,12 @@ internal sealed class EArkClaimIdAllocationTests
         Assert.IsFalse(AipClaimIds.IsProseRequirement(EArkClaimIds.Csip1));
 
         //A claim identifier of another track of this library, and one that was never created at all.
-        ClaimId neverCreated = default;
-        foreach(var recognises in BandHelpers())
+        int otherTrackCode = ClaimId.AlgIsValid.Code;
+        int neverCreatedCode = default(ClaimId).Code;
+        foreach((int start, int end) in BandHelpers())
         {
-            Assert.IsFalse(recognises(ClaimId.AlgIsValid), "A claim identifier of another track was recognised.");
-            Assert.IsFalse(recognises(neverCreated), "A default-initialized claim identifier was recognised.");
+            Assert.IsFalse(otherTrackCode >= start && otherTrackCode <= end, "A claim identifier of another track was recognised.");
+            Assert.IsFalse(neverCreatedCode >= start && neverCreatedCode <= end, "A default-initialized claim identifier was recognised.");
         }
     }
 
@@ -271,7 +274,7 @@ internal sealed class EArkClaimIdAllocationTests
 
         foreach(var allocation in EveryEArchivingAllocation())
         {
-            int matchingBands = BandHelpers().Count(recognises => recognises(allocation.ClaimId));
+            int matchingBands = BandHelpers().Count(band => allocation.Code >= band.Start && allocation.Code <= band.End);
             Assert.AreEqual(
                 1,
                 matchingBands,
@@ -281,51 +284,90 @@ internal sealed class EArkClaimIdAllocationTests
 
 
     /// <summary>
-    /// The narrowest band helper of each source specification, one per band, so a code can be tested for
-    /// belonging to exactly one of them.
+    /// The narrowest band boundary of each source specification, one per band, so a code can be tested for
+    /// falling inside exactly one of them — read by direct, non-reflective access to each class's own
+    /// <c>RangeStart</c>/<c>RangeEnd</c> properties, the same numbers every <c>Is*</c> predicate in these
+    /// classes compares a code against.
     /// </summary>
-    /// <returns>One recognition helper per allocated band.</returns>
-    private static IReadOnlyList<Func<ClaimId, bool>> BandHelpers() =>
+    /// <returns>One (start, end) boundary pair per allocated band.</returns>
+    private static IReadOnlyList<(int Start, int End)> BandHelpers() =>
     [
-        EArkClaimIds.IsMetsProfileRequirement,
-        EArkClaimIds.IsFolderStructureRequirement,
-        EArkClaimIds.IsHouseConvention,
-        PremisClaimIds.IsTableRequirement,
-        PremisClaimIds.IsNarrativeRequirement,
-        PreservationClaimIds.IsOverallRequirement,
-        PreservationClaimIds.IsProtocolRequirement,
-        PreservationClaimIds.IsProtocolOperation,
-        PreservationClaimIds.IsProtocolResult,
-        AipClaimIds.IsProseRequirement,
-        AipClaimIds.IsMetsProfileRequirement,
-        AipClaimIds.IsNarrativeObligation,
+        (EArkClaimIds.MetsProfileRangeStart, EArkClaimIds.MetsProfileRangeEnd),
+        (EArkClaimIds.FolderStructureRangeStart, EArkClaimIds.FolderStructureRangeEnd),
+        (EArkClaimIds.HouseConventionRangeStart, EArkClaimIds.HouseConventionRangeEnd),
+        (PremisClaimIds.TableRequirementRangeStart, PremisClaimIds.TableRequirementRangeEnd),
+        (PremisClaimIds.NarrativeRequirementRangeStart, PremisClaimIds.NarrativeRequirementRangeEnd),
+        (PreservationClaimIds.OverallRequirementRangeStart, PreservationClaimIds.OverallRequirementRangeEnd),
+        (PreservationClaimIds.ProtocolRequirementRangeStart, PreservationClaimIds.ProtocolRequirementRangeEnd),
+        (PreservationClaimIds.ProtocolOperationRangeStart, PreservationClaimIds.ProtocolOperationRangeEnd),
+        (PreservationClaimIds.ProtocolResultRangeStart, PreservationClaimIds.ProtocolResultRangeEnd),
+        (AipClaimIds.ProseRangeStart, AipClaimIds.ProseRangeEnd),
+        (AipClaimIds.MetsProfileRangeStart, AipClaimIds.MetsProfileRangeEnd),
+        (AipClaimIds.NarrativeRangeStart, AipClaimIds.NarrativeRangeEnd),
     ];
+
+
+    /// <summary>The repository-relative path declaring <see cref="EArkClaimIds"/>.</summary>
+    private const string EArkClaimIdsPath = "src/Verifiable.Core/Assessment/EArchiving/EArkClaimIds.cs";
+
+    /// <summary>The repository-relative path declaring <see cref="PremisClaimIds"/>.</summary>
+    private const string PremisClaimIdsPath = "src/Verifiable.Core/Assessment/EArchiving/PremisClaimIds.cs";
+
+    /// <summary>The repository-relative path declaring <see cref="PreservationClaimIds"/>.</summary>
+    private const string PreservationClaimIdsPath = "src/Verifiable.Core/Assessment/EArchiving/PreservationClaimIds.cs";
+
+    /// <summary>The repository-relative path declaring <see cref="AipClaimIds"/>.</summary>
+    private const string AipClaimIdsPath = "src/Verifiable.Core/Assessment/EArchiving/AipClaimIds.cs";
+
+    /// <summary>Matches a declared <c>public static int X { get; } = LITERAL;</c> range-boundary constant.</summary>
+    private static Regex RangeConstantPattern { get; } = new(
+        @"public\s+static\s+int\s+(\w+)\s*\{\s*get;\s*\}\s*=\s*(-?[\d_]+)\s*;",
+        RegexOptions.Compiled);
+
+    /// <summary>
+    /// Matches a declared <c>public static ClaimId X { get; } = ClaimId.Create(code, "description");</c>
+    /// allocation, whose code is either a bare integer literal or a range constant plus a literal offset.
+    /// </summary>
+    private static Regex ClaimIdCreatePattern { get; } = new(
+        @"public\s+static\s+ClaimId\s+(\w+)\s*\{\s*get;\s*\}\s*=\s*ClaimId\.Create\(\s*(?:(\w+)\s*\+\s*)?(-?[\d_]+)\s*,\s*""((?:[^""\\]|\\.)*)""\s*\)\s*;",
+        RegexOptions.Compiled);
 
 
     /// <summary>Every allocation of the four eArchiving classes, in one list.</summary>
-    /// <returns>The property name, claim identifier and description of every allocation.</returns>
-    private static IReadOnlyList<(string PropertyName, ClaimId ClaimId, string Description)> EveryEArchivingAllocation() =>
+    /// <returns>The property name, code and description of every allocation.</returns>
+    private static IReadOnlyList<(string PropertyName, int Code, string Description)> EveryEArchivingAllocation() =>
     [
-        .. AllocationsOf(typeof(EArkClaimIds)),
-        .. AllocationsOf(typeof(PremisClaimIds)),
-        .. AllocationsOf(typeof(PreservationClaimIds)),
-        .. AllocationsOf(typeof(AipClaimIds)),
+        .. AllocationsOf(EArkClaimIdsPath),
+        .. AllocationsOf(PremisClaimIdsPath),
+        .. AllocationsOf(PreservationClaimIdsPath),
+        .. AllocationsOf(AipClaimIdsPath),
     ];
 
 
-    /// <summary>Reads every <see cref="ClaimId"/> a well-known class allocates.</summary>
-    /// <param name="wellKnownType">The class holding the allocations.</param>
-    /// <returns>The property name, claim identifier and description of every allocation.</returns>
-    private static List<(string PropertyName, ClaimId ClaimId, string Description)> AllocationsOf(Type wellKnownType)
+    /// <summary>
+    /// Reads every <see cref="ClaimId"/> a well-known class allocates, by a source scan of its own declaring
+    /// file — resolving a <c>RangeStart + offset</c> code expression against that same file's own range
+    /// constant — rather than by reflection over the loaded type, so a property added without a test row
+    /// still shows up in the counts.
+    /// </summary>
+    /// <param name="relativePath">The declaring file's repository-relative path.</param>
+    /// <returns>The property name, code and description of every allocation.</returns>
+    private static List<(string PropertyName, int Code, string Description)> AllocationsOf(string relativePath)
     {
-        List<(string PropertyName, ClaimId ClaimId, string Description)> allocations = [];
-        foreach(PropertyInfo property in wellKnownType.GetProperties(BindingFlags.Public | BindingFlags.Static))
+        string text = File.ReadAllText(Path.Combine(SourceHygieneScanner.FindRepositoryRoot(), relativePath));
+
+        Dictionary<string, int> rangeConstants = [];
+        foreach(Match rangeMatch in RangeConstantPattern.Matches(text))
         {
-            if(property.PropertyType == typeof(ClaimId))
-            {
-                var claimId = (ClaimId)property.GetValue(null)!;
-                allocations.Add((property.Name, claimId, claimId.ToString()));
-            }
+            rangeConstants[rangeMatch.Groups[1].Value] = int.Parse(rangeMatch.Groups[2].Value.Replace("_", string.Empty, StringComparison.Ordinal), CultureInfo.InvariantCulture);
+        }
+
+        List<(string PropertyName, int Code, string Description)> allocations = [];
+        foreach(Match match in ClaimIdCreatePattern.Matches(text))
+        {
+            int offset = int.Parse(match.Groups[3].Value.Replace("_", string.Empty, StringComparison.Ordinal), CultureInfo.InvariantCulture);
+            int code = match.Groups[2].Success ? rangeConstants[match.Groups[2].Value] + offset : offset;
+            allocations.Add((match.Groups[1].Value, code, match.Groups[4].Value));
         }
 
         return allocations;

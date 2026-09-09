@@ -326,6 +326,58 @@ public sealed class Oid4VciWalletClient
             grant.PreAuthorizedCode, transactionCode, endpoints.TokenEndpoint, cancellationToken)
             .ConfigureAwait(false);
 
+        return await IssueWithAccessTokenDetailedAsync(
+            accessToken,
+            tokenType,
+            credentialIssuer,
+            credentialConfigurationId,
+            holderPrivate,
+            holderPublic,
+            endpoints,
+            responseEncryption,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Drives issuance from an access token the Wallet already holds - the section 7 Nonce Request,
+    /// the section 7.2.1 holder key proof, and the section 8 Credential Request - returning the full
+    /// section 8.3 outcome. This is the grant-agnostic half of issuance: the Pre-Authorized Code path
+    /// obtains its token in this client and continues here, while the Authorization Code grant
+    /// (HAIP: RFC 9126 pushed authorization with RFC 7636 PKCE) obtains its token through the
+    /// authorization-code client - carrying the section 5.1.1 <c>authorization_details</c> composed
+    /// by <see cref="CredentialAuthorizationDetailComposition"/> and the offer's
+    /// <c>issuer_state</c> on the authorization request - and hands the token here.
+    /// </summary>
+    /// <param name="accessToken">The access token authorizing the Nonce and Credential Requests.</param>
+    /// <param name="tokenType">The token's <c>token_type</c> (<c>Bearer</c>, or <c>DPoP</c> with the DPoP delegate wired).</param>
+    /// <param name="credentialIssuer">The Credential Issuer identifier - the holder proof's <c>aud</c>.</param>
+    /// <param name="credentialConfigurationId">The Credential Configuration to request.</param>
+    /// <param name="holderPrivate">The holder's signing private key for the section 7.2.1 proof.</param>
+    /// <param name="holderPublic">The holder's public key projected into the proof header.</param>
+    /// <param name="endpoints">The resolved Nonce / Credential endpoint URLs.</param>
+    /// <param name="responseEncryption">The section 8.2 response-encryption ask, or <see langword="null"/>.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The full Credential Response outcome.</returns>
+    public async ValueTask<CredentialIssuanceResult> IssueWithAccessTokenDetailedAsync(
+        string accessToken,
+        string tokenType,
+        Uri credentialIssuer,
+        string credentialConfigurationId,
+        PrivateKeyMemory holderPrivate,
+        PublicKeyMemory holderPublic,
+        Oid4VciIssuanceEndpoints endpoints,
+        CredentialResponseEncryption? responseEncryption,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(accessToken);
+        ArgumentException.ThrowIfNullOrWhiteSpace(tokenType);
+        ArgumentNullException.ThrowIfNull(credentialIssuer);
+        ArgumentException.ThrowIfNullOrWhiteSpace(credentialConfigurationId);
+        ArgumentNullException.ThrowIfNull(holderPrivate);
+        ArgumentNullException.ThrowIfNull(holderPublic);
+        ArgumentNullException.ThrowIfNull(endpoints);
+
         //§7: the Nonce Endpoint issues the c_nonce the proof must carry.
         string credentialNonce = await RequestNonceAsync(
             accessToken, tokenType, endpoints.NonceEndpoint, cancellationToken).ConfigureAwait(false);

@@ -27,12 +27,12 @@ internal sealed class GeneralJweParsingRejectionTests
 
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
-    private static readonly JwtHeaderSerializer JwtHeaderSerializer =
+    private static JwtHeaderSerializer JwtHeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)header,
             TestSetup.DefaultSerializationOptions);
 
-    private static readonly byte[] Plaintext =
+    private static byte[] Plaintext { get; } =
         Encoding.UTF8.GetBytes(/*lang=json,strict*/ "{\"type\":\"https://didcomm.org/routing/2.0/forward\"}");
 
     private const string RecipientKid = "did:example:recipient-0#key-1";
@@ -449,7 +449,7 @@ internal sealed class GeneralJweParsingRejectionTests
             JwtHeaderSerializer,
             TestSetup.Base64UrlEncoder,
             CryptoFormatConversions.DefaultTagToEpkCrvConverter,
-            MicrosoftEntropyFunctions.GenerateNonce,
+            MicrosoftEntropyFunctionsAdapter.GenerateNonce,
             BouncyCastleKeyAgreementFunctions.EcdhEsMultiRecipientAgreementEncryptX25519Async,
             ConcatKdf.DefaultKeyDerivationDelegate,
             MicrosoftKeyAgreementFunctions.AesKeyWrapAsync,
@@ -497,7 +497,7 @@ internal sealed class GeneralJweParsingRejectionTests
             JwtHeaderSerializer,
             TestSetup.Base64UrlEncoder,
             CryptoFormatConversions.DefaultTagToEpkCrvConverter,
-            MicrosoftEntropyFunctions.GenerateNonce,
+            MicrosoftEntropyFunctionsAdapter.GenerateNonce,
             MicrosoftKeyAgreementFunctions.EcdhEsMultiRecipientAgreementEncryptP256Async,
             ConcatKdf.DefaultKeyDerivationDelegate,
             MicrosoftKeyAgreementFunctions.AesKeyWrapAsync,
@@ -697,8 +697,8 @@ internal sealed class GeneralJweParsingRejectionTests
     //A P-256 anoncrypt single-recipient baseline plus its recipient key material.
     private sealed class AnoncryptSingleRecipientP256
     {
-        private readonly PublicKeyMemory recipientPublic;
-        private readonly PrivateKeyMemory recipientPrivate;
+        private PublicKeyMemory RecipientPublic { get; }
+        private PrivateKeyMemory RecipientPrivate { get; }
         private bool isPrivateConsumed;
 
         public AnoncryptSingleRecipientP256(
@@ -707,8 +707,8 @@ internal sealed class GeneralJweParsingRejectionTests
             PrivateKeyMemory recipientPrivate)
         {
             Message = message;
-            this.recipientPublic = recipientPublic;
-            this.recipientPrivate = recipientPrivate;
+            this.RecipientPublic = recipientPublic;
+            this.RecipientPrivate = recipientPrivate;
         }
 
         public GeneralJweMessage Message { get; }
@@ -719,17 +719,17 @@ internal sealed class GeneralJweParsingRejectionTests
             {
                 isPrivateConsumed = true;
 
-                return recipientPrivate;
+                return RecipientPrivate;
             }
         }
 
         public void DisposeKeys()
         {
             Message.Dispose();
-            recipientPublic.Dispose();
+            RecipientPublic.Dispose();
             if(!isPrivateConsumed)
             {
-                recipientPrivate.Dispose();
+                RecipientPrivate.Dispose();
             }
         }
     }

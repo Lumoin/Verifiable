@@ -854,6 +854,15 @@ public static class MicrosoftKeyAgreementFunctions
                 }
             }
         }
+        catch
+        {
+            //Unwrapped key material never returns to the pool in the clear, mid-unwrap failure
+            //included — the same invariant the integrity-check failure below enforces.
+            keyData.Clear();
+            keyOwner.Dispose();
+
+            throw;
+        }
         finally
         {
             CryptographicOperations.ZeroMemory(block);
@@ -1003,8 +1012,16 @@ public static class MicrosoftKeyAgreementFunctions
     }
 
 
-    //Parameterized AES_CBC_HMAC_SHA2 decryption (RFC 7518 §5.2.2.2). The tag is verified before
-    //any decryption is attempted (step 2 precedes step 3); a mismatch returns no plaintext.
+    /// <summary>
+    /// Parameterized AES_CBC_HMAC_SHA2 decryption (RFC 7518 §5.2.2.2). The tag is verified before
+    /// any decryption is attempted (step 2 precedes step 3); a mismatch returns no plaintext.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Manual disposal, not a <see langword="using"/> declaration.</strong> <c>scratchOwner</c> holds
+    /// the CBC-decrypted plaintext before its PKCS#7 padding is stripped by the exact-length copy, so it is
+    /// zeroed before disposal — a <see langword="using"/> declaration only ever calls <c>Dispose()</c>, never
+    /// a zeroing step first.
+    /// </remarks>
     private static async ValueTask<DecryptedContent> CbcHmacDecryptAsync(
         AesCbcHmacParameters parameters,
         Ciphertext ciphertext,

@@ -29,7 +29,7 @@ internal sealed class DidCommSignedMessageTests
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     //A non-network resolution context; it only satisfies the SSRF-policy-carrying parameter.
-    private static readonly ExchangeContext Context = new();
+    private static ExchangeContext Context { get; } = new();
 
     private const string ExampleDidPrefix = "did:example";
 

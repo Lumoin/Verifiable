@@ -15,18 +15,19 @@ using Verifiable.Tpm.Spec.Attributes;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
 /// <summary>
 /// The pool-accounting proofs for a session's retained nonceTPM (<c>TPM2B_NONCE</c>, TPM 2.0 Library Part 2,
-/// clause 10.4.4, Table 94), which every session record owns for the session's whole life and replaces wholesale
-/// once per command response (Part 1, clause 17.6.5). Each proof drives the real wire through the production
+/// clause 10.3.4, Table 92), which every session record owns for the session's whole life and replaces wholesale
+/// once per command response (Part 1, clause 16.6.5). Each proof drives the real wire through the production
 /// command path and reads real pool telemetry (<see cref="MeteredHousePool"/>), never an internal hook.
 /// </summary>
 /// <remarks>
 /// An unbound, unsalted session is the isolating fixture: its session key is the shared Empty-Buffer carrier and
-/// its bound-entity value is the shared unbound sentinel (Part 1, clause 17.6.9 — no <c>KDFa</c> runs at all), so
+/// its bound-entity value is the shared unbound sentinel (Part 1, clause 16.6.9 — no <c>KDFa</c> runs at all), so
 /// neither rents anything and the retained nonceTPM is the ONLY rental such a session holds. A balance taken over
 /// it therefore counts nonce carriers and nothing else.
 /// </remarks>
@@ -45,6 +46,9 @@ internal sealed class TpmInHouseSimulatorSessionNonceCarrierTests
     /// <summary>The declared data area size of the Index the policy-session roll proof defines.</summary>
     private const ushort IndexDataSize = 8;
 
+    /// <summary>An NV Index handle from this class's assigned block, used only as a Table-57-out-of-range probe — never defined.</summary>
+    private const uint NvBlockHandle = 0x0100_02C0;
+
     /// <summary>The attribute set the policy-session roll proof's Index is defined with — caller-authorized and dictionary-attack exempt.</summary>
     private const TpmaNv OrdinaryIndexAttributes = TpmaNv.TPMA_NV_AUTHREAD | TpmaNv.TPMA_NV_AUTHWRITE | TpmaNv.TPMA_NV_NO_DA;
 
@@ -61,7 +65,7 @@ internal sealed class TpmInHouseSimulatorSessionNonceCarrierTests
     /// A started unbound, unsalted HMAC session holds EXACTLY ONE pooled rental — its retained nonceTPM — and
     /// <c>TPM2_FlushContext()</c> returns it: the balance rises by exactly one over the start and falls back to
     /// the pre-start baseline once the session leaves the table (TPM 2.0 Library Part 3, clause 28.4; Part 1,
-    /// clause 17.6.5 for the nonce the session retains).
+    /// clause 16.6.5 for the nonce the session retains).
     /// </summary>
     [TestMethod]
     public async Task FlushContextReturnsAnHmacSessionsRetainedNonceCarrierToPool()
@@ -69,7 +73,7 @@ internal sealed class TpmInHouseSimulatorSessionNonceCarrierTests
         using var trackingPool = new MeteredHousePool();
         BaseMemoryPool pool = trackingPool.Pool;
         using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-nonce-flush-hmac").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         long baseline = trackingPool.OutstandingCount;
@@ -93,7 +97,7 @@ internal sealed class TpmInHouseSimulatorSessionNonceCarrierTests
     /// <c>TPM2_FlushContext()</c> returns it — the policy-table counterpart of
     /// <see cref="FlushContextReturnsAnHmacSessionsRetainedNonceCarrierToPool"/>. The nonce is the real
     /// per-session value, never a placeholder, because <c>TPM2_PolicySigned()</c>'s <c>aHash</c> binds to it
-    /// (TPM 2.0 Library Part 3, Section 23.3).
+    /// (TPM 2.0 Library Part 3, clause 23.3).
     /// </summary>
     [TestMethod]
     public async Task FlushContextReturnsAPolicySessionsRetainedNonceCarrierToPool()
@@ -101,12 +105,12 @@ internal sealed class TpmInHouseSimulatorSessionNonceCarrierTests
         using var trackingPool = new MeteredHousePool();
         BaseMemoryPool pool = trackingPool.Pool;
         using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-nonce-flush-policy").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         long baseline = trackingPool.OutstandingCount;
 
-        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedPolicySession(SessionAlg);
+        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedPolicySession(SessionAlg, TestEntropy.NewCounterStream(), pool);
         uint sessionHandle;
         {
             TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
@@ -133,7 +137,7 @@ internal sealed class TpmInHouseSimulatorSessionNonceCarrierTests
     /// <summary>
     /// Two live sessions hold two DISTINCT nonce carriers: the balance rises by exactly one per start and falls
     /// by exactly one per flush, so no session shares another's carrier and none is left behind (TPM 2.0 Library
-    /// Part 1, clause 17.6.5 — the nonce is per session).
+    /// Part 1, clause 16.6.5 — the nonce is per session).
     /// </summary>
     [TestMethod]
     public async Task EachStartedSessionHoldsItsOwnRetainedNonceCarrier()
@@ -141,7 +145,7 @@ internal sealed class TpmInHouseSimulatorSessionNonceCarrierTests
         using var trackingPool = new MeteredHousePool();
         BaseMemoryPool pool = trackingPool.Pool;
         using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-nonce-two-sessions").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         long baseline = trackingPool.OutstandingCount;
@@ -169,10 +173,106 @@ internal sealed class TpmInHouseSimulatorSessionNonceCarrierTests
     }
 
     /// <summary>
+    /// Table 57 (<c>TPMI_DH_CONTEXT</c>, TPM 2.0 Library Part 2, clause 9.11) admits only the HMAC-session,
+    /// policy-session and transient ranges; anything else is <c>#TPM_RC_VALUE</c>. <c>flushHandle</c> unmarshals
+    /// as <c>TPMI_DH_CONTEXT</c> exactly as <c>TPM2_ContextSave()</c>'s own handle does, so an out-of-range value
+    /// is refused at parse rather than falling through to the generic <c>TPM_RC_HANDLE</c> every table-miss
+    /// answers.
+    /// </summary>
+    [TestMethod]
+    public async Task FlushContextWithAnOutOfRangeHandleReturnsValue()
+    {
+        using var trackingPool = new MeteredHousePool();
+        BaseMemoryPool pool = trackingPool.Pool;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-flush-out-of-range").ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
+        TpmResponseRegistry registry = CreateRegistry();
+
+        TpmResult<FlushContextResponse> flushResult = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(
+            tpm, FlushContextInput.ForHandle(0xFFFFFFFF), [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(
+            HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_VALUE, 0), flushResult.ResponseCode,
+            $"Table 228: flushHandle is TPM2_FlushContext()'s sole parameter (index 0), a use of a handle as a " +
+            $"parameter; one outside Table 57's HMAC-session, policy-session and transient ranges must be " +
+            $"refused at parse with parameter-encoded TPM_RC_VALUE (got '{flushResult.ResponseCode}').");
+    }
+
+    /// <summary>
+    /// TPM 2.0 Library Part 3, clause 28.4.1: "When flushing a session, the upper byte of the handle is
+    /// ignored" — general to a session, not scoped to a saved one (Part 4's <c>TPM2_FlushContext()</c>
+    /// implementation resolves the HMAC-session and policy-session handle types through one shared arm). A
+    /// loaded POLICY session flushed under
+    /// the HMAC top byte at the same index succeeds and is actually removed — a second flush of the session's
+    /// own (policy) handle then answers <c>TPM_RC_HANDLE</c>.
+    /// </summary>
+    [TestMethod]
+    public async Task FlushContextOfALoadedPolicySessionUnderTheHmacTopByteSucceedsAndRemovesIt()
+    {
+        using var trackingPool = new MeteredHousePool();
+        BaseMemoryPool pool = trackingPool.Pool;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-flush-cross-policy").ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
+        TpmResponseRegistry registry = CreateRegistry();
+
+        TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
+            tpm, StartAuthSessionInput.CreateUnboundUnsaltedPolicySession(SessionAlg, TestEntropy.NewCounterStream(), pool), [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession (policy) failed: '{startResult.ResponseCode}'.");
+
+        using StartAuthSessionResponse started = startResult.Value;
+        uint policyHandle = started.SessionHandle.Value;
+        uint index = TpmHandleRanges.GetHandleIndex(policyHandle);
+        uint crossHandle = TpmHandleRanges.HMAC_SESSION_FIRST + index;
+
+        TpmResult<FlushContextResponse> crossFlushResult = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(
+            tpm, FlushContextInput.ForHandle(crossHandle), [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(
+            crossFlushResult.IsSuccess,
+            $"A loaded policy session flushed under the HMAC top byte at the same index must succeed (got '{crossFlushResult.ResponseCode}').");
+
+        TpmResult<FlushContextResponse> secondFlushResult = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(
+            tpm, FlushContextInput.ForHandle(policyHandle), [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(
+            HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_HANDLE, 0), secondFlushResult.ResponseCode,
+            "The policy session must actually be gone: flushing its own handle again must answer TPM_RC_HANDLE.");
+    }
+
+    /// <summary>
+    /// The HMAC-session counterpart of
+    /// <see cref="FlushContextOfALoadedPolicySessionUnderTheHmacTopByteSucceedsAndRemovesIt"/>: a loaded HMAC
+    /// session flushed under the policy top byte at the same index succeeds and is actually removed.
+    /// </summary>
+    [TestMethod]
+    public async Task FlushContextOfALoadedHmacSessionUnderThePolicyTopByteSucceedsAndRemovesIt()
+    {
+        using var trackingPool = new MeteredHousePool();
+        BaseMemoryPool pool = trackingPool.Pool;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-flush-cross-hmac").ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
+        TpmResponseRegistry registry = CreateRegistry();
+
+        uint hmacHandle = await StartUnboundHmacSessionAsync(tpm, registry, pool).ConfigureAwait(false);
+        uint index = TpmHandleRanges.GetHandleIndex(hmacHandle);
+        uint crossHandle = TpmHandleRanges.POLICY_SESSION_FIRST + index;
+
+        TpmResult<FlushContextResponse> crossFlushResult = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(
+            tpm, FlushContextInput.ForHandle(crossHandle), [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(
+            crossFlushResult.IsSuccess,
+            $"A loaded HMAC session flushed under the policy top byte at the same index must succeed (got '{crossFlushResult.ResponseCode}').");
+
+        TpmResult<FlushContextResponse> secondFlushResult = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(
+            tpm, FlushContextInput.ForHandle(hmacHandle), [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(
+            HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_HANDLE, 0), secondFlushResult.ResponseCode,
+            "The HMAC session must actually be gone: flushing its own handle again must answer TPM_RC_HANDLE.");
+    }
+
+    /// <summary>
     /// The nonceTPM ROLL replaces the retained carrier rather than accumulating one per command: three
     /// encrypt-attributed <c>TPM2_GetRandom()</c> commands over one session leave the pool balance exactly where
     /// the first one did, proving the roll releases the superseded carrier as the replacement lands (TPM 2.0
-    /// Library Part 1, clause 17.6.5).
+    /// Library Part 1, clause 16.6.5).
     /// </summary>
     /// <remarks>
     /// The measurement starts AFTER the first command so that the balance being compared is the session's steady
@@ -186,7 +286,7 @@ internal sealed class TpmInHouseSimulatorSessionNonceCarrierTests
         using var trackingPool = new MeteredHousePool();
         BaseMemoryPool pool = trackingPool.Pool;
         using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-nonce-roll").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         TpmtSymDef symmetric = TpmtSymDef.Xor(SessionAlg);
@@ -204,7 +304,7 @@ internal sealed class TpmInHouseSimulatorSessionNonceCarrierTests
 
         try
         {
-            StartAuthSessionInput startInput = StartAuthSessionInput.CreateBoundUnsaltedHmacSession(objectHandle, SessionAlg, symmetric);
+            StartAuthSessionInput startInput = StartAuthSessionInput.CreateBoundUnsaltedHmacSession(objectHandle, SessionAlg, TestEntropy.NewCounterStream(), pool, symmetric);
 
             TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
                 tpm, startInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
@@ -220,7 +320,7 @@ internal sealed class TpmInHouseSimulatorSessionNonceCarrierTests
                 using Tpm2bAuth bindAuth = Tpm2bAuth.CreateEmpty(pool);
                 using var session = await TpmSession.CreateBoundAsync(
                     new TpmHandle(sessionHandle), bindAuth.AsReadOnlyMemory(), startInput.NonceCaller, startResponse.NonceTPM,
-                    SessionAlg, pool, symmetric: symmetric, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+                    SessionAlg, TestEntropy.NewCounterStream(), pool, symmetric: symmetric, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
                 session.SessionAttributes = TpmaSession.CONTINUE_SESSION | TpmaSession.ENCRYPT;
 
@@ -271,7 +371,7 @@ internal sealed class TpmInHouseSimulatorSessionNonceCarrierTests
     /// A POLICY session's nonceTPM roll likewise replaces the retained carrier rather than accumulating one:
     /// a <c>TPM2_NV_ChangeAuth()</c> authorized by a policy session — the ADMIN-role shape Part 3, clause
     /// 31.15.1 demands — rolls that session's nonce as part of the success-only policy-context reset (Part 3,
-    /// Section 23.2.4; Part 1, clause 17.6.5), and the pool balance returns to where it stood before the
+    /// clause 23.2.4; Part 1, clause 16.6.5), and the pool balance returns to where it stood before the
     /// rotation once the session is flushed.
     /// </summary>
     /// <remarks>
@@ -287,7 +387,7 @@ internal sealed class TpmInHouseSimulatorSessionNonceCarrierTests
         using var trackingPool = new MeteredHousePool();
         BaseMemoryPool pool = trackingPool.Pool;
         using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-nonce-policy-roll").ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_NV_DefineSpace, TpmResponseCodec.NvDefineSpace);
         _ = registry.Register(TpmCcConstants.TPM_CC_NV_ChangeAuth, TpmResponseCodec.NvChangeAuth);
@@ -298,7 +398,7 @@ internal sealed class TpmInHouseSimulatorSessionNonceCarrierTests
         long baseline = trackingPool.OutstandingCount;
 
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
-            tpm, StartAuthSessionInput.CreateUnboundUnsaltedPolicySession(SessionAlg), [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+            tpm, StartAuthSessionInput.CreateUnboundUnsaltedPolicySession(SessionAlg, TestEntropy.NewCounterStream(), pool), [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession (policy) failed: '{startResult.ResponseCode}'.");
 
         StartAuthSessionResponse started = startResult.Value;
@@ -306,7 +406,7 @@ internal sealed class TpmInHouseSimulatorSessionNonceCarrierTests
 
         try
         {
-            using TpmSession session = new(new TpmHandle(sessionHandle), started.NonceTPM, SessionAlg, pool);
+            using TpmSession session = new(new TpmHandle(sessionHandle), started.NonceTPM, SessionAlg, TestEntropy.NewCounterStream(), pool);
 
             TpmResult<PolicyCommandCodeResponse> commandCodeResult = await tpm.PolicyCommandCodeAsync(
                 sessionHandle, TpmCcConstants.TPM_CC_NV_ChangeAuth, TestContext.CancellationToken).ConfigureAwait(false);
@@ -334,9 +434,313 @@ internal sealed class TpmInHouseSimulatorSessionNonceCarrierTests
     }
 
     /// <summary>
+    /// Part 2, clause 9.11, Table 57 (<c>TPMI_DH_CONTEXT</c>): the only admitted values are the HMAC-session,
+    /// policy-session and transient-object ranges, "#TPM_RC_VALUE" on anything else — an NV Index handle, a
+    /// permanent handle and a persistent-object handle are all outside those three ranges, so the
+    /// <c>TPMI_DH_CONTEXT</c> unmarshal refuses every one of them at parse, before any table lookup runs.
+    /// </summary>
+    /// <param name="flushHandle">A handle outside Table 57's three admitted ranges.</param>
+    [TestMethod]
+    [DataRow(NvBlockHandle, DisplayName = "an NV Index handle")]
+    [DataRow((uint)TpmRh.TPM_RH_OWNER, DisplayName = "a permanent handle")]
+    [DataRow(TpmHandleRanges.PERSISTENT_FIRST, DisplayName = "a persistent-object handle")]
+    public async Task FlushContextWithAHandleOutsideTable57sThreeRangesReturnsValue(uint flushHandle)
+    {
+        using var trackingPool = new MeteredHousePool();
+        BaseMemoryPool pool = trackingPool.Pool;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-flush-outside-table57").ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
+        TpmResponseRegistry registry = CreateRegistry();
+
+        TpmResult<FlushContextResponse> flushResult = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(
+            tpm, FlushContextInput.ForHandle(flushHandle), [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(
+            HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_VALUE, 0), flushResult.ResponseCode,
+            $"Table 228: flushHandle is TPM2_FlushContext()'s sole parameter (index 0), a use of a handle as a parameter; " +
+            $"0x{flushHandle:X8}, outside Table 57's HMAC-session, policy-session and transient ranges, must be refused with parameter-encoded TPM_RC_VALUE at parse (got '{flushResult.ResponseCode}').");
+    }
+
+    /// <summary>
+    /// The invariant counterpart of <see cref="FlushContextWithAHandleOutsideTable57sThreeRangesReturnsValue"/>:
+    /// a handle INSIDE the transient-object range (TPM 2.0 Library Part 2, clause 9.11, Table 57) still passes
+    /// <c>TpmiDhContext.Parse</c>, so a range that admits no loaded object falls through every resource table to
+    /// the generic <c>TPM_RC_HANDLE</c> — Table 57's admission and a live table entry are independent gates.
+    /// </summary>
+    [TestMethod]
+    public async Task FlushContextOfAnUnresolvedTransientHandleReturnsHandle()
+    {
+        using var trackingPool = new MeteredHousePool();
+        BaseMemoryPool pool = trackingPool.Pool;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-flush-unresolved-transient").ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
+        TpmResponseRegistry registry = CreateRegistry();
+
+        TpmResult<FlushContextResponse> flushResult = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(
+            tpm, FlushContextInput.ForHandle(TpmHandleRanges.TRANSIENT_FIRST), [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(
+            HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_HANDLE, 0), flushResult.ResponseCode,
+            $"A transient-range handle naming no loaded object must be refused with the generic TPM_RC_HANDLE, never TPM_RC_VALUE (got '{flushResult.ResponseCode}').");
+    }
+
+    /// <summary>
+    /// TPM 2.0 Library Part 3, clause 28.4.1: "A session does not have to be loaded in TPM memory to have its
+    /// context flushed. The saved session context associated with the indicated handle is invalidated... the
+    /// upper byte of the handle is ignored." A saved (not loaded) HMAC session's blob is flushed by presenting
+    /// the SAME index under the policy top byte and succeeds, and the load-once tracking entry it removes makes
+    /// the ORIGINAL blob unloadable henceforth: a following <c>TPM2_ContextLoad()</c> of that exact blob answers
+    /// <c>TPM_RC_HANDLE</c> (TPM 2.0 Library Part 1, clause 27.5's "a saved session context may only be loaded once").
+    /// </summary>
+    [TestMethod]
+    public async Task FlushContextOfASavedSessionUnderTheCrossTypeTopByteSucceedsAndItsContextLoadReturnsHandle()
+    {
+        using var trackingPool = new MeteredHousePool();
+        BaseMemoryPool pool = trackingPool.Pool;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-flush-saved-cross-type").ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
+        TpmResponseRegistry registry = CreateRegistry();
+        _ = registry.Register(TpmCcConstants.TPM_CC_ContextSave, TpmResponseCodec.ContextSave);
+        _ = registry.Register(TpmCcConstants.TPM_CC_ContextLoad, TpmResponseCodec.ContextLoad);
+
+        uint hmacHandle = await StartUnboundHmacSessionAsync(tpm, registry, pool).ConfigureAwait(false);
+
+        TpmResult<ContextSaveResponse> saveResult = await TpmCommandExecutor.ExecuteAsync<ContextSaveResponse>(
+            tpm, ContextSaveInput.ForHandle(hmacHandle), [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(saveResult.IsSuccess, $"ContextSave of the HMAC session failed: '{saveResult.ResponseCode}'.");
+        using ContextSaveResponse saved = saveResult.Value;
+
+        uint index = TpmHandleRanges.GetHandleIndex(hmacHandle);
+        uint crossHandle = TpmHandleRanges.POLICY_SESSION_FIRST + index;
+
+        TpmResult<FlushContextResponse> crossFlushResult = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(
+            tpm, FlushContextInput.ForHandle(crossHandle), [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(
+            crossFlushResult.IsSuccess,
+            $"A saved session flushed under the other top byte at the same index must succeed (got '{crossFlushResult.ResponseCode}').");
+
+        var loadInput = new ContextLoadInput(saved.Context);
+        TpmResult<ContextLoadResponse> loadResult = await TpmCommandExecutor.ExecuteAsync<ContextLoadResponse>(
+            tpm, loadInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(
+            HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_HANDLE, 0), loadResult.ResponseCode,
+            $"ContextLoad of a blob whose saved-session tracking entry the cross-type flush already removed must answer TPM_RC_HANDLE, not reload it (got '{loadResult.ResponseCode}').");
+    }
+
+    /// <summary>
+    /// With a loaded POLICY session and a loaded HMAC session occupying the SAME index at once — this
+    /// simulator's independent HMAC and policy counters admit that, unlike the reference's one shared array —
+    /// flushing the HMAC top byte resolves the handle's OWN presented range first (TPM 2.0 Library Part 4's
+    /// <c>TPM2_FlushContext()</c> implementation shares one arm for both session handle types; this simulator
+    /// resolves its own type first): the HMAC session is removed and the co-located policy session is left
+    /// untouched.
+    /// </summary>
+    [TestMethod]
+    public async Task FlushContextWithBothSessionKindsAtTheSameIndexUnderTheHmacTopByteFlushesOnlyTheHmacSession()
+    {
+        using var trackingPool = new MeteredHousePool();
+        BaseMemoryPool pool = trackingPool.Pool;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-flush-both-kinds-hmac-first").ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
+        TpmResponseRegistry registry = CreateRegistry();
+
+        uint policyHandle = await StartUnboundPolicySessionAsync(tpm, registry, pool).ConfigureAwait(false);
+        uint hmacHandle = await StartUnboundHmacSessionAsync(tpm, registry, pool).ConfigureAwait(false);
+        Assert.AreEqual(
+            TpmHandleRanges.GetHandleIndex(policyHandle), TpmHandleRanges.GetHandleIndex(hmacHandle),
+            "The two sessions must land at the same index for this proof to be about co-located sessions.");
+
+        TpmResult<FlushContextResponse> hmacFlush = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(
+            tpm, FlushContextInput.ForHandle(hmacHandle), [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(
+            hmacFlush.IsSuccess,
+            $"Flushing the HMAC top byte must succeed: '{(hmacFlush.IsSuccess ? TpmRcConstants.TPM_RC_SUCCESS : hmacFlush.ResponseCode)}'.");
+
+        //Proves the co-located policy session survived the HMAC-top-byte flush untouched: had it been removed
+        //instead, this own-type flush of its OWN handle would answer TPM_RC_HANDLE rather than succeed.
+        TpmResult<FlushContextResponse> policyStillPresentFlush = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(
+            tpm, FlushContextInput.ForHandle(policyHandle), [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(
+            policyStillPresentFlush.IsSuccess,
+            $"The co-located policy session must have survived the HMAC-top-byte flush untouched (got '{(policyStillPresentFlush.IsSuccess ? TpmRcConstants.TPM_RC_SUCCESS : policyStillPresentFlush.ResponseCode)}').");
+
+        //With both tables now empty at this index, a further flush of either handle falls through every table
+        //(no own-type match, no cross-type fallback left to find) to the generic TPM_RC_HANDLE — proving the
+        //first flush genuinely removed the HMAC session rather than merely leaving it unreachable.
+        TpmResult<FlushContextResponse> bothGoneCheck = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(
+            tpm, FlushContextInput.ForHandle(hmacHandle), [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_HANDLE, 0), bothGoneCheck.ResponseCode, "Both co-located sessions must be gone once the survivor is also flushed.");
+    }
+
+    /// <summary>
+    /// The mirror of <see cref="FlushContextWithBothSessionKindsAtTheSameIndexUnderTheHmacTopByteFlushesOnlyTheHmacSession"/>:
+    /// flushing the POLICY top byte at a shared index removes the co-located policy session and leaves the HMAC
+    /// session at the same index untouched.
+    /// </summary>
+    [TestMethod]
+    public async Task FlushContextWithBothSessionKindsAtTheSameIndexUnderThePolicyTopByteFlushesOnlyThePolicySession()
+    {
+        using var trackingPool = new MeteredHousePool();
+        BaseMemoryPool pool = trackingPool.Pool;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-flush-both-kinds-policy-first").ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
+        TpmResponseRegistry registry = CreateRegistry();
+
+        uint policyHandle = await StartUnboundPolicySessionAsync(tpm, registry, pool).ConfigureAwait(false);
+        uint hmacHandle = await StartUnboundHmacSessionAsync(tpm, registry, pool).ConfigureAwait(false);
+        Assert.AreEqual(
+            TpmHandleRanges.GetHandleIndex(policyHandle), TpmHandleRanges.GetHandleIndex(hmacHandle),
+            "The two sessions must land at the same index for this proof to be about co-located sessions.");
+
+        TpmResult<FlushContextResponse> policyFlush = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(
+            tpm, FlushContextInput.ForHandle(policyHandle), [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(
+            policyFlush.IsSuccess,
+            $"Flushing the policy top byte must succeed: '{(policyFlush.IsSuccess ? TpmRcConstants.TPM_RC_SUCCESS : policyFlush.ResponseCode)}'.");
+
+        //Proves the co-located HMAC session survived the policy-top-byte flush untouched: had it been removed
+        //instead, this own-type flush of its OWN handle would answer TPM_RC_HANDLE rather than succeed.
+        TpmResult<FlushContextResponse> hmacStillPresentFlush = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(
+            tpm, FlushContextInput.ForHandle(hmacHandle), [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(
+            hmacStillPresentFlush.IsSuccess,
+            $"The co-located HMAC session must have survived the policy-top-byte flush untouched (got '{(hmacStillPresentFlush.IsSuccess ? TpmRcConstants.TPM_RC_SUCCESS : hmacStillPresentFlush.ResponseCode)}').");
+
+        //With both tables now empty at this index, a further flush of either handle falls through to the
+        //generic TPM_RC_HANDLE — proving the first flush genuinely removed the policy session.
+        TpmResult<FlushContextResponse> bothGoneCheck = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(
+            tpm, FlushContextInput.ForHandle(policyHandle), [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_HANDLE, 0), bothGoneCheck.ResponseCode, "Both co-located sessions must be gone once the survivor is also flushed.");
+    }
+
+    /// <summary>
+    /// A parse-time <c>TPM_RC_VALUE</c> refusal (Table 57's range gate) rents nothing that survives the refusal:
+    /// the pool balance after a refused <c>TPM2_FlushContext()</c> equals the balance before it.
+    /// </summary>
+    [TestMethod]
+    public async Task FlushContextParseRefusalLeavesNoPoolResidue()
+    {
+        using var trackingPool = new MeteredHousePool();
+        BaseMemoryPool pool = trackingPool.Pool;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-flush-parse-refusal-pool").ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
+        TpmResponseRegistry registry = CreateRegistry();
+
+        long baseline = trackingPool.OutstandingCount;
+
+        TpmResult<FlushContextResponse> flushResult = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(
+            tpm, FlushContextInput.ForHandle((uint)TpmRh.TPM_RH_OWNER), [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(
+            HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_VALUE, 0), flushResult.ResponseCode,
+            "Table 228: flushHandle is TPM2_FlushContext()'s sole parameter (index 0); the seeding refusal must be the parse-time parameter-encoded TPM_RC_VALUE.");
+
+        Assert.AreEqual(
+            baseline, trackingPool.OutstandingCount,
+            "A refusal at TpmiDhContext.Parse must leave the pool exactly where it found it.");
+    }
+
+    /// <summary>
+    /// "No sessions of any type are allowed with this command and tag is required to be TPM_ST_NO_SESSIONS"
+    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Part
+    /// 3, clause 28.4.1</see>): a hand-framed <c>TPM2_FlushContext()</c> whose body is a well-formed LOADED
+    /// session's own handle, tagged <c>TPM_ST_SESSIONS</c> instead of the required <c>TPM_ST_NO_SESSIONS</c>, is
+    /// refused the format-zero <c>TPM_RC_BAD_TAG</c> before the handle is even read — the session stays loaded (a
+    /// following, correctly-tagged flush of the SAME handle still succeeds), and the refusal itself leaves no
+    /// pool residue, mirroring <see cref="FlushContextParseRefusalLeavesNoPoolResidue"/> and
+    /// <c>TpmInHouseSimulatorContextSaveTests.ContextSaveWithSessionsTagIsRefusedWithBadTag</c>'s own proof for
+    /// the sibling command.
+    /// </summary>
+    [TestMethod]
+    public async Task FlushContextUnderTpmStSessionsReturnsBadTag()
+    {
+        using var trackingPool = new MeteredHousePool();
+        BaseMemoryPool pool = trackingPool.Pool;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool, "tpm-flush-sessions-tag-bad-tag").ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
+        TpmResponseRegistry registry = CreateRegistry();
+
+        long beforeSession = trackingPool.OutstandingCount;
+        uint sessionHandle = await StartUnboundHmacSessionAsync(tpm, registry, pool).ConfigureAwait(false);
+        long baseline = trackingPool.OutstandingCount;
+
+        TpmRcConstants responseCode = await SubmitFlushContextFramedAsync(
+            simulator, pool, (ushort)TpmStConstants.TPM_ST_SESSIONS, sessionHandle).ConfigureAwait(false);
+        Assert.AreEqual(
+            TpmRcConstants.TPM_RC_BAD_TAG, responseCode,
+            "TPM2_FlushContext() requires tag TPM_ST_NO_SESSIONS; a TPM_ST_SESSIONS arrival must be refused with the format-zero TPM_RC_BAD_TAG before the handle is even read.");
+        Assert.AreEqual(
+            baseline, trackingPool.OutstandingCount,
+            "The parse-time BAD_TAG refusal must leave the pool exactly where it found it.");
+
+        TpmResult<FlushContextResponse> realFlush = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(
+            tpm, FlushContextInput.ForHandle(sessionHandle), [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(
+            realFlush.IsSuccess,
+            $"The session must still be loaded after the BAD_TAG refusal: a correctly-tagged flush of the same handle must succeed (got '{realFlush.ResponseCode}').");
+
+        Assert.AreEqual(
+            beforeSession, trackingPool.OutstandingCount,
+            "Once the session is actually flushed, the pool must return to its pre-session baseline.");
+    }
+
+    /// <summary>
+    /// Hand-frames a complete <c>TPM2_FlushContext()</c> command — header under the caller-chosen
+    /// <paramref name="tag"/>, then the raw four-octet <c>flushHandle</c> body — and submits it directly to the
+    /// simulator, mirroring <c>TpmInHouseSimulatorContextSaveTests.SubmitContextSaveFramedAsync</c>'s framing for
+    /// the sibling command; no shared framing helper covers <c>TPM2_FlushContext()</c> itself.
+    /// </summary>
+    /// <param name="simulator">The simulator to submit against.</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <param name="tag">The command tag to frame under.</param>
+    /// <param name="flushHandle">The handle to place in the body.</param>
+    /// <returns>The response code.</returns>
+    private async Task<TpmRcConstants> SubmitFlushContextFramedAsync(TpmSimulator simulator, BaseMemoryPool pool, ushort tag, uint flushHandle)
+    {
+        byte[] body = new byte[sizeof(uint)];
+        BinaryPrimitives.WriteUInt32BigEndian(body, flushHandle);
+
+        int length = TpmHeader.HeaderSize + body.Length;
+        using IMemoryOwner<byte> owner = pool.Rent(length);
+        var writer = new TpmWriter(owner.Memory.Span[..length]);
+        var header = new TpmHeader(tag, (uint)length, (uint)TpmCcConstants.TPM_CC_FlushContext);
+        header.WriteTo(ref writer);
+        writer.WriteBytes(body);
+
+        TpmResult<TpmResponse> result = await simulator.SubmitAsync(owner.Memory[..length], pool, TestContext.CancellationToken).ConfigureAwait(false);
+        if(result.IsSuccess)
+        {
+            using TpmResponse response = result.Value;
+            var reader = new TpmReader(response.AsReadOnlySpan());
+
+            return (TpmRcConstants)TpmHeader.Parse(ref reader).Code;
+        }
+
+        return result.ResponseCode;
+    }
+
+    /// <summary>Starts an unbound, unsalted POLICY session and returns its handle, releasing the response's own nonce carrier before returning.</summary>
+    /// <param name="tpm">The TPM device.</param>
+    /// <param name="registry">The response codec registry.</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <returns>The started session's handle.</returns>
+    private async Task<uint> StartUnboundPolicySessionAsync(TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool)
+    {
+        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedPolicySession(SessionAlg, TestEntropy.NewCounterStream(), pool);
+
+        TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
+            tpm, startInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession (policy) failed: '{startResult.ResponseCode}'.");
+
+        using StartAuthSessionResponse startResponse = startResult.Value;
+
+        return startResponse.SessionHandle.Value;
+    }
+
+    /// <summary>
     /// Computes the policy digest of a policy asserting <c>TPM2_PolicyCommandCode(TPM_CC_NV_ChangeAuth)</c> and
     /// nothing else — <c>H(0…0 ‖ TPM_CC_PolicyCommandCode ‖ TPM_CC_NV_ChangeAuth)</c> (TPM 2.0 Library Part 3,
-    /// Section 23.11).
+    /// clause 23.11).
     /// </summary>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The policy digest under <see cref="SessionAlg"/>.</returns>
@@ -355,7 +759,7 @@ internal sealed class TpmInHouseSimulatorSessionNonceCarrierTests
     /// <summary>
     /// Defines an ordinary, dictionary-attack-exempt NV Index carrying <paramref name="authPolicy"/>, authorized
     /// by the empty owner authValue, and returns the Index's Name (<c>nameAlg ‖ H(TPMS_NV_PUBLIC)</c>, TPM 2.0
-    /// Library Part 1, clause 14, Table 6) computed independently of the simulator so the executor can build cpHash.
+    /// Library Part 1, clause 13, Table 9) computed independently of the simulator so the executor can build cpHash.
     /// </summary>
     /// <param name="tpm">The TPM device.</param>
     /// <param name="pool">The memory pool.</param>
@@ -398,7 +802,7 @@ internal sealed class TpmInHouseSimulatorSessionNonceCarrierTests
     /// <returns>The started session's handle.</returns>
     private async Task<uint> StartUnboundHmacSessionAsync(TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool)
     {
-        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(SessionAlg);
+        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(SessionAlg, TestEntropy.NewCounterStream(), pool);
 
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             tpm, startInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
@@ -431,7 +835,7 @@ internal sealed class TpmInHouseSimulatorSessionNonceCarrierTests
     /// <returns>The operational simulator.</returns>
     private async Task<TpmSimulator> CreateOperationalAsync(BaseMemoryPool pool, string tpmId)
     {
-        var simulator = new TpmSimulator(tpmId, signingBackend: BouncyCastleTpmEccSigningBackend.Create());
+        var simulator = new TpmSimulator(tpmId, signingBackend: BouncyCastleTpmEccSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         var input = new StartupInput(TpmSuConstants.TPM_SU_CLEAR);

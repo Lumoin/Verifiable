@@ -7,6 +7,7 @@ namespace Verifiable.OAuth.Jarm;
 /// <see href="https://openid.net/specs/oauth-v2-jarm-final.html#section-3">JARM §3</see>,
 /// registered in the IANA OAuth Dynamic Client Registration Metadata registry.
 /// </summary>
+/// <seealso cref="Verifiable.OAuth.Client.ClientMetadataParameterNames"/>
 public static class JarmClientMetadataParameterNames
 {
     /// <summary>The UTF-8 source literal of <see cref="AuthorizationSignedResponseAlg"/>.</summary>
@@ -17,7 +18,7 @@ public static class JarmClientMetadataParameterNames
     /// REQUIRED for signing authorization responses. Defaults to <c>RS256</c> when
     /// unspecified; <c>none</c> is not allowed.
     /// </summary>
-    public static readonly string AuthorizationSignedResponseAlg = Utf8Constants.ToInternedString(AuthorizationSignedResponseAlgUtf8);
+    public static string AuthorizationSignedResponseAlg { get; } = Utf8Constants.ToInternedString(AuthorizationSignedResponseAlgUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="AuthorizationEncryptedResponseAlg"/>.</summary>
     public static ReadOnlySpan<byte> AuthorizationEncryptedResponseAlgUtf8 => "authorization_encrypted_response_alg"u8;
@@ -27,7 +28,7 @@ public static class JarmClientMetadataParameterNames
     /// REQUIRED for encrypting authorization responses (sign-then-encrypt Nested JWT
     /// when both are requested). No encryption when omitted.
     /// </summary>
-    public static readonly string AuthorizationEncryptedResponseAlg = Utf8Constants.ToInternedString(AuthorizationEncryptedResponseAlgUtf8);
+    public static string AuthorizationEncryptedResponseAlg { get; } = Utf8Constants.ToInternedString(AuthorizationEncryptedResponseAlgUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="AuthorizationEncryptedResponseEnc"/>.</summary>
     public static ReadOnlySpan<byte> AuthorizationEncryptedResponseEncUtf8 => "authorization_encrypted_response_enc"u8;
@@ -38,7 +39,7 @@ public static class JarmClientMetadataParameterNames
     /// <c>A128CBC-HS256</c> when <c>authorization_encrypted_response_alg</c> is
     /// specified; requires it when present.
     /// </summary>
-    public static readonly string AuthorizationEncryptedResponseEnc = Utf8Constants.ToInternedString(AuthorizationEncryptedResponseEncUtf8);
+    public static string AuthorizationEncryptedResponseEnc { get; } = Utf8Constants.ToInternedString(AuthorizationEncryptedResponseEncUtf8);
 
 
     /// <summary>Returns <see langword="true"/> when <paramref name="value"/> is exactly

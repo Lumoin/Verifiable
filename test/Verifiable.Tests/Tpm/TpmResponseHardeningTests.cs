@@ -9,6 +9,7 @@ using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Structures;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -89,7 +90,7 @@ internal sealed class TpmResponseHardeningTests
     {
         //A TPM2_Quote response whose attestation is a (replayed) TPM_ST_ATTEST_CERTIFY structure must be rejected:
         //its type does not match the command, and surfacing it as success leaves Attested.Quote null for the first
-        //consumer that dereferences it (Part 3, §18.4 fixes the type to TPM_ST_ATTEST_QUOTE).
+        //consumer that dereferences it (Part 3, clause 18.4 fixes the type to TPM_ST_ATTEST_QUOTE).
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] certifyAttest = BuildTpm2bAttestImage(TpmStConstants.TPM_ST_ATTEST_CERTIFY, pool);
 
@@ -100,7 +101,7 @@ internal sealed class TpmResponseHardeningTests
     public void CertifyResponseParseRejectsQuoteTypedAttestation()
     {
         //Symmetric to the quote case: a TPM2_Certify response whose attestation is a TPM_ST_ATTEST_QUOTE structure
-        //must be rejected rather than surfaced with a null Attested.Certify (Part 3, §18.2).
+        //must be rejected rather than surfaced with a null Attested.Certify (Part 3, clause 18.2).
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] quoteAttest = BuildTpm2bAttestImage(TpmStConstants.TPM_ST_ATTEST_QUOTE, pool);
 
@@ -112,7 +113,7 @@ internal sealed class TpmResponseHardeningTests
     {
         //A TPM_ST_SESSIONS response whose parameterSize field claims more bytes than the response contains must be
         //answered with TPM_RC_SIZE, not pre-allocate that many bytes nor, once cast to int, go negative and throw
-        //past the fail-closed TpmResult contract (Part 1, §16.10 parameter/auth split).
+        //past the fail-closed TpmResult contract (Part 1, clause 15.10 parameter/auth split).
         ValueTask<TpmResult<TpmResponse>> Handler(
             ReadOnlyMemory<byte> command,
             BaseMemoryPool pool,
@@ -126,7 +127,7 @@ internal sealed class TpmResponseHardeningTests
             return ValueTask.FromResult(SuccessFrame(frame, pool));
         }
 
-        using var device = TpmDevice.Create(Handler);
+        using var device = TpmDevice.Create(Handler, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_GetRandom, TpmResponseCodec.GetRandom);
@@ -158,12 +159,12 @@ internal sealed class TpmResponseHardeningTests
             return ValueTask.FromResult(SuccessFrame(frame, pool));
         }
 
-        using var device = TpmDevice.Create(Handler);
+        using var device = TpmDevice.Create(Handler, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_StartAuthSession, TpmResponseCodec.StartAuthSession);
 
-        var input = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(TpmAlgIdConstants.TPM_ALG_SHA256);
+        var input = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(TpmAlgIdConstants.TPM_ALG_SHA256, TestEntropy.NewCounterStream(), pool);
 
         TpmResult<StartAuthSessionResponse> result = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             device, input, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);

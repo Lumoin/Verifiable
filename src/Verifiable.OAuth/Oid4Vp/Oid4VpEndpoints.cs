@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Text;
 using Verifiable.Core;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Dcql;
@@ -22,8 +23,11 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Produces PAR (flow creation), JAR-fetch (on-demand signing), and direct_post
-/// (encrypted VP response) endpoints per
+/// Produces PAR (flow creation), JAR-fetch (on-demand signing), and three <c>direct_post</c>
+/// response-endpoint candidates sharing one path — an encrypted VP response
+/// (<see cref="BuildOid4VpDirectPost"/>), an unencrypted VP response
+/// (<see cref="BuildOid4VpDirectPostUnencrypted"/>), and the Wallet's Authorization Error Response
+/// (<see cref="BuildOid4VpDirectPostError"/>) — per
 /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html">OID4VP 1.0</see>
 /// and
 /// <see href="https://openid.net/specs/openid4vc-high-assurance-interoperability-profile-1_0.html">HAIP 1.0</see>.
@@ -92,12 +96,27 @@ public static class Oid4VpEndpoints
     //sharing across the assembly boundary, which these internal route markers
     //do not.
 
+    /// <summary>
+    /// Maximum accepted length of a Wallet-supplied <c>error</c> parameter on the §8.2 Authorization Error
+    /// Response POST. RFC 6749 §4.1.2.1 sets no limit on the parameter's length; this bound protects the
+    /// flow store from an unbounded value riding <see cref="VerifierWalletErrorReceivedState.Error"/> for
+    /// the flow's lifetime.
+    /// </summary>
+    private const int MaxWalletErrorLength = 128;
+
+    /// <summary>
+    /// Maximum accepted length of a Wallet-supplied <c>error_description</c> parameter on the §8.2
+    /// Authorization Error Response POST. The same unbounded-storage rationale as
+    /// <see cref="MaxWalletErrorLength"/>, sized for a human-readable sentence rather than a bare code.
+    /// </summary>
+    private const int MaxWalletErrorDescriptionLength = 1024;
+
 
     /// <summary>
     /// The endpoint builder delegate. Pass this to
     /// <see cref="EndpointServer.EndpointBuilders"/>.
     /// </summary>
-    public static readonly EndpointBuilderDelegate Builder = static (registration, context, ct) =>
+    public static EndpointBuilderDelegate Builder { get; } = static (registration, context, ct) =>
     {
         if(!((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.VcVerifiablePresentation))
         {
@@ -109,7 +128,8 @@ public static class Oid4VpEndpoints
             BuildOid4VpPar(),
             BuildOid4VpJarRequest(),
             BuildOid4VpDirectPost(),
-            BuildOid4VpDirectPostUnencrypted()
+            BuildOid4VpDirectPostUnencrypted(),
+            BuildOid4VpDirectPostError()
         ]);
     };
 
@@ -257,7 +277,7 @@ public static class Oid4VpEndpoints
                     context,
                     ct).ConfigureAwait(false);
 
-                return ((FlowInput?)new ServerParReceived(
+                return (new ServerParReceived(
                     FlowId: flowId,
                     ParHandle: parHandle,
                     Par: new ParResponse(requestUri, expiresIn),
@@ -390,7 +410,7 @@ public static class Oid4VpEndpoints
 
                     DateTimeOffset postNow = server.TimeProvider.GetUtcNow();
 
-                    return ((FlowInput?)new ServerWalletPostReceived(
+                    return (new ServerWalletPostReceived(
                         walletNonce,
                         walletMetadataJson,
                         postNow), null);
@@ -524,16 +544,55 @@ public static class Oid4VpEndpoints
 
 
     /// <summary>
+    /// Builds the OID4VP 1.0 §8.2 200 JSON body carrying a single <c>redirect_uri</c> member, through
+    /// <see cref="JsonAppender"/> so a deployment-configured <paramref name="redirectUri"/> containing a
+    /// percent-encoded quote or backslash is JSON-escaped rather than interpolated raw. Reads
+    /// <see cref="Uri.OriginalString"/> — the value the deployment configured — the way
+    /// <see cref="JsonAppender.AppendUriField"/> always does; <see cref="Uri.ToString"/> un-escapes a
+    /// percent-encoded reserved character (RFC 3986's own allowance) back to its literal form, which can
+    /// break out of the JSON string literal this method writes into.
+    /// </summary>
+    /// <param name="redirectUri">The Wallet redirect target the deployment configured for this flow.</param>
+    /// <returns>The compact JSON object body, e.g. <c>{"redirect_uri":"https://…"}</c>.</returns>
+    private static string BuildRedirectUriBody(Uri redirectUri)
+    {
+        StringBuilder builder = JsonAppender.Rent();
+        try
+        {
+            builder.Append('{');
+            bool first = true;
+            JsonAppender.AppendUriField(builder, OAuthRequestParameterNames.RedirectUri, redirectUri, ref first);
+            builder.Append('}');
+
+            return builder.ToString();
+        }
+        finally
+        {
+            JsonAppender.Return(builder);
+        }
+    }
+
+
+    /// <summary>
     /// Builds the OID4VP direct_post endpoint per
     /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-8.2">OID4VP 1.0 §8.2</see>.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// <see cref="ServerEndpoint.BuildResponse"/> writes the response body —
     /// <c>redirect_uri</c> for same-device flows or an empty object for
     /// cross-device flows — directly with
     /// <see cref="System.Text.StringBuilder"/>. See the serialization-firewall
     /// paragraph in the remarks on <see cref="Oid4VpEndpoints"/> for the
     /// rationale.
+    /// </para>
+    /// <para>
+    /// Three answers: a verified presentation answers 200 JSON, carrying <c>redirect_uri</c> when the
+    /// deployment configured one; a refused presentation answers RFC 6749 §4.1.2.1's error shape (HTTP 400);
+    /// anything else is a genuine Verifier fault (HTTP 500). The Wallet's Authorization Error Response
+    /// (OID4VP 1.0 §8.2's <c>error</c> shape) is a distinct endpoint candidate — see
+    /// <see cref="BuildOid4VpDirectPostError"/>.
+    /// </para>
     /// </remarks>
     private static EndpointCandidate BuildOid4VpDirectPost() =>
         new()
@@ -545,9 +604,10 @@ public static class Oid4VpEndpoints
             Kind = FlowKind.Oid4VpVerifierServer,
             //DiscoveryMetadataKey null per v2 MD Step 12 table.
 
-            //Acceptance test: POST to /cb for this registration with response
-            //(encrypted JWE per HAIP) and state (the request_uri token echo
-            //per OID4VP §6.1) both present in the body.
+            //Acceptance test: POST to /cb for this registration with state (the request_uri token echo per
+            //OID4VP §6.1) and response (the encrypted JWE per HAIP) present in the body. Disjoint from
+            //BuildOid4VpDirectPostError by requiring response, which an Authorization Error Response POST
+            //never carries.
             MatchesRequest = static (fields, context, endpoint, ct) =>
             {
                 IncomingRequest? req = context.IncomingRequest;
@@ -560,11 +620,11 @@ public static class Oid4VpEndpoints
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
-                if(!fields.ContainsKey(OAuthRequestParameterNames.Response))
+                if(!fields.ContainsKey(OAuthRequestParameterNames.State))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
-                if(!fields.ContainsKey(OAuthRequestParameterNames.State))
+                if(!fields.ContainsKey(OAuthRequestParameterNames.Response))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
@@ -582,7 +642,6 @@ public static class Oid4VpEndpoints
             BuildInputAsync = static (fields, context, currentState, ct) =>
             {
                 EndpointServer server = context.Server!;
-                var oauth = server.OAuth();
 
                 //VerifierJarServedState is the JAR-served path; VerifierParReceivedState
                 //is the inline (no-JAR) path for the redirect_uri prefix per
@@ -610,20 +669,26 @@ public static class Oid4VpEndpoints
             },
 
             BuildResponse = static (state, _, _) =>
-            {
-                if(state is not PresentationVerifiedState verified)
+                state switch
                 {
-                    return ServerHttpResponse.ServerError(
+                    PresentationVerifiedState verified => ServerHttpResponse.Ok(
+                        verified.RedirectUri is not null
+                            ? BuildRedirectUriBody(verified.RedirectUri)
+                            : "{}",
+                        WellKnownMediaTypes.Application.Json),
+
+                    //OID4VP 1.0 §8.2 defines only the success answer; a refused presentation is answered
+                    //with RFC 6749 §4.1.2.1's error shape (HTTP 400). 500 stays reserved for a genuine Verifier
+                    //fault (an unclassified failure state, carrying no typed refusal).
+                    VerifierFlowFailedState { Refusal: { } refusal } => ServerHttpResponse.BadRequest(
+                        refusal.ErrorCode, refusal.Description),
+
+                    //The state is server-side detail; naming its CLR type on the wire is an internal-structure
+                    //disclosure and an oracle for probing the flow's implementation.
+                    _ => ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError,
-                        $"Unexpected state after direct_post: {state.GetType().Name}.");
+                        "Unexpected state after direct_post.")
                 }
-
-                string body = verified.RedirectUri is not null
-                    ? $"{{\"redirect_uri\":\"{verified.RedirectUri}\"}}"
-                    : "{}";
-
-                return ServerHttpResponse.Ok(body, WellKnownMediaTypes.Application.Json);
-            }
         };
 
 
@@ -637,12 +702,20 @@ public static class Oid4VpEndpoints
     /// <c>direct_post.jwt</c>.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// HAIP 1.0 §5.1 mandates encrypted responses; this endpoint is for
     /// non-HAIP profiles or deployments that explicitly opt into plaintext
     /// responses. Capability-gated like the encrypted sibling — only
     /// registrations with
     /// <see cref="WellKnownCapabilityIdentifiers.VcVerifiablePresentation"/>
     /// expose it.
+    /// </para>
+    /// <para>
+    /// A verified presentation answers 200 JSON (with <c>redirect_uri</c> when configured); a refused
+    /// presentation answers RFC 6749 §4.1.2.1's error shape (HTTP 400); anything else is a genuine Verifier
+    /// fault (HTTP 500). The Wallet's Authorization Error Response (OID4VP 1.0 §8.2's <c>error</c> shape) is
+    /// a distinct endpoint candidate — see <see cref="BuildOid4VpDirectPostError"/>.
+    /// </para>
     /// </remarks>
     private static EndpointCandidate BuildOid4VpDirectPostUnencrypted() =>
         new()
@@ -688,7 +761,6 @@ public static class Oid4VpEndpoints
             BuildInputAsync = static (fields, context, currentState, ct) =>
             {
                 EndpointServer server = context.Server!;
-                var oauth = server.OAuth();
 
                 //VerifierJarServedState is the JAR-served path; VerifierParReceivedState
                 //is the inline (no-JAR) path for the redirect_uri prefix per
@@ -716,19 +788,179 @@ public static class Oid4VpEndpoints
             },
 
             BuildResponse = static (state, _, _) =>
-            {
-                if(state is not PresentationVerifiedState verified)
+                state switch
                 {
-                    return ServerHttpResponse.ServerError(
+                    PresentationVerifiedState verified => ServerHttpResponse.Ok(
+                        verified.RedirectUri is not null
+                            ? BuildRedirectUriBody(verified.RedirectUri)
+                            : "{}",
+                        WellKnownMediaTypes.Application.Json),
+
+                    //OID4VP 1.0 §8.2 defines only the success answer; a refused presentation is answered
+                    //with RFC 6749 §4.1.2.1's error shape (HTTP 400). 500 stays reserved for a genuine Verifier
+                    //fault (an unclassified failure state, carrying no typed refusal).
+                    VerifierFlowFailedState { Refusal: { } refusal } => ServerHttpResponse.BadRequest(
+                        refusal.ErrorCode, refusal.Description),
+
+                    //The state is server-side detail; naming its CLR type on the wire is an internal-structure
+                    //disclosure and an oracle for probing the flow's implementation.
+                    _ => ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError,
-                        $"Unexpected state after direct_post: {state.GetType().Name}.");
+                        "Unexpected state after direct_post.")
+                }
+        };
+
+
+    /// <summary>
+    /// Builds the Wallet Authorization Error Response endpoint per
+    /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-8.2">OID4VP 1.0 §8.2</see>.
+    /// Shares the path, HTTP method and <see cref="ServerEndpoint.Name"/> with
+    /// <see cref="BuildOid4VpDirectPost"/> and <see cref="BuildOid4VpDirectPostUnencrypted"/>; the matcher
+    /// distinguishes the §8.2 Authorization Error Response POST — <c>error</c> (+ optional
+    /// <c>error_description</c>) and <c>state</c>, never <c>response</c> or <c>vp_token</c> — from either
+    /// presentation shape.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-8.2">OID4VP 1.0
+    /// §8.2</see>: "If the Response URI has successfully processed the Authorization Response or
+    /// Authorization Error Response, it MUST respond with an HTTP status code of 200 with Content-Type of
+    /// application/json and a JSON object in the response body." A processed error POST answers 200 JSON,
+    /// carrying <c>redirect_uri</c> when the deployment configured one — "The Response URI MAY return the
+    /// redirect_uri parameter in response to successful Authorization Responses or for Error Responses."
+    /// </para>
+    /// <para>
+    /// <see cref="ServerEndpoint.BuildInputAsync"/> enforces RFC 6749 §4.1.2.1's <c>error</c> /
+    /// <c>error_description</c> character rule and a library storage bound
+    /// (<see cref="MaxWalletErrorLength"/> / <see cref="MaxWalletErrorDescriptionLength"/>) on both wallet-
+    /// supplied values before recording them: a POST violating either answers 400 <c>invalid_request</c>
+    /// rather than reaching <see cref="VerifierWalletErrorReceivedState"/> — a malformed Authorization
+    /// Error Response is not one §8.2 counts as successfully processed.
+    /// </para>
+    /// </remarks>
+    private static EndpointCandidate BuildOid4VpDirectPostError() =>
+        new()
+        {
+            Name = WellKnownEndpointNames.Oid4VpDirectPost,
+            HttpMethod = WellKnownHttpMethods.Post,
+            Capability = WellKnownCapabilityIdentifiers.VcVerifiablePresentation,
+            StartsNewFlow = false,
+            Kind = FlowKind.Oid4VpVerifierServer,
+            //DiscoveryMetadataKey null per v2 MD Step 12 table.
+
+            //Acceptance test: POST to /cb for this registration with state and error present, and neither
+            //response nor vp_token — the OID4VP 1.0 §8.2 Authorization Error Response shape. Disjoint from
+            //both presentation candidates because THIS candidate alone requires error and rejects a POST
+            //carrying response or vp_token; neither presentation candidate inspects error at all, so a POST
+            //carrying error together with a presentation field matches only the presentation candidate —
+            //EndpointChain's one-match invariant holds even for a malformed POST carrying several fields at once.
+            MatchesRequest = static (fields, context, endpoint, ct) =>
+            {
+                IncomingRequest? req = context.IncomingRequest;
+                if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
+                if(!WellKnownHttpMethods.IsPost(req.Method))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                if(!PathEquals.Equals(req.Path, endpoint.ResolvedUri.AbsolutePath))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                if(!fields.ContainsKey(OAuthRequestParameterNames.State))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                if(!fields.ContainsKey(OAuthRequestParameterNames.Error))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                if(fields.ContainsKey(OAuthRequestParameterNames.Response)
+                    || fields.ContainsKey(AuthorizationResponseParameters.VpToken))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
                 }
 
-                string body = verified.RedirectUri is not null
-                    ? $"{{\"redirect_uri\":\"{verified.RedirectUri}\"}}"
-                    : "{}";
+                return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
+            },
 
-                return ServerHttpResponse.Ok(body, WellKnownMediaTypes.Application.Json);
-            }
+            //The Wallet echoes the JAR's state claim as the state form field per
+            //OID4VP 1.0 §6.1 and RFC 6749 §4.1.1, the same as either presentation candidate.
+            ExtractCorrelationKey = static (path, fields, context) =>
+                fields.TryGetValue(OAuthRequestParameterNames.State, out string? state)
+                    && !string.IsNullOrWhiteSpace(state) ? state : null,
+
+            BuildInputAsync = static (fields, context, currentState, ct) =>
+            {
+                EndpointServer server = context.Server!;
+
+                //VerifierJarServedState is the JAR-served path; VerifierParReceivedState
+                //is the inline (no-JAR) path for the redirect_uri prefix per
+                //OID4VP 1.0 §5.9.3, where the verifier never serves a JAR.
+                if(currentState is not VerifierJarServedState
+                    and not VerifierParReceivedState)
+                {
+                    return ValueTask.FromResult<(FlowInput?, ServerHttpResponse?)>((null,
+                        ServerHttpResponse.BadRequest(
+                            OAuthErrors.InvalidRequest,
+                            "Flow not in expected state for direct_post.")));
+                }
+
+                if(!fields.TryGetValue(OAuthRequestParameterNames.Error, out string? walletError)
+                    || string.IsNullOrWhiteSpace(walletError))
+                {
+                    return ValueTask.FromResult<(FlowInput?, ServerHttpResponse?)>((null,
+                        ServerHttpResponse.BadRequest(
+                            OAuthErrors.InvalidRequest, "Missing error parameter.")));
+                }
+
+                //RFC 6749 §4.1.2.1's error_description character rule applies to error too; a value
+                //outside the wire-safe ASCII set or past the library's own storage bound is itself a
+                //malformed Authorization Error Response POST, not a successfully processed one — §8.2's
+                //200 is reserved for the latter.
+                if(walletError.Length > MaxWalletErrorLength
+                    || !ErrorDescriptionCharset.IsConformant(walletError))
+                {
+                    return ValueTask.FromResult<(FlowInput?, ServerHttpResponse?)>((null,
+                        ServerHttpResponse.BadRequest(
+                            OAuthErrors.InvalidRequest, "Malformed error parameter.")));
+                }
+
+                fields.TryGetValue(
+                    OAuthRequestParameterNames.ErrorDescription, out string? walletErrorDescription);
+
+                if(!string.IsNullOrWhiteSpace(walletErrorDescription)
+                    && (walletErrorDescription.Length > MaxWalletErrorDescriptionLength
+                        || !ErrorDescriptionCharset.IsConformant(walletErrorDescription)))
+                {
+                    return ValueTask.FromResult<(FlowInput?, ServerHttpResponse?)>((null,
+                        ServerHttpResponse.BadRequest(
+                            OAuthErrors.InvalidRequest, "Malformed error_description parameter.")));
+                }
+
+                return ValueTask.FromResult<(FlowInput?, ServerHttpResponse?)>(
+                    (new WalletErrorResponsePosted(
+                        walletError,
+                        string.IsNullOrWhiteSpace(walletErrorDescription) ? null : walletErrorDescription,
+                        server.TimeProvider.GetUtcNow(),
+                        context.Oid4VpRedirectUri), null));
+            },
+
+            BuildResponse = static (state, _, _) =>
+                state switch
+                {
+                    //OID4VP 1.0 §8.2's own MUST: a successfully processed Authorization Error Response
+                    //answers 200 JSON, carrying redirect_uri when configured (the §8.2 MAY).
+                    VerifierWalletErrorReceivedState walletErrorReceived => ServerHttpResponse.Ok(
+                        walletErrorReceived.RedirectUri is not null
+                            ? BuildRedirectUriBody(walletErrorReceived.RedirectUri)
+                            : "{}",
+                        WellKnownMediaTypes.Application.Json),
+
+                    //The state is server-side detail; naming its CLR type on the wire is an internal-structure
+                    //disclosure and an oracle for probing the flow's implementation.
+                    _ => ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError,
+                        "Unexpected state after direct_post.")
+                }
         };
 }

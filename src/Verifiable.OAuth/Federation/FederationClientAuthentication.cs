@@ -225,7 +225,11 @@ public static class FederationClientAuthentication
     /// <summary>
     /// Reads an epoch-seconds temporal claim. Returns <see langword="false"/> when
     /// the claim is present but not a numeric timestamp; sets
-    /// <paramref name="present"/> to whether the claim was there at all.
+    /// <paramref name="present"/> to whether the claim was there at all. The
+    /// <c>== Math.Floor(…)</c> checks test whether a directly-deserialized
+    /// <see cref="double"/>/<see cref="float"/> already holds an exact integer value —
+    /// no arithmetic is performed on the claim, so the exact comparison carries no
+    /// floating-point rounding risk.
     /// </summary>
     private static bool TryReadEpochSeconds(
         JwtPayload payload, string claimName, out bool present, out DateTimeOffset value)

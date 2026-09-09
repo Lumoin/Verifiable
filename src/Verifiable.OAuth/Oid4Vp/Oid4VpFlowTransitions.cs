@@ -182,7 +182,7 @@ public static class Oid4VpFlowTransitions
                             EnteredAt = verified.VerifiedAt,
                             ExpiresAt = received.ExpiresAt,
                             Kind = FlowKind.Oid4VpVerifier,
-                            Claims = verified.Claims,
+                            Credentials = verified.Credentials,
                             VerifiedAt = verified.VerifiedAt,
                             RedirectUri = verified.RedirectUri
                         },

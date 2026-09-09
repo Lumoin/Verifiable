@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.Net.Http;
 using System.Text;
 using Verifiable.Core;
@@ -86,20 +85,18 @@ internal static class GuardedHttpClientTransport
                 encoded.Append(Uri.EscapeDataString(field.Value));
             }
 
-            Dictionary<string, string> requestHeaders = new(StringComparer.OrdinalIgnoreCase)
-            {
-                ["Content-Type"] = "application/x-www-form-urlencoded"
-            };
+            HttpHeaderSet.Builder requestHeaderBuilder = new HttpHeaderSet.Builder()
+                .Add(WellKnownHttpHeaderNames.ContentType, "application/x-www-form-urlencoded");
             foreach(KeyValuePair<string, string> header in headers.Values)
             {
-                requestHeaders[header.Key] = header.Value;
+                requestHeaderBuilder.Add(header.Key, header.Value);
             }
 
             OutboundRequest request = new()
             {
                 Target = endpoint,
                 Method = "POST",
-                Headers = requestHeaders,
+                Headers = requestHeaderBuilder.Build(),
                 Body = new TaggedMemory<byte>(Encoding.UTF8.GetBytes(encoded.ToString()), Tag.Empty)
             };
 
@@ -121,13 +118,6 @@ internal static class GuardedHttpClientTransport
                 };
             }
 
-            ImmutableDictionary<string, string>.Builder headerBuilder =
-                ImmutableDictionary.CreateBuilder<string, string>(StringComparer.OrdinalIgnoreCase);
-            foreach(KeyValuePair<string, string> header in response.Headers)
-            {
-                headerBuilder[header.Key] = header.Value;
-            }
-
             //W3C Trace Context response headers are lifted into TransportMetadata under
             //the documented HttpResponseDataKeys constants so that
             //OAuthParseError.WithTransportMetadata can surface the server's trace
@@ -136,7 +126,7 @@ internal static class GuardedHttpClientTransport
             //only when its deployment chooses to echo trace context on responses;
             //when absent, TransportMetadata stays null.
             Dictionary<string, string>? transportMetadata = null;
-            if(headerBuilder.TryGetValue(TraceParentHeaderName, out string? traceParent))
+            if(response.Headers.TryGetValue(TraceParentHeaderName, out string? traceParent))
             {
                 transportMetadata = new Dictionary<string, string>(StringComparer.Ordinal)
                 {
@@ -144,7 +134,7 @@ internal static class GuardedHttpClientTransport
                 };
             }
 
-            if(headerBuilder.TryGetValue(TraceStateHeaderName, out string? traceState))
+            if(response.Headers.TryGetValue(TraceStateHeaderName, out string? traceState))
             {
                 transportMetadata ??= new Dictionary<string, string>(StringComparer.Ordinal);
                 transportMetadata[HttpResponseDataKeys.TraceState] = traceState;
@@ -155,7 +145,7 @@ internal static class GuardedHttpClientTransport
                 Body = Encoding.UTF8.GetString(response.Body.Span),
                 StatusCode = response.StatusCode,
                 TransportMetadata = transportMetadata,
-                Headers = new ResponseHeaders { Values = headerBuilder.ToImmutable() }
+                Headers = new ResponseHeaders { Headers = response.Headers }
             };
         };
     }
@@ -180,12 +170,15 @@ internal static class GuardedHttpClientTransport
                 httpRequest.Content = new ByteArrayContent(body.Memory.ToArray());
             }
 
-            foreach(KeyValuePair<string, string> header in request.Headers)
+            foreach(string name in request.Headers.Names)
             {
-                if(!httpRequest.Headers.TryAddWithoutValidation(header.Key, header.Value)
-                    && httpRequest.Content is not null)
+                foreach(string value in request.Headers.GetValues(name))
                 {
-                    httpRequest.Content.Headers.TryAddWithoutValidation(header.Key, header.Value);
+                    if(!httpRequest.Headers.TryAddWithoutValidation(name, value)
+                        && httpRequest.Content is not null)
+                    {
+                        httpRequest.Content.Headers.TryAddWithoutValidation(name, value);
+                    }
                 }
             }
 
@@ -193,15 +186,25 @@ internal static class GuardedHttpClientTransport
                 .SendAsync(httpRequest, HttpCompletionOption.ResponseContentRead, cancellationToken)
                 .ConfigureAwait(false);
 
-            Dictionary<string, string> responseHeaders = new(StringComparer.OrdinalIgnoreCase);
+            //Repeated field lines (RFC 9110 §5.3) are kept in received order, never comma-joined;
+            //FromReceived groups both header collections by name even in the rare case a name appears
+            //in both (Content.Headers holding a name response.Headers also carries), and takes RFC
+            //9110 §5.5's recipient arm on a hostile line rather than throwing out of the fetch.
+            List<(string Name, string Value)> responsePairs = [];
             foreach(KeyValuePair<string, IEnumerable<string>> header in httpResponse.Headers)
             {
-                responseHeaders[header.Key] = string.Join(", ", header.Value);
+                foreach(string value in header.Value)
+                {
+                    responsePairs.Add((header.Key, value));
+                }
             }
 
             foreach(KeyValuePair<string, IEnumerable<string>> header in httpResponse.Content.Headers)
             {
-                responseHeaders[header.Key] = string.Join(", ", header.Value);
+                foreach(string value in header.Value)
+                {
+                    responsePairs.Add((header.Key, value));
+                }
             }
 
             byte[] responseBody = await httpResponse.Content
@@ -211,7 +214,7 @@ internal static class GuardedHttpClientTransport
             return new OutboundResponse
             {
                 StatusCode = (int)httpResponse.StatusCode,
-                Headers = responseHeaders,
+                Headers = HttpHeaderSet.FromReceived(responsePairs),
                 Body = new TaggedMemory<byte>(responseBody, Tag.Empty)
             };
         };

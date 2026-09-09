@@ -21,12 +21,12 @@ internal sealed class KbJwtIatClockSkewCheckTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly DateTimeOffset Now =
+    private static DateTimeOffset Now { get; } =
         new(2026, 5, 29, 12, 0, 0, TimeSpan.Zero);
 
     //A KB-JWT iat ten seconds ahead of the verifier's clock — inside a generous
     //skew window, outside a tight one.
-    private static readonly DateTimeOffset IatTenSecondsAhead = Now.AddSeconds(10);
+    private static DateTimeOffset IatTenSecondsAhead { get; } = Now.AddSeconds(10);
 
 
     [TestMethod]

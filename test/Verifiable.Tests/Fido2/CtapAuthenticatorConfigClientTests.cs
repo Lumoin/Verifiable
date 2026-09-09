@@ -137,7 +137,7 @@ internal sealed class CtapAuthenticatorConfigClientTests
     public async Task ToggleAlwaysUvSucceedsOverTheSimulator()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("config-client-toggle-always-uv");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("config-client-toggle-always-uv",BaseMemoryPool.Shared);
 
         var request = new CtapAuthenticatorConfigRequest(SubCommand: WellKnownCtapAuthenticatorConfigSubCommands.ToggleAlwaysUv);
         await CtapAuthenticatorConfigClient.AuthenticatorConfigAsync(

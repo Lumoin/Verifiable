@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Concurrent;
 using System.Linq;
-using System.Net;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
@@ -32,12 +31,12 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// </remarks>
 internal sealed class StaticContentHost: IAsyncDisposable
 {
-    private readonly WebApplication app;
+    private WebApplication App { get; }
 
 
     private StaticContentHost(WebApplication app, X509Certificate2 certificate, Uri baseAddress, StaticContentApplication application)
     {
-        this.app = app;
+        this.App = app;
         Certificate = certificate;
         BaseAddress = baseAddress;
         Application = application;
@@ -81,15 +80,18 @@ internal sealed class StaticContentHost: IAsyncDisposable
     /// <returns>The started host.</returns>
     public static async Task<StaticContentHost> StartAsync(CancellationToken cancellationToken)
     {
-        X509Certificate2 certificate = LoopbackTls.CreateServerCertificate("static-content-loopback-test-host");
+        //A test topology commonly starts several static-content hosts side by side (a document host
+        //and a JWKS host, for example), so each host needs a genuinely distinct TLS identity rather
+        //than the process-wide shared leaf.
+        X509Certificate2 certificate = LoopbackTls.CreateDistinctServerCertificate("static-content-loopback-test-host");
 
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
-        builder.Logging.ClearProviders();
+        LoopbackKestrel.ConfigureLoopbackLogging(builder.Logging);
 
         //A single explicit HTTPS Listen call — no UseUrls — so there is no plaintext fallback on
         //this host at all.
         builder.WebHost.ConfigureKestrel(options =>
-            options.Listen(IPAddress.Loopback, port: 0, listenOptions => listenOptions.UseHttps(certificate)));
+            LoopbackKestrel.ConfigureLoopbackListener(options, certificate));
 
         WebApplication app = builder.Build();
 
@@ -111,8 +113,8 @@ internal sealed class StaticContentHost: IAsyncDisposable
     /// <summary>Stops and disposes the host.</summary>
     public async ValueTask DisposeAsync()
     {
-        await app.StopAsync(CancellationToken.None).ConfigureAwait(false);
-        await app.DisposeAsync().ConfigureAwait(false);
+        await App.StopAsync(CancellationToken.None).ConfigureAwait(false);
+        await App.DisposeAsync().ConfigureAwait(false);
         Certificate.Dispose();
     }
 
@@ -125,8 +127,8 @@ internal sealed class StaticContentHost: IAsyncDisposable
     /// </summary>
     private sealed class StaticContentApplication
     {
-        private readonly ConcurrentDictionary<string, (byte[] Body, string ContentType)> content = new(StringComparer.Ordinal);
-        private readonly ConcurrentDictionary<string, int> requestCounts = new(StringComparer.Ordinal);
+        private ConcurrentDictionary<string, (byte[] Body, string ContentType)> Content { get; } = new(StringComparer.Ordinal);
+        private ConcurrentDictionary<string, int> RequestCounts { get; } = new(StringComparer.Ordinal);
         private int totalRequests;
 
 
@@ -140,14 +142,14 @@ internal sealed class StaticContentHost: IAsyncDisposable
         /// <param name="contentType">The content type.</param>
         public void Publish(string path, ReadOnlyMemory<byte> body, string contentType)
         {
-            content[path] = (body.ToArray(), contentType);
+            Content[path] = (body.ToArray(), contentType);
         }
 
 
         /// <summary>Whether a path was requested at least once.</summary>
         /// <param name="path">The request path to test.</param>
         /// <returns><see langword="true"/> when the path was requested.</returns>
-        public bool WasRequested(string path) => requestCounts.ContainsKey(path);
+        public bool WasRequested(string path) => RequestCounts.ContainsKey(path);
 
 
         /// <summary>Serves a GET request from the published-content map, recording the requested path.</summary>
@@ -159,7 +161,7 @@ internal sealed class StaticContentHost: IAsyncDisposable
             string path = context.Request.Path.HasValue ? context.Request.Path.Value! : string.Empty;
 
             Interlocked.Increment(ref totalRequests);
-            requestCounts.AddOrUpdate(path, 1, static (_, count) => count + 1);
+            RequestCounts.AddOrUpdate(path, 1, static (_, count) => count + 1);
 
             if(!HttpMethods.IsGet(context.Request.Method))
             {
@@ -168,7 +170,7 @@ internal sealed class StaticContentHost: IAsyncDisposable
                 return;
             }
 
-            if(!content.TryGetValue(path, out (byte[] Body, string ContentType) served))
+            if(!Content.TryGetValue(path, out (byte[] Body, string ContentType) served))
             {
                 httpResponse.StatusCode = StatusCodes.Status404NotFound;
 

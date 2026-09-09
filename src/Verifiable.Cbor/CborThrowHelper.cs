@@ -1,7 +1,7 @@
 using System;
 using System.Diagnostics.CodeAnalysis;
-using System.Formats.Cbor;
 using System.Runtime.CompilerServices;
+using Lumoin.Veritas.Cbor;
 
 namespace Verifiable.Cbor;
 
@@ -229,33 +229,8 @@ public static class CborThrowHelper
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void ThrowMapKeysNotAscending(long previousKey, long key)
     {
-        throw new CborContentException(
+        throw new CborConformanceException(
+            CborConformanceException.MapKeyOrderRule,
             $"CBOR map keys must be strictly increasing under canonical encoding; got {key} after {previousKey}.");
-    }
-
-
-    /// <summary>
-    /// Throws an <see cref="InvalidOperationException"/> indicating a converter was not found.
-    /// </summary>
-    /// <param name="type">The type for which no converter was found.</param>
-    [DoesNotReturn]
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    public static void ThrowConverterNotFound(Type type)
-    {
-        ArgumentNullException.ThrowIfNull(type);
-        throw new InvalidOperationException($"No CBOR converter found for type '{type.FullName}'.");
-    }
-
-
-    /// <summary>
-    /// Throws an <see cref="InvalidOperationException"/> for a null converter result.
-    /// </summary>
-    /// <param name="type">The type being converted.</param>
-    [DoesNotReturn]
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    public static void ThrowNullConverterResult(Type type)
-    {
-        ArgumentNullException.ThrowIfNull(type);
-        throw new InvalidOperationException($"Converter for type '{type.FullName}' returned null.");
     }
 }

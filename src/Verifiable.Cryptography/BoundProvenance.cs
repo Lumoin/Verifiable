@@ -40,15 +40,15 @@ namespace Verifiable.Cryptography;
 /// is being established for and records it; <see cref="Witnesses(object)"/> reports whether a later value is
 /// that SAME instance. <see cref="Verified{T}.TryCreateBound"/> calls it before minting, so a legitimate
 /// <see cref="BoundProvenance"/> for one verified value can never be paired with a different
-/// <see cref="Verified{T}"/> instance. This is an INSTANCE-identity witness, not a content witness (accepted
-/// residual A5): a shared mutable payload mutated after mint keeps <see cref="Verified{T}.IsIdentityBound"/>
+/// <see cref="Verified{T}"/> instance. This is an INSTANCE-identity witness, not a content witness:
+/// a shared mutable payload mutated after mint keeps <see cref="Verified{T}.IsIdentityBound"/>
 /// <see langword="true"/> even though its content has since changed. <see cref="Verified{T}"/> is documented as
 /// an immutable post-verification snapshot boundary as the convention that keeps this residual closed in
 /// practice; closing it structurally would need per-payload content-commitment witnesses, a distinct design
 /// axis left for a follow-up.
 /// </para>
 /// <para>
-/// <strong>Accepted residual (A4).</strong> <see cref="TryBindByCertificateDigestAsync"/> recomputes its digest
+/// <strong>The digest recomputation trusts the registry.</strong> <see cref="TryBindByCertificateDigestAsync"/> recomputes its digest
 /// through the ambient <c>ComputeDigestDelegate</c> registry
 /// (<see cref="CryptographicKeyEvents.ComputeDigestAsync"/>). Re-registering that delegate at process startup
 /// would defeat this gate — but it would equally defeat every digest computation in the library, so this is a
@@ -70,7 +70,7 @@ namespace Verifiable.Cryptography;
 /// </remarks>
 public sealed class BoundProvenance: VerificationProvenance
 {
-    private readonly object subject;
+    private object Subject { get; }
 
     /// <summary>Which typed gate produced this provenance.</summary>
     public ResolutionSource Source { get; }
@@ -86,7 +86,7 @@ public sealed class BoundProvenance: VerificationProvenance
     {
         Source = source;
         Relationship = relationship;
-        this.subject = subject;
+        this.Subject = subject;
     }
 
 
@@ -95,7 +95,7 @@ public sealed class BoundProvenance: VerificationProvenance
     /// <returns><see langword="true"/> when <paramref name="value"/> is the same instance this provenance was bound to.</returns>
     internal bool Witnesses(object value)
     {
-        return ReferenceEquals(subject, value);
+        return ReferenceEquals(Subject, value);
     }
 
 

@@ -180,19 +180,19 @@ public static class JweParsing
             EpkCrvToTagDelegate crvToTagConverter,
             BaseMemoryPool pool)
     {
-        string? alg = JwkJsonReader.ExtractStringValue(headerJson, "alg"u8);
+        string? alg = JwkJsonReader.ExtractStringValue(headerJson, WellKnownJoseHeaderNames.AlgUtf8);
         string? enc = JwkJsonReader.ExtractStringValue(headerJson, "enc"u8);
 
         if(alg is null)
         {
             throw new FormatException(
-                $"JWE protected header must contain the '{WellKnownJwkMemberNames.Alg}' parameter.");
+                $"JWE protected header must contain the '{WellKnownJoseHeaderNames.Alg}' parameter.");
         }
 
         if(!string.Equals(alg, expectedAlgorithm, StringComparison.Ordinal))
         {
             throw new FormatException(
-                $"JWE '{WellKnownJwkMemberNames.Alg}' value '{alg}' does not match the expected " +
+                $"JWE '{WellKnownJoseHeaderNames.Alg}' value '{alg}' does not match the expected " +
                 $"algorithm '{expectedAlgorithm}'.");
         }
 
@@ -262,7 +262,7 @@ public static class JweParsing
 
         var header = new Dictionary<string, object>(3)
         {
-            [WellKnownJwkMemberNames.Alg] = alg,
+            [WellKnownJoseHeaderNames.Alg] = alg,
             [WellKnownJoseHeaderNames.Enc] = enc,
             [WellKnownJoseHeaderNames.Epk] = epkDict
         };

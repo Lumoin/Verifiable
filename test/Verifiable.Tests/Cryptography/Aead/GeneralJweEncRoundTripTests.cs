@@ -24,7 +24,7 @@ internal sealed class GeneralJweEncRoundTripTests
 
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
-    private static readonly JwtHeaderSerializer JwtHeaderSerializer =
+    private static JwtHeaderSerializer JwtHeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)header,
             TestSetup.DefaultSerializationOptions);
@@ -192,7 +192,7 @@ internal sealed class GeneralJweEncRoundTripTests
                 JwtHeaderSerializer,
                 TestSetup.Base64UrlEncoder,
                 CryptoFormatConversions.DefaultTagToEpkCrvConverter,
-                MicrosoftEntropyFunctions.GenerateNonce,
+                MicrosoftEntropyFunctionsAdapter.GenerateNonce,
                 encryptAgreement,
                 ConcatKdf.DefaultKeyDerivationDelegate,
                 MicrosoftKeyAgreementFunctions.AesKeyWrapAsync,
@@ -285,7 +285,7 @@ internal sealed class GeneralJweEncRoundTripTests
                 JwtHeaderSerializer,
                 TestSetup.Base64UrlEncoder,
                 CryptoFormatConversions.DefaultTagToEpkCrvConverter,
-                MicrosoftEntropyFunctions.GenerateNonce,
+                MicrosoftEntropyFunctionsAdapter.GenerateNonce,
                 encryptAgreement,
                 ConcatKdf.DefaultAuthenticatedKeyDerivationDelegate,
                 MicrosoftKeyAgreementFunctions.AesKeyWrapAsync,

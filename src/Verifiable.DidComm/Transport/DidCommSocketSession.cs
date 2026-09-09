@@ -161,11 +161,12 @@ public sealed class DidCommInboundFrameResult
 /// </remarks>
 public sealed class DidCommSocketSession: IAsyncDisposable
 {
-    private readonly DidCommSessionSendDelegate send;
-    private readonly DidCommSocketSessionOptions options;
-    private readonly DidCommSessionInboundDelegate unsolicited;
-    private readonly BaseMemoryPool pool;
-    private readonly ConcurrentDictionary<string, TaskCompletionSource<DidCommExchangeResult>> pendingExchanges = new(StringComparer.Ordinal);
+    private DidCommSessionSendDelegate Send { get; }
+    private DidCommSocketSessionOptions Options { get; }
+    private DidCommSessionInboundDelegate Unsolicited { get; }
+    private BaseMemoryPool Pool { get; }
+    private TimeProvider TimeProvider { get; }
+    private ConcurrentDictionary<string, TaskCompletionSource<DidCommExchangeResult>> PendingExchanges { get; } = new(StringComparer.Ordinal);
 
     private int isReturnRouteEstablishedFlag;
     private int isLiveDeliveryEnabledFlag;
@@ -177,17 +178,20 @@ public sealed class DidCommSocketSession: IAsyncDisposable
     /// <param name="options">Per-connection configuration.</param>
     /// <param name="unsolicited">Receives every inbound frame that does not correlate to an outstanding exchange.</param>
     /// <param name="pool">The pool a correlated reply frame is copied into (see <see cref="AcceptInboundFrameAsync"/>).</param>
-    public DidCommSocketSession(DidCommSessionSendDelegate send, DidCommSocketSessionOptions options, DidCommSessionInboundDelegate unsolicited, BaseMemoryPool pool)
+    /// <param name="timeProvider">The clock <see cref="ExchangeAsync"/>'s <see cref="DidCommSocketSessionOptions.ExchangeTimeout"/> is realized against.</param>
+    public DidCommSocketSession(DidCommSessionSendDelegate send, DidCommSocketSessionOptions options, DidCommSessionInboundDelegate unsolicited, BaseMemoryPool pool, TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(send);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(unsolicited);
         ArgumentNullException.ThrowIfNull(pool);
+        ArgumentNullException.ThrowIfNull(timeProvider);
 
-        this.send = send;
-        this.options = options;
-        this.unsolicited = unsolicited;
-        this.pool = pool;
+        this.Send = send;
+        this.Options = options;
+        this.Unsolicited = unsolicited;
+        this.Pool = pool;
+        this.TimeProvider = timeProvider;
     }
 
 
@@ -197,7 +201,7 @@ public sealed class DidCommSocketSession: IAsyncDisposable
     /// library. <see langword="null"/> when the application's handshake negotiated none (see
     /// <see cref="DidCommSocketSessionOptions.NegotiatedSubprotocol"/>).
     /// </summary>
-    public string? NegotiatedSubprotocol => options.NegotiatedSubprotocol;
+    public string? NegotiatedSubprotocol => Options.NegotiatedSubprotocol;
 
     /// <summary>
     /// Whether the return-route directive has been established once for this socket
@@ -268,7 +272,7 @@ public sealed class DidCommSocketSession: IAsyncDisposable
         ArgumentException.ThrowIfNullOrEmpty(mediaType);
         ArgumentNullException.ThrowIfNull(request);
 
-        DidCommTransmitResult result = await send(message, mediaType, cancellationToken).ConfigureAwait(false);
+        DidCommTransmitResult result = await Send(message, mediaType, cancellationToken).ConfigureAwait(false);
 
         if(result.IsAccepted && request.IsReturnRouteAll())
         {
@@ -342,7 +346,7 @@ public sealed class DidCommSocketSession: IAsyncDisposable
         }
 
         var completion = new TaskCompletionSource<DidCommExchangeResult>(TaskCreationOptions.RunContinuationsAsynchronously);
-        if(!pendingExchanges.TryAdd(threadId, completion))
+        if(!PendingExchanges.TryAdd(threadId, completion))
         {
             throw new ArgumentException(
                 $"An exchange for thread id '{threadId}' is already outstanding on this session.",
@@ -365,7 +369,7 @@ public sealed class DidCommSocketSession: IAsyncDisposable
             //succeeds, any later frame for this thread id finds the registration gone (or settled) and is
             //dispatched unsolicited, never claimed for a caller that has already given up.
             bool isSelfSettled = completion.TrySetResult(DidCommExchangeResult.TransportFailed());
-            pendingExchanges.TryRemove(ownRegistration);
+            PendingExchanges.TryRemove(ownRegistration);
 
             return isSelfSettled
                 ? DidCommExchangeResult.TransportFailed()
@@ -378,7 +382,7 @@ public sealed class DidCommSocketSession: IAsyncDisposable
             //frames by envelope shape regardless of what accompanies this send, so null — a decidable "no
             //media type" — is what actually crosses a raw WebSocket. SendAsync carries a caller-supplied
             //media type for a channel that does convey one (e.g. STOMP).
-            DidCommTransmitResult sent = await send(packed, null, cancellationToken).ConfigureAwait(false);
+            DidCommTransmitResult sent = await Send(packed, null, cancellationToken).ConfigureAwait(false);
             if(!sent.IsAccepted)
             {
                 //The registration was live during the send, so a reply can have correlated already. Settle
@@ -398,7 +402,7 @@ public sealed class DidCommSocketSession: IAsyncDisposable
 
             MarkReturnRouteEstablished();
 
-            return await WaitForCorrelatedReplyAsync(completion, options.ExchangeTimeout, cancellationToken).ConfigureAwait(false);
+            return await WaitForCorrelatedReplyAsync(completion, Options.ExchangeTimeout, TimeProvider, cancellationToken).ConfigureAwait(false);
         }
         catch
         {
@@ -424,7 +428,7 @@ public sealed class DidCommSocketSession: IAsyncDisposable
             //Value-comparing: removes ONLY this call's own registration. A plain TryRemove(threadId, out _)
             //could instead delete a NEWER registration that reused the same thread id after this one already
             //completed and was replaced.
-            pendingExchanges.TryRemove(ownRegistration);
+            PendingExchanges.TryRemove(ownRegistration);
         }
     }
 
@@ -445,6 +449,7 @@ public sealed class DidCommSocketSession: IAsyncDisposable
     private static async ValueTask<DidCommExchangeResult> WaitForCorrelatedReplyAsync(
         TaskCompletionSource<DidCommExchangeResult> completion,
         TimeSpan? timeout,
+        TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
         if(timeout is not { } value)
@@ -465,7 +470,7 @@ public sealed class DidCommSocketSession: IAsyncDisposable
             }
         }
 
-        using var timeoutSource = new CancellationTokenSource(value);
+        using var timeoutSource = new CancellationTokenSource(value, timeProvider);
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutSource.Token);
 
         try
@@ -549,22 +554,37 @@ public sealed class DidCommSocketSession: IAsyncDisposable
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref isDisposedFlag) != 0, this);
 
-        if(options.MaxReceiveBytes is { } maxReceiveBytes && frame.Length > maxReceiveBytes)
+        if(Options.MaxReceiveBytes is { } maxReceiveBytes && frame.Length > maxReceiveBytes)
         {
             return ValueTask.FromResult(DidCommInboundFrameResult.Refused(WellKnownProblemCodes.MessageTooBig));
         }
 
-        if(correlationThreadId is { Length: > 0 } id && pendingExchanges.TryRemove(id, out TaskCompletionSource<DidCommExchangeResult>? pending))
+        if(correlationThreadId is { Length: > 0 } id && PendingExchanges.TryRemove(id, out TaskCompletionSource<DidCommExchangeResult>? pending))
         {
             //Copied, never aliased: the caller's pump reads this result AFTER AcceptInboundFrameAsync
             //returns (ExchangeAsync's TaskCompletionSource runs continuations asynchronously), so a pooling
             //pump that reuses `frame`'s backing buffer immediately after the call returns must not be able
             //to corrupt a reply already handed to the exchange. The copy happens before TrySetResult so the
             //rented buffer is only ever handed off once its ownership destination (this result) already exists.
-            PooledMemory replyBody = PooledMemory.FromBytes(frame.Span, pool, BufferTags.Json);
+            PooledMemory replyBody = PooledMemory.FromBytes(frame.Span, Pool, BufferTags.Json);
             DidCommExchangeResult result = DidCommExchangeResult.Accepted(null, replyBody, null);
 
-            if(pending.TrySetResult(result))
+            bool wasSet;
+            try
+            {
+                wasSet = pending.TrySetResult(result);
+            }
+            catch
+            {
+                //TrySetResult never takes ownership of result — it only stores the reference for the
+                //awaiting ExchangeAsync call to read — so an unexpected throw here still leaves result
+                //otherwise unowned.
+                result.Dispose();
+
+                throw;
+            }
+
+            if(wasSet)
             {
                 return ValueTask.FromResult(DidCommInboundFrameResult.Correlated());
             }
@@ -584,7 +604,7 @@ public sealed class DidCommSocketSession: IAsyncDisposable
     //Hands an uncorrelated (or genuinely unsolicited) frame to the application's live-delivery handler.
     private async ValueTask<DidCommInboundFrameResult> DispatchUnsolicitedAsync(ReadOnlyMemory<byte> frame, CancellationToken cancellationToken)
     {
-        await unsolicited(frame, cancellationToken).ConfigureAwait(false);
+        await Unsolicited(frame, cancellationToken).ConfigureAwait(false);
 
         return DidCommInboundFrameResult.DispatchedUnsolicited();
     }
@@ -605,9 +625,9 @@ public sealed class DidCommSocketSession: IAsyncDisposable
             return ValueTask.CompletedTask;
         }
 
-        foreach(string threadId in pendingExchanges.Keys)
+        foreach(string threadId in PendingExchanges.Keys)
         {
-            if(pendingExchanges.TryRemove(threadId, out TaskCompletionSource<DidCommExchangeResult>? completion))
+            if(PendingExchanges.TryRemove(threadId, out TaskCompletionSource<DidCommExchangeResult>? completion))
             {
                 completion.TrySetResult(DidCommExchangeResult.TransportFailed());
             }

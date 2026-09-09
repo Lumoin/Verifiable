@@ -32,9 +32,9 @@ internal sealed class VcalmWorkflowEndpointTests
     private FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch);
 
     private const string ClientId = "https://workflow.client.test";
-    private static readonly Uri ClientBaseUri = new("https://workflow.client.test");
+    private static Uri ClientBaseUri { get; } = new("https://workflow.client.test");
 
-    private static readonly ImmutableHashSet<CapabilityIdentifier> AdministrationCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> AdministrationCapabilities { get; } =
         ImmutableHashSet.Create(WellKnownVcalmCapabilities.VcalmAdministration);
 
     private static JsonSerializerOptions JsonOptions { get; } = TestSetup.DefaultSerializationOptions;

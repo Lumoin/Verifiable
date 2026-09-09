@@ -1,4 +1,7 @@
 using System.Diagnostics;
+using Verifiable.Core.Dcql;
+using Verifiable.Core.StatusList;
+using Verifiable.OAuth.Oid4Vp.Server;
 using Verifiable.OAuth.Server;
 
 namespace Verifiable.OAuth.Siop.Server.States;
@@ -22,4 +25,22 @@ public sealed record SelfIssuedAuthenticationVerifiedState: FlowState
 
     /// <summary>When verification completed.</summary>
     public required DateTimeOffset VerifiedAt { get; init; }
+
+    /// <summary>
+    /// The IETF Token Status List outcomes for the §12 combined response's <c>vp_token</c>, keyed by the
+    /// DCQL credential query identifier, carried through from
+    /// <see cref="SelfIssuedAuthenticationVerified.CredentialStatuses"/>. <see langword="null"/> for an
+    /// id_token-only response, an unreferenced status, or an executor registered without a status
+    /// resolver. A relying party hosting the SIOP flow reads this from the terminal state to act on
+    /// revocation/suspension.
+    /// </summary>
+    public IReadOnlyDictionary<CredentialQueryId, CredentialStatusOutcome>? CredentialStatuses { get; init; }
+
+    /// <summary>
+    /// The §12 combined response's verified <c>vp_token</c> credential, keyed by the
+    /// <see cref="CredentialQueryId"/> it was presented under, carried through from
+    /// <see cref="SelfIssuedAuthenticationVerified.Credentials"/>. <see langword="null"/> for an
+    /// id_token-only response.
+    /// </summary>
+    public IReadOnlyDictionary<CredentialQueryId, VpCredentialClaims>? Credentials { get; init; }
 }

@@ -12,7 +12,7 @@ public record PlaceholderDidMethod: GenericDidMethod
     {
         ArgumentNullException.ThrowIfNull(didString);
 
-        if(!didString.StartsWith("did:plc:", StringComparison.InvariantCulture))
+        if(!didString.StartsWith("did:plc:", StringComparison.Ordinal))
         {
             throw new ArgumentException("The DID string must start with 'did:plc:'", nameof(didString));
         }

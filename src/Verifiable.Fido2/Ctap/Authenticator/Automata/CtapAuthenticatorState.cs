@@ -560,8 +560,7 @@ public sealed record CtapAuthenticatorState(
     /// <param name="keyAgreementPool">
     /// The memory pool the two PIN/UV auth protocol key-agreement key pairs, their two
     /// <c>pinUvAuthToken</c>s, and the seeded <see cref="SerializedLargeBlobArray"/> are minted from — a
-    /// construction-time event, independent of any later command's own pool. Defaults to
-    /// <see cref="BaseMemoryPool.Shared"/> when <see langword="null"/>.
+    /// construction-time event, independent of any later command's own pool.
     /// </param>
     /// <param name="enterpriseAttestationProvisioning">
     /// The vendor-burned-in enterprise attestation material, or <see langword="null"/> (the
@@ -578,15 +577,15 @@ public sealed record CtapAuthenticatorState(
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of both CtapPinUvAuthKeyAgreementKeyPair instances, both CtapPinUvAuthTokenState instances, and the seeded PooledMemory transfers to the returned CtapAuthenticatorState, which CtapAuthenticatorSimulator.Dispose disposes as part of its dispose walk.")]
     public static CtapAuthenticatorState Initial(
-        Guid aaguid, DateTimeOffset poweredOnAt, IReadOnlyList<string>? supportedExtensions = null, int residentCredentialCapacity = 8, BaseMemoryPool? keyAgreementPool = null,
+        Guid aaguid, DateTimeOffset poweredOnAt, BaseMemoryPool keyAgreementPool, IReadOnlyList<string>? supportedExtensions = null, int residentCredentialCapacity = 8,
         CtapEnterpriseAttestationProvisioning? enterpriseAttestationProvisioning = null, int firmwareVersion = 1)
     {
-        BaseMemoryPool resolvedKeyAgreementPool = keyAgreementPool ?? BaseMemoryPool.Shared;
+        ArgumentNullException.ThrowIfNull(keyAgreementPool);
 
         (CtapPinUvAuthKeyAgreementKeyPair protocolOneKeyPair, CtapPinUvAuthKeyAgreementKeyPair protocolTwoKeyPair) =
-            MintKeyAgreementKeyPairs(resolvedKeyAgreementPool);
+            MintKeyAgreementKeyPairs(keyAgreementPool);
 
-        (CtapPinUvAuthTokenState protocolOneToken, CtapPinUvAuthTokenState protocolTwoToken) = MintTokens(resolvedKeyAgreementPool, protocolOneKeyPair, protocolTwoKeyPair);
+        (CtapPinUvAuthTokenState protocolOneToken, CtapPinUvAuthTokenState protocolTwoToken) = MintTokens(keyAgreementPool, protocolOneKeyPair, protocolTwoKeyPair);
 
         return new(
             aaguid,
@@ -616,7 +615,7 @@ public sealed record CtapAuthenticatorState(
             MinPinLengthRpIds: [],
             BioEnrollmentTemplatesByTemplateId: ImmutableDictionary<string, CtapBioEnrollmentTemplateRecord>.Empty,
             RememberedBioEnrollment: null,
-            SerializedLargeBlobArray: PooledMemory.FromBytes(InitialSerializedLargeBlobArray, resolvedKeyAgreementPool, Fido2BufferTags.CtapSerializedLargeBlobArrayPayload),
+            SerializedLargeBlobArray: PooledMemory.FromBytes(InitialSerializedLargeBlobArray, keyAgreementPool, Fido2BufferTags.CtapSerializedLargeBlobArrayPayload),
             RememberedLargeBlobWrite: null,
             EnterpriseAttestationProvisioning: enterpriseAttestationProvisioning,
             IsEnterpriseAttestationEnabled: false,
@@ -668,21 +667,20 @@ public sealed record CtapAuthenticatorState(
     /// 10-second power-up window.
     /// </param>
     /// <param name="keyAgreementPool">
-    /// The memory pool the refreshed key-agreement key pairs and tokens are minted from. Defaults to
-    /// <see cref="BaseMemoryPool.Shared"/> when <see langword="null"/>.
+    /// The memory pool the refreshed key-agreement key pairs and tokens are minted from.
     /// </param>
     /// <returns>The post-power-cycle state.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the four newly minted objects transfers to the returned CtapAuthenticatorState.")]
-    public CtapAuthenticatorState PowerCycle(DateTimeOffset now, BaseMemoryPool? keyAgreementPool = null)
+    public CtapAuthenticatorState PowerCycle(DateTimeOffset now, BaseMemoryPool keyAgreementPool)
     {
-        BaseMemoryPool resolvedPool = keyAgreementPool ?? BaseMemoryPool.Shared;
+        ArgumentNullException.ThrowIfNull(keyAgreementPool);
 
         (CtapPinUvAuthKeyAgreementKeyPair freshProtocolOneKeyPair, CtapPinUvAuthKeyAgreementKeyPair freshProtocolTwoKeyPair) =
-            MintKeyAgreementKeyPairs(resolvedPool);
+            MintKeyAgreementKeyPairs(keyAgreementPool);
 
         (CtapPinUvAuthTokenState freshProtocolOneToken, CtapPinUvAuthTokenState freshProtocolTwoToken) =
-            MintTokens(resolvedPool, freshProtocolOneKeyPair, freshProtocolTwoKeyPair);
+            MintTokens(keyAgreementPool, freshProtocolOneKeyPair, freshProtocolTwoKeyPair);
 
         ProtocolOneKeyAgreementKeyPair.Dispose();
         ProtocolTwoKeyAgreementKeyPair.Dispose();
@@ -755,13 +753,12 @@ public sealed record CtapAuthenticatorState(
     /// large-blob array value") — the array's initial 17-byte constant is entropy-FREE (a spec literal,
     /// unlike the PIN/UV key material below), so this pure transform restores it DIRECTLY, with no
     /// executor round-trip: the fresh copy is rented from <paramref name="pool"/> (never a hardcoded
-    /// <c>.Shared</c>, mirroring <see cref="Initial"/>/<see cref="PowerCycle"/>'s own optional-pool
-    /// convention) and needs no crypto backend, no telemetry-bearing hash computation, and no entropy
-    /// draw.
+    /// <c>.Shared</c>), the caller's own pool exactly as <see cref="Initial"/> and
+    /// <see cref="PowerCycle"/> require theirs, and needs no crypto backend, no telemetry-bearing
+    /// hash computation, and no entropy draw.
     /// </summary>
     /// <param name="pool">
-    /// The memory pool the restored <see cref="SerializedLargeBlobArray"/> is rented from. Defaults to
-    /// <see cref="BaseMemoryPool.Shared"/> when <see langword="null"/>.
+    /// The memory pool the restored <see cref="SerializedLargeBlobArray"/> is rented from.
     /// </param>
     /// <remarks>
     /// <para>
@@ -794,9 +791,9 @@ public sealed record CtapAuthenticatorState(
     /// </para>
     /// </remarks>
     /// <returns>The post-reset state, with every clientPIN/credential-store/config/large-blob field at its factory value.</returns>
-    public CtapAuthenticatorState FactoryReset(BaseMemoryPool? pool = null)
+    public CtapAuthenticatorState FactoryReset(BaseMemoryPool pool)
     {
-        BaseMemoryPool resolvedPool = pool ?? BaseMemoryPool.Shared;
+        ArgumentNullException.ThrowIfNull(pool);
 
         foreach(CtapCredentialRecord record in CredentialsByCredentialId.Values)
         {
@@ -837,7 +834,7 @@ public sealed record CtapAuthenticatorState(
             IsEnterpriseAttestationEnabled = false,
             BioEnrollmentTemplatesByTemplateId = ImmutableDictionary<string, CtapBioEnrollmentTemplateRecord>.Empty,
             RememberedBioEnrollment = null,
-            SerializedLargeBlobArray = PooledMemory.FromBytes(InitialSerializedLargeBlobArray, resolvedPool, Fido2BufferTags.CtapSerializedLargeBlobArrayPayload),
+            SerializedLargeBlobArray = PooledMemory.FromBytes(InitialSerializedLargeBlobArray, pool, Fido2BufferTags.CtapSerializedLargeBlobArrayPayload),
             //A fresh authenticatorReset also retires the persistent tier itself (the executor's own
             //post-command retirement call), so no PIN — local or durable — remains provisioned; this
             //flag's own XML doc names this exact clearing obligation.

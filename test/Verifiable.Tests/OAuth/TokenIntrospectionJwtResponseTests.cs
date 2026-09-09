@@ -32,11 +32,11 @@ internal sealed class TokenIntrospectionJwtResponseTests
 
     private const string ClientId = "https://rs.introspection.client.test";
 
-    private static readonly Uri ClientBaseUri = new("https://rs.introspection.client.test");
+    private static Uri ClientBaseUri { get; } = new("https://rs.introspection.client.test");
 
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
-    private static readonly ImmutableHashSet<CapabilityIdentifier> IntrospectionCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> IntrospectionCapabilities { get; } =
         ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.OAuthTokenIntrospection);
 
 

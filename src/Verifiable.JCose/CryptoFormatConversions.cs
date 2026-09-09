@@ -14,7 +14,7 @@ namespace Verifiable.JCose
     /// <summary>
     /// Delegate for converting algorithm and key material to Base58 format.
     /// </summary>
-    public delegate string AlgorithmToBase58Delegate(CryptoAlgorithm algorithm, Purpose purpose, ReadOnlySpan<byte> keyMaterial, EncodeDelegate base58Encoder);
+    public delegate string AlgorithmToBase58Delegate(CryptoAlgorithm algorithm, Purpose purpose, ReadOnlySpan<byte> keyMaterial, EncodeDelegate base58Encoder, BaseMemoryPool pool);
 
     /// <summary>
     /// Delegate for converting JWK to algorithm representation.
@@ -535,43 +535,44 @@ namespace Verifiable.JCose
         /// <summary>
         /// Default converter from algorithm and key material to Base58 format.
         /// </summary>
-        public static AlgorithmToBase58Delegate DefaultAlgorithmToBase58Converter => (algorithm, purpose, keyMaterial, base58Encoder) =>
+        public static AlgorithmToBase58Delegate DefaultAlgorithmToBase58Converter => (algorithm, purpose, keyMaterial, base58Encoder, pool) =>
         {
             static string EncodeKey(
                 ReadOnlySpan<byte> keyMaterial,
                 ReadOnlySpan<byte> multicodecHeader,
-                EncodeDelegate encoder)
+                EncodeDelegate encoder,
+                BaseMemoryPool pool)
             {
                 return MultibaseSerializer.Encode(
                     keyMaterial,
                     multicodecHeader,
                     MultibaseAlgorithms.Base58Btc,
                     encoder,
-                    BaseMemoryPool.Shared);
+                    pool);
             }
 
             return (algorithm, purpose) switch
             {
                 (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P256) && p.Equals(Purpose.Verification) =>
-                    EncodeKey(keyMaterial, MulticodecHeaders.P256PublicKey, base58Encoder),
+                    EncodeKey(keyMaterial, MulticodecHeaders.P256PublicKey, base58Encoder, pool),
                 (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P384) && p.Equals(Purpose.Verification) =>
-                    EncodeKey(keyMaterial, MulticodecHeaders.P384PublicKey, base58Encoder),
+                    EncodeKey(keyMaterial, MulticodecHeaders.P384PublicKey, base58Encoder, pool),
                 (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P521) && p.Equals(Purpose.Verification) =>
-                    EncodeKey(keyMaterial, MulticodecHeaders.P521PublicKey, base58Encoder),
+                    EncodeKey(keyMaterial, MulticodecHeaders.P521PublicKey, base58Encoder, pool),
                 (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Secp256k1) && p.Equals(Purpose.Verification) =>
-                    EncodeKey(keyMaterial, MulticodecHeaders.Secp256k1PublicKey, base58Encoder),
+                    EncodeKey(keyMaterial, MulticodecHeaders.Secp256k1PublicKey, base58Encoder, pool),
                 (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa2048) && p.Equals(Purpose.Verification) =>
-                    EncodeKey(keyMaterial, MulticodecHeaders.RsaPublicKey, base58Encoder),
+                    EncodeKey(keyMaterial, MulticodecHeaders.RsaPublicKey, base58Encoder, pool),
                 (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa4096) && p.Equals(Purpose.Verification) =>
-                    EncodeKey(keyMaterial, MulticodecHeaders.RsaPublicKey, base58Encoder),
+                    EncodeKey(keyMaterial, MulticodecHeaders.RsaPublicKey, base58Encoder, pool),
                 (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Bls12381G1) && p.Equals(Purpose.Verification) =>
-                    EncodeKey(keyMaterial, MulticodecHeaders.Bls12381G1PublicKey, base58Encoder),
+                    EncodeKey(keyMaterial, MulticodecHeaders.Bls12381G1PublicKey, base58Encoder, pool),
                 (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Bls12381G2) && p.Equals(Purpose.Verification) =>
-                    EncodeKey(keyMaterial, MulticodecHeaders.Bls12381G2PublicKey, base58Encoder),
+                    EncodeKey(keyMaterial, MulticodecHeaders.Bls12381G2PublicKey, base58Encoder, pool),
                 (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Ed25519) && p.Equals(Purpose.Verification) =>
-                    EncodeKey(keyMaterial, MulticodecHeaders.Ed25519PublicKey, base58Encoder),
+                    EncodeKey(keyMaterial, MulticodecHeaders.Ed25519PublicKey, base58Encoder, pool),
                 (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.X25519) && p.Equals(Purpose.Exchange) =>
-                    EncodeKey(keyMaterial, MulticodecHeaders.X25519PublicKey, base58Encoder),
+                    EncodeKey(keyMaterial, MulticodecHeaders.X25519PublicKey, base58Encoder, pool),
 
                 _ => throw new ArgumentException($"Unknown combination of algorithm and purpose: '{algorithm}', '{purpose}'.")
             };
@@ -615,14 +616,10 @@ namespace Verifiable.JCose
             Purpose explicitPurpose = Purpose.Verification;
             if(jwk.TryGetValue(WellKnownJwkMemberNames.Use, out object? useObj) && useObj is string use)
             {
-                explicitPurpose = use switch
-                {
-                    string u when WellKnownJwkValues.Equals(u, WellKnownJwkValues.UseEnc) => Purpose.Exchange,
-                    _ => Purpose.Verification
-                };
+                explicitPurpose = WellKnownJwkValues.Equals(use, WellKnownJwkValues.UseEnc) ? Purpose.Exchange : Purpose.Verification;
             }
 
-            byte[] keyMaterial = DecodeKeyMaterial(jwk, keyType, base64UrlDecoder);
+            byte[] keyMaterial = DecodeKeyMaterial(jwk, keyType, base64UrlDecoder, memoryPool);
             (CryptoAlgorithm cryptoAlgorithm, Purpose purpose) =
                 MapToAlgorithmAndPurpose(keyType, algorithm, crv, explicitPurpose, keyMaterial.Length);
 
@@ -710,20 +707,21 @@ namespace Verifiable.JCose
             static byte[] DecodeKeyMaterial(
                 Dictionary<string, object> jwk,
                 string keyType,
-                DecodeDelegate decoder) => keyType switch
+                DecodeDelegate decoder,
+                BaseMemoryPool pool) => keyType switch
                 {
-                    var kt when WellKnownKeyTypeValues.IsEc(kt) => DecodeEcKey(jwk, decoder),
-                    var kt when WellKnownKeyTypeValues.IsOkp(kt) => DecodeOkpKey(jwk, decoder),
-                    var kt when WellKnownKeyTypeValues.IsRsa(kt) => DecodeRsaKey(jwk, decoder),
-                    var kt when WellKnownKeyTypeValues.IsAkp(kt) => DecodeAkpKey(jwk, decoder),
+                    var kt when WellKnownKeyTypeValues.IsEc(kt) => DecodeEcKey(jwk, decoder, pool),
+                    var kt when WellKnownKeyTypeValues.IsOkp(kt) => DecodeOkpKey(jwk, decoder, pool),
+                    var kt when WellKnownKeyTypeValues.IsRsa(kt) => DecodeRsaKey(jwk, decoder, pool),
+                    var kt when WellKnownKeyTypeValues.IsAkp(kt) => DecodeAkpKey(jwk, decoder, pool),
                     _ => throw new ArgumentException($"Unsupported key type: '{keyType}'.")
                 };
 
 
-            static byte[] DecodeEcKey(Dictionary<string, object> jwk, DecodeDelegate decoder)
+            static byte[] DecodeEcKey(Dictionary<string, object> jwk, DecodeDelegate decoder, BaseMemoryPool pool)
             {
-                using IMemoryOwner<byte> xBytes = decoder((string)jwk[WellKnownJwkMemberNames.X], BaseMemoryPool.Shared);
-                using IMemoryOwner<byte> yBytes = decoder((string)jwk[WellKnownJwkMemberNames.Y], BaseMemoryPool.Shared);
+                using IMemoryOwner<byte> xBytes = decoder((string)jwk[WellKnownJwkMemberNames.X], pool);
+                using IMemoryOwner<byte> yBytes = decoder((string)jwk[WellKnownJwkMemberNames.Y], pool);
 
                 //Compressed format is the canonical internal form for all EC public keys.
                 //Backend functions accept both compressed and uncompressed SEC1 encoding.
@@ -731,25 +729,25 @@ namespace Verifiable.JCose
             }
 
 
-            static byte[] DecodeOkpKey(Dictionary<string, object> jwk, DecodeDelegate decoder)
+            static byte[] DecodeOkpKey(Dictionary<string, object> jwk, DecodeDelegate decoder, BaseMemoryPool pool)
             {
-                using IMemoryOwner<byte> decoded = decoder((string)jwk[WellKnownJwkMemberNames.X], BaseMemoryPool.Shared);
+                using IMemoryOwner<byte> decoded = decoder((string)jwk[WellKnownJwkMemberNames.X], pool);
 
                 return decoded.Memory.Span.ToArray();
             }
 
 
-            static byte[] DecodeRsaKey(Dictionary<string, object> jwk, DecodeDelegate decoder)
+            static byte[] DecodeRsaKey(Dictionary<string, object> jwk, DecodeDelegate decoder, BaseMemoryPool pool)
             {
-                using IMemoryOwner<byte> decoded = decoder((string)jwk[WellKnownJwkMemberNames.N], BaseMemoryPool.Shared);
+                using IMemoryOwner<byte> decoded = decoder((string)jwk[WellKnownJwkMemberNames.N], pool);
 
                 return decoded.Memory.Span.ToArray();
             }
 
 
-            static byte[] DecodeAkpKey(Dictionary<string, object> jwk, DecodeDelegate decoder)
+            static byte[] DecodeAkpKey(Dictionary<string, object> jwk, DecodeDelegate decoder, BaseMemoryPool pool)
             {
-                using IMemoryOwner<byte> decoded = decoder((string)jwk[WellKnownJwkMemberNames.Pub], BaseMemoryPool.Shared);
+                using IMemoryOwner<byte> decoded = decoder((string)jwk[WellKnownJwkMemberNames.Pub], pool);
 
                 return decoded.Memory.Span.ToArray();
             }
@@ -874,23 +872,16 @@ namespace Verifiable.JCose
         private static IMemoryOwner<byte> DecodeBase64UrlPayload(ReadOnlySpan<char> payload, BaseMemoryPool memoryPool)
         {
             int maxLength = System.Buffers.Text.Base64Url.GetMaxDecodedLength(payload.Length);
-            IMemoryOwner<byte> buffer = memoryPool.Rent(maxLength);
-            try
+            using IMemoryOwner<byte> buffer = memoryPool.Rent(maxLength);
+            if(System.Buffers.Text.Base64Url.DecodeFromChars(payload, buffer.Memory.Span, out _, out int bytesWritten) != System.Buffers.OperationStatus.Done)
             {
-                if(System.Buffers.Text.Base64Url.DecodeFromChars(payload, buffer.Memory.Span, out _, out int bytesWritten) != System.Buffers.OperationStatus.Done)
-                {
-                    throw new FormatException("The base64url 'u' multibase payload is not valid base64url.");
-                }
-
-                IMemoryOwner<byte> exact = memoryPool.Rent(bytesWritten);
-                buffer.Memory.Span[..bytesWritten].CopyTo(exact.Memory.Span);
-
-                return exact;
+                throw new FormatException("The base64url 'u' multibase payload is not valid base64url.");
             }
-            finally
-            {
-                buffer.Dispose();
-            }
+
+            IMemoryOwner<byte> exact = memoryPool.Rent(bytesWritten);
+            buffer.Memory.Span[..bytesWritten].CopyTo(exact.Memory.Span);
+
+            return exact;
         }
 
 

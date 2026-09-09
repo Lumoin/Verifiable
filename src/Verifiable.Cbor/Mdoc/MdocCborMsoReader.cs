@@ -1,5 +1,7 @@
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
+using Verifiable.Cbor.StatusList;
 using Verifiable.Core.Model.Mdoc;
+using Verifiable.Core.StatusList;
 using Verifiable.JCose;
 
 namespace Verifiable.Cbor.Mdoc;
@@ -13,11 +15,16 @@ namespace Verifiable.Cbor.Mdoc;
 /// <remarks>
 /// <para>
 /// The reader walks the MSO's text-keyed CBOR map, recognising the six
-/// required fields per §9.1.2.4. Unknown keys are skipped per the spec's
-/// forward-compatibility convention. Nested sub-readers handle
-/// <c>valueDigests</c> (namespace → digestID → bytes), <c>deviceKeyInfo</c>
-/// (delegates to <see cref="MdocCborCoseKeyReader"/> for the COSE_Key), and
-/// <c>validityInfo</c> (tdate timestamps wrapped in CBOR Tag 0).
+/// required fields per §9.1.2.4 plus the optional <c>status</c> member the
+/// second edition of ISO/IEC 18013-5 (under ballot as a DIS) adds. Unknown
+/// top-level keys are skipped per the spec's forward-compatibility
+/// convention. Nested sub-readers handle <c>valueDigests</c> (namespace →
+/// digestID → bytes), <c>deviceKeyInfo</c> (delegates to
+/// <see cref="MdocCborCoseKeyReader"/> for the COSE_Key), <c>validityInfo</c>
+/// (tdate timestamps wrapped in CBOR Tag 0), and <c>status</c> (the Token
+/// Status List Status CBOR structure per Section 6.3, read by
+/// <see cref="StatusClaimCborReader"/> — the one decoder every COSE format's
+/// status claim flows through).
 /// </para>
 /// <para>
 /// Per spec the MSO payload is itself wrapped in CBOR Tag 24 inside the
@@ -38,7 +45,7 @@ public static class MdocCborMsoReader
     /// </exception>
     public static MdocMobileSecurityObject Read(ReadOnlySpan<byte> encodedMso)
     {
-        var reader = new CborReader(encodedMso.ToArray(), CborConformanceMode.Lax);
+        var reader = new CborReader(encodedMso.ToArray(), CborOptions.Lax);
 
         int? entryCount = reader.ReadStartMap();
 
@@ -48,6 +55,7 @@ public static class MdocCborMsoReader
         MdocDeviceKeyInfo? deviceKeyInfo = null;
         string? docType = null;
         MdocValidityInfo? validityInfo = null;
+        StatusClaim? status = null;
 
         int entriesRead = 0;
         while(entryCount is null ? reader.PeekState() != CborReaderState.EndMap : entriesRead < entryCount.Value)
@@ -63,6 +71,7 @@ public static class MdocCborMsoReader
                 MdocMsoWellKnownKeys.DeviceKeyInfo => AssignDeviceKeyInfo(reader, ref deviceKeyInfo),
                 MdocMsoWellKnownKeys.DocType => AssignDocType(reader, ref docType),
                 MdocMsoWellKnownKeys.ValidityInfo => AssignValidityInfo(reader, ref validityInfo),
+                MdocMsoWellKnownKeys.Status => AssignStatus(reader, ref status),
                 _ => SkipValue(reader)
             };
         }
@@ -83,7 +92,8 @@ public static class MdocCborMsoReader
             valueDigests: valueDigests,
             deviceKeyInfo: deviceKeyInfo,
             docType: docType,
-            validityInfo: validityInfo);
+            validityInfo: validityInfo,
+            status: status);
 
         //Assigns the decoded MSO version string.
         static bool AssignVersion(CborReader reader, ref string? version)
@@ -129,6 +139,14 @@ public static class MdocCborMsoReader
         static bool AssignValidityInfo(CborReader reader, ref MdocValidityInfo? validityInfo)
         {
             validityInfo = ReadValidityInfo(reader);
+
+            return true;
+        }
+
+        //Assigns the decoded Status structure.
+        static bool AssignStatus(CborReader reader, ref StatusClaim? status)
+        {
+            status = StatusClaimCborReader.Read(reader);
 
             return true;
         }
@@ -308,7 +326,7 @@ public static class MdocCborMsoReader
         if(tag != CborTag.DateTimeString)
         {
             throw new CborContentException(
-                $"Expected tdate (Tag 0) per ISO/IEC 18013-5 §9.1.2.4; got Tag {(int)tag}.");
+                $"Expected tdate (Tag 0) per ISO/IEC 18013-5 §9.1.2.4; got Tag {tag.Value}.");
         }
 
         string rfc3339 = reader.ReadTextString();

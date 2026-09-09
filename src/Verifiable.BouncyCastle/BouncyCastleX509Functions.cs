@@ -1,6 +1,8 @@
 using Org.BouncyCastle.Asn1;
 using Org.BouncyCastle.Asn1.X509;
 using Org.BouncyCastle.Pkix;
+using BcAuthorityKeyIdentifier = Org.BouncyCastle.Asn1.X509.AuthorityKeyIdentifier;
+using PkiAuthorityKeyIdentifier = Verifiable.Cryptography.Pki.AuthorityKeyIdentifier;
 using Org.BouncyCastle.Security;
 using Org.BouncyCastle.Utilities.Collections;
 using Org.BouncyCastle.X509;
@@ -186,8 +188,7 @@ public static class BouncyCastleX509Functions
                 $"X.509 certificate chain validation failed: {ex.Message}", ex);
         }
 
-        BouncyCastleX509 validatedLeaf =
-            (BouncyCastleX509)result.CertPath.Certificates[0];
+        BouncyCastleX509 validatedLeaf = result.CertPath.Certificates[0];
 
         //Revocation is part of path validation: when a revocation source is configured, every certificate in the
         //chain that is not itself a supplied trust anchor must additionally be checked and the result is
@@ -298,22 +299,17 @@ public static class BouncyCastleX509Functions
 
     /// <summary>
     /// Implements <see cref="ExtractAuthorityKeyIdentifierDelegate"/>. Reads the <c>KeyIdentifier</c> of
-    /// the certificate's AuthorityKeyIdentifier extension (RFC 5280 §4.2.1.1) and returns it
-    /// base64url-encoded — the value a DCQL <c>trusted_authorities</c> entry of type <c>aki</c> matches
-    /// against per
+    /// the certificate's AuthorityKeyIdentifier extension (RFC 5280 §4.2.1.1) — the value a DCQL
+    /// <c>trusted_authorities</c> entry of type <c>aki</c> matches against per
     /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-6.1.1.1">OID4VP 1.0 §6.1.1.1</see>.
     /// Returns <see langword="null"/> when the certificate carries no AuthorityKeyIdentifier extension or
     /// that extension omits the KeyIdentifier (e.g. it identifies the issuer by name + serial instead).
     /// </summary>
     /// <param name="certificate">The certificate to read — typically the leaf of an mdoc IssuerAuth x5chain.</param>
-    /// <param name="base64UrlEncoder">Encoder producing the base64url string form (the AKI is public metadata, not key material).</param>
-    /// <returns>The base64url-encoded AuthorityKeyIdentifier KeyIdentifier, or <see langword="null"/>.</returns>
-    public static string? GetAuthorityKeyIdentifier(
-        PkiCertificateMemory certificate,
-        EncodeDelegate base64UrlEncoder)
+    /// <returns>The certificate's <see cref="Pki.AuthorityKeyIdentifier"/>, or <see langword="null"/>.</returns>
+    public static PkiAuthorityKeyIdentifier? GetAuthorityKeyIdentifier(PkiCertificateMemory certificate)
     {
         ArgumentNullException.ThrowIfNull(certificate);
-        ArgumentNullException.ThrowIfNull(base64UrlEncoder);
 
         BouncyCastleX509 cert = CertificateParser.ReadCertificate(
             certificate.AsReadOnlyMemory().ToArray());
@@ -324,14 +320,57 @@ public static class BouncyCastleX509Functions
             return null;
         }
 
-        byte[]? keyIdentifier = AuthorityKeyIdentifier.GetInstance(
+        byte[]? keyIdentifier = BcAuthorityKeyIdentifier.GetInstance(
             X509ExtensionUtilities.FromExtensionValue(extensionValue)).KeyIdentifier?.GetOctets();
         if(keyIdentifier is null)
         {
             return null;
         }
 
-        return base64UrlEncoder(keyIdentifier);
+        return new PkiAuthorityKeyIdentifier(keyIdentifier);
+    }
+
+
+    /// <summary>
+    /// Implements <see cref="ReadCertificateSubjectKeyIdentifierDelegate"/>. Reads the <c>KeyIdentifier</c>
+    /// contents of the certificate's SubjectKeyIdentifier extension (RFC 5280 §4.2.1.2).
+    /// </summary>
+    /// <param name="certificate">The certificate to read.</param>
+    /// <returns>The SubjectKeyIdentifier's octets, or an empty <see cref="ReadOnlyMemory{T}"/> when the certificate carries no such extension.</returns>
+    public static ReadOnlyMemory<byte> GetSubjectKeyIdentifier(PkiCertificateMemory certificate)
+    {
+        ArgumentNullException.ThrowIfNull(certificate);
+
+        BouncyCastleX509 cert = CertificateParser.ReadCertificate(
+            certificate.AsReadOnlyMemory().ToArray());
+
+        Asn1OctetString? extensionValue = cert.GetExtensionValue(X509Extensions.SubjectKeyIdentifier);
+        if(extensionValue is null)
+        {
+            return ReadOnlyMemory<byte>.Empty;
+        }
+
+        byte[]? keyIdentifier = SubjectKeyIdentifier.GetInstance(
+            X509ExtensionUtilities.FromExtensionValue(extensionValue)).GetKeyIdentifier();
+
+        return keyIdentifier ?? ReadOnlyMemory<byte>.Empty;
+    }
+
+
+    /// <summary>
+    /// Implements <see cref="ReadCertificateSubjectNameDelegate"/>. Renders the certificate's Subject as an
+    /// RFC 4514 distinguished name string.
+    /// </summary>
+    /// <param name="certificate">The certificate to read.</param>
+    /// <returns>The certificate Subject's RFC 4514 string form.</returns>
+    public static string GetSubjectName(PkiCertificateMemory certificate)
+    {
+        ArgumentNullException.ThrowIfNull(certificate);
+
+        BouncyCastleX509 cert = CertificateParser.ReadCertificate(
+            certificate.AsReadOnlyMemory().ToArray());
+
+        return Rfc4514SubjectNameText.FromDer(cert.SubjectDN.GetDerEncoded());
     }
 
 

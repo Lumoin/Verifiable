@@ -14,61 +14,61 @@ public static class WellKnownResponseTypes
     public static ReadOnlySpan<byte> CodeUtf8 => "code"u8;
 
     /// <summary>The <c>code</c> response type (RFC 6749 §4.1.1).</summary>
-    public static readonly string Code = Utf8Constants.ToInternedString(CodeUtf8);
+    public static string Code { get; } = Utf8Constants.ToInternedString(CodeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Token"/>.</summary>
     public static ReadOnlySpan<byte> TokenUtf8 => "token"u8;
 
     /// <summary>The <c>token</c> response type (RFC 6749 §4.2.1).</summary>
-    public static readonly string Token = Utf8Constants.ToInternedString(TokenUtf8);
+    public static string Token { get; } = Utf8Constants.ToInternedString(TokenUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="IdToken"/>.</summary>
     public static ReadOnlySpan<byte> IdTokenUtf8 => "id_token"u8;
 
     /// <summary>The <c>id_token</c> response type (OIDC Core 1.0 §3.2.2.1).</summary>
-    public static readonly string IdToken = Utf8Constants.ToInternedString(IdTokenUtf8);
+    public static string IdToken { get; } = Utf8Constants.ToInternedString(IdTokenUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="CodeIdToken"/>.</summary>
     public static ReadOnlySpan<byte> CodeIdTokenUtf8 => "code id_token"u8;
 
     /// <summary>The <c>code id_token</c> hybrid response type (OIDC Core 1.0 §3.3).</summary>
-    public static readonly string CodeIdToken = Utf8Constants.ToInternedString(CodeIdTokenUtf8);
+    public static string CodeIdToken { get; } = Utf8Constants.ToInternedString(CodeIdTokenUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="CodeToken"/>.</summary>
     public static ReadOnlySpan<byte> CodeTokenUtf8 => "code token"u8;
 
     /// <summary>The <c>code token</c> hybrid response type (OIDC Core 1.0 §3.3).</summary>
-    public static readonly string CodeToken = Utf8Constants.ToInternedString(CodeTokenUtf8);
+    public static string CodeToken { get; } = Utf8Constants.ToInternedString(CodeTokenUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="IdTokenToken"/>.</summary>
     public static ReadOnlySpan<byte> IdTokenTokenUtf8 => "id_token token"u8;
 
     /// <summary>The <c>id_token token</c> implicit response type (OIDC Core 1.0 §3.2).</summary>
-    public static readonly string IdTokenToken = Utf8Constants.ToInternedString(IdTokenTokenUtf8);
+    public static string IdTokenToken { get; } = Utf8Constants.ToInternedString(IdTokenTokenUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="CodeIdTokenToken"/>.</summary>
     public static ReadOnlySpan<byte> CodeIdTokenTokenUtf8 => "code id_token token"u8;
 
     /// <summary>The <c>code id_token token</c> hybrid response type (OIDC Core 1.0 §3.3).</summary>
-    public static readonly string CodeIdTokenToken = Utf8Constants.ToInternedString(CodeIdTokenTokenUtf8);
+    public static string CodeIdTokenToken { get; } = Utf8Constants.ToInternedString(CodeIdTokenTokenUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="None"/>.</summary>
     public static ReadOnlySpan<byte> NoneUtf8 => "none"u8;
 
     /// <summary>The <c>none</c> response type (OAuth 2.0 Multiple Response Type Encoding Practices).</summary>
-    public static readonly string None = Utf8Constants.ToInternedString(NoneUtf8);
+    public static string None { get; } = Utf8Constants.ToInternedString(NoneUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="VpToken"/>.</summary>
     public static ReadOnlySpan<byte> VpTokenUtf8 => "vp_token"u8;
 
     /// <summary>The <c>vp_token</c> response type (OpenID for Verifiable Presentations).</summary>
-    public static readonly string VpToken = Utf8Constants.ToInternedString(VpTokenUtf8);
+    public static string VpToken { get; } = Utf8Constants.ToInternedString(VpTokenUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="CodeVpToken"/>.</summary>
     public static ReadOnlySpan<byte> CodeVpTokenUtf8 => "code vp_token"u8;
 
     /// <summary>The <c>code vp_token</c> response type (OpenID for Verifiable Presentations).</summary>
-    public static readonly string CodeVpToken = Utf8Constants.ToInternedString(CodeVpTokenUtf8);
+    public static string CodeVpToken { get; } = Utf8Constants.ToInternedString(CodeVpTokenUtf8);
 
 
     /// <summary>Whether <paramref name="value"/> is <see cref="Code"/>.</summary>

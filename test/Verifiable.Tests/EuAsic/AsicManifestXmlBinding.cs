@@ -411,8 +411,24 @@ public static class AsicManifestXmlBinding
         }
 
         List<AsicManifestExtension> extensions = [];
-        (AsicManifestParseStatus extensionsStatus, string extensionsReason) = ReadExtensions(
-            referenceElement.Element(DataObjectReferenceExtensionsElementName), limits, pool, extensions);
+        AsicManifestParseStatus extensionsStatus;
+        string extensionsReason;
+        try
+        {
+            (extensionsStatus, extensionsReason) = ReadExtensions(
+                referenceElement.Element(DataObjectReferenceExtensionsElementName), limits, pool, extensions);
+        }
+        catch
+        {
+            digest.Dispose();
+            foreach(AsicManifestExtension extension in extensions)
+            {
+                extension.Dispose();
+            }
+
+            throw;
+        }
+
         if(extensionsStatus != AsicManifestParseStatus.Valid)
         {
             digest.Dispose();
@@ -522,7 +538,9 @@ public static class AsicManifestXmlBinding
     /// <remarks>
     /// The length is checked against the algorithm rather than accepted as whatever decodes, because a digest
     /// of the wrong length can never equal a recomputation and the clause 4.4.4.2 item d comparison is
-    /// unconditional — a producer that stated one has stated something no verifier can act on.
+    /// unconditional — a producer that stated one has stated something no verifier can act on. The
+    /// <c>Trim</c>/<c>TryFromBase64String</c> call sits inside the method's own <c>try</c>, so an exception
+    /// from either is already caught and disposes <c>owner</c> before rethrowing.
     /// </remarks>
     private static DigestValue? ReadDigestValue(string value, PkiDigestAlgorithm algorithm, BaseMemoryPool pool)
     {

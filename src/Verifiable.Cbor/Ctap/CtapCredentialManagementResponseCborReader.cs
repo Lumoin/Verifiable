@@ -1,6 +1,6 @@
 using System;
 using System.Buffers;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Cbor.Fido2;
 using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
@@ -37,7 +37,7 @@ public static class CtapCredentialManagementResponseCborReader
     {
         try
         {
-            var reader = new CborReader(payload, CborConformanceMode.Ctap2Canonical);
+            var reader = new CborReader(payload, CborOptions.Ctap2Canonical, pool);
             int? entryCount = reader.ReadStartMap();
 
             int? existingResidentCredentialsCount = null;
@@ -114,7 +114,7 @@ public static class CtapCredentialManagementResponseCborReader
                 existingResidentCredentialsCount, maxPossibleRemainingResidentCredentialsCount, rp, rpIdHash, totalRps,
                 user, credentialId, publicKey, totalCredentials, credProtect, largeBlobKey);
         }
-        catch(Exception exception) when(exception is CborContentException or InvalidOperationException or OverflowException)
+        catch(Exception exception) when(exception is CborException or InvalidOperationException or OverflowException)
         {
             throw new Fido2FormatException("The authenticatorCredentialManagement response bytes are not valid CTAP2 canonical CBOR.", exception);
         }

@@ -38,22 +38,22 @@ internal sealed class CompositeClientIdSigningKeyResolverTests
     private static EncodeDelegate Encoder => TestSetup.Base64UrlEncoder;
     private static DecodeDelegate Decoder => TestSetup.Base64UrlDecoder;
 
-    private static readonly JwtHeaderSerializer JwtHeaderSerializer =
+    private static JwtHeaderSerializer JwtHeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)header, TestSetup.DefaultSerializationOptions);
 
-    private static readonly JwtPayloadSerializer JwtPayloadSerializer =
+    private static JwtPayloadSerializer JwtPayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)payload, TestSetup.DefaultSerializationOptions);
 
     /// <summary>Header deserializer mirroring the authorization server's wiring.</summary>
-    private static readonly JwtHeaderDeserializer HeaderDeserializer = static bytes =>
+    private static JwtHeaderDeserializer HeaderDeserializer { get; } = static bytes =>
         JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
             bytes, TestSetup.DefaultSerializationOptions)
         ?? throw new FormatException("Header JSON parsed to null.");
 
     /// <summary>Payload deserializer mirroring the authorization server's wiring.</summary>
-    private static readonly JwtPayloadDeserializer PayloadDeserializer = static bytes =>
+    private static JwtPayloadDeserializer PayloadDeserializer { get; } = static bytes =>
         JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
             bytes, TestSetup.DefaultSerializationOptions)
         ?? throw new FormatException("Payload JSON parsed to null.");
@@ -193,6 +193,9 @@ internal sealed class CompositeClientIdSigningKeyResolverTests
         }
         finally
         {
+            //trustAnchors is a collection of disposables, not one disposable value: a using declaration
+            //disposes one variable's own value, not a collection's elements, so this foreach is the
+            //release point.
             foreach(PkiCertificateMemory anchor in trustAnchors)
             {
                 anchor.Dispose();

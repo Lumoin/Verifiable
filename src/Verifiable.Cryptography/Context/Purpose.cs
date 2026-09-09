@@ -149,13 +149,13 @@ public readonly struct Purpose: IEquatable<Purpose>
     public static Purpose Salt { get; } = new Purpose(14);
 
 
-    private static List<Purpose> purposes { get; } = new([
+    private static List<Purpose> RegisteredPurposes { get; } = new([
         None, Verification, Signing, Exchange, Wrapped, Signature,
         Encryption, Nonce, Hmac, Digest, Transport, Data, Mac, Decrypted, Salt
     ]);
 
     /// <summary>Gets all registered purpose values.</summary>
-    public static IReadOnlyList<Purpose> Purposes => purposes.AsReadOnly();
+    public static IReadOnlyList<Purpose> Purposes => RegisteredPurposes.AsReadOnly();
 
 
     /// <summary>
@@ -166,16 +166,16 @@ public readonly struct Purpose: IEquatable<Purpose>
     /// <exception cref="ArgumentException">Thrown when the code already exists.</exception>
     public static Purpose Create(int code)
     {
-        for(int i = 0; i < purposes.Count; ++i)
+        for(int i = 0; i < RegisteredPurposes.Count; ++i)
         {
-            if(purposes[i].Code == code)
+            if(RegisteredPurposes[i].Code == code)
             {
                 throw new ArgumentException($"Purpose code {code} already exists.");
             }
         }
 
         var newPurpose = new Purpose(code);
-        purposes.Add(newPurpose);
+        RegisteredPurposes.Add(newPurpose);
         return newPurpose;
     }
 

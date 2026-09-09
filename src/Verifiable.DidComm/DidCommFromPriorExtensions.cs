@@ -299,7 +299,7 @@ public static class DidCommFromPriorExtensions
                     int i => i,
                     decimal m => (long)m,
                     double d => (long)d,
-                    _ => (long?)null
+                    _ => null
                 }
                 : null;
 

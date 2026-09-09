@@ -13,6 +13,8 @@ using Verifiable.Apdu.Lds;
 using Verifiable.Apdu.SecureMessaging;
 using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
+using Microsoft.Extensions.Time.Testing;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Apdu;
 
@@ -50,9 +52,9 @@ internal sealed class CardSimulatorTerminalAuthenticationAccessControlTests
     /// <summary>A minimal iris record (EF.DG4): the ISO/IEC 19794-6 format identifier "IIR\0", a version, and filler. A read-only span over static data, not a heap array.</summary>
     private static ReadOnlySpan<byte> IrisRecord => [0x49, 0x49, 0x52, 0x00, 0x30, 0x31, 0x30, 0x00, 0x11, 0x22, 0x33, 0x44];
 
-    private static readonly DateOnly Effective = new(2024, 1, 1);
-    private static readonly DateOnly Expiration = new(2026, 1, 1);
-    private static readonly DateOnly WithinValidity = new(2025, 1, 1);
+    private static DateOnly Effective { get; } = new(2024, 1, 1);
+    private static DateOnly Expiration { get; } = new(2026, 1, 1);
+    private static DateOnly WithinValidity { get; } = new(2025, 1, 1);
 
     private const byte CvcaRole = CardVerifiableCertificateMinter.CvcaRole;
     private const byte DocumentVerifierRole = CardVerifiableCertificateMinter.DocumentVerifierRole;
@@ -114,7 +116,7 @@ internal sealed class CardSimulatorTerminalAuthenticationAccessControlTests
         using PublicKeyMemory unusedCompressedPublicKey = terminalKeys.PublicKey;
         using EncodedEcPoint terminalPublicPoint = await terminalKeys.PrivateKey.WithKeyBytesAsync(
             static (scalar, state) => state.Generator(scalar, state.Curve, state.Pool, state.Token),
-            (Generator: multiplyGenerator, Curve: CryptoTags.P256ExchangePublicKey, Pool: (BaseMemoryPool)BaseMemoryPool.Shared, Token: TestContext.CancellationToken));
+            (Generator: multiplyGenerator, Curve: CryptoTags.P256ExchangePublicKey, Pool: BaseMemoryPool.Shared, Token: TestContext.CancellationToken));
         using PrivateKey terminalKey = CryptographicKeyFactory.CreatePrivateKey(terminalKeys.PrivateKey, "terminal-p256", terminalKeys.PrivateKey.Tag);
         using CardVerifiableCertificate terminal = CardVerifiableCertificateMinter.Mint(
             documentVerifierKey, terminalPublicPoint.AsReadOnlyMemory(), DocumentVerifierReference, TerminalReference, (byte)(TerminalRole | ReadDataGroup3 | ReadDataGroup4), Effective, Expiration, certificateCurve, BaseMemoryPool.Shared, TerminalType.InspectionSystem);
@@ -131,7 +133,7 @@ internal sealed class CardSimulatorTerminalAuthenticationAccessControlTests
 
         using var card = new CardSimulator(
             "passport-ta-injected-key", [efCom, dataGroup1, dataGroup14File, dataGroup3, dataGroup4],
-            chipAuthenticationKeys: [chipKey], terminalAuthenticationTrustAnchor: trustAnchor, terminalAuthenticationDate: WithinValidity);
+            chipAuthenticationKeys: [chipKey], terminalAuthenticationTrustAnchor: trustAnchor, terminalAuthenticationDate: WithinValidity, rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         using ApduDevice device = ApduDevice.Create(card.TransceiveAsync);
 
         (SecureMessagingSession bacSession, SymmetricKeyMemory accessEncryptionKey, SymmetricKeyMemory accessMacKey) =
@@ -272,7 +274,7 @@ internal sealed class CardSimulatorTerminalAuthenticationAccessControlTests
             [efCom, dataGroup1, dataGroup14File, dataGroup3, dataGroup4],
             chipAuthenticationKeys: [chipKey],
             terminalAuthenticationTrustAnchor: trustAnchor,
-            terminalAuthenticationDate: WithinValidity);
+            terminalAuthenticationDate: WithinValidity, rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         using ApduDevice device = ApduDevice.Create(card.TransceiveAsync);
 
         (SecureMessagingSession bacSession, SymmetricKeyMemory accessEncryptionKey, SymmetricKeyMemory accessMacKey) =

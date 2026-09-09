@@ -50,7 +50,9 @@ internal static class XmlCharacters
     /// <summary>
     /// Tells whether the code point is a legal XML character per production <c>Char</c> of
     /// <see href="https://www.w3.org/TR/2008/REC-xml-20081126/">XML 1.0 (Fifth Edition)</see> section 2.2:
-    /// <c>#x9 | #xA | #xD | [#x20-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF]</c>.
+    /// <c>#x9 | #xA | #xD | [#x20-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF]</c>. The boolean
+    /// expression below mirrors the production's own alternation one range at a time; a named predicate
+    /// per range would only rename the citation, not simplify it.
     /// </summary>
     /// <param name="codePoint">The Unicode code point to classify.</param>
     /// <returns><see langword="true"/> when the code point matches <c>Char</c>.</returns>
@@ -68,7 +70,8 @@ internal static class XmlCharacters
     /// <see href="https://www.w3.org/TR/2008/REC-xml-20081126/">XML 1.0 (Fifth Edition)</see> section 2.3
     /// with the colon removed, which is the first character of production <c>NCName</c> of
     /// <see href="https://www.w3.org/TR/2009/REC-xml-names-20091208/">Namespaces in XML 1.0 (Third Edition)</see>
-    /// section 3.
+    /// section 3. The boolean expression below mirrors the production's own alternation one range at a
+    /// time; a named predicate per range would only rename the citation, not simplify it.
     /// </summary>
     /// <param name="codePoint">The Unicode code point to classify.</param>
     /// <returns><see langword="true"/> when the code point may start an <c>NCName</c>.</returns>
@@ -96,7 +99,9 @@ internal static class XmlCharacters
     /// Tells whether the code point may continue a colon-free name, per production <c>NameChar</c> of
     /// <see href="https://www.w3.org/TR/2008/REC-xml-20081126/">XML 1.0 (Fifth Edition)</see> section 2.3
     /// with the colon removed: <c>NameStartChar | "-" | "." | [0-9] | #xB7 | [#x0300-#x036F] |
-    /// [#x203F-#x2040]</c>.
+    /// [#x203F-#x2040]</c>. The boolean expression below mirrors the production's own alternation one
+    /// alternative at a time; a named predicate per alternative would only rename the citation, not
+    /// simplify it.
     /// </summary>
     /// <param name="codePoint">The Unicode code point to classify.</param>
     /// <returns><see langword="true"/> when the code point may continue an <c>NCName</c>.</returns>
@@ -117,7 +122,9 @@ internal static class XmlCharacters
     /// <see href="https://www.rfc-editor.org/rfc/rfc3986#section-4.2">IETF RFC 3986 section 4.2</see>: a
     /// reference is absolute exactly when it begins with a <c>scheme ":"</c>, where <c>scheme</c> is
     /// <c>ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )</c> per section 3.1. The comparison is over exact
-    /// octets; nothing is normalized or resolved.
+    /// octets; nothing is normalized or resolved. The scheme-character check below mirrors the
+    /// <c>ALPHA / DIGIT / "+" / "-" / "."</c> alternation directly; a named predicate per alternative
+    /// would only rename the citation, not simplify it.
     /// </summary>
     /// <param name="uriReference">The URI reference octets.</param>
     /// <returns><see langword="true"/> when the reference carries a scheme.</returns>

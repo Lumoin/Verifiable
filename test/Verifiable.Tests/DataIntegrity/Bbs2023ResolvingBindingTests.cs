@@ -34,19 +34,19 @@ internal sealed class Bbs2023ResolvingBindingTests
     private const string IssuerDid = "did:example:bbs-issuer";
     private const string SignerKeyId = "did:example:bbs-issuer#key-1";
 
-    private static readonly DateTime ProofCreated = new(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+    private static DateTime ProofCreated { get; } = new(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
-    private static readonly byte[] PresentationHeader = [0x01, 0x02, 0x03, 0x04];
+    private static byte[] PresentationHeader { get; } = [0x01, 0x02, 0x03, 0x04];
 
     //Canonicalization/signing here is in-memory; a default context yields the
     //secure-default SSRF policy and satisfies the policy-carrying parameter.
-    private static readonly ExchangeContext EmptyContext = new();
+    private static ExchangeContext EmptyContext { get; } = new();
 
-    private static readonly CanonicalizationDelegate RdfcCanonicalizer = CanonicalizationTestUtilities.CreateRdfcCanonicalizer();
+    private static CanonicalizationDelegate RdfcCanonicalizer { get; } = CanonicalizationTestUtilities.CreateRdfcCanonicalizer();
 
-    private static readonly ContextResolverDelegate ContextResolver = CanonicalizationTestUtilities.CreateTestContextResolver();
+    private static ContextResolverDelegate ContextResolver { get; } = CanonicalizationTestUtilities.CreateTestContextResolver();
 
-    private static readonly IReadOnlyList<CredentialPath> MandatoryPaths =
+    private static IReadOnlyList<CredentialPath> MandatoryPaths { get; } =
     [
         CredentialPath.FromJsonPointer("/issuer")
     ];
@@ -378,7 +378,8 @@ internal sealed class Bbs2023ResolvingBindingTests
             issuerPublicKeyBytes,
             MulticodecHeaders.Bls12381G2PublicKey,
             MultibaseAlgorithms.Base58Btc,
-            TestSetup.Base58Encoder);
+            TestSetup.Base58Encoder,
+            BaseMemoryPool.Shared);
 
         return new DidDocument
         {
@@ -412,19 +413,19 @@ internal sealed class Bbs2023ResolvingBindingTests
     /// </summary>
     internal sealed class ResolvingBbsOperations: IDisposable
     {
-        private static readonly BbsCiphersuite Ciphersuite = BbsCiphersuite.Bls12Curve381Sha256;
+        private static BbsCiphersuite Ciphersuite { get; } = BbsCiphersuite.Bls12Curve381Sha256;
 
         //BBS secret keys, signatures, and proofs request AllocationKind.Native. The shared pool disallows
         //native degradation, so a dedicated pool that degrades Native to Pinned backs the BBS value types.
-        private readonly BaseMemoryPool keyPool;
-        private readonly ScalarArithmeticBackend scalarBackend;
-        private readonly G1ArithmeticBackend g1Backend;
-        private readonly G2ArithmeticBackend g2Backend;
-        private readonly PairingBackend pairingBackend;
-        private readonly ScalarHashToScalarDelegate hashToScalar;
-        private readonly G1HashToCurveDelegate hashToCurve;
-        private readonly BbsSecretKey secretKey;
-        private readonly BbsPublicKey publicKey;
+        private BaseMemoryPool KeyPool { get; }
+        private ScalarArithmeticBackend ScalarBackend { get; }
+        private G1ArithmeticBackend G1Backend { get; }
+        private G2ArithmeticBackend G2Backend { get; }
+        private PairingBackend PairingBackend { get; }
+        private ScalarHashToScalarDelegate HashToScalar { get; }
+        private G1HashToCurveDelegate HashToCurve { get; }
+        private BbsSecretKey SecretKey { get; }
+        private BbsPublicKey PublicKey { get; }
 
         private ResolvingBbsOperations(
             BaseMemoryPool keyPool,
@@ -437,15 +438,15 @@ internal sealed class Bbs2023ResolvingBindingTests
             BbsSecretKey secretKey,
             BbsPublicKey publicKey)
         {
-            this.keyPool = keyPool;
-            this.scalarBackend = scalarBackend;
-            this.g1Backend = g1Backend;
-            this.g2Backend = g2Backend;
-            this.pairingBackend = pairingBackend;
-            this.hashToScalar = hashToScalar;
-            this.hashToCurve = hashToCurve;
-            this.secretKey = secretKey;
-            this.publicKey = publicKey;
+            this.KeyPool = keyPool;
+            this.ScalarBackend = scalarBackend;
+            this.G1Backend = g1Backend;
+            this.G2Backend = g2Backend;
+            this.PairingBackend = pairingBackend;
+            this.HashToScalar = hashToScalar;
+            this.HashToCurve = hashToCurve;
+            this.SecretKey = secretKey;
+            this.PublicKey = publicKey;
         }
 
 
@@ -474,7 +475,7 @@ internal sealed class Bbs2023ResolvingBindingTests
         }
 
 
-        public byte[] PublicKeyBytes => publicKey.AsReadOnlySpan().ToArray();
+        public byte[] PublicKeyBytes => PublicKey.AsReadOnlySpan().ToArray();
 
 
         public byte[] Sign(ReadOnlyMemory<byte> bbsHeader, IReadOnlyList<byte[]> messages, BaseMemoryPool pool)
@@ -483,19 +484,19 @@ internal sealed class Bbs2023ResolvingBindingTests
             var bbsMessages = ToBbsMessages(messages);
 
             using var signature = BbsSigningExtensions.Sign(
-                secretKey,
-                publicKey,
+                SecretKey,
+                PublicKey,
                 header,
                 bbsMessages,
                 Rfc9380ExpandMessage.ExpandMessageXmdSha256,
-                hashToScalar,
-                scalarBackend.Add,
-                scalarBackend.Invert,
-                g1Backend.Add,
-                g1Backend.ScalarMultiply,
-                g1Backend.MultiScalarMultiply,
-                hashToCurve,
-                keyPool);
+                HashToScalar,
+                ScalarBackend.Add,
+                ScalarBackend.Invert,
+                G1Backend.Add,
+                G1Backend.ScalarMultiply,
+                G1Backend.MultiScalarMultiply,
+                HashToCurve,
+                KeyPool);
 
             return signature.AsReadOnlySpan().ToArray();
         }
@@ -507,9 +508,9 @@ internal sealed class Bbs2023ResolvingBindingTests
         {
             var header = new BbsHeader(bbsHeader);
             var bbsMessages = ToBbsMessages(messages);
-            using var signature = BbsSignature.FromCanonical(bbsSignature.Span, Ciphersuite, keyPool, BbsSignature.GetAlgebraicTag(Ciphersuite));
+            using var signature = BbsSignature.FromCanonical(bbsSignature.Span, Ciphersuite, KeyPool, BbsSignature.GetAlgebraicTag(Ciphersuite));
 
-            return VerifyAgainst(publicKey, signature, header, bbsMessages);
+            return VerifyAgainst(PublicKey, signature, header, bbsMessages);
         }
 
 
@@ -520,10 +521,10 @@ internal sealed class Bbs2023ResolvingBindingTests
         {
             return (bbsSignature, bbsHeader, messages, pool) =>
             {
-                using var resolvedPublicKey = BbsPublicKey.FromCanonical(issuerPublicKey.Span, Ciphersuite, keyPool, BbsPublicKey.GetAlgebraicTag(Ciphersuite));
+                using var resolvedPublicKey = BbsPublicKey.FromCanonical(issuerPublicKey.Span, Ciphersuite, KeyPool, BbsPublicKey.GetAlgebraicTag(Ciphersuite));
                 var header = new BbsHeader(bbsHeader);
                 var bbsMessages = ToBbsMessages(messages);
-                using var signature = BbsSignature.FromCanonical(bbsSignature.Span, Ciphersuite, keyPool, BbsSignature.GetAlgebraicTag(Ciphersuite));
+                using var signature = BbsSignature.FromCanonical(bbsSignature.Span, Ciphersuite, KeyPool, BbsSignature.GetAlgebraicTag(Ciphersuite));
 
                 return VerifyAgainst(resolvedPublicKey, signature, header, bbsMessages);
             };
@@ -542,30 +543,30 @@ internal sealed class Bbs2023ResolvingBindingTests
             var ph = new BbsPresentationHeader(presentationHeader);
             var bbsMessages = ToBbsMessages(messages);
 
-            using var signature = BbsSignature.FromCanonical(bbsSignature.Span, Ciphersuite, keyPool, BbsSignature.GetAlgebraicTag(Ciphersuite));
+            using var signature = BbsSignature.FromCanonical(bbsSignature.Span, Ciphersuite, KeyPool, BbsSignature.GetAlgebraicTag(Ciphersuite));
 
             using var proof = BbsProofGenerationExtensions.GenerateProof(
                 signature,
-                publicKey,
+                PublicKey,
                 header,
                 ph,
                 bbsMessages,
                 disclosedIndexes.ToArray(),
                 Rfc9380ExpandMessage.ExpandMessageXmdSha256,
-                hashToScalar,
-                scalarBackend.Add,
-                scalarBackend.Subtract,
-                scalarBackend.Multiply,
-                scalarBackend.Negate,
-                scalarBackend.Invert,
-                scalarBackend.Random,
-                g1Backend.Add,
-                g1Backend.ScalarMultiply,
-                g1Backend.MultiScalarMultiply,
-                hashToCurve,
-                g1Backend.IsOnCurve!,
-                g1Backend.IsInPrimeOrderSubgroup!,
-                keyPool);
+                HashToScalar,
+                ScalarBackend.Add,
+                ScalarBackend.Subtract,
+                ScalarBackend.Multiply,
+                ScalarBackend.Negate,
+                ScalarBackend.Invert,
+                ScalarBackend.Random,
+                G1Backend.Add,
+                G1Backend.ScalarMultiply,
+                G1Backend.MultiScalarMultiply,
+                HashToCurve,
+                G1Backend.IsOnCurve!,
+                G1Backend.IsInPrimeOrderSubgroup!,
+                KeyPool);
 
             return proof.AsReadOnlySpan().ToArray();
         }
@@ -580,9 +581,9 @@ internal sealed class Bbs2023ResolvingBindingTests
             IReadOnlyList<int> disclosedIndexes,
             BaseMemoryPool pool)
         {
-            using var proof = BbsProof.FromCanonical(bbsProof.Span, Ciphersuite, keyPool, BbsProof.GetAlgebraicTag(Ciphersuite));
+            using var proof = BbsProof.FromCanonical(bbsProof.Span, Ciphersuite, KeyPool, BbsProof.GetAlgebraicTag(Ciphersuite));
 
-            return ProofVerifyAgainst(publicKey, proof, bbsHeader, presentationHeader, disclosedMessages, disclosedIndexes);
+            return ProofVerifyAgainst(PublicKey, proof, bbsHeader, presentationHeader, disclosedMessages, disclosedIndexes);
         }
 
 
@@ -591,8 +592,8 @@ internal sealed class Bbs2023ResolvingBindingTests
         {
             return (bbsProof, bbsHeader, presentationHeader, disclosedMessages, disclosedIndexes, pool) =>
             {
-                using var resolvedPublicKey = BbsPublicKey.FromCanonical(issuerPublicKey.Span, Ciphersuite, keyPool, BbsPublicKey.GetAlgebraicTag(Ciphersuite));
-                using var proof = BbsProof.FromCanonical(bbsProof.Span, Ciphersuite, keyPool, BbsProof.GetAlgebraicTag(Ciphersuite));
+                using var resolvedPublicKey = BbsPublicKey.FromCanonical(issuerPublicKey.Span, Ciphersuite, KeyPool, BbsPublicKey.GetAlgebraicTag(Ciphersuite));
+                using var proof = BbsProof.FromCanonical(bbsProof.Span, Ciphersuite, KeyPool, BbsProof.GetAlgebraicTag(Ciphersuite));
 
                 return ProofVerifyAgainst(resolvedPublicKey, proof, bbsHeader, presentationHeader, disclosedMessages, disclosedIndexes);
             };
@@ -607,18 +608,18 @@ internal sealed class Bbs2023ResolvingBindingTests
                 header,
                 bbsMessages,
                 Rfc9380ExpandMessage.ExpandMessageXmdSha256,
-                hashToScalar,
-                g1Backend.Add,
-                g1Backend.MultiScalarMultiply,
-                hashToCurve,
-                g1Backend.IsOnCurve!,
-                g1Backend.IsInPrimeOrderSubgroup!,
-                g2Backend.Add,
-                g2Backend.ScalarMultiply,
-                g2Backend.IsOnCurve,
-                g2Backend.IsInPrimeOrderSubgroup,
-                pairingBackend.Pairing,
-                keyPool);
+                HashToScalar,
+                G1Backend.Add,
+                G1Backend.MultiScalarMultiply,
+                HashToCurve,
+                G1Backend.IsOnCurve!,
+                G1Backend.IsInPrimeOrderSubgroup!,
+                G2Backend.Add,
+                G2Backend.ScalarMultiply,
+                G2Backend.IsOnCurve,
+                G2Backend.IsInPrimeOrderSubgroup,
+                PairingBackend.Pairing,
+                KeyPool);
         }
 
 
@@ -642,18 +643,18 @@ internal sealed class Bbs2023ResolvingBindingTests
                 bbsMessages,
                 disclosedIndexes.ToArray(),
                 Rfc9380ExpandMessage.ExpandMessageXmdSha256,
-                hashToScalar,
-                g1Backend.Add,
-                g1Backend.MultiScalarMultiply,
-                hashToCurve,
-                g1Backend.IsOnCurve!,
-                g1Backend.IsInPrimeOrderSubgroup!,
-                g2Backend.Add,
-                g2Backend.ScalarMultiply,
-                g2Backend.IsOnCurve,
-                g2Backend.IsInPrimeOrderSubgroup,
-                pairingBackend.Pairing,
-                keyPool);
+                HashToScalar,
+                G1Backend.Add,
+                G1Backend.MultiScalarMultiply,
+                HashToCurve,
+                G1Backend.IsOnCurve!,
+                G1Backend.IsInPrimeOrderSubgroup!,
+                G2Backend.Add,
+                G2Backend.ScalarMultiply,
+                G2Backend.IsOnCurve,
+                G2Backend.IsInPrimeOrderSubgroup,
+                PairingBackend.Pairing,
+                KeyPool);
         }
 
 
@@ -671,13 +672,13 @@ internal sealed class Bbs2023ResolvingBindingTests
 
         public void Dispose()
         {
-            secretKey.Dispose();
-            publicKey.Dispose();
-            scalarBackend.Dispose();
-            g1Backend.Dispose();
-            g2Backend.Dispose();
-            pairingBackend.Dispose();
-            keyPool.Dispose();
+            SecretKey.Dispose();
+            PublicKey.Dispose();
+            ScalarBackend.Dispose();
+            G1Backend.Dispose();
+            G2Backend.Dispose();
+            PairingBackend.Dispose();
+            KeyPool.Dispose();
         }
     }
 }

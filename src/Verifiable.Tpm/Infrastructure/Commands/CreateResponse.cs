@@ -11,7 +11,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// <remarks>
 /// <para>
 /// TPM2_Create has no response handle (the created object is not loaded). Its parameters are
-/// (Part 3, Section 12.1):
+/// (Part 3, clause 12.1):
 /// </para>
 /// <list type="bullet">
 ///   <item><description>outPrivate (TPM2B_PRIVATE) - the parent-wrapped sensitive area; persist this and reload with TPM2_Load.</description></item>

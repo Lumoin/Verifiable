@@ -26,9 +26,10 @@ public static class XAdESCounterSignatureChain
     /// <see cref="XmlReferenceProcessing.MaximumReparseDepth"/> already take for their own unbounded XMLDSIG-
     /// level constructs — chosen generously above any legitimate nesting a real deployment would produce (NOTE
     /// 2/3's own examples describe chains of a handful of hops) while remaining small enough that a hostile
-    /// document refuses well inside a loose ceiling: <c>XAdESCounterSignatureChainTests.DeepHostileChainRefusesWithinTheCeiling</c>
-    /// measures a 150-hop hostile chain (well beyond this bound) refusing at hop 65 in well under the test's
-    /// own five-second ceiling, dominated by parsing the fixture itself rather than the bounded walk.
+    /// document refuses well before doing unbounded work: <c>XAdESCounterSignatureChainTests.DeepHostileChainRefusesAfterOpeningExactlyMaximumChainNodeCountSignatures</c>
+    /// proves a 150-hop hostile chain (well beyond this bound) opens exactly this many nested signatures
+    /// before refusing the next one, counted by pool rents rather than by wall-clock time since parsing the
+    /// 150-hop fixture itself otherwise dominates any elapsed measurement.
     /// </summary>
     public const int MaximumChainNodeCount = 64;
 
@@ -63,6 +64,12 @@ public static class XAdESCounterSignatureChain
     }
 
 
+    /// <remarks>
+    /// <strong>Manual disposal, not a <see langword="using"/> declaration.</strong> <c>counterSignature</c> is
+    /// bound through <see cref="XAdESCounterSignature.TryRead"/>'s <see langword="out"/> parameter inside the
+    /// loop's own <see langword="try"/>, so it is declared <see langword="null"/> and disposed once per
+    /// iteration in the <see langword="finally"/> below.
+    /// </remarks>
     private static bool TryWalkCore(XmlNodeTable table, XmlSignature signature, BaseMemoryPool pool, ref int visitedCount, out XAdESProcessingError error)
     {
         if(!XAdESQualifyingPropertiesDiscovery.TryDiscover(table, signature, out XAdESQualifyingPropertiesDiscoveryResult discovery, out error))

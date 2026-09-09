@@ -42,7 +42,7 @@ internal sealed class JoseTests
             JwtWireFixtures.EncodeJwtPart,
             TestSetup.Base64UrlEncoder,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -57,7 +57,7 @@ internal sealed class JoseTests
             TestSetup.Base64UrlDecoder,
             BaseMemoryPool.Shared,
             publicKey,
-            MicrosoftCryptographicFunctions.VerifyP256Async,
+            MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "Signature verification should succeed.");
@@ -127,7 +127,7 @@ internal sealed class JoseTests
             JwtWireFixtures.EncodeJwtPart,
             TestSetup.Base64UrlEncoder,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP384Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP384Async,
             BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -138,7 +138,7 @@ internal sealed class JoseTests
             TestSetup.Base64UrlDecoder,
             BaseMemoryPool.Shared,
             publicKey,
-            MicrosoftCryptographicFunctions.VerifyP384Async,
+            MicrosoftCryptographicFunctionsAdapter.VerifyP384Async,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "P-384 signature verification should succeed.");
@@ -161,7 +161,7 @@ internal sealed class JoseTests
             JwtWireFixtures.EncodeJwtPart,
             TestSetup.Base64UrlEncoder,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP521Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP521Async,
             BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -172,7 +172,7 @@ internal sealed class JoseTests
             TestSetup.Base64UrlDecoder,
             BaseMemoryPool.Shared,
             publicKey,
-            MicrosoftCryptographicFunctions.VerifyP521Async,
+            MicrosoftCryptographicFunctionsAdapter.VerifyP521Async,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "P-521 signature verification should succeed.");
@@ -201,7 +201,7 @@ internal sealed class JoseTests
             JwtWireFixtures.EncodeJwtPart,
             TestSetup.Base64UrlEncoder,
             signingPrivateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -212,7 +212,7 @@ internal sealed class JoseTests
             TestSetup.Base64UrlDecoder,
             BaseMemoryPool.Shared,
             wrongPublicKey,
-            MicrosoftCryptographicFunctions.VerifyP256Async,
+            MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(isValid, "Verification with wrong key should fail.");
@@ -244,7 +244,7 @@ internal sealed class JoseTests
             JwtWireFixtures.EncodeJwtPart,
             TestSetup.Base64UrlEncoder,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -282,7 +282,7 @@ internal sealed class JoseTests
             JwtWireFixtures.EncodeJwtPart,
             TestSetup.Base64UrlEncoder,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -327,7 +327,7 @@ internal sealed class JoseTests
             JwtWireFixtures.EncodeJwtPart,
             TestSetup.Base64UrlEncoder,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -382,7 +382,7 @@ internal sealed class JoseTests
             JwtWireFixtures.EncodeJwtPart,
             TestSetup.Base64UrlEncoder,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -503,7 +503,7 @@ internal sealed class JoseTests
         int state,
         CancellationToken cancellationToken)
     {
-        return ValueTask.FromResult(new PrivateKey(material, "test-key", MicrosoftCryptographicFunctions.SignP256Async));
+        return ValueTask.FromResult(new PrivateKey(material, "test-key", MicrosoftCryptographicFunctionsAdapter.SignP256Async));
     }
 
 
@@ -517,7 +517,7 @@ internal sealed class JoseTests
         int state,
         CancellationToken cancellationToken)
     {
-        return ValueTask.FromResult(new PublicKey(material, "test-key", MicrosoftCryptographicFunctions.VerifyP256Async));
+        return ValueTask.FromResult(new PublicKey(material, "test-key", MicrosoftCryptographicFunctionsAdapter.VerifyP256Async));
     }
 
 

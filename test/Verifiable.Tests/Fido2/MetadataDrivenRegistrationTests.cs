@@ -1,7 +1,9 @@
+using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using Verifiable.Cbor;
 using Verifiable.Cbor.Fido2;
 using Verifiable.Cbor.Mdoc;
 using Verifiable.Core;
@@ -13,6 +15,7 @@ using Verifiable.Json;
 using Verifiable.Microsoft;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Fido2;
 
@@ -79,39 +82,36 @@ internal sealed class MetadataDrivenRegistrationTests
             resolvePreviousSerialNumber: serialNumberStore.ResolveAsync,
             persistVerifiedBlob: serialNumberStore.PersistAsync);
         Assert.IsInstanceOfType<VerifiedMetadataBlobResult>(blobResult);
-        MetadataBlob blob = ((VerifiedMetadataBlobResult)blobResult).Blob;
+        using MetadataBlob blob = ((VerifiedMetadataBlobResult)blobResult).Blob;
+
+        Assert.HasCount(1, serialNumberStore.Persisted);
+        Assert.AreEqual(DefaultTenantId, serialNumberStore.Persisted[0].TenantId);
+        Assert.AreEqual(blob.Payload.No, serialNumberStore.Persisted[0].SerialNumber);
+
+        Assert.IsTrue(MetadataBlobPayloadQueries.TryFindEntryByAaguid(blob.Payload, fixture.Aaguid, out MetadataBlobPayloadEntry? entry));
+        MetadataStatusEvaluation evaluation = MetadataBlobPayloadQueries.EvaluateStatus(entry!);
+        Assert.IsTrue(evaluation.Accepted);
+
+        //trustAnchors is a collection of disposables, not one disposable value: a using declaration
+        //disposes one variable's own value, not a collection's elements, so the foreach below in the
+        //finally block is the release point.
+        IReadOnlyList<PkiCertificateMemory> trustAnchors = MetadataBlobPayloadQueries.GetAttestationTrustAnchors(entry!, BaseMemoryPool.Shared);
         try
         {
-            Assert.HasCount(1, serialNumberStore.Persisted);
-            Assert.AreEqual(DefaultTenantId, serialNumberStore.Persisted[0].TenantId);
-            Assert.AreEqual(blob.Payload.No, serialNumberStore.Persisted[0].SerialNumber);
+            Assert.HasCount(1, trustAnchors);
 
-            Assert.IsTrue(MetadataBlobPayloadQueries.TryFindEntryByAaguid(blob.Payload, fixture.Aaguid, out MetadataBlobPayloadEntry? entry));
-            MetadataStatusEvaluation evaluation = MetadataBlobPayloadQueries.EvaluateStatus(entry!);
-            Assert.IsTrue(evaluation.Accepted);
+            Fido2RegistrationOutcome outcome = await RunRegistrationAsync(fixture, trustAnchors);
 
-            IReadOnlyList<PkiCertificateMemory> trustAnchors = MetadataBlobPayloadQueries.GetAttestationTrustAnchors(entry!, BaseMemoryPool.Shared);
-            try
-            {
-                Assert.HasCount(1, trustAnchors);
-
-                Fido2RegistrationOutcome outcome = await RunRegistrationAsync(fixture, trustAnchors);
-
-                Assert.IsInstanceOfType<CertifiedAttestationResult>(outcome.AttestationResult);
-                Assert.IsTrue(outcome.IsAcceptable);
-                outcome.CredentialRecord?.Dispose();
-            }
-            finally
-            {
-                foreach(PkiCertificateMemory anchor in trustAnchors)
-                {
-                    anchor.Dispose();
-                }
-            }
+            Assert.IsInstanceOfType<CertifiedAttestationResult>(outcome.AttestationResult);
+            Assert.IsTrue(outcome.IsAcceptable);
+            outcome.CredentialRecord?.Dispose();
         }
         finally
         {
-            blob.Dispose();
+            foreach(PkiCertificateMemory anchor in trustAnchors)
+            {
+                anchor.Dispose();
+            }
         }
     }
 
@@ -132,26 +132,20 @@ internal sealed class MetadataDrivenRegistrationTests
 
         MetadataBlobResult blobResult = await VerifyBlobAsync(fixture.BlobBytes, fixture.MdsRootPki);
         Assert.IsInstanceOfType<VerifiedMetadataBlobResult>(blobResult);
-        MetadataBlob blob = ((VerifiedMetadataBlobResult)blobResult).Blob;
-        try
-        {
-            Assert.IsTrue(MetadataBlobPayloadQueries.TryFindEntryByAaguid(blob.Payload, fixture.Aaguid, out MetadataBlobPayloadEntry? entry));
-            MetadataStatusEvaluation evaluation = MetadataBlobPayloadQueries.EvaluateStatus(entry!);
-            Assert.IsFalse(evaluation.Accepted);
+        using MetadataBlob blob = ((VerifiedMetadataBlobResult)blobResult).Blob;
 
-            //A correct relying party gates on Accepted and never calls GetAttestationTrustAnchors
-            //here; the registration below is run with no anchors at all, the exact shape the gate
-            //produces, and rejects for that reason specifically.
-            Fido2RegistrationOutcome outcome = await RunRegistrationAsync(fixture, []);
+        Assert.IsTrue(MetadataBlobPayloadQueries.TryFindEntryByAaguid(blob.Payload, fixture.Aaguid, out MetadataBlobPayloadEntry? entry));
+        MetadataStatusEvaluation evaluation = MetadataBlobPayloadQueries.EvaluateStatus(entry!);
+        Assert.IsFalse(evaluation.Accepted);
 
-            Assert.IsInstanceOfType<RejectedAttestationResult>(outcome.AttestationResult);
-            Assert.AreEqual(Fido2AttestationErrors.NoTrustAnchors.Code, ((RejectedAttestationResult)outcome.AttestationResult).Error.Code);
-            Assert.IsFalse(outcome.IsAcceptable);
-        }
-        finally
-        {
-            blob.Dispose();
-        }
+        //A correct relying party gates on Accepted and never calls GetAttestationTrustAnchors
+        //here; the registration below is run with no anchors at all, the exact shape the gate
+        //produces, and rejects for that reason specifically.
+        Fido2RegistrationOutcome outcome = await RunRegistrationAsync(fixture, []);
+
+        Assert.IsInstanceOfType<RejectedAttestationResult>(outcome.AttestationResult);
+        Assert.AreEqual(Fido2AttestationErrors.NoTrustAnchors.Code, ((RejectedAttestationResult)outcome.AttestationResult).Error.Code);
+        Assert.IsFalse(outcome.IsAcceptable);
     }
 
 
@@ -256,19 +250,7 @@ internal sealed class MetadataDrivenRegistrationTests
             authenticatorDataOverride: authenticatorData,
             expectedRpIdHash: fixture.RpIdHash);
 
-        return await Fido2RegistrationVerifier.VerifyAsync(
-            WellKnownWebAuthnAttestationFormats.Packed,
-            parts.AttestationStatement,
-            fixture.AuthenticatorDataBytes,
-            fixture.ClientDataJsonBytes,
-            ceremonyInput,
-            selectVerifier,
-            AlwaysUnique,
-            trustAnchors,
-            ValidationTime,
-            CorrelationId,
-            BaseMemoryPool.Shared,
-            cancellationToken: TestContext.CancellationToken);
+        return await Fido2RegistrationVerifier.VerifyAsync(WellKnownWebAuthnAttestationFormats.Packed, parts.AttestationStatement, fixture.AuthenticatorDataBytes, fixture.ClientDataJsonBytes, ceremonyInput, selectVerifier, AlwaysUnique, trustAnchors, ValidationTime, CorrelationId, BaseMemoryPool.Shared, new FakeTimeProvider(TestClock.CanonicalEpoch), cancellationToken: TestContext.CancellationToken);
     }
 
 
@@ -370,7 +352,9 @@ internal sealed class MetadataDrivenRegistrationTests
     /// </summary>
     private static byte[] EncodeAttestationObject(string format, byte[] attStmtCbor, byte[] authData)
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(3);
         writer.WriteTextString("fmt");
         writer.WriteTextString(format);
@@ -380,7 +364,7 @@ internal sealed class MetadataDrivenRegistrationTests
         writer.WriteByteString(authData);
         writer.WriteEndMap();
 
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -390,7 +374,9 @@ internal sealed class MetadataDrivenRegistrationTests
     /// </summary>
     private static byte[] EncodePackedAttStmt(int alg, byte[] sig, IReadOnlyList<byte[]> x5c)
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(3);
         writer.WriteTextString("alg");
         writer.WriteInt32(alg);
@@ -406,7 +392,7 @@ internal sealed class MetadataDrivenRegistrationTests
         writer.WriteEndArray();
         writer.WriteEndMap();
 
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 }
 

@@ -207,6 +207,8 @@ public static partial class TcgEventLogReader
         }
         catch
         {
+            //The Windows TBS event log API is a platform boundary; any failure surfaces as a transport
+            //error rather than an escaping exception, releasing the rental it may have made.
             memoryOwner?.Dispose();
             return TpmResult<TcgEventLogData>.TransportError((uint)TbsResult.TBS_E_INTERNAL_ERROR);
         }
@@ -374,7 +376,8 @@ public static partial class TcgEventLogReader
     }
 
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership transferred to TcgEventLogData and then to caller.")]
-    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "<Pending>")]
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types",
+        Justification = "stream is a platform-supplied handle to an event log file of unknown provenance; any read failure surfaces as a transport error rather than an escaping exception, releasing the rental it made.")]
     private static TpmResult<TcgEventLogData> ReadFromStream(Stream stream, BaseMemoryPool pool)
     {
         //Read in chunks to avoid large single allocation for unknown-size streams.
@@ -424,6 +427,8 @@ public static partial class TcgEventLogReader
         }
         catch
         {
+            //See this method's own SuppressMessage rationale: any read failure over the stream releases
+            //the rental it made and surfaces as an I/O transport error.
             memoryOwner.Dispose();
             return TpmResult<TcgEventLogData>.TransportError((uint)LinuxErrno.EIO);
         }

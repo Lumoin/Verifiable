@@ -484,14 +484,9 @@ public static class EArkEvidenceWellKnown
         {
             //A rune is admitted when a two-character name starting with a letter and continuing with it is an
             //NCName: that asks exactly the NameChar question, without restating the production here.
-            if(MetsWellKnown.IsNCName(NameStartCharacter + rune.ToString()))
-            {
-                _ = builder.Append(rune);
-            }
-            else
-            {
-                _ = builder.Append(FoldedCharacter);
-            }
+            _ = MetsWellKnown.IsNCName(NameStartCharacter + rune)
+                ? builder.Append(rune)
+                : builder.Append(FoldedCharacter);
         }
 
         return builder.ToString();

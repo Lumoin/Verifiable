@@ -3,8 +3,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Lumoin.Base;
+using Microsoft.Extensions.Time.Testing;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Cbom;
 
@@ -40,10 +42,10 @@ internal sealed class CryptoEventProvenanceTests
     {
         CryptoEvent[] events =
         [
-            KeyMaterialGeneratedEvent.Create(CryptoAlgorithm.P256, Purpose.Signing, MaterialSemantics.Direct, "Microsoft"),
-            SignatureProducedEvent.Create(CryptoAlgorithm.P256, dataLength: 32, signatureLength: 64, "Microsoft"),
-            SignatureProducedEvent.Create(CryptoAlgorithm.P256, dataLength: 48, signatureLength: 64, "Microsoft"),
-            VerificationCompletedEvent.Create(CryptoAlgorithm.P256, VerificationOutcome.Valid, dataLength: 32, "Microsoft")
+            KeyMaterialGeneratedEvent.Create(CryptoAlgorithm.P256, Purpose.Signing, MaterialSemantics.Direct, "Microsoft", timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch)),
+            SignatureProducedEvent.Create(CryptoAlgorithm.P256, dataLength: 32, signatureLength: 64, "Microsoft", timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch)),
+            SignatureProducedEvent.Create(CryptoAlgorithm.P256, dataLength: 48, signatureLength: 64, "Microsoft", timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch)),
+            VerificationCompletedEvent.Create(CryptoAlgorithm.P256, VerificationOutcome.Valid, dataLength: 32, "Microsoft", timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch))
         ];
 
         string summary = CryptoEventProvenance.RenderSummary(events);
@@ -67,8 +69,8 @@ internal sealed class CryptoEventProvenanceTests
     {
         CryptoEvent[] events =
         [
-            EntropyConsumedEvent.Create(EntropySource.Csprng, byteCount: 16, Purpose.Nonce, EntropyHealthObservation.Unknown),
-            DigestComputedEvent.Create("SHA-256", inputLength: 10, digestLength: 32, Purpose.Digest)
+            EntropyConsumedEvent.Create(EntropySource.Csprng, byteCount: 16, Purpose.Nonce, EntropyHealthObservation.Unknown, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch)),
+            DigestComputedEvent.Create("SHA-256", inputLength: 10, digestLength: 32, Purpose.Digest, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch))
         ];
 
         string[] lines = CryptoEventProvenance.RenderSummary(events).Split(Environment.NewLine);

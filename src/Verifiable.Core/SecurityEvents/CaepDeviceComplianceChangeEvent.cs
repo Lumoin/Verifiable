@@ -13,13 +13,13 @@ public static class CaepDeviceComplianceClaimNames
     public static ReadOnlySpan<byte> PreviousStatusUtf8 => "previous_status"u8;
 
     /// <summary><c>previous_status</c> — REQUIRED; the status prior to the change.</summary>
-    public static readonly string PreviousStatus = Utf8Constants.ToInternedString(PreviousStatusUtf8);
+    public static string PreviousStatus { get; } = Utf8Constants.ToInternedString(PreviousStatusUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="CurrentStatus"/>.</summary>
     public static ReadOnlySpan<byte> CurrentStatusUtf8 => "current_status"u8;
 
     /// <summary><c>current_status</c> — REQUIRED; the status that triggered the event.</summary>
-    public static readonly string CurrentStatus = Utf8Constants.ToInternedString(CurrentStatusUtf8);
+    public static string CurrentStatus { get; } = Utf8Constants.ToInternedString(CurrentStatusUtf8);
 }
 
 
@@ -32,13 +32,13 @@ public static class CaepComplianceStatusValues
     public static ReadOnlySpan<byte> CompliantUtf8 => "compliant"u8;
 
     /// <summary><c>compliant</c>.</summary>
-    public static readonly string Compliant = Utf8Constants.ToInternedString(CompliantUtf8);
+    public static string Compliant { get; } = Utf8Constants.ToInternedString(CompliantUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="NotCompliant"/>.</summary>
     public static ReadOnlySpan<byte> NotCompliantUtf8 => "not-compliant"u8;
 
     /// <summary><c>not-compliant</c>.</summary>
-    public static readonly string NotCompliant = Utf8Constants.ToInternedString(NotCompliantUtf8);
+    public static string NotCompliant { get; } = Utf8Constants.ToInternedString(NotCompliantUtf8);
 
 
     /// <summary>Whether <paramref name="value"/> is one of the two allowed values.</summary>

@@ -58,6 +58,13 @@ public static class KeriIssuerAnchors
     /// caller replaying an untrusted KEL cannot be made to crash on hostile input it forgot to guard. Only argument
     /// and cancellation faults surface as exceptions.
     /// </returns>
+    /// <remarks>
+    /// <strong>Manual disposal, not a <see langword="using"/> declaration.</strong> <c>owned</c> accumulates
+    /// one pooled buffer owner per <see cref="Utf8(string, BaseMemoryPool, List{IDisposable})"/> call across
+    /// the whole event loop — a collection of disposables, not one disposable value — so the
+    /// <see langword="finally"/> below disposes every entry once the replay (successful or not) is done with
+    /// them.
+    /// </remarks>
     public static async Task<KeriIssuerAnchorReplayResult> ReplayAsync(
         IReadOnlyList<KeriKelEvent> events,
         KeriEventFieldMapDecoder decodeFieldMap,

@@ -10,7 +10,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Response parameters (TPM 2.0 Part 3, Section 23.6):
+/// Response parameters (TPM 2.0 Library Part 3, clause 23.6):
 /// </para>
 /// <list type="bullet">
 ///   <item><description>policyDigest (TPM2B_DIGEST): The current policy digest of the session.</description></item>

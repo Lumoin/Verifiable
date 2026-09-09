@@ -13,6 +13,8 @@ using Verifiable.Tpm.Infrastructure.Sessions;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
+using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -26,12 +28,11 @@ namespace Verifiable.Tests.Tpm;
 /// </summary>
 /// <remarks>
 /// <para>
-/// A simulator gap this package surfaced was fixed alongside this coverage: <c>TpmLifecycleTransitions.OnFlushContext</c>
-/// checked <c>PolicySessions</c>, <c>HmacSessions</c>, and <c>TransientObjects</c> for the flushed handle but never
-/// <c>LoadedSealedObjects</c> — the dictionary a loaded sealed KEYEDHASH object actually lives in
-/// (<c>OnObjectLoaded</c>) — so <c>TPM2_FlushContext</c> against a loaded sealed object's handle always rejected
-/// with <c>TPM_RC_HANDLE</c> (every pre-existing seal flow test discarded the flush's result, masking it).
-/// <c>OnFlushContext</c> now removes the sealed-object entry;
+/// <c>TPM2_FlushContext()</c> checks <c>PolicySessions</c>, <c>HmacSessions</c>, <c>TransientObjects</c>, and
+/// <c>LoadedKeyedHashObjects</c> for the flushed handle — the last of these is the dictionary a loaded sealed
+/// KEYEDHASH object lives in, so <c>TPM2_FlushContext</c> against a loaded sealed object's handle succeeds and
+/// removes that entry, rather than rejecting with <c>TPM_RC_HANDLE</c> as it would for a handle in none of the
+/// four tables.
 /// <see cref="FlushContextReleasesALoadedSealedObjectHandle"/> is the regression proof, and
 /// <see cref="RepeatedSealUnsealCyclesThroughTheVerbsSucceedWithNoAccumulatingFailure"/> remains the verb-level
 /// bracket proof. The verbs never propagate the flush's own outcome into the returned Unseal result (Part 3,
@@ -49,7 +50,8 @@ internal sealed class TpmSealExtensionsTests
 
     /// <summary>
     /// The PCR(s) the policy-gated arm binds to. PCR 23 is the application/debug register, reset to the
-    /// all-zero image (TPM 2.0 Library Part 1, clause 17.5.3), keeping the test off the boot-measured registers.
+    /// all-zero image (TPM 2.0 Library Part 1, clause 14.1 (Initializing PCR)), keeping the test off the
+    /// boot-measured registers.
     /// </summary>
     private static int[] PcrIndices { get; } = [23];
 
@@ -86,7 +88,7 @@ internal sealed class TpmSealExtensionsTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, pool).ConfigureAwait(false);
         uint parentHandle = parent.ObjectHandle.Value;
@@ -139,7 +141,7 @@ internal sealed class TpmSealExtensionsTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, pool).ConfigureAwait(false);
         uint parentHandle = parent.ObjectHandle.Value;
@@ -188,7 +190,7 @@ internal sealed class TpmSealExtensionsTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         using CreatePrimaryResponse parent = await CreatePasswordProtectedStorageParentAsync(
             tpm, pool, ParentAuthPassword, noDa: false).ConfigureAwait(false);
@@ -224,7 +226,7 @@ internal sealed class TpmSealExtensionsTests
     /// (session index 0, the only session that command carries) with the session-index-encoded
     /// <c>TPM_RC_AUTH_FAIL</c> the simulator returns for a DA-protected parent's authValue mismatch (Part 2,
     /// clause 6.6.2), and charges the shared dictionary-attack <c>LockoutCounter</c> exactly once (Part 1,
-    /// clause 17.8.7). A follow-up <c>UnsealAsync</c> call with the CORRECT parentAuth against the same
+    /// clause 16.8.7). A follow-up <c>UnsealAsync</c> call with the CORRECT parentAuth against the same
     /// <see cref="TpmSealedBlob"/> and parent handle still recovers the secret, showing the failed Load
     /// attempt left nothing behind that blocks a subsequent legitimate cycle.
     /// </summary>
@@ -233,7 +235,7 @@ internal sealed class TpmSealExtensionsTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         using CreatePrimaryResponse parent = await CreatePasswordProtectedStorageParentAsync(
             tpm, pool, ParentAuthPassword, noDa: false).ConfigureAwait(false);
@@ -263,7 +265,7 @@ internal sealed class TpmSealExtensionsTests
             Assert.IsTrue(afterWrong.IsSuccess, $"GetDictionaryAttackParameters (after wrong) failed: '{afterWrong.ResponseCode}'.");
             Assert.AreEqual(
                 before.Value.LockoutCounter + 1, afterWrong.Value.LockoutCounter,
-                "A wrong parentAuth against a DA-protected storage parent must charge failedTries exactly once (TPM 2.0 Library Part 1, clause 17.8.7).");
+                "A wrong parentAuth against a DA-protected storage parent must charge failedTries exactly once (TPM 2.0 Library Part 1, clause 16.8.7).");
 
             TpmResult<UnsealResponse> correctResult = await tpm.UnsealAsync(
                 parentHandle, ParentAuthPasswordBytes, sealedBlob, SealAuthBytes,
@@ -296,7 +298,7 @@ internal sealed class TpmSealExtensionsTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, pool).ConfigureAwait(false);
         uint parentHandle = parent.ObjectHandle.Value;
@@ -339,7 +341,7 @@ internal sealed class TpmSealExtensionsTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, pool).ConfigureAwait(false);
         uint parentHandle = parent.ObjectHandle.Value;
@@ -419,7 +421,7 @@ internal sealed class TpmSealExtensionsTests
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, pool).ConfigureAwait(false);
         uint parentHandle = parent.ObjectHandle.Value;
@@ -455,10 +457,10 @@ internal sealed class TpmSealExtensionsTests
     }
 
     /// <summary>
-    /// Regression proof for the <c>OnFlushContext</c> sealed-object arm (TPM 2.0 Library Part 3, clause 28.4):
+    /// Regression proof for <c>TPM2_FlushContext()</c>'s sealed-object handling (TPM 2.0 Library Part 3, clause 28.4):
     /// a sealed object loaded with <c>TPM2_Load</c> is flushable — the first <c>TPM2_FlushContext</c> against its
-    /// handle succeeds (pre-fix it rejected with <c>TPM_RC_HANDLE</c>, because the transition never consulted the
-    /// <c>LoadedSealedObjects</c> table), and a second flush of the same handle rejects with <c>TPM_RC_HANDLE</c>,
+    /// handle succeeds (the transition consults the <c>LoadedKeyedHashObjects</c> table), and a second flush of
+    /// the same handle rejects with <c>TPM_RC_HANDLE</c>,
     /// proving the entry was actually removed rather than merely acknowledged.
     /// </summary>
     [TestMethod]
@@ -466,7 +468,7 @@ internal sealed class TpmSealExtensionsTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_Load, TpmResponseCodec.Load);
@@ -501,13 +503,13 @@ internal sealed class TpmSealExtensionsTests
                 itemHandle, TestContext.CancellationToken).ConfigureAwait(false);
             Assert.IsTrue(
                 firstFlush.IsSuccess,
-                $"FlushContext of a loaded sealed object must succeed, got '{firstFlush.ResponseCode}' (the pre-fix transition answered TPM_RC_HANDLE).");
+                $"FlushContext of a loaded sealed object must succeed, got '{firstFlush.ResponseCode}'.");
 
             TpmResult<FlushContextResponse> secondFlush = await tpm.FlushContextAsync(
                 itemHandle, TestContext.CancellationToken).ConfigureAwait(false);
             Assert.IsFalse(secondFlush.IsSuccess, "A second flush of the same handle must reject — the entry must actually be gone.");
             Assert.AreEqual(
-                TpmRcConstants.TPM_RC_HANDLE,
+                HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_HANDLE, 0),
                 secondFlush.ResponseCode,
                 "The already-flushed handle must reject with TPM_RC_HANDLE (Part 3, clause 28.4).");
         }
@@ -543,7 +545,7 @@ internal sealed class TpmSealExtensionsTests
     /// Strips the format-one session-index modifier bits (<c>TPM_RC_P</c>/<c>TPM_RC_S</c>/<c>TPM_RC_N_MASK</c>)
     /// from a response code, the same normalization <see cref="TpmInHouseSimulatorPcrSealTests"/> applies before
     /// comparing a session-encoded rejection to its base <see cref="TpmRcConstants"/> value (TPM 2.0 Library
-    /// Part 2, Section 6.6.3).
+    /// Part 2, clause 6.6.3).
     /// </summary>
     /// <param name="responseCode">The raw response code.</param>
     /// <returns>The base error code.</returns>
@@ -687,7 +689,7 @@ internal sealed class TpmSealExtensionsTests
     /// <returns>The operational simulator.</returns>
     private async Task<TpmSimulator> CreateOperationalAsync(BaseMemoryPool pool)
     {
-        var simulator = new TpmSimulator("tpm-in-house-seal-verbs", signingBackend: BouncyCastleTpmEccSigningBackend.Create());
+        var simulator = new TpmSimulator("tpm-in-house-seal-verbs", signingBackend: BouncyCastleTpmEccSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await BringOperationalAsync(simulator, pool).ConfigureAwait(false);
 

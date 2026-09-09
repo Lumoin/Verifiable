@@ -1,5 +1,5 @@
 using System.Buffers;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Mdoc;
@@ -86,7 +86,7 @@ internal sealed class MdocCborDeviceSignedEndToEndTests
             Assert.IsTrue(isIssuerVerified, "Issuer MSO signature must verify.");
 
             //Verifier side leg 2: digest binding.
-            MdocDigestBindingResult bindingResult = issued.VerifyDigestBinding();
+            MdocDigestBindingResult bindingResult = issued.VerifyDigestBinding(BaseMemoryPool.Shared);
             Assert.IsTrue(bindingResult.IsValid, $"Digest binding must hold; got {bindingResult}.");
 
             //Verifier side leg 3: device signature.
@@ -479,13 +479,14 @@ internal sealed class MdocCborDeviceSignedEndToEndTests
     /// </summary>
     private static byte[] SampleSessionTranscript(int nonce = 0x42)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteStartArray(3);
         writer.WriteNull();
         writer.WriteNull();
         writer.WriteInt32(nonce);
         writer.WriteEndArray();
 
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
     }
 }

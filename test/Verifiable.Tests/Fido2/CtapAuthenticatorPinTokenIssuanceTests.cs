@@ -53,7 +53,7 @@ internal sealed class CtapAuthenticatorPinTokenIssuanceTests
     public async Task GetPinTokenHappyPathReturnsExpectedCiphertextLengthAndThirtyTwoByteDecryptedToken(
         CtapPinUvAuthProtocolId protocolId, int expectedCiphertextLength)
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator($"getpintoken-happy-{protocolId}");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator($"getpintoken-happy-{protocolId}",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         await CtapAuthenticatorSetPinTests.EstablishPinAsync(simulator, pool, "1234");
 
@@ -78,7 +78,7 @@ internal sealed class CtapAuthenticatorPinTokenIssuanceTests
     [TestMethod]
     public async Task GetPinTokenMissingMandatoryParametersReturnsMissingParameter()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("getpintoken-missing-params");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("getpintoken-missing-params",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         await CtapAuthenticatorSetPinTests.EstablishPinAsync(simulator, pool, "1234");
 
@@ -105,7 +105,7 @@ internal sealed class CtapAuthenticatorPinTokenIssuanceTests
     [TestMethod]
     public async Task GetPinTokenWithPermissionsPresentReturnsInvalidParameter()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("getpintoken-permissions-present");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("getpintoken-permissions-present",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         await CtapAuthenticatorSetPinTests.EstablishPinAsync(simulator, pool, "1234");
 
@@ -128,7 +128,7 @@ internal sealed class CtapAuthenticatorPinTokenIssuanceTests
     [TestMethod]
     public async Task GetPinTokenWithRpIdPresentReturnsInvalidParameter()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("getpintoken-rpid-present");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("getpintoken-rpid-present",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         await CtapAuthenticatorSetPinTests.EstablishPinAsync(simulator, pool, "1234");
 
@@ -150,7 +150,7 @@ internal sealed class CtapAuthenticatorPinTokenIssuanceTests
     [TestMethod]
     public async Task GetPinTokenWithNoPinSetReturnsPinNotSet()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("getpintoken-no-pin-set");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("getpintoken-no-pin-set",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using CtapPlatformPinSession session = await CtapPinCryptoFixtures.EstablishSessionAsync(
@@ -176,7 +176,7 @@ internal sealed class CtapAuthenticatorPinTokenIssuanceTests
     [TestMethod]
     public async Task PinUvAuthTokenUsingPinWithNoPinSetReturnsPinNotSet()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("0x09-no-pin-set");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("0x09-no-pin-set",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using CtapPlatformPinSession session = await CtapPinCryptoFixtures.EstablishSessionAsync(
@@ -200,7 +200,7 @@ internal sealed class CtapAuthenticatorPinTokenIssuanceTests
     [TestMethod]
     public async Task GetPinTokenWithWrongPinReturnsPinInvalidAndDecrementsRetries()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("getpintoken-wrong-pin");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("getpintoken-wrong-pin",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         await CtapAuthenticatorSetPinTests.EstablishPinAsync(simulator, pool, "1234");
 
@@ -235,7 +235,8 @@ internal sealed class CtapAuthenticatorPinTokenIssuanceTests
     public async Task PinHashEncDecryptFailureAppliesMismatchSemantics(bool useSubcommandWithPermissions)
     {
         using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator(
-            $"pinhashenc-decrypt-failure-{useSubcommandWithPermissions}");
+            $"pinhashenc-decrypt-failure-{useSubcommandWithPermissions}",
+            BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         await CtapAuthenticatorSetPinTests.EstablishPinAsync(simulator, pool, "1234");
 
@@ -276,7 +277,7 @@ internal sealed class CtapAuthenticatorPinTokenIssuanceTests
     [TestMethod]
     public async Task GetPinTokenWithRetriesExhaustedReturnsPinBlocked()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("getpintoken-retries-exhausted");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("getpintoken-retries-exhausted",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         await CtapAuthenticatorSetPinTests.EstablishPinAsync(simulator, pool, "1234");
 
@@ -294,7 +295,7 @@ internal sealed class CtapAuthenticatorPinTokenIssuanceTests
             //cycle clears the latch (but not pinRetries) so the exhaustion can continue toward 0.
             if(statusCode == WellKnownCtapStatusCodes.PinAuthBlocked)
             {
-                simulator.PowerCycle();
+                simulator.PowerCycle(BaseMemoryPool.Shared);
             }
         }
 
@@ -319,7 +320,7 @@ internal sealed class CtapAuthenticatorPinTokenIssuanceTests
     [TestMethod]
     public async Task PinUvAuthTokenUsingPinWithPermissionsHappyPathSucceeds()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("0x09-happy");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("0x09-happy",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         await CtapAuthenticatorSetPinTests.EstablishPinAsync(simulator, pool, "1234");
 
@@ -344,7 +345,7 @@ internal sealed class CtapAuthenticatorPinTokenIssuanceTests
     [TestMethod]
     public async Task PinUvAuthTokenUsingPinWithZeroPermissionsReturnsInvalidParameter()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("0x09-zero-permissions");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("0x09-zero-permissions",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         await CtapAuthenticatorSetPinTests.EstablishPinAsync(simulator, pool, "1234");
 
@@ -368,7 +369,7 @@ internal sealed class CtapAuthenticatorPinTokenIssuanceTests
     [DataRow(0, DisplayName = "pcmr")]
     public async Task PinUvAuthTokenUsingPinWithDeniedPermissionReturnsUnauthorizedPermission(int deniedBitIndex)
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator($"0x09-denied-{deniedBitIndex}");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator($"0x09-denied-{deniedBitIndex}",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         await CtapAuthenticatorSetPinTests.EstablishPinAsync(simulator, pool, "1234");
 
@@ -398,7 +399,7 @@ internal sealed class CtapAuthenticatorPinTokenIssuanceTests
     [TestMethod]
     public async Task PinUvAuthTokenUsingPinGrantsAcfgAlone()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("0x09-grants-acfg-alone");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("0x09-grants-acfg-alone",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         await CtapAuthenticatorSetPinTests.EstablishPinAsync(simulator, pool, "1234");
 
@@ -433,7 +434,7 @@ internal sealed class CtapAuthenticatorPinTokenIssuanceTests
     [TestMethod]
     public async Task PinUvAuthTokenUsingPinGrantsLbwAlone()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("0x09-grants-lbw-alone");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("0x09-grants-lbw-alone",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         await CtapAuthenticatorSetPinTests.EstablishPinAsync(simulator, pool, "1234");
 
@@ -467,7 +468,7 @@ internal sealed class CtapAuthenticatorPinTokenIssuanceTests
     [TestMethod]
     public async Task PinUvAuthTokenUsingPinGrantsAcfgOredWithMcGa()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("0x09-grants-acfg-or-mcga");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("0x09-grants-acfg-or-mcga",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         await CtapAuthenticatorSetPinTests.EstablishPinAsync(simulator, pool, "1234");
 
@@ -504,7 +505,7 @@ internal sealed class CtapAuthenticatorPinTokenIssuanceTests
     [TestMethod]
     public async Task PinUvAuthTokenUsingPinGrantsBeAlone()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("0x09-grants-be-alone");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("0x09-grants-be-alone",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         await CtapAuthenticatorSetPinTests.EstablishPinAsync(simulator, pool, "1234");
 
@@ -542,7 +543,7 @@ internal sealed class CtapAuthenticatorPinTokenIssuanceTests
     [TestMethod]
     public async Task PinUvAuthTokenUsingPinGrantsCmAloneUnbound()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("0x09-grants-cm-alone-unbound");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("0x09-grants-cm-alone-unbound",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         await CtapAuthenticatorSetPinTests.EstablishPinAsync(simulator, pool, "1234");
 
@@ -578,7 +579,7 @@ internal sealed class CtapAuthenticatorPinTokenIssuanceTests
     [TestMethod]
     public async Task PinUvAuthTokenUsingPinGrantsCmOredWithMcGaAcfgBound()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("0x09-grants-cm-or-mcgaacfg-bound");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("0x09-grants-cm-or-mcgaacfg-bound",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         await CtapAuthenticatorSetPinTests.EstablishPinAsync(simulator, pool, "1234");
 
@@ -610,7 +611,7 @@ internal sealed class CtapAuthenticatorPinTokenIssuanceTests
     [TestMethod]
     public async Task PinUvAuthTokenUsingPinIgnoresUndefinedPermissionBit()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("0x09-undefined-bit-ignored");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("0x09-undefined-bit-ignored",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         await CtapAuthenticatorSetPinTests.EstablishPinAsync(simulator, pool, "1234");
 
@@ -635,7 +636,7 @@ internal sealed class CtapAuthenticatorPinTokenIssuanceTests
     [TestMethod]
     public async Task PinUvAuthTokenUsingPinWithMcPermissionWithoutRpIdReturnsMissingParameter()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("0x09-mc-without-rpid");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("0x09-mc-without-rpid",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         await CtapAuthenticatorSetPinTests.EstablishPinAsync(simulator, pool, "1234");
 
@@ -664,7 +665,7 @@ internal sealed class CtapAuthenticatorPinTokenIssuanceTests
     [TestMethod]
     public async Task PinUvAuthTokenUsingPinPermissionGateOrderingBeatsPinBlocked()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("0x09-gate-beats-blocked");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("0x09-gate-beats-blocked",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         await CtapAuthenticatorSetPinTests.EstablishPinAsync(simulator, pool, "1234");
 
@@ -679,7 +680,7 @@ internal sealed class CtapAuthenticatorPinTokenIssuanceTests
             byte statusCode = await SendExpectingErrorAsync(simulator, mismatchRequest, pool);
             if(statusCode == WellKnownCtapStatusCodes.PinAuthBlocked)
             {
-                simulator.PowerCycle();
+                simulator.PowerCycle(BaseMemoryPool.Shared);
             }
         }
 
@@ -714,7 +715,7 @@ internal sealed class CtapAuthenticatorPinTokenIssuanceTests
     [TestMethod]
     public async Task FreshTokenIssuanceInvalidatesEveryPriorOutstandingToken()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("token-issuance-invalidates-prior");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("token-issuance-invalidates-prior",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         await CtapAuthenticatorSetPinTests.EstablishPinAsync(simulator, pool, "1234");
 
@@ -765,7 +766,7 @@ internal sealed class CtapAuthenticatorPinTokenIssuanceTests
     [TestMethod]
     public async Task GetPinTokenMismatchRegeneratesOnlySelectedProtocolsKeyAgreementKey()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("getpintoken-mismatch-regenerate");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("getpintoken-mismatch-regenerate",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         await CtapAuthenticatorSetPinTests.EstablishPinAsync(simulator, pool, "1234");
 
@@ -805,7 +806,8 @@ internal sealed class CtapAuthenticatorPinTokenIssuanceTests
         CtapPinUvAuthProtocolId protocolId, int sharedSecretLength, bool useSubcommandWithPermissions)
     {
         using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator(
-            $"token-issuance-zeroization-{protocolId}-{useSubcommandWithPermissions}");
+            $"token-issuance-zeroization-{protocolId}-{useSubcommandWithPermissions}",
+            BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         await CtapAuthenticatorSetPinTests.EstablishPinAsync(simulator, pool, "1234", protocolId);
 

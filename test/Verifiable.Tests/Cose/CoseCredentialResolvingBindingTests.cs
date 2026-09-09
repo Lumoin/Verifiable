@@ -29,7 +29,7 @@ internal sealed class CoseCredentialResolvingBindingTests
     private const string IssuerDid = "did:example:issuer";
     private const string SignerKeyId = "did:example:issuer#key-1";
 
-    private static readonly ExchangeContext Context = new();
+    private static ExchangeContext Context { get; } = new();
 
     private const string CredentialJson = /*lang=json,strict*/ """
     {
@@ -305,7 +305,8 @@ internal sealed class CoseCredentialResolvingBindingTests
             wrongPublicKey.AsReadOnlySpan(),
             MulticodecHeaders.Ed25519PublicKey,
             MultibaseAlgorithms.Base58Btc,
-            TestSetup.Base58Encoder);
+            TestSetup.Base58Encoder,
+            BaseMemoryPool.Shared);
 
         DidResolver resolver = CreateResolver(CreateIssuerDidDocument(publicKeyMultibase: wrongPublicKeyMultibase));
 

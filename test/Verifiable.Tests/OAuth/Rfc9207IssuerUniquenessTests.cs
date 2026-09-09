@@ -12,9 +12,9 @@ namespace Verifiable.Tests.OAuth;
 [TestClass]
 internal sealed class Rfc9207IssuerUniquenessTests
 {
-    private static readonly Uri HonestIssuer = new("https://honest.as.example");
-    private static readonly Uri ImpersonatorIssuer = new("https://impersonator.as.example");
-    private static readonly Uri UnknownIssuer = new("https://unknown.as.example");
+    private static Uri HonestIssuer { get; } = new("https://honest.as.example");
+    private static Uri ImpersonatorIssuer { get; } = new("https://impersonator.as.example");
+    private static Uri UnknownIssuer { get; } = new("https://unknown.as.example");
 
 
     /// <summary>

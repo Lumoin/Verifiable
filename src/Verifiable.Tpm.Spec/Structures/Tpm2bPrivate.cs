@@ -30,7 +30,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// TPM returns.
 /// </para>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 12.3.7 (Table 227).
+/// Specification reference: TPM 2.0 Library Part 2, clause 12.3.7 (Table 243).
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]

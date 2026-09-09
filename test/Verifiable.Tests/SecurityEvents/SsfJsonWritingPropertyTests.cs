@@ -25,7 +25,7 @@ internal sealed class SsfJsonWritingPropertyTests
     //Characters that hammer the JSON escaping paths: quotes, backslashes,
     //control characters, separators, and non-ASCII. Lone surrogates are
     //excluded — they cannot appear in well-formed UTF-16 input strings.
-    private static readonly Gen<char> JsonCharGen = Gen.OneOf(
+    private static Gen<char> JsonCharGen { get; } = Gen.OneOf(
         Gen.Char['a', 'z'],
         Gen.Char['0', '9'],
         Gen.Char['\u0001', '\u001F'],
@@ -43,16 +43,16 @@ internal sealed class SsfJsonWritingPropertyTests
         Gen.Const('€'),
         Gen.Const(' '));
 
-    private static readonly Gen<string> JsonStringGen =
+    private static Gen<string> JsonStringGen { get; } =
         JsonCharGen.Array[1, 12].Select(static chars => new string(chars));
 
-    private static readonly Gen<IReadOnlyList<string>> StringListGen =
+    private static Gen<IReadOnlyList<string>> StringListGen { get; } =
         JsonStringGen.Array[1, 4].Select(static items => (IReadOnlyList<string>)items);
 
-    private static readonly Gen<int?> OptionalIntGen =
+    private static Gen<int?> OptionalIntGen { get; } =
         Gen.OneOf(Gen.Const((int?)null), Gen.Int.Select(static i => (int?)i));
 
-    private static readonly Gen<SsfDeliveryConfiguration> DeliveryGen =
+    private static Gen<SsfDeliveryConfiguration> DeliveryGen { get; } =
         from method in JsonStringGen
         from endpointUrl in GenOption(JsonStringGen)
         from authorizationHeader in GenOption(JsonStringGen)
@@ -63,7 +63,7 @@ internal sealed class SsfJsonWritingPropertyTests
             AuthorizationHeader = authorizationHeader
         };
 
-    private static readonly Gen<SsfStreamConfiguration> StreamGen =
+    private static Gen<SsfStreamConfiguration> StreamGen { get; } =
         from streamId in JsonStringGen
         from issuer in JsonStringGen
         from audiences in StringListGen
@@ -149,7 +149,7 @@ internal sealed class SsfJsonWritingPropertyTests
             select new Uri($"https://{host}.example/");
 
         Gen<IReadOnlyList<KeyValuePair<string, string>>> endpointMembersGen = Gen.OneOf(
-            Gen.Const((IReadOnlyList<KeyValuePair<string, string>>)[]),
+            Gen.Const<IReadOnlyList<KeyValuePair<string, string>>>([]),
             JsonStringGen.Select(static url => (IReadOnlyList<KeyValuePair<string, string>>)
                 [new KeyValuePair<string, string>(SsfMetadataParameterNames.JwksUri, url)]),
             Gen.Select(JsonStringGen, JsonStringGen, static (jwks, config) => (IReadOnlyList<KeyValuePair<string, string>>)
@@ -249,7 +249,7 @@ internal sealed class SsfJsonWritingPropertyTests
 
 
     private static Gen<T?> GenOption<T>(Gen<T> gen) where T : class =>
-        Gen.OneOf(Gen.Const(default(T)), gen.Select(static value => (T?)value));
+        Gen.OneOf(Gen.Const(default(T)), gen.Select(static value => value));
 
 
     //The writers omit absent (null) members and the parsers return null for

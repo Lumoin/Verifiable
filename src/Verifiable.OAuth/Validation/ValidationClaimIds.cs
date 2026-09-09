@@ -368,6 +368,14 @@ public static class ValidationClaimIds
     /// </summary>
     public static ClaimId SaltNotReused { get; } = ClaimId.Create(937, "SaltNotReused");
 
+    /// <summary>
+    /// The credential declares its own type. SD-JWT VC §2.2.2.3 makes <c>vct</c> REQUIRED (§2.2.2.1
+    /// defines the claim), so a
+    /// <c>dc+sd-jwt</c> credential presenting none fails this check rather than being treated as an
+    /// untyped SD-JWT.
+    /// </summary>
+    public static ClaimId CredentialTypePresent { get; } = ClaimId.Create(938, "CredentialTypePresent");
+
 
 
     /// <summary>

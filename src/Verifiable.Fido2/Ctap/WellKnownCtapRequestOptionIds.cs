@@ -30,7 +30,7 @@ public static class WellKnownCtapRequestOptionIds
     /// <c>rk</c>: whether the credential being created is to be discoverable. Legal only on
     /// <c>authenticatorMakeCredential</c>; default <see langword="false"/> when absent.
     /// </summary>
-    public static readonly string Rk = Utf8Constants.ToInternedString(RkUtf8);
+    public static string Rk { get; } = Utf8Constants.ToInternedString(RkUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Up"/>.</summary>
     public static ReadOnlySpan<byte> UpUtf8 => "up"u8;
@@ -39,7 +39,7 @@ public static class WellKnownCtapRequestOptionIds
     /// <c>up</c>: user presence — whether the authenticator must obtain evidence of user
     /// interaction. Default <see langword="true"/> when absent.
     /// </summary>
-    public static readonly string Up = Utf8Constants.ToInternedString(UpUtf8);
+    public static string Up { get; } = Utf8Constants.ToInternedString(UpUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Uv"/>.</summary>
     public static ReadOnlySpan<byte> UvUtf8 => "uv"u8;
@@ -48,7 +48,7 @@ public static class WellKnownCtapRequestOptionIds
     /// <c>uv</c>: user verification — whether the authenticator must perform a user-verifying
     /// gesture. Default <see langword="false"/> when absent.
     /// </summary>
-    public static readonly string Uv = Utf8Constants.ToInternedString(UvUtf8);
+    public static string Uv { get; } = Utf8Constants.ToInternedString(UvUtf8);
 
 
     /// <summary>

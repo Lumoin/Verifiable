@@ -24,6 +24,9 @@ public sealed class EncodedEcPoint(IMemoryOwner<byte> sensitiveMemory, Tag tag, 
     /// <summary>Gets the length of the encoded point in bytes.</summary>
     public int Length => MemoryOwner.Memory.Length;
 
+    /// <summary>Gets whether this carrier holds no octets — the RSA-key sentinel shape (<see cref="Length"/> zero).</summary>
+    public bool IsEmpty => Length == 0;
+
 
     /// <summary>
     /// Rents pool memory of <paramref name="bytes"/>'s length, copies the bytes in, and wraps the

@@ -28,9 +28,9 @@ internal sealed class GuardedHttpClientTransportTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly OutgoingHeaders NoHeaders = new();
+    private static OutgoingHeaders NoHeaders { get; } = new();
 
-    private static readonly System.Collections.Generic.Dictionary<string, string> Form =
+    private static System.Collections.Generic.Dictionary<string, string> Form { get; } =
         new(StringComparer.Ordinal) { ["wallet_metadata"] = "{}" };
 
 
@@ -136,7 +136,11 @@ internal sealed class GuardedHttpClientTransportTests
     }
 
 
-    /// <summary>An inner transport that returns 200 with an empty body.</summary>
+    /// <summary>
+    /// An inner transport that returns 200 with an empty body. Ownership of the returned
+    /// HttpResponseMessage transfers to the caller through the HttpMessageHandler pipeline,
+    /// the standard shape for this override — the pipeline disposes it, not this method.
+    /// </summary>
     private sealed class StubOkHandler: HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(

@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using Microsoft.Extensions.Time.Testing;
 using Verifiable.BouncyCastle;
 using Verifiable.Core;
+using Verifiable.Core.Dcql;
 using Verifiable.Core.OutboundFetch;
 using Verifiable.Cryptography;
 using Verifiable.OAuth;
@@ -42,9 +43,9 @@ internal sealed class Oid4VpX509RequestUriPostFlowTests
 
     private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
-    private static readonly Uri VerifierBaseUri = new("https://verifier.example.com");
+    private static Uri VerifierBaseUri { get; } = new("https://verifier.example.com");
 
-    private static readonly ImmutableHashSet<CapabilityIdentifier> Oid4VpCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> Oid4VpCapabilities { get; } =
         ImmutableHashSet.Create(
             WellKnownCapabilityIdentifiers.VcVerifiablePresentation,
             WellKnownCapabilityIdentifiers.OAuthJwksEndpoint,
@@ -131,7 +132,7 @@ internal sealed class Oid4VpX509RequestUriPostFlowTests
             "decrypted JAR's x5c over the §5.10 POST round-trip.");
 
         PresentationVerifiedState verified = (PresentationVerifiedState)app.GetFlowState(parHandle).State;
-        Assert.IsTrue(verified.Claims.ContainsKey("pid"),
+        Assert.IsTrue(verified.Credentials.ContainsKey(new CredentialQueryId("pid")),
             "Verifier must reach PresentationVerified for the x509 + request_uri_method=post + " +
             "encrypted-JAR flow driven entirely over HTTPS.");
     }

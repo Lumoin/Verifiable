@@ -208,7 +208,7 @@ internal sealed class XmlCanonicalizationExclusivePrefixListTests
         using XmlNodeTable table = Parse(document);
         XmlNodeSet nodeSet = XmlNodeSet.WholeDocument(table);
 
-        foreach(string invalidToken in (string[])["p:q", "1abc", "#other"])
+        foreach(string invalidToken in new[] { "p:q", "1abc", "#other" })
         {
             bool isCanonicalized = XmlCanonicalization.TryCanonicalizeExclusive(table, nodeSet, isWithComments: false, [invalidToken], BaseMemoryPool.Shared, out PooledMemory? _, out XmlCanonicalizationError error);
 

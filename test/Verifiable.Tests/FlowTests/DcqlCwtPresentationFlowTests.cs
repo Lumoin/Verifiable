@@ -118,14 +118,14 @@ internal sealed class DcqlCwtPresentationFlowTests
             claimExtractor: SdTokenDcqlAdapter.ClaimExtractor<ReadOnlyMemory<byte>>).ToList();
 
         Assert.HasCount(1, matches);
-        Assert.AreEqual(CredentialQueryId, matches[0].CredentialQueryId);
+        Assert.AreEqual(CredentialQueryId, matches[0].CredentialQueryId.Value);
         Assert.HasCount(2, matches[0].MatchedPatterns);
 
         DisclosureMatch<SdToken<ReadOnlyMemory<byte>>> match = DcqlPathResolver.ToDisclosureMatch(
             matches[0], CreateAllAvailablePaths(), CreateMandatoryPaths(), DcqlCredentialFormats.SdCwt);
 
         //Disclosure engine computes optimal disclosure via lattice.
-        var computation = new DisclosureComputation<SdToken<ReadOnlyMemory<byte>>>();
+        var computation = new DisclosureComputation<SdToken<ReadOnlyMemory<byte>>>([], new FakeTimeProvider(TestClock.CanonicalEpoch));
         var graph = await computation.ComputeAsync(
             [match],
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -229,7 +229,7 @@ internal sealed class DcqlCwtPresentationFlowTests
             [CredentialQueryId] = new HashSet<CredentialPath> { emailPath }
         };
 
-        var computation = new DisclosureComputation<SdToken<ReadOnlyMemory<byte>>>();
+        var computation = new DisclosureComputation<SdToken<ReadOnlyMemory<byte>>>([], new FakeTimeProvider(TestClock.CanonicalEpoch));
         var graph = await computation.ComputeAsync(
             [match],
             userExclusions,
@@ -289,7 +289,7 @@ internal sealed class DcqlCwtPresentationFlowTests
             Format = DcqlCredentialFormats.SdCwt
         };
 
-        var computation = new DisclosureComputation<SdToken<ReadOnlyMemory<byte>>>();
+        var computation = new DisclosureComputation<SdToken<ReadOnlyMemory<byte>>>([], new FakeTimeProvider(TestClock.CanonicalEpoch));
         var graph = await computation.ComputeAsync(
             [match],
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -340,11 +340,26 @@ internal sealed class DcqlCwtPresentationFlowTests
             CredentialPath.FromJsonPointer(PhoneNumberPath)
         };
 
-        return await claims.IssueSdCwtTokenAsync(
+        SdToken<ReadOnlyMemory<byte>> issued = await claims.IssueSdCwtTokenAsync(
             SdCwtWireFixtures.SerializeCwtClaimMap, SdCwtIssuance.IssueVerboseAsync, disclosablePaths,
             TestSalts.DefaultGenerator(),
             privateKey, IssuerKeyId, Pool,
             cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        //Issuance carries no parsed DisclosurePaths/IssuerSignedClaims (SdToken's plain
+        //constructor defaults both to empty), and issued.IssuerSigned alone carries no sd_claims
+        //(the unprotected header entry lives beside the token, not embedded in it, until
+        //serialized as a full SdCwtMessage). Rebuilding the full wire form and parsing it back —
+        //what a wallet does once it stores an issued credential — is what gives the DCQL adapter
+        //real evidence to match against.
+        using(issued)
+        {
+            SdCwtMessage bare = SdCwtSerializer.Parse(issued.IssuerSigned, TestSalts.TestSaltTag, Pool);
+            var full = new SdCwtMessage(bare.Payload, bare.ProtectedHeader, bare.Signature, issued.Disclosures);
+            byte[] wireBytes = SdCwtSerializer.Serialize(full);
+
+            return SdCwtSerializer.ParseToken(wireBytes, TestSalts.TestSaltTag, Pool, TestSetup.Base64UrlEncoder);
+        }
     }
 
 

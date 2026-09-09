@@ -53,16 +53,62 @@ public readonly struct StatusListReference: IEquatable<StatusListReference>
     /// <param name="uri">The URI of the Status List Token. Must conform to RFC 3986.</param>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="index"/> is negative.</exception>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="uri"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="uri"/> is empty or whitespace.</exception>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="uri"/> does not satisfy <see cref="IsConformingUri(string?)"/> — empty,
+    /// all-whitespace, or not an RFC 3986 URI proper.
+    /// </exception>
     [SuppressMessage("Design", "CA1054:URI-like parameters should not be strings", Justification = "The specification defines this as a string claim value that is compared and serialized as a string in both JWT and CWT formats.")]
     public StatusListReference(int index, string uri)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(index);
         ArgumentNullException.ThrowIfNull(uri);
-        ArgumentException.ThrowIfNullOrWhiteSpace(uri);
+
+        if(!IsConformingUri(uri))
+        {
+            throw new ArgumentException(
+                "The uri must be a URI conforming to RFC 3986, per Token Status List Section 6.2/6.3's " +
+                "\"The value of uri MUST be a URI conforming to [RFC3986].\"",
+                nameof(uri));
+        }
 
         Index = index;
         Uri = uri;
+    }
+
+
+    /// <summary>
+    /// Determines whether <paramref name="value"/> is an RFC 3986 URI proper — an absolute URI carrying an
+    /// explicit scheme.
+    /// </summary>
+    /// <remarks>
+    /// <see langword="false"/> for <see langword="null"/>, empty, or all-whitespace text; for a relative
+    /// reference such as <c>/statuslists/1</c>; and for a scheme-less string such as
+    /// <c>example.com/list</c>. <see cref="System.Uri.TryCreate(string?, UriKind, out System.Uri)"/> with
+    /// <see cref="UriKind.Absolute"/> alone is not sufficient cross-platform — on Unix a bare rooted path
+    /// parses as an absolute <c>file:</c> URI — so this predicate additionally requires the raw text to
+    /// carry a scheme delimiter (<c>:</c>) before its first <c>/</c>, giving identical behaviour on Windows
+    /// and Unix. This predicate polices only RFC 3986 syntax; it never restricts scheme, fragment, or
+    /// userinfo — where the resolver may actually connect is the deployment's outbound-fetch policy
+    /// concern, not this type's.
+    /// </remarks>
+    /// <param name="value">The candidate URI text.</param>
+    /// <returns><see langword="true"/> when <paramref name="value"/> conforms to RFC 3986.</returns>
+    public static bool IsConformingUri(string? value)
+    {
+        if(string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        if(!System.Uri.TryCreate(value, UriKind.Absolute, out System.Uri? parsed) || !parsed.IsAbsoluteUri)
+        {
+            return false;
+        }
+
+        int schemeDelimiterIndex = value.IndexOf(':', StringComparison.Ordinal);
+        int firstSlashIndex = value.IndexOf('/', StringComparison.Ordinal);
+
+        return schemeDelimiterIndex >= 0 && (firstSlashIndex < 0 || schemeDelimiterIndex < firstSlashIndex);
     }
 
     /// <inheritdoc/>

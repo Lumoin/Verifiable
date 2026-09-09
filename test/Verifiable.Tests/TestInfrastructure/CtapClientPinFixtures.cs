@@ -3,6 +3,7 @@ using System.Buffers;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Time.Testing;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Cbor.Fido2;
 using Verifiable.Cryptography;
@@ -43,11 +44,18 @@ internal static class CtapClientPinFixtures
     /// <param name="runId">A stable identifier for the simulated authenticator.</param>
     /// <param name="rng">
     /// The random-number backend the AAGUID and every minted credential identifier are drawn from, or
-    /// <see langword="null"/> for the production default. The PIN/UV key-agreement key pairs are drawn
-    /// independently, through the registered production key-creation seam, regardless of this value.
+    /// <see langword="null"/> (the default) for <see cref="TestEntropy.NewCounterStream"/>. The PIN/UV
+    /// key-agreement key pairs are drawn independently, through the registered production
+    /// key-creation seam, regardless of this value.
     /// </param>
+    /// <param name="timeProvider">
+    /// The simulator's clock, or <see langword="null"/> (the default) to resolve to
+    /// <see cref="TestClock.CanonicalEpoch"/> under a fresh <see cref="FakeTimeProvider"/> — the suite's one
+    /// instant unless a fixture needs a specific relationship to it — never the system clock.
+    /// </param>
+    /// <param name="pool">The memory pool the simulator's PIN/UV auth key-agreement material is minted from.</param>
     /// <returns>The composed simulator. The caller owns it and must dispose it.</returns>
-    public static CtapAuthenticatorSimulator CreateSimulator(string runId, FillEntropyDelegate? rng = null) =>
+    public static CtapAuthenticatorSimulator CreateSimulator(string runId, BaseMemoryPool pool, FillEntropyDelegate? rng = null, TimeProvider? timeProvider = null) =>
         new(
             runId,
             CtapGetInfoResponseCborWriter.Write,
@@ -57,7 +65,9 @@ internal static class CtapClientPinFixtures
             CtapGetAssertionResponseCborWriter.Write,
             CredentialPublicKeyCborWriter.Write,
             PackedAttestationStatementCborWriter.Write,
-            rng: rng,
+            rng: rng ?? TestEntropy.NewCounterStream(),
+            timeProvider: timeProvider ?? new FakeTimeProvider(TestClock.CanonicalEpoch),
+            pinUvAuthKeyAgreementPool: pool,
             decodeClientPinRequest: CtapClientPinRequestCborReader.Read,
             encodeClientPinResponse: CtapClientPinResponseCborWriter.Write,
             decodeAuthenticatorConfigRequest: CtapAuthenticatorConfigRequestCborReader.Read,
@@ -92,10 +102,16 @@ internal static class CtapClientPinFixtures
     /// — entirely independent of <paramref name="custody"/>.
     /// </param>
     /// <param name="firmwareVersion">The authenticator model's firmware version — part of the rehydration fingerprint alongside <paramref name="aaguid"/>.</param>
+    /// <param name="timeProvider">The simulator's clock, or <see langword="null"/> (the default) to resolve to <see cref="TestClock.CanonicalEpoch"/> under a fresh <see cref="FakeTimeProvider"/> — see <see cref="CreateSimulator"/>.</param>
+    /// <param name="pool">The memory pool the simulator's PIN/UV auth key-agreement material is minted from.</param>
+    /// <param name="rng">
+    /// The random-number backend the AAGUID and every minted credential identifier are drawn from, or
+    /// <see langword="null"/> (the default) for <see cref="TestEntropy.NewCounterStream"/>.
+    /// </param>
     /// <param name="cancellationToken">A cancellation token for the load attempt.</param>
     public static ValueTask<CtapAuthenticatorSimulator> CreateSimulatorWithCustodyAsync(
-        string runId, CtapStateCustody custody, Guid aaguid, CtapPinRetriesCustody? pinRetriesCustody = null, int firmwareVersion = 1,
-        CancellationToken cancellationToken = default) =>
+        string runId, CtapStateCustody custody, Guid aaguid, BaseMemoryPool pool, CtapPinRetriesCustody? pinRetriesCustody = null, int firmwareVersion = 1,
+        TimeProvider? timeProvider = null, FillEntropyDelegate? rng = null, CancellationToken cancellationToken = default) =>
         CtapAuthenticatorSimulator.CreateWithCustodyAsync(
             runId,
             custody,
@@ -117,6 +133,9 @@ internal static class CtapClientPinFixtures
             encodeLargeBlobsResponse: CtapLargeBlobsResponseCborWriter.Write,
             encodeMakeCredentialExtensionOutputs: CtapMakeCredentialExtensionOutputsCborWriter.Write,
             encodeGetAssertionExtensionOutputs: CtapGetAssertionExtensionOutputsCborWriter.Write,
+            timeProvider: timeProvider ?? new FakeTimeProvider(TestClock.CanonicalEpoch),
+            pinUvAuthKeyAgreementPool: pool,
+            rng: rng ?? TestEntropy.NewCounterStream(),
             aaguid: aaguid,
             firmwareVersion: firmwareVersion,
             pinRetriesCustody: pinRetriesCustody,

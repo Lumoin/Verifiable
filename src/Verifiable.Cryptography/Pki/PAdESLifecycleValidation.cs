@@ -117,7 +117,12 @@ public sealed class PAdESLifecycleResult: IDisposable
         new() { ReachedLevel = level, Indication = indication, SubIndications = [subIndication], Reason = reason };
 
 
-    /// <summary>Disposes <see cref="VerifiedSignature"/>'s wrapped facts when present.</summary>
+    /// <summary>
+    /// Disposes <see cref="VerifiedSignature"/>'s wrapped facts when present. The <c>?.</c> on
+    /// <see cref="VerifiedSignature"/> short-circuits the whole chain including <c>.Value.Dispose()</c>
+    /// when it is <see langword="null"/> — <see cref="Verified{T}.Value"/> is read only when
+    /// <see cref="VerifiedSignature"/> is proven non-null, so no null-forgiving operator is needed.
+    /// </summary>
     public void Dispose()
     {
         if(!disposed)

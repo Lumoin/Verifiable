@@ -16,7 +16,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// the key referenced by <see cref="SignHandle"/>. This command requires Endorsement authorization.
 /// </para>
 /// <para>
-/// Command structure (TPM 2.0 Part 3, Section 18.7, Table 96):
+/// Command structure (TPM 2.0 Library Part 3, clause 18.7, Table 107):
 /// </para>
 /// <list type="bullet">
 ///   <item><description>privacyAdminHandle (TPMI_RH_ENDORSEMENT): Fixed to TPM_RH_ENDORSEMENT. Requires authorization (USER role).</description></item>
@@ -26,7 +26,8 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </list>
 /// <para>
 /// Both handles require authorization, so the executor is given two authorization sessions in handle order: the
-/// Endorsement hierarchy's first, the signing key's second. Both are empty-auth password sessions in this slice.
+/// Endorsement hierarchy's first, the signing key's second. Both are empty-auth password sessions; a non-empty-auth
+/// or policy session on either handle is not modelled.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -42,8 +43,8 @@ public sealed class GetTimeInput: ITpmCommandInput, IDisposable
     /// <inheritdoc/>
     /// <remarks>
     /// <c>qualifyingData</c> (<c>TPM2B_DATA</c>) is the first entry of the parameter area and carries an
-    /// explicit size field (TPM 2.0 Library Part 3, clause 18.7, Table 99), which is what TPM 2.0 Library Part 1,
-    /// clause 19.1 requires of an encryptable parameter and what clause 16.4 restates ("for a command or response
+    /// explicit size field (TPM 2.0 Library Part 3, clause 18.7, Table 107), which is what TPM 2.0 Library Part 1,
+    /// clause 18.1 requires of an encryptable parameter and what clause 15.4 restates ("for a command or response
     /// parameter to be encrypted, it must be the first parameter and it must be a TPM2B type"). A session without
     /// the <c>decrypt</c> attribute is unaffected; the attribute is what asks the TPM to decrypt the parameter
     /// after the command HMACs verify, so the caller nonce this command echoes into the attestation's
@@ -182,12 +183,15 @@ public sealed class GetTimeInput: ITpmCommandInput, IDisposable
     /// <inheritdoc/>
     public int GetSerializedSize()
     {
-        //TPMT_SIG_SCHEME: scheme (UINT16) + hashAlg (UINT16).
-        const int TpmtSigSchemeSize = sizeof(ushort) + sizeof(ushort);
+        //TPMT_SIG_SCHEME (TPM 2.0 Library Part 2, clause 11.2.1.5, Table 183): scheme (UINT16) selector, plus a
+        //hashAlg (UINT16) detail pair only when the scheme is not TPM_ALG_NULL — Table 183's [scheme]details
+        //is absent entirely for the NULL scheme (clause 11.2.1.4, Table 182, whose "null" row carries an empty
+        //Type column against selector TPM_ALG_NULL), so a NULL SignatureScheme omits the trailing octets.
+        int schemeSize = sizeof(ushort) + (SignatureScheme == TpmAlgIdConstants.TPM_ALG_NULL ? 0 : sizeof(ushort));
 
         return (2 * sizeof(uint)) +                         //privacyAdminHandle + signHandle.
                sizeof(ushort) + QualifyingData.Length +     //TPM2B_DATA: size prefix + bytes.
-               TpmtSigSchemeSize;
+               schemeSize;
     }
 
     /// <inheritdoc/>
@@ -205,7 +209,13 @@ public sealed class GetTimeInput: ITpmCommandInput, IDisposable
         writer.WriteUInt16((ushort)QualifyingData.Length);
         writer.WriteBytes(QualifyingData.Span);
         writer.WriteUInt16((ushort)SignatureScheme);
-        writer.WriteUInt16((ushort)SchemeHashAlg);
+
+        //Table 183's [scheme]details is present only for a non-NULL scheme — a NULL SignatureScheme selects no
+        //TPMU_SIG_SCHEME member at all, so SchemeHashAlg is not framed for it.
+        if(SignatureScheme != TpmAlgIdConstants.TPM_ALG_NULL)
+        {
+            writer.WriteUInt16((ushort)SchemeHashAlg);
+        }
     }
 
     /// <inheritdoc/>

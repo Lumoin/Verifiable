@@ -1,4 +1,4 @@
-﻿using System.Buffers;
+using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Verifiable.Cesr;
@@ -13,7 +13,7 @@ namespace Verifiable.Cesr;
 [SuppressMessage("Performance", "CA1815:Override equals and operator equals on value types", Justification = "This is a disposable owner of pooled memory, not a comparable value; equality is not meaningful.")]
 public readonly struct CesrParsedPrimitive: IDisposable
 {
-    private readonly IMemoryOwner<byte> rawOwner;
+    private IMemoryOwner<byte> RawOwner { get; }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CesrParsedPrimitive"/> struct.
@@ -26,7 +26,7 @@ public readonly struct CesrParsedPrimitive: IDisposable
     {
         Code = code;
         Soft = soft;
-        this.rawOwner = rawOwner;
+        this.RawOwner = rawOwner;
         RawLength = rawLength;
     }
 
@@ -48,10 +48,10 @@ public readonly struct CesrParsedPrimitive: IDisposable
     /// <summary>
     /// The recovered raw value (the unframed cryptographic material), without code or lead bytes.
     /// </summary>
-    public ReadOnlySpan<byte> Raw => rawOwner.Memory.Span[..RawLength];
+    public ReadOnlySpan<byte> Raw => RawOwner.Memory.Span[..RawLength];
 
     /// <summary>
     /// Returns the pooled raw buffer to its pool.
     /// </summary>
-    public void Dispose() => rawOwner.Dispose();
+    public void Dispose() => RawOwner.Dispose();
 }

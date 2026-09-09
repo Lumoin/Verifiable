@@ -1,7 +1,14 @@
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using Verifiable.Core;
+using Verifiable.Core.Assessment;
+using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
+using Verifiable.Core.Validation;
 using Verifiable.JCose;
 
 namespace Verifiable.Vcalm;
@@ -36,7 +43,7 @@ public static class VcalmIssuerEndpoints
     /// The endpoint builder delegate. Pass this to
     /// <see cref="Verifiable.Server.ServerConfiguration.EndpointBuilders"/>.
     /// </summary>
-    public static readonly EndpointBuilderDelegate Builder = static (registration, context, ct) =>
+    public static EndpointBuilderDelegate Builder { get; } = static (registration, context, ct) =>
     {
         List<EndpointCandidate> candidates = [];
 
@@ -248,7 +255,7 @@ public static class VcalmIssuerEndpoints
         //issuer, and at least one credentialSubject (VC-DM §4); an absent or empty one of these is a
         //400 rather than a signed-but-invalid credential. Wrong-typed members are already refused at
         //parse; this catches the absent / empty ones that bind to default model values.
-        ServerHttpResponse? structuralFailure = ValidateCredentialStructure(credential);
+        ServerHttpResponse? structuralFailure = await ValidateCredentialStructureAsync(credential, cancellationToken).ConfigureAwait(false);
         if(structuralFailure is not null)
         {
             return structuralFailure;
@@ -543,15 +550,33 @@ public static class VcalmIssuerEndpoints
     }
 
 
-    //§3.2.1 structural validation of the credential to be issued: a Verifiable Credential carries a
-    //non-empty @context, a type that includes VerifiableCredential, an issuer, and at least one
-    //credentialSubject (VC-DM §4). A violation is a §3.8 MALFORMED_VALUE_ERROR 400 — the issuer
-    //refuses to secure a document that is not a valid credential.
-    private static ServerHttpResponse? ValidateCredentialStructure(VerifiableCredential credential)
+    /// <summary>
+    /// The §3.2.1 structural gate on the credential to be issued: its <c>@context</c> MUST conform
+    /// to <see cref="ContextValidationRules.ValidateCredentialContextAsync"/>'s NORMATIVE pipeline,
+    /// its <c>type</c> MUST include <c>VerifiableCredential</c>, it MUST carry an <c>issuer</c>, and
+    /// it MUST carry at least one <c>credentialSubject</c> (VC-DM 2.0 §4).
+    /// </summary>
+    /// <param name="credential">The credential the issue request carries.</param>
+    /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
+    /// <returns>
+    /// A §3.8 <c>MALFORMED_VALUE_ERROR</c> 400 naming the specific violated clause, or
+    /// <see langword="null"/> when the credential is structurally sound.
+    /// </returns>
+    /// <remarks>
+    /// This gate is intentionally narrower than the full VCALM strict profile: it never runs
+    /// <see cref="ContextValidationRules.ValidateCredentialContextStrictProfileAsync"/>, so an
+    /// unknown but well-formed context IRI, or an instance-specific inline definition, still issues
+    /// — the issuer refuses only a document that fails a base-specification MUST, never one that
+    /// merely falls outside this library's own SHOULD-level allowlist.
+    /// </remarks>
+    private static async ValueTask<ServerHttpResponse?> ValidateCredentialStructureAsync(
+        VerifiableCredential credential, CancellationToken cancellationToken)
     {
-        if(credential.Context?.Contexts is not { Count: > 0 })
+        List<Claim> contextClaims = await ContextValidationRules.ValidateCredentialContextAsync(credential, cancellationToken).ConfigureAwait(false);
+        Claim? failedContextClaim = contextClaims.Find(static claim => claim.Outcome == ClaimOutcome.Failure);
+        if(failedContextClaim is not null)
         {
-            return MalformedCredentialRequest("The credential must have a non-empty '@context'.");
+            return MalformedCredentialRequest(DescribeNormativeContextViolation(failedContextClaim));
         }
 
         if(credential.Type is not { Count: > 0 } type
@@ -573,6 +598,54 @@ public static class VcalmIssuerEndpoints
 
         return null;
     }
+
+
+    /// <summary>
+    /// Names the specific MUST-level VC Data Model 2.0 clause a failed claim from
+    /// <see cref="ContextValidationRules.ValidateCredentialContextAsync"/> (the NORMATIVE pipeline)
+    /// actually violated, so a §3.8 refusal never misattributes a blanket "does not conform to §4.3".
+    /// </summary>
+    /// <param name="claim">The failed claim, one of the NORMATIVE pipeline's own claims.</param>
+    /// <returns>A detail string quoting the exact clause the claim's own doc comment cites.</returns>
+    /// <exception cref="UnreachableException">
+    /// Thrown when <paramref name="claim"/> carries a <see cref="ClaimId"/> none of the arms name.
+    /// Every claim <see cref="ContextValidationRules.ValidateCredentialContextAsync"/> can return
+    /// today has its own arm, so this is unreached; it exists so a normative claim added later
+    /// without a matching arm here fails loudly instead of silently falling through to a blanket,
+    /// misattributed "does not conform to §4.3" detail.
+    /// </exception>
+    private static string DescribeNormativeContextViolation(Claim claim) => claim switch
+    {
+        _ when claim.Id.Equals(ClaimId.ContextPresent) =>
+            "The credential is missing a '@context' property. VC Data Model 2.0 §4.3 Contexts: "
+            + "\"Verifiable credentials and verifiable presentations MUST include a @context property.\"",
+
+        _ when claim.Id.Equals(ClaimId.ContextFormIsOrderedSet) =>
+            "The credential's '@context' is not a JSON array. VC Data Model 2.0 §4.3 Contexts: "
+            + "\"The value of the @context property MUST be an ordered set [...].\"",
+
+        _ when claim.Id.Equals(ClaimId.ContextFirstEntry) =>
+            $"The credential's '@context' does not have '{Context.Credentials20}' as its first entry. "
+            + $"VC Data Model 2.0 §4.3 Contexts: \"[...] the first item is a URL with the value {Context.Credentials20}.\"",
+
+        _ when claim.Id.Equals(ClaimId.ContextEntriesAreUrlsOrDefinitions) =>
+            "An entry in the credential's '@context' is neither an inline definition nor an absolute "
+            + "URL. VC Data Model 2.0 §4.3 Contexts: \"Subsequent items in the ordered set MUST "
+            + "be composed of any combination of URLs and objects [...].\"",
+
+        _ when claim.Id.Equals(ClaimId.ContextNoDuplicateEntries) =>
+            "The credential's '@context' contains a duplicate entry. VC Data Model 2.0 §4.3 Contexts "
+            + "requires the @context value be an ordered set, and per the Infra Standard's ordered set "
+            + "definition it \"must not contain the same item twice.\"",
+
+        _ when claim.Id.Equals(ClaimId.ContextUndefinedTermsLast) =>
+            $"The credential's '@context' does not place '{Context.UndefinedTerms20}' as its last entry. "
+            + $"VC Data Model 2.0 §5.2 Extensibility: \"[...] it MUST include the {Context.UndefinedTerms20} "
+            + "as the last value in the @context property.\"",
+
+        _ => throw new UnreachableException(
+            $"No §4.3 refusal detail is mapped for context claim '{claim.Id}'.")
+    };
 
 
     //A §3.2.1 / §3.8 MALFORMED_VALUE_ERROR 400 carrying the specific structural reason the credential

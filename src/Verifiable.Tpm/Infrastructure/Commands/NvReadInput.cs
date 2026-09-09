@@ -23,7 +23,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </list>
 /// <para>
 /// This command is authorized, so it is sent with <c>TPM_ST_SESSIONS</c>. See TPM 2.0 Library Part 3,
-/// Section 31.13 (Table 248).
+/// clause 31.13 (Table 265).
 /// </para>
 /// </remarks>
 public readonly record struct NvReadInput(uint AuthHandle, uint NvIndex, ushort Size, ushort Offset): ITpmCommandInput

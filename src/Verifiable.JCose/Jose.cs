@@ -380,28 +380,6 @@ public static class Jws
 
 
     /// <summary>
-    /// Verifies a JWS message using registry-resolved verification function.
-    /// Allocates the signing-input buffer from <see cref="BaseMemoryPool.Shared"/>,
-    /// the library's known house pool; the overload taking an explicit
-    /// <c>pool</c> uses caller-supplied pooling instead.
-    /// </summary>
-    /// <param name="message">The JWS message to verify.</param>
-    /// <param name="base64UrlEncoder">Encodes bytes to Base64Url strings.</param>
-    /// <param name="publicKey">The public key for verification.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns><see langword="true"/> if the signature is valid; otherwise <see langword="false"/>.</returns>
-    /// <exception cref="InvalidOperationException">
-    /// Thrown when the message has multiple signatures.
-    /// </exception>
-    public static ValueTask<bool> VerifyAsync(
-        JwsMessage message,
-        EncodeDelegate base64UrlEncoder,
-        PublicKeyMemory publicKey,
-        CancellationToken cancellationToken)
-        => VerifyAsync(message, base64UrlEncoder, publicKey, BaseMemoryPool.Shared, cancellationToken);
-
-
-    /// <summary>
     /// Verifies a JWS message using registry-resolved verification function,
     /// allocating the pooled signing-input buffer from the caller-supplied
     /// <paramref name="pool"/>.

@@ -198,7 +198,8 @@ namespace Verifiable.Cryptography
             {
                 //Writing these bytes should never fail. The output size is known and the buffer is already reserved.
                 //Plus tests check the guards checking function data check other options are not possible.
-                _ = point.TryWriteBytes(((Span<byte>)yPointBytes)[start..], out _, isUnsigned: true, isBigEndian: true);
+                Span<byte> yPointBytesSpan = yPointBytes;
+                _ = point.TryWriteBytes(yPointBytesSpan[start..], out _, isUnsigned: true, isBigEndian: true);
                 return yPointBytes;
             }
 

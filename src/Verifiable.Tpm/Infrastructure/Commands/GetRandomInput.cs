@@ -20,7 +20,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 ///   <item><description>bytesRequested (UINT16) - number of bytes to generate.</description></item>
 /// </list>
 /// <para>
-/// See TPM 2.0 Part 3, Section 16.1 - TPM2_GetRandom.
+/// See TPM 2.0 Library Part 3, clause 16.1 - TPM2_GetRandom.
 /// </para>
 /// </remarks>
 public readonly record struct GetRandomInput(ushort BytesRequested): ITpmCommandInput

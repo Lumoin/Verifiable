@@ -1,3 +1,5 @@
+using Verifiable.Core.StatusList;
+
 namespace Verifiable.OAuth.Trust;
 
 /// <summary>
@@ -57,7 +59,7 @@ public readonly record struct TrustSignalKind(string Value)
     public static TrustSignalKind Revocation { get; } = new("revocation");
 
     /// <summary>A Token Status List entry (valid / revoked / suspended) for the subject.</summary>
-    public static TrustSignalKind StatusListEntry { get; } = new("status_list");
+    public static TrustSignalKind StatusListEntry { get; } = new(StatusMechanismNames.StatusList);
 
     /// <summary>A freshness / expiry bound on the subject (e.g. statement or mark <c>exp</c>).</summary>
     public static TrustSignalKind Expiry { get; } = new("expiry");
@@ -394,7 +396,7 @@ public sealed record TrustDecisionRecord<TMechanismEvidence>
 /// </remarks>
 public static class PartyTrustEngine
 {
-    internal static readonly IReadOnlyDictionary<string, object> EmptyMetadata =
+    internal static IReadOnlyDictionary<string, object> EmptyMetadata { get; } =
         new Dictionary<string, object>(StringComparer.Ordinal);
 
 

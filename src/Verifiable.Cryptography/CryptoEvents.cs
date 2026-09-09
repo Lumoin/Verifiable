@@ -125,13 +125,15 @@ public sealed record EntropyConsumedEvent: CryptoEvent
         int byteCount,
         Purpose purpose,
         EntropyHealthObservation health,
-        string emittedBy = "",
-        TimeProvider? timeProvider = null)
+        TimeProvider timeProvider,
+        string emittedBy = "")
     {
+        ArgumentNullException.ThrowIfNull(timeProvider);
+
         (string? traceParent, string? traceState) = CaptureTraceContext();
         return new EntropyConsumedEvent
         {
-            OccurredAt = (timeProvider ?? TimeProvider.System).GetUtcNow(),
+            OccurredAt = timeProvider.GetUtcNow(),
             Source = source,
             ByteCount = byteCount,
             Purpose = purpose,
@@ -168,13 +170,15 @@ public sealed record EntropyHealthAssessedEvent: CryptoEvent
     public static EntropyHealthAssessedEvent Create(
         EntropySource source,
         EntropyHealthObservation observation,
-        string emittedBy = "",
-        TimeProvider? timeProvider = null)
+        TimeProvider timeProvider,
+        string emittedBy = "")
     {
+        ArgumentNullException.ThrowIfNull(timeProvider);
+
         (string? traceParent, string? traceState) = CaptureTraceContext();
         return new EntropyHealthAssessedEvent
         {
-            OccurredAt = (timeProvider ?? TimeProvider.System).GetUtcNow(),
+            OccurredAt = timeProvider.GetUtcNow(),
             Source = source,
             Observation = observation,
             EmittedBy = emittedBy,
@@ -219,13 +223,15 @@ public sealed record KeyMaterialGeneratedEvent: CryptoEvent
         Purpose purpose,
         MaterialSemantics materialSemantics,
         string backend,
-        string emittedBy = "",
-        TimeProvider? timeProvider = null)
+        TimeProvider timeProvider,
+        string emittedBy = "")
     {
+        ArgumentNullException.ThrowIfNull(timeProvider);
+
         (string? traceParent, string? traceState) = CaptureTraceContext();
         return new KeyMaterialGeneratedEvent
         {
-            OccurredAt = (timeProvider ?? TimeProvider.System).GetUtcNow(),
+            OccurredAt = timeProvider.GetUtcNow(),
             Algorithm = algorithm,
             Purpose = purpose,
             MaterialSemantics = materialSemantics,
@@ -266,13 +272,15 @@ public sealed record SignatureProducedEvent: CryptoEvent
         int dataLength,
         int signatureLength,
         string backend,
-        string emittedBy = "",
-        TimeProvider? timeProvider = null)
+        TimeProvider timeProvider,
+        string emittedBy = "")
     {
+        ArgumentNullException.ThrowIfNull(timeProvider);
+
         (string? traceParent, string? traceState) = CaptureTraceContext();
         return new SignatureProducedEvent
         {
-            OccurredAt = (timeProvider ?? TimeProvider.System).GetUtcNow(),
+            OccurredAt = timeProvider.GetUtcNow(),
             Algorithm = algorithm,
             DataLength = dataLength,
             SignatureLength = signatureLength,
@@ -316,13 +324,15 @@ public sealed record VerificationCompletedEvent: CryptoEvent
         VerificationOutcome outcome,
         int dataLength,
         string backend,
-        string emittedBy = "",
-        TimeProvider? timeProvider = null)
+        TimeProvider timeProvider,
+        string emittedBy = "")
     {
+        ArgumentNullException.ThrowIfNull(timeProvider);
+
         (string? traceParent, string? traceState) = CaptureTraceContext();
         return new VerificationCompletedEvent
         {
-            OccurredAt = (timeProvider ?? TimeProvider.System).GetUtcNow(),
+            OccurredAt = timeProvider.GetUtcNow(),
             Algorithm = algorithm,
             Outcome = outcome,
             DataLength = dataLength,
@@ -362,13 +372,15 @@ public sealed record DigestComputedEvent: CryptoEvent
         int inputLength,
         int digestLength,
         Purpose purpose,
-        string emittedBy = "",
-        TimeProvider? timeProvider = null)
+        TimeProvider timeProvider,
+        string emittedBy = "")
     {
+        ArgumentNullException.ThrowIfNull(timeProvider);
+
         (string? traceParent, string? traceState) = CaptureTraceContext();
         return new DigestComputedEvent
         {
-            OccurredAt = (timeProvider ?? TimeProvider.System).GetUtcNow(),
+            OccurredAt = timeProvider.GetUtcNow(),
             AlgorithmName = algorithmName,
             InputLength = inputLength,
             DigestLength = digestLength,
@@ -404,13 +416,15 @@ public sealed record HmacComputedEvent: CryptoEvent
         string algorithmName,
         int inputLength,
         int outputLength,
-        string emittedBy = "",
-        TimeProvider? timeProvider = null)
+        TimeProvider timeProvider,
+        string emittedBy = "")
     {
+        ArgumentNullException.ThrowIfNull(timeProvider);
+
         (string? traceParent, string? traceState) = CaptureTraceContext();
         return new HmacComputedEvent
         {
-            OccurredAt = (timeProvider ?? TimeProvider.System).GetUtcNow(),
+            OccurredAt = timeProvider.GetUtcNow(),
             AlgorithmName = algorithmName,
             InputLength = inputLength,
             OutputLength = outputLength,
@@ -449,13 +463,15 @@ public sealed record HmacVerifiedEvent: CryptoEvent
         string algorithmName,
         VerificationOutcome outcome,
         int inputLength,
-        string emittedBy = "",
-        TimeProvider? timeProvider = null)
+        TimeProvider timeProvider,
+        string emittedBy = "")
     {
+        ArgumentNullException.ThrowIfNull(timeProvider);
+
         (string? traceParent, string? traceState) = CaptureTraceContext();
         return new HmacVerifiedEvent
         {
-            OccurredAt = (timeProvider ?? TimeProvider.System).GetUtcNow(),
+            OccurredAt = timeProvider.GetUtcNow(),
             AlgorithmName = algorithmName,
             Outcome = outcome,
             InputLength = inputLength,
@@ -500,13 +516,15 @@ public sealed record SymmetricCipherPerformedEvent: CryptoEvent
         int inputLength,
         int outputLength,
         string backend,
-        string emittedBy = "",
-        TimeProvider? timeProvider = null)
+        TimeProvider timeProvider,
+        string emittedBy = "")
     {
+        ArgumentNullException.ThrowIfNull(timeProvider);
+
         (string? traceParent, string? traceState) = CaptureTraceContext();
         return new SymmetricCipherPerformedEvent
         {
-            OccurredAt = (timeProvider ?? TimeProvider.System).GetUtcNow(),
+            OccurredAt = timeProvider.GetUtcNow(),
             Algorithm = algorithm,
             Encrypting = encrypting,
             InputLength = inputLength,
@@ -547,13 +565,15 @@ public sealed record BlockCipherMacComputedEvent: CryptoEvent
         int inputLength,
         int outputLength,
         string backend,
-        string emittedBy = "",
-        TimeProvider? timeProvider = null)
+        TimeProvider timeProvider,
+        string emittedBy = "")
     {
+        ArgumentNullException.ThrowIfNull(timeProvider);
+
         (string? traceParent, string? traceState) = CaptureTraceContext();
         return new BlockCipherMacComputedEvent
         {
-            OccurredAt = (timeProvider ?? TimeProvider.System).GetUtcNow(),
+            OccurredAt = timeProvider.GetUtcNow(),
             Algorithm = algorithm,
             InputLength = inputLength,
             OutputLength = outputLength,
@@ -598,13 +618,15 @@ public sealed record BlockCipherMacVerifiedEvent: CryptoEvent
         VerificationOutcome outcome,
         int inputLength,
         string backend,
-        string emittedBy = "",
-        TimeProvider? timeProvider = null)
+        TimeProvider timeProvider,
+        string emittedBy = "")
     {
+        ArgumentNullException.ThrowIfNull(timeProvider);
+
         (string? traceParent, string? traceState) = CaptureTraceContext();
         return new BlockCipherMacVerifiedEvent
         {
-            OccurredAt = (timeProvider ?? TimeProvider.System).GetUtcNow(),
+            OccurredAt = timeProvider.GetUtcNow(),
             Algorithm = algorithm,
             Outcome = outcome,
             InputLength = inputLength,

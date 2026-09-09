@@ -734,7 +734,6 @@ internal sealed class QualifiedCertificateFactsExtractorTests
     [TestMethod]
     public void KeepsTheFirstValueWhenTheDuplicateStatementInfoIsMalformed()
     {
-        X500DistinguishedName name = CreateName([Utf8(WellKnownOids.CommonName, "Malformed Duplicate")]);
         using PkiCertificateMemory certificate = MintSyntheticCertificate(
             extensions:
             [

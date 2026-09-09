@@ -1,6 +1,8 @@
 using System;
+using System.Buffers;
 using System.Collections.Generic;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
+using Verifiable.Cbor;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Fido2;
 
@@ -23,7 +25,9 @@ internal sealed class CtapParameterMapReaderTests
             clientDataHash[i] = (byte)i;
         }
 
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(2);
         writer.WriteInt32(1);
         writer.WriteByteString(clientDataHash);
@@ -31,14 +35,14 @@ internal sealed class CtapParameterMapReaderTests
         writer.WriteTextString("example.com");
         writer.WriteEndMap();
 
-        IReadOnlyDictionary<int, ReadOnlyMemory<byte>> result = CtapParameterMapReader.Read(writer.Encode());
+        IReadOnlyDictionary<int, ReadOnlyMemory<byte>> result = CtapParameterMapReader.Read(writerBuffer.WrittenSpan.ToArray());
 
         Assert.HasCount(2, result);
 
-        var clientDataHashReader = new CborReader(result[1]);
+        var clientDataHashReader = new CborReader(result[1], CborOptions.Strict);
         Assert.IsTrue(clientDataHashReader.ReadByteString().AsSpan().SequenceEqual(clientDataHash));
 
-        var rpIdReader = new CborReader(result[2]);
+        var rpIdReader = new CborReader(result[2], CborOptions.Strict);
         Assert.AreEqual("example.com", rpIdReader.ReadTextString());
     }
 
@@ -63,11 +67,13 @@ internal sealed class CtapParameterMapReaderTests
     [TestMethod]
     public void ReadsEmptyMap()
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(0);
         writer.WriteEndMap();
 
-        IReadOnlyDictionary<int, ReadOnlyMemory<byte>> result = CtapParameterMapReader.Read(writer.Encode());
+        IReadOnlyDictionary<int, ReadOnlyMemory<byte>> result = CtapParameterMapReader.Read(writerBuffer.WrittenSpan.ToArray());
 
         Assert.IsEmpty(result);
     }

@@ -166,7 +166,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     /// <summary>
     /// <see cref="TpmiAlgHash.Parse"/> admits a TCG-defined hash algorithm and <see cref="TpmiAlgHash.WriteTo"/>
     /// reproduces the exact wire bytes it was parsed from; <see cref="TpmiAlgHash.DigestSize"/> reports the
-    /// algorithm's digest size (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, Section 9.31, Table 78).
+    /// algorithm's digest size (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, clause 9.31, Table 77).
     /// </summary>
     [TestMethod]
     public void TpmiAlgHashParsesHashAlgorithmAndRoundTripsByteIdentically()
@@ -188,8 +188,8 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
 
     /// <summary>
     /// A non-hash algorithm is refused by <see cref="TpmiAlgHash.Parse"/> with <c>TPM_RC_HASH</c>, and
-    /// <see cref="TpmiAlgHash.IsAlgHash"/> reports it as not admitted (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, Section 9.31,
-    /// Table 78).
+    /// <see cref="TpmiAlgHash.IsAlgHash"/> reports it as not admitted (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, clause 9.31,
+    /// Table 77).
     /// </summary>
     [TestMethod]
     public void TpmiAlgHashRefusesNonHashAlgorithm()
@@ -203,7 +203,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     /// <summary>
     /// The bare form of <see cref="TpmiAlgHash.Parse"/> refuses <c>TPM_ALG_NULL</c> (<see
     /// href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 2, Section 9.31, Table 78's leading <c>+</c> row).
+    /// Specification</see>, Part 2, clause 9.31, Table 77's leading <c>+</c> row).
     /// </summary>
     [TestMethod]
     public void TpmiAlgHashBareFormRefusesNull()
@@ -218,7 +218,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     /// The <c>isNullAdmitted: true</c> form of <see cref="TpmiAlgHash.Parse"/> admits <c>TPM_ALG_NULL</c>, and
     /// <see cref="TpmiAlgHash.DigestSize"/> reports <see langword="null"/> for it (<see
     /// href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 2, Section 9.31, Table 78's leading <c>+</c> row).
+    /// Specification</see>, Part 2, clause 9.31, Table 77's leading <c>+</c> row).
     /// </summary>
     [TestMethod]
     public void TpmiAlgHashPlusFormAdmitsNull()
@@ -233,7 +233,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
 
     /// <summary>
     /// <see cref="TpmiAlgHash.FromValue"/> is the unvalidated escape hatch for a value already known good — it
-    /// admits a non-hash algorithm without throwing (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, Section 9.31).
+    /// admits a non-hash algorithm without throwing (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, clause 9.31).
     /// </summary>
     [TestMethod]
     public void TpmiAlgHashFromValueDoesNotValidate()
@@ -247,7 +247,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     /// <see cref="TpmiAlgSigScheme.Parse"/> admits an asymmetric signing scheme and
     /// <see cref="TpmiAlgSigScheme.WriteTo"/> reproduces the exact wire bytes it was parsed from (<see
     /// href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 2, Section 9.37, Table 84).
+    /// Specification</see>, Part 2, clause 9.37, Table 83).
     /// </summary>
     [TestMethod]
     public void TpmiAlgSigSchemeParsesSchemeAndRoundTripsByteIdentically()
@@ -268,8 +268,8 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
 
     /// <summary>
     /// A symmetric algorithm is refused by <see cref="TpmiAlgSigScheme.Parse"/> with <c>TPM_RC_SCHEME</c>, and
-    /// <see cref="TpmiAlgSigScheme.IsSigScheme"/> reports it as not admitted (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, Section
-    /// 9.37, Table 84).
+    /// <see cref="TpmiAlgSigScheme.IsSigScheme"/> reports it as not admitted (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, clause
+    /// 9.37, Table 83).
     /// </summary>
     [TestMethod]
     public void TpmiAlgSigSchemeRefusesNonSigningAlgorithm()
@@ -283,7 +283,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     /// <summary>
     /// The bare form of <see cref="TpmiAlgSigScheme.Parse"/> refuses <c>TPM_ALG_NULL</c> (<see
     /// href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 2, Section 9.37, Table 84's leading <c>+</c> row).
+    /// Specification</see>, Part 2, clause 9.37, Table 83's leading <c>+</c> row).
     /// </summary>
     [TestMethod]
     public void TpmiAlgSigSchemeBareFormRefusesNull()
@@ -295,7 +295,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
 
     /// <summary>
     /// The <c>isNullAdmitted: true</c> form of <see cref="TpmiAlgSigScheme.Parse"/> admits <c>TPM_ALG_NULL</c>
-    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, Section 9.37, Table 84's leading <c>+</c> row).
+    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, clause 9.37, Table 83's leading <c>+</c> row).
     /// </summary>
     [TestMethod]
     public void TpmiAlgSigSchemePlusFormAdmitsNull()
@@ -309,7 +309,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
 
     /// <summary>
     /// <see cref="TpmiAlgSigScheme.FromValue"/> is the unvalidated escape hatch for a value already known good
-    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, Section 9.37).
+    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, clause 9.37).
     /// </summary>
     [TestMethod]
     public void TpmiAlgSigSchemeFromValueDoesNotValidate()
@@ -320,11 +320,11 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     }
 
     /// <summary>
-    /// <see cref="TpmiAlgSigScheme.Parse"/> admits <c>TPM_ALG_EDDSA</c> — Type "A X" in Part 2, Table 11, one
-    /// of the <c>!ALG.ax</c> asymmetric signing schemes Table 84 admits — and
+    /// <see cref="TpmiAlgSigScheme.Parse"/> admits <c>TPM_ALG_EDDSA</c> — Type "A X" in Part 2, Table 8, one
+    /// of the <c>!ALG.ax</c> asymmetric signing schemes Table 83 admits — and
     /// <see cref="TpmiAlgSigScheme.WriteTo"/> reproduces the exact wire bytes it was parsed from (<see
     /// href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 2, Section 9.37, Table 84).
+    /// Specification</see>, Part 2, clause 9.37, Table 83).
     /// </summary>
     [TestMethod]
     public void TpmiAlgSigSchemeParsesEddsaAndRoundTripsByteIdentically()
@@ -344,11 +344,11 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     }
 
     /// <summary>
-    /// <see cref="TpmiAlgSigScheme.Parse"/> admits <c>TPM_ALG_EDDSA_PH</c> — Type "A X" in Part 2, Table 11,
-    /// one of the <c>!ALG.ax</c> asymmetric signing schemes Table 84 admits — and
+    /// <see cref="TpmiAlgSigScheme.Parse"/> admits <c>TPM_ALG_EDDSA_PH</c> — Type "A X" in Part 2, Table 8,
+    /// one of the <c>!ALG.ax</c> asymmetric signing schemes Table 83 admits — and
     /// <see cref="TpmiAlgSigScheme.WriteTo"/> reproduces the exact wire bytes it was parsed from (<see
     /// href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 2, Section 9.37, Table 84).
+    /// Specification</see>, Part 2, clause 9.37, Table 83).
     /// </summary>
     [TestMethod]
     public void TpmiAlgSigSchemeParsesEddsaPhAndRoundTripsByteIdentically()
@@ -368,11 +368,11 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     }
 
     /// <summary>
-    /// <see cref="TpmiAlgSigScheme.Parse"/> admits <c>TPM_ALG_LMS</c> — Type "A X C" in Part 2, Table 11 (the
-    /// "C" marking it stateful/counter-based), one of the <c>!ALG.ax</c> asymmetric signing schemes Table 84
+    /// <see cref="TpmiAlgSigScheme.Parse"/> admits <c>TPM_ALG_LMS</c> — Type "A X C" in Part 2, Table 8 (the
+    /// "C" marking it stateful/counter-based), one of the <c>!ALG.ax</c> asymmetric signing schemes Table 83
     /// admits — and <see cref="TpmiAlgSigScheme.WriteTo"/> reproduces the exact wire bytes it was parsed from
     /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 2, Section 9.37, Table 84).
+    /// Specification</see>, Part 2, clause 9.37, Table 83).
     /// </summary>
     [TestMethod]
     public void TpmiAlgSigSchemeParsesLmsAndRoundTripsByteIdentically()
@@ -392,11 +392,11 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     }
 
     /// <summary>
-    /// <see cref="TpmiAlgSigScheme.Parse"/> admits <c>TPM_ALG_XMSS</c> — Type "A X C" in Part 2, Table 11 (the
-    /// "C" marking it stateful/counter-based), one of the <c>!ALG.ax</c> asymmetric signing schemes Table 84
+    /// <see cref="TpmiAlgSigScheme.Parse"/> admits <c>TPM_ALG_XMSS</c> — Type "A X C" in Part 2, Table 8 (the
+    /// "C" marking it stateful/counter-based), one of the <c>!ALG.ax</c> asymmetric signing schemes Table 83
     /// admits — and <see cref="TpmiAlgSigScheme.WriteTo"/> reproduces the exact wire bytes it was parsed from
     /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 2, Section 9.37, Table 84).
+    /// Specification</see>, Part 2, clause 9.37, Table 83).
     /// </summary>
     [TestMethod]
     public void TpmiAlgSigSchemeParsesXmssAndRoundTripsByteIdentically()
@@ -419,7 +419,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     /// <see cref="TpmiAlgRsaScheme.Parse"/> admits an RSA encrypting or signing scheme and
     /// <see cref="TpmiAlgRsaScheme.WriteTo"/> reproduces the exact wire bytes it was parsed from (<see
     /// href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 2, Section 11.2.4.1, Table 189).
+    /// Specification</see>, Part 2, clause 11.2.4.1, Table 189).
     /// </summary>
     [TestMethod]
     public void TpmiAlgRsaSchemeParsesSchemeAndRoundTripsByteIdentically()
@@ -442,7 +442,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     /// An ECC signing algorithm is refused by <see cref="TpmiAlgRsaScheme.Parse"/> with <c>TPM_RC_VALUE</c>,
     /// and <see cref="TpmiAlgRsaScheme.IsRsaScheme"/> reports it as not admitted (<see
     /// href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 2, Section 11.2.4.1, Table 189).
+    /// Specification</see>, Part 2, clause 11.2.4.1, Table 189).
     /// </summary>
     [TestMethod]
     public void TpmiAlgRsaSchemeRefusesEccSigningAlgorithm()
@@ -456,7 +456,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     /// <summary>
     /// The bare form of <see cref="TpmiAlgRsaScheme.Parse"/> refuses <c>TPM_ALG_NULL</c> (<see
     /// href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 2, Section 11.2.4.1, Table 189's leading <c>+</c> row).
+    /// Specification</see>, Part 2, clause 11.2.4.1, Table 189's leading <c>+</c> row).
     /// </summary>
     [TestMethod]
     public void TpmiAlgRsaSchemeBareFormRefusesNull()
@@ -468,7 +468,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
 
     /// <summary>
     /// The <c>isNullAdmitted: true</c> form of <see cref="TpmiAlgRsaScheme.Parse"/> admits <c>TPM_ALG_NULL</c>
-    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, Section 11.2.4.1, Table 189's leading <c>+</c> row).
+    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, clause 11.2.4.1, Table 189's leading <c>+</c> row).
     /// </summary>
     [TestMethod]
     public void TpmiAlgRsaSchemePlusFormAdmitsNull()
@@ -482,7 +482,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
 
     /// <summary>
     /// <see cref="TpmiAlgRsaScheme.FromValue"/> is the unvalidated escape hatch for a value already known good
-    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, Section 11.2.4.1).
+    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, clause 11.2.4.1).
     /// </summary>
     [TestMethod]
     public void TpmiAlgRsaSchemeFromValueDoesNotValidate()
@@ -496,7 +496,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     /// <see cref="TpmiAlgEccScheme.Parse"/> admits an ECC signing or key-exchange scheme and
     /// <see cref="TpmiAlgEccScheme.WriteTo"/> reproduces the exact wire bytes it was parsed from (<see
     /// href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 2, Section 11.2.5.4, Table 199).
+    /// Specification</see>, Part 2, clause 11.2.5.4, Table 200).
     /// </summary>
     [TestMethod]
     public void TpmiAlgEccSchemeParsesSchemeAndRoundTripsByteIdentically()
@@ -519,7 +519,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     /// An RSA signing algorithm is refused by <see cref="TpmiAlgEccScheme.Parse"/> with <c>TPM_RC_SCHEME</c>,
     /// and <see cref="TpmiAlgEccScheme.IsEccScheme"/> reports it as not admitted (<see
     /// href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 2, Section 11.2.5.4, Table 199).
+    /// Specification</see>, Part 2, clause 11.2.5.4, Table 200).
     /// </summary>
     [TestMethod]
     public void TpmiAlgEccSchemeRefusesRsaSigningAlgorithm()
@@ -533,7 +533,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     /// <summary>
     /// The bare form of <see cref="TpmiAlgEccScheme.Parse"/> refuses <c>TPM_ALG_NULL</c> (<see
     /// href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 2, Section 11.2.5.4, Table 199's leading <c>+</c> row).
+    /// Specification</see>, Part 2, clause 11.2.5.4, Table 200's leading <c>+</c> row).
     /// </summary>
     [TestMethod]
     public void TpmiAlgEccSchemeBareFormRefusesNull()
@@ -545,7 +545,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
 
     /// <summary>
     /// The <c>isNullAdmitted: true</c> form of <see cref="TpmiAlgEccScheme.Parse"/> admits <c>TPM_ALG_NULL</c>
-    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, Section 11.2.5.4, Table 199's leading <c>+</c> row).
+    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, clause 11.2.5.4, Table 200's leading <c>+</c> row).
     /// </summary>
     [TestMethod]
     public void TpmiAlgEccSchemePlusFormAdmitsNull()
@@ -559,7 +559,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
 
     /// <summary>
     /// <see cref="TpmiAlgEccScheme.FromValue"/> is the unvalidated escape hatch for a value already known good
-    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, Section 11.2.5.4).
+    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, clause 11.2.5.4).
     /// </summary>
     [TestMethod]
     public void TpmiAlgEccSchemeFromValueDoesNotValidate()
@@ -570,11 +570,11 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     }
 
     /// <summary>
-    /// <see cref="TpmiAlgEccScheme.Parse"/> admits <c>TPM_ALG_EDDSA</c> — Dep "ECC" in Part 2, Table 11, one
-    /// of the <c>!ALG.ax</c> signing schemes Table 199's "(ECC)" restriction keeps — and
+    /// <see cref="TpmiAlgEccScheme.Parse"/> admits <c>TPM_ALG_EDDSA</c> — Dep "ECC" in Part 2, Table 8, one
+    /// of the <c>!ALG.ax</c> signing schemes Table 200's "(ECC)" restriction keeps — and
     /// <see cref="TpmiAlgEccScheme.WriteTo"/> reproduces the exact wire bytes it was parsed from (<see
     /// href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 2, Section 11.2.5.4, Table 199).
+    /// Specification</see>, Part 2, clause 11.2.5.4, Table 200).
     /// </summary>
     [TestMethod]
     public void TpmiAlgEccSchemeParsesEddsaAndRoundTripsByteIdentically()
@@ -594,11 +594,11 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     }
 
     /// <summary>
-    /// <see cref="TpmiAlgEccScheme.Parse"/> admits <c>TPM_ALG_EDDSA_PH</c> — Dep "ECC" in Part 2, Table 11, one
-    /// of the <c>!ALG.ax</c> signing schemes Table 199's "(ECC)" restriction keeps — and
+    /// <see cref="TpmiAlgEccScheme.Parse"/> admits <c>TPM_ALG_EDDSA_PH</c> — Dep "ECC" in Part 2, Table 8, one
+    /// of the <c>!ALG.ax</c> signing schemes Table 200's "(ECC)" restriction keeps — and
     /// <see cref="TpmiAlgEccScheme.WriteTo"/> reproduces the exact wire bytes it was parsed from (<see
     /// href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 2, Section 11.2.5.4, Table 199).
+    /// Specification</see>, Part 2, clause 11.2.5.4, Table 200).
     /// </summary>
     [TestMethod]
     public void TpmiAlgEccSchemeParsesEddsaPhAndRoundTripsByteIdentically()
@@ -621,7 +621,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     /// <see cref="TpmiAlgPublic.Parse"/> admits a public-area object type and
     /// <see cref="TpmiAlgPublic.WriteTo"/> reproduces the exact wire bytes it was parsed from (<see
     /// href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 2, Section 12.2.2, Table 211).
+    /// Specification</see>, Part 2, clause 12.2.2, Table 225).
     /// </summary>
     [TestMethod]
     public void TpmiAlgPublicParsesObjectTypeAndRoundTripsByteIdentically()
@@ -641,10 +641,10 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     }
 
     /// <summary>
-    /// <c>TPM_ALG_MLDSA</c> is an object type of the registry-extended <c>!ALG.o</c> class Table 211 names, so
+    /// <c>TPM_ALG_MLDSA</c> is an object type of the registry-extended <c>!ALG.o</c> class Table 225 names, so
     /// <see cref="TpmiAlgPublic.Parse"/> admits it and <see cref="TpmiAlgPublic.WriteTo"/> reproduces the exact
     /// wire bytes it was parsed from (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 2, Section 12.2.2, Table 211).
+    /// Specification</see>, Part 2, clause 12.2.2, Table 225).
     /// </summary>
     [TestMethod]
     public void TpmiAlgPublicParsesMlDsaObjectTypeAndRoundTripsByteIdentically()
@@ -664,10 +664,10 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     }
 
     /// <summary>
-    /// <c>TPM_ALG_HASH_MLDSA</c> is an object type of the registry-extended <c>!ALG.o</c> class Table 211 names,
+    /// <c>TPM_ALG_HASH_MLDSA</c> is an object type of the registry-extended <c>!ALG.o</c> class Table 225 names,
     /// so <see cref="TpmiAlgPublic.Parse"/> admits it and <see cref="TpmiAlgPublic.WriteTo"/> reproduces the
     /// exact wire bytes it was parsed from (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 2, Section 12.2.2, Table 211).
+    /// Specification</see>, Part 2, clause 12.2.2, Table 225).
     /// </summary>
     [TestMethod]
     public void TpmiAlgPublicParsesHashMlDsaObjectTypeAndRoundTripsByteIdentically()
@@ -687,10 +687,10 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     }
 
     /// <summary>
-    /// <c>TPM_ALG_MLKEM</c> is an object type of the registry-extended <c>!ALG.o</c> class Table 211 names, so
+    /// <c>TPM_ALG_MLKEM</c> is an object type of the registry-extended <c>!ALG.o</c> class Table 225 names, so
     /// <see cref="TpmiAlgPublic.Parse"/> admits it and <see cref="TpmiAlgPublic.WriteTo"/> reproduces the exact
     /// wire bytes it was parsed from (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 2, Section 12.2.2, Table 211).
+    /// Specification</see>, Part 2, clause 12.2.2, Table 225).
     /// </summary>
     [TestMethod]
     public void TpmiAlgPublicParsesMlKemObjectTypeAndRoundTripsByteIdentically()
@@ -711,8 +711,8 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
 
     /// <summary>
     /// A hash algorithm is refused by <see cref="TpmiAlgPublic.Parse"/> with <c>TPM_RC_TYPE</c>, and
-    /// <see cref="TpmiAlgPublic.IsPublic"/> reports it as not admitted (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, Section 12.2.2,
-    /// Table 211).
+    /// <see cref="TpmiAlgPublic.IsPublic"/> reports it as not admitted (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, clause 12.2.2,
+    /// Table 225).
     /// </summary>
     [TestMethod]
     public void TpmiAlgPublicRefusesNonObjectAlgorithm()
@@ -724,9 +724,9 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     }
 
     /// <summary>
-    /// Table 211 carries no leading <c>+</c>, so <see cref="TpmiAlgPublic.Parse"/> refuses <c>TPM_ALG_NULL</c>
-    /// unconditionally — there is no NULL-admitting overload (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, Section 12.2.2, Table
-    /// 211).
+    /// Table 225 carries no leading <c>+</c>, so <see cref="TpmiAlgPublic.Parse"/> refuses <c>TPM_ALG_NULL</c>
+    /// unconditionally — there is no NULL-admitting overload (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, clause 12.2.2, Table
+    /// 225).
     /// </summary>
     [TestMethod]
     public void TpmiAlgPublicRefusesNullSinceTableHasNoPlusForm()
@@ -739,7 +739,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
 
     /// <summary>
     /// <see cref="TpmiAlgPublic.FromValue"/> is the unvalidated escape hatch for a value already known good
-    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, Section 12.2.2).
+    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, clause 12.2.2).
     /// </summary>
     [TestMethod]
     public void TpmiAlgPublicFromValueDoesNotValidate()
@@ -751,8 +751,8 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
 
     /// <summary>
     /// <see cref="TpmiEccCurve.Parse"/> admits an implemented curve and <see cref="TpmiEccCurve.WriteTo"/>
-    /// reproduces the exact wire bytes it was parsed from (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, Section 11.2.5.5, Table
-    /// 200).
+    /// reproduces the exact wire bytes it was parsed from (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, clause 11.2.5.5, Table
+    /// 201).
     /// </summary>
     [TestMethod]
     public void TpmiEccCurveParsesCurveAndRoundTripsByteIdentically()
@@ -775,7 +775,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     /// A curve code the TCG registry has not assigned is refused by <see cref="TpmiEccCurve.Parse"/> with
     /// <c>TPM_RC_CURVE</c>, and <see cref="TpmiEccCurve.IsEccCurve"/> reports it as not admitted (<see
     /// href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 2, Section 11.2.5.5, Table 200).
+    /// Specification</see>, Part 2, clause 11.2.5.5, Table 201).
     /// </summary>
     [TestMethod]
     public void TpmiEccCurveRefusesUndefinedCurveCode()
@@ -790,7 +790,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     /// <summary>
     /// The bare form of <see cref="TpmiEccCurve.Parse"/> refuses <c>TPM_ECC_NONE</c> (<see
     /// href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 2, Section 11.2.5.5, Table 200's leading <c>+</c> row).
+    /// Specification</see>, Part 2, clause 11.2.5.5, Table 201's leading <c>+</c> row).
     /// </summary>
     [TestMethod]
     public void TpmiEccCurveBareFormRefusesNone()
@@ -804,7 +804,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     /// <summary>
     /// The <c>isNoneAdmitted: true</c> form of <see cref="TpmiEccCurve.Parse"/> admits <c>TPM_ECC_NONE</c> (<see
     /// href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 2, Section 11.2.5.5, Table 200's leading <c>+</c> row).
+    /// Specification</see>, Part 2, clause 11.2.5.5, Table 201's leading <c>+</c> row).
     /// </summary>
     [TestMethod]
     public void TpmiEccCurvePlusFormAdmitsNone()
@@ -819,7 +819,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     /// <summary>
     /// <see cref="TpmiEccCurve.FromValue"/> is the unvalidated escape hatch for a value already known good (<see
     /// href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 2, Section 11.2.5.5).
+    /// Specification</see>, Part 2, clause 11.2.5.5).
     /// </summary>
     [TestMethod]
     public void TpmiEccCurveFromValueDoesNotValidate()
@@ -835,7 +835,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     /// <see cref="TpmiRsaKeyBits.Parse"/> admits a supported RSA key size and
     /// <see cref="TpmiRsaKeyBits.WriteTo"/> reproduces the exact wire bytes it was parsed from (<see
     /// href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 2, Section 11.2.4.6, Table 194).
+    /// Specification</see>, Part 2, clause 11.2.4.7, Table 195).
     /// </summary>
     [TestMethod]
     public void TpmiRsaKeyBitsParsesSupportedSizeAndRoundTripsByteIdentically()
@@ -858,7 +858,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     /// A key size outside the <c>RSA_KEY_SIZES_BITS</c> set is refused by <see cref="TpmiRsaKeyBits.Parse"/>
     /// with <c>TPM_RC_VALUE</c>, and <see cref="TpmiRsaKeyBits.IsRsaKeyBits"/> reports it as not admitted (<see
     /// href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 2, Section 11.2.4.6, Table 194).
+    /// Specification</see>, Part 2, clause 11.2.4.7, Table 195).
     /// </summary>
     [TestMethod]
     public void TpmiRsaKeyBitsRefusesUnsupportedSize()
@@ -871,7 +871,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
 
     /// <summary>
     /// <see cref="TpmiRsaKeyBits.FromValue"/> is the unvalidated escape hatch for a value already known good
-    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, Section 11.2.4.6).
+    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, clause 11.2.4.6).
     /// </summary>
     [TestMethod]
     public void TpmiRsaKeyBitsFromValueDoesNotValidate()
@@ -883,7 +883,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
 
     /// <summary>
     /// <see cref="TpmiAlgSym.Parse"/> admits a symmetric algorithm and <see cref="TpmiAlgSym.WriteTo"/>
-    /// reproduces the exact wire bytes it was parsed from (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, Section 9.33, Table 80).
+    /// reproduces the exact wire bytes it was parsed from (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, clause 9.33, Table 79).
     /// </summary>
     [TestMethod]
     public void TpmiAlgSymParsesAlgorithmAndRoundTripsByteIdentically()
@@ -904,8 +904,8 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
 
     /// <summary>
     /// An asymmetric algorithm is refused by <see cref="TpmiAlgSym.Parse"/> with <c>TPM_RC_SYMMETRIC</c>, and
-    /// <see cref="TpmiAlgSym.IsAlgSym"/> reports it as not admitted (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, Section 9.33,
-    /// Table 80).
+    /// <see cref="TpmiAlgSym.IsAlgSym"/> reports it as not admitted (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, clause 9.33,
+    /// Table 79).
     /// </summary>
     [TestMethod]
     public void TpmiAlgSymRefusesNonSymmetricAlgorithm()
@@ -919,7 +919,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     /// <summary>
     /// The bare form of <see cref="TpmiAlgSym.Parse"/> refuses <c>TPM_ALG_NULL</c> (<see
     /// href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 2, Section 9.33, Table 80's leading <c>+</c> row).
+    /// Specification</see>, Part 2, clause 9.33, Table 79's leading <c>+</c> row).
     /// </summary>
     [TestMethod]
     public void TpmiAlgSymBareFormRefusesNull()
@@ -932,7 +932,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     /// <summary>
     /// The <c>isNullAdmitted: true</c> form of <see cref="TpmiAlgSym.Parse"/> admits <c>TPM_ALG_NULL</c> (<see
     /// href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 2, Section 9.33, Table 80's leading <c>+</c> row).
+    /// Specification</see>, Part 2, clause 9.33, Table 79's leading <c>+</c> row).
     /// </summary>
     [TestMethod]
     public void TpmiAlgSymPlusFormAdmitsNull()
@@ -947,7 +947,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     /// <summary>
     /// <see cref="TpmiAlgSym.FromValue"/> is the unvalidated escape hatch for a value already known good (<see
     /// href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 2, Section 9.33).
+    /// Specification</see>, Part 2, clause 9.33).
     /// </summary>
     [TestMethod]
     public void TpmiAlgSymFromValueDoesNotValidate()
@@ -961,7 +961,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     /// <see cref="TpmiAlgKdf.Parse"/> admits a hash-based key derivation function and
     /// <see cref="TpmiAlgKdf.WriteTo"/> reproduces the exact wire bytes it was parsed from (<see
     /// href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 2, Section 9.36, Table 83).
+    /// Specification</see>, Part 2, clause 9.36, Table 82).
     /// </summary>
     [TestMethod]
     public void TpmiAlgKdfParsesKdfAndRoundTripsByteIdentically()
@@ -981,9 +981,33 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     }
 
     /// <summary>
+    /// <see cref="TpmiAlgKdf.Parse"/> admits <c>TPM_ALG_HKDF</c> — the key derivation function v185 added to
+    /// Table 82 for the DHKEM ECC KEM path — and <see cref="TpmiAlgKdf.WriteTo"/> reproduces the exact wire
+    /// bytes it was parsed from (<see
+    /// href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
+    /// Specification</see>, Part 2, clause 9.36, Table 82).
+    /// </summary>
+    [TestMethod]
+    public void TpmiAlgKdfParsesHkdfAndRoundTripsByteIdentically()
+    {
+        byte[] wireBytes = EncodeAlg(TpmAlgIdConstants.TPM_ALG_HKDF);
+
+        TpmiAlgKdf kdf = ParseAlgKdf(wireBytes);
+
+        Assert.AreEqual(TpmAlgIdConstants.TPM_ALG_HKDF, kdf.Value);
+        Assert.IsTrue(TpmiAlgKdf.IsKdf(kdf.Value));
+
+        byte[] outBytes = new byte[sizeof(ushort)];
+        var writer = new TpmWriter(outBytes);
+        kdf.WriteTo(ref writer);
+
+        Assert.AreSequenceEqual(wireBytes, outBytes);
+    }
+
+    /// <summary>
     /// A non-KDF algorithm is refused by <see cref="TpmiAlgKdf.Parse"/> with <c>TPM_RC_KDF</c>, and
-    /// <see cref="TpmiAlgKdf.IsKdf"/> reports it as not admitted (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, Section 9.36, Table
-    /// 83).
+    /// <see cref="TpmiAlgKdf.IsKdf"/> reports it as not admitted (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, clause 9.36, Table
+    /// 82).
     /// </summary>
     [TestMethod]
     public void TpmiAlgKdfRefusesNonKdfAlgorithm()
@@ -997,7 +1021,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     /// <summary>
     /// The bare form of <see cref="TpmiAlgKdf.Parse"/> refuses <c>TPM_ALG_NULL</c> (<see
     /// href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 2, Section 9.36, Table 83's leading <c>+</c> row).
+    /// Specification</see>, Part 2, clause 9.36, Table 82's leading <c>+</c> row).
     /// </summary>
     [TestMethod]
     public void TpmiAlgKdfBareFormRefusesNull()
@@ -1010,7 +1034,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     /// <summary>
     /// The <c>isNullAdmitted: true</c> form of <see cref="TpmiAlgKdf.Parse"/> admits <c>TPM_ALG_NULL</c> (<see
     /// href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 2, Section 9.36, Table 83's leading <c>+</c> row).
+    /// Specification</see>, Part 2, clause 9.36, Table 82's leading <c>+</c> row).
     /// </summary>
     [TestMethod]
     public void TpmiAlgKdfPlusFormAdmitsNull()
@@ -1025,7 +1049,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     /// <summary>
     /// <see cref="TpmiAlgKdf.FromValue"/> is the unvalidated escape hatch for a value already known good (<see
     /// href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 2, Section 9.36).
+    /// Specification</see>, Part 2, clause 9.36).
     /// </summary>
     [TestMethod]
     public void TpmiAlgKdfFromValueDoesNotValidate()
@@ -1039,7 +1063,9 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     /// <see cref="TpmtHa.Parse"/> rents exactly one carrier from the pool for a non-empty digest, and
     /// <see cref="TpmtHa.Dispose"/> returns it, balancing back to the pre-rental baseline (<see
     /// href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 2, Section 10.3.2, Table 91).
+    /// Specification</see>, Part 2, clause 10.2.2, Table 89). <c>ha</c> is disposed explicitly, not via a
+    /// <see langword="using"/> declaration, because the balance assertion right after it must see the
+    /// rental already returned.
     /// </summary>
     [TestMethod]
     public void TpmtHaParseBalancesOnMeteredPoolForNonEmptyDigest()
@@ -1070,7 +1096,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     /// <see cref="TpmtHa.Create"/> rents exactly one carrier from the pool for a non-empty digest, and
     /// <see cref="TpmtHa.Dispose"/> returns it, balancing back to the pre-rental baseline (<see
     /// href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 2, Section 10.3.2, Table 91).
+    /// Specification</see>, Part 2, clause 10.2.2, Table 89).
     /// </summary>
     [TestMethod]
     public void TpmtHaCreateBalancesOnMeteredPoolForNonEmptyDigest()
@@ -1093,7 +1119,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
 
     /// <summary>
     /// The NULL hash-agile digest carries no digest octets, so <see cref="TpmtHa.Parse"/> rents nothing from
-    /// the pool for it (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, Section 10.3.2, Table 91).
+    /// the pool for it (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, clause 10.2.2, Table 89).
     /// </summary>
     [TestMethod]
     public void TpmtHaParseOfNullHashAlgRentsNothing()
@@ -1113,8 +1139,8 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
 
     /// <summary>
     /// The bare <see cref="TpmiAlgHash"/> form of <see cref="TpmtHa.Parse"/> refuses <c>TPM_ALG_NULL</c>,
-    /// since the leading <c>+</c> in Table 91 is a capability the caller opts into, not a blanket admission
-    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, Section 10.3.2, Table 91).
+    /// since the leading <c>+</c> in Table 89 is a capability the caller opts into, not a blanket admission
+    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, clause 10.2.2, Table 89).
     /// </summary>
     [TestMethod]
     public void TpmtHaParseBareFormRefusesNullHashAlg()
@@ -1127,8 +1153,8 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
 
     /// <summary>
     /// <see cref="TpmtHa.Create"/> refuses a digest whose length does not match the hash algorithm's digest
-    /// size, since Table 91's digest length is implied by <c>hashAlg</c> rather than carried as an explicit
-    /// size field on the wire (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, Section 10.3.2, Table 91).
+    /// size, since Table 89's digest length is implied by <c>hashAlg</c> rather than carried as an explicit
+    /// size field on the wire (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, clause 10.2.2, Table 89).
     /// </summary>
     [TestMethod]
     public void TpmtHaCreateRefusesDigestLengthMismatch()
@@ -1141,7 +1167,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
 
     /// <summary>
     /// <see cref="TpmtHa.WriteTo"/> followed by <see cref="TpmtHa.Parse"/> reproduces the exact digest bytes
-    /// and hash algorithm a structure was created from (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, Section 10.3.2, Table 91).
+    /// and hash algorithm a structure was created from (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, clause 10.2.2, Table 89).
     /// </summary>
     [TestMethod]
     public void TpmtHaWriteToThenParseRoundtripsByteIdentical()
@@ -1168,8 +1194,8 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
 
     /// <summary>
     /// <see cref="TpmtSigScheme.Create"/> then <see cref="TpmtSigScheme.Parse"/> round trip the hash-only
-    /// <c>TPMS_SIG_SCHEME_RSASSA</c> shape (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, Section 11.2.1.5, Table 180, over the
-    /// <c>TPMS_SCHEME_HASH</c> shape of Table 170).
+    /// <c>TPMS_SIG_SCHEME_RSASSA</c> shape (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, clause 11.2.1.5, Table 183, over the
+    /// <c>TPMS_SCHEME_HASH</c> shape of Table 173).
     /// </summary>
     [TestMethod]
     public void TpmtSigSchemeRoundtripsRsassa()
@@ -1190,8 +1216,8 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
 
     /// <summary>
     /// <see cref="TpmtSigScheme.Create"/> then <see cref="TpmtSigScheme.Parse"/> round trip the hash-only
-    /// <c>TPMS_SIG_SCHEME_ECDSA</c> shape (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, Section 11.2.1.5, Table 180, over the ECC
-    /// <c>TPMS_SCHEME_HASH</c> shape of Table 178).
+    /// <c>TPMS_SIG_SCHEME_ECDSA</c> shape (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, clause 11.2.1.5, Table 183, over the ECC
+    /// <c>TPMS_SCHEME_HASH</c> shape of Table 181).
     /// </summary>
     [TestMethod]
     public void TpmtSigSchemeRoundtripsEcdsa()
@@ -1212,8 +1238,8 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
 
     /// <summary>
     /// <see cref="TpmtSigScheme.CreateEcdaa"/> then <see cref="TpmtSigScheme.Parse"/> round trip the anonymous
-    /// <c>TPMS_SIG_SCHEME_ECDAA</c> shape, including its commit counter (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, Section
-    /// 11.2.1.5, Table 180, over <c>TPMS_SCHEME_ECDAA</c>, Table 171).
+    /// <c>TPMS_SIG_SCHEME_ECDAA</c> shape, including its commit counter (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, clause
+    /// 11.2.1.5, Table 183, over <c>TPMS_SCHEME_ECDAA</c>, Table 174).
     /// </summary>
     [TestMethod]
     public void TpmtSigSchemeRoundtripsEcdaa()
@@ -1234,8 +1260,8 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
 
     /// <summary>
     /// <see cref="TpmtSigScheme.Create"/> then <see cref="TpmtSigScheme.Parse"/> round trip the hash-only
-    /// <c>TPMS_SCHEME_HMAC</c> shape, present in every TPM implementation (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, Section
-    /// 11.2.1.5, Table 180, over Table 173).
+    /// <c>TPMS_SCHEME_HMAC</c> shape, present in every TPM implementation (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, clause
+    /// 11.2.1.5, Table 183, over Table 176).
     /// </summary>
     [TestMethod]
     public void TpmtSigSchemeRoundtripsHmac()
@@ -1257,7 +1283,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     /// <summary>
     /// <see cref="TpmtSigScheme.Null"/> writes only its 2-octet <c>TPM_ALG_NULL</c> selector, with no
     /// <see cref="TpmuSigScheme"/> details, and <see cref="TpmtSigScheme.Parse"/> with
-    /// <c>isNullAdmitted: true</c> reproduces it (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, Section 11.2.1.5, Table 180's leading
+    /// <c>isNullAdmitted: true</c> reproduces it (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, clause 11.2.1.5, Table 183's leading
     /// <c>+</c> row).
     /// </summary>
     [TestMethod]
@@ -1278,7 +1304,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     /// <summary>
     /// <see cref="TpmtSigScheme.Create"/> refuses <c>TPM_ALG_ECDAA</c> since that scheme needs a commit
     /// counter <see cref="TpmtSigScheme.CreateEcdaa"/> supplies and <see cref="TpmtSigScheme.Create"/> does not
-    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, Section 11.2.1.4, Table 179).
+    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2, clause 11.2.1.4, Table 182).
     /// </summary>
     [TestMethod]
     public void TpmtSigSchemeCreateRefusesEcdaaSelector()
@@ -1289,7 +1315,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     /// <summary>
     /// A non-signing algorithm is refused by <see cref="TpmtSigScheme.Parse"/> with <c>TPM_RC_SCHEME</c> (<see
     /// href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 2, Section 11.2.1.5, Table 180, via <see cref="TpmiAlgSigScheme"/>).
+    /// Specification</see>, Part 2, clause 11.2.1.5, Table 183, via <see cref="TpmiAlgSigScheme"/>).
     /// </summary>
     [TestMethod]
     public void TpmtSigSchemeParseRefusesNonSigningAlgorithm()
@@ -1302,7 +1328,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     /// <summary>
     /// The bare form of <see cref="TpmtSigScheme.Parse"/> refuses <c>TPM_ALG_NULL</c> (<see
     /// href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 2, Section 11.2.1.5, Table 180's leading <c>+</c> row).
+    /// Specification</see>, Part 2, clause 11.2.1.5, Table 183's leading <c>+</c> row).
     /// </summary>
     [TestMethod]
     public void TpmtSigSchemeParseBareFormRefusesNull()
@@ -1336,13 +1362,15 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
         }
         catch(InvalidOperationException)
         {
+            //Reaching this block IS the assertion: InvalidOperationException was thrown as expected; the
+            //preceding Assert.Fail fires only when WriteTo returns instead of throwing.
         }
     }
 
     /// <summary>
     /// <see cref="TpmtSigScheme.Null"/> writes exactly the 2-octet <c>TPM_ALG_NULL</c> selector (0x0010) (<see
     /// href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
-    /// Specification</see>, Part 2, Section 11.2.1.5, Table 180's leading <c>+</c> row).
+    /// Specification</see>, Part 2, clause 11.2.1.5, Table 183's leading <c>+</c> row).
     /// </summary>
     [TestMethod]
     public void TpmtSigSchemeNullWritesTpmAlgNullSelectorBytes()

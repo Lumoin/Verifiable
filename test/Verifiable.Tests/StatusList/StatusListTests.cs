@@ -1,4 +1,6 @@
 using System.Buffers;
+using System.IO;
+using System.IO.Compression;
 using Lumoin.Base;
 using Verifiable.Core.StatusList;
 
@@ -185,6 +187,57 @@ internal sealed class StatusListTests
         Assert.AreEqual(StatusTypes.Suspended, list[1]);
         Assert.AreEqual(StatusTypes.Valid, list[2]);
         Assert.AreEqual(StatusTypes.ApplicationSpecific03, list[3]);
+    }
+
+
+    /// <summary>
+    /// A decompression bomb — a small ZLIB stream engineered to inflate to far more than a caller's
+    /// configured ceiling — must be refused as soon as the running inflated total crosses that ceiling,
+    /// never materialized in full. A remote Status Provider is bounded only by the compact JWS length
+    /// its answer is wrapped in, so this is the wire-facing overload's own defence.
+    /// </summary>
+    [TestMethod]
+    public void FromCompressedRefusesInflationPastAnExplicitCeiling()
+    {
+        byte[] bomb = CompressedZeros(1024 * 1024);
+
+        _ = Assert.ThrowsExactly<InvalidDataException>(
+            () => StatusListType.FromCompressed(bomb, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst, maxDecompressedByteCount: 1024));
+    }
+
+
+    /// <summary>
+    /// The same crafted stream, read under a ceiling large enough to hold its inflated size, decodes
+    /// normally — the ceiling refuses only what crosses it, not the compression ratio itself.
+    /// </summary>
+    [TestMethod]
+    public void FromCompressedDecodesUnderASufficientCeiling()
+    {
+        byte[] bomb = CompressedZeros(1024 * 1024);
+
+        using StatusListType list = StatusListType.FromCompressed(
+            bomb, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst, maxDecompressedByteCount: 2 * 1024 * 1024);
+
+        Assert.AreEqual((byte)0, list[0], "The inflated (all-zero) bytes decode normally under a sufficient ceiling.");
+    }
+
+
+    /// <summary>
+    /// Builds a ZLIB-compressed run of <paramref name="decompressedByteCount"/> zero bytes — a
+    /// realistic decompression-bomb shape (highly compressible, cheap to construct, expensive to
+    /// inflate without a ceiling).
+    /// </summary>
+    /// <param name="decompressedByteCount">How many zero bytes the compressed stream inflates to.</param>
+    /// <returns>The compressed bytes.</returns>
+    private static byte[] CompressedZeros(int decompressedByteCount)
+    {
+        using var output = new MemoryStream();
+        using(var zlib = new ZLibStream(output, CompressionLevel.SmallestSize, leaveOpen: true))
+        {
+            zlib.Write(new byte[decompressedByteCount]);
+        }
+
+        return output.ToArray();
     }
 
 

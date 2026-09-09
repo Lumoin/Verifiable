@@ -22,7 +22,7 @@ public static class WellKnownAuthenticatorAttachments
     /// <summary>
     /// The <c>platform</c> value, for an authenticator that is part of the client device.
     /// </summary>
-    public static readonly string Platform = Utf8Constants.ToInternedString(PlatformUtf8);
+    public static string Platform { get; } = Utf8Constants.ToInternedString(PlatformUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="CrossPlatform"/>.</summary>
     public static ReadOnlySpan<byte> CrossPlatformUtf8 => "cross-platform"u8;
@@ -30,7 +30,7 @@ public static class WellKnownAuthenticatorAttachments
     /// <summary>
     /// The <c>cross-platform</c> value, for an authenticator that is removable from the client device.
     /// </summary>
-    public static readonly string CrossPlatform = Utf8Constants.ToInternedString(CrossPlatformUtf8);
+    public static string CrossPlatform { get; } = Utf8Constants.ToInternedString(CrossPlatformUtf8);
 
 
     /// <summary>

@@ -5,7 +5,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// so the response is the 10-byte header alone.
 /// </summary>
 /// <remarks>
-/// See TPM 2.0 Library Part 3, Section 31.3 (Table 229).
+/// See TPM 2.0 Library Part 3, clause 31.3 (Table 246).
 /// </remarks>
 public sealed class NvDefineSpaceResponse: ITpmWireType
 {
@@ -14,6 +14,9 @@ public sealed class NvDefineSpaceResponse: ITpmWireType
     /// </summary>
     public static NvDefineSpaceResponse Instance { get; } = new();
 
+    /// <summary>
+    /// Prevents external construction: the parameterless response resolves to <see cref="Instance"/>.
+    /// </summary>
     private NvDefineSpaceResponse()
     {
     }

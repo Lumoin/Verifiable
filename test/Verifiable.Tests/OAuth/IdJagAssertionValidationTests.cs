@@ -30,8 +30,8 @@ internal sealed class IdJagAssertionValidationTests
     /// </summary>
     private const string PriorActorSubject = "https://svc.example/first-hop";
 
-    private static readonly DateTimeOffset Now = DateTimeOffset.FromUnixTimeSeconds(1_311_280_970);
-    private static readonly TimeSpan Skew = TimeSpan.FromSeconds(60);
+    private static DateTimeOffset Now { get; } = DateTimeOffset.FromUnixTimeSeconds(1_311_280_970);
+    private static TimeSpan Skew { get; } = TimeSpan.FromSeconds(60);
 
 
     private static JwtHeader ValidHeader() =>

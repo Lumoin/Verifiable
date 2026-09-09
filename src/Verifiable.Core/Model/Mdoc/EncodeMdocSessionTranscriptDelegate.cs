@@ -20,9 +20,11 @@ namespace Verifiable.Core.Model.Mdoc;
 /// <param name="responseUri">The authorization-request <c>response_uri</c>; byte-exact.</param>
 /// <param name="authorizationRequestNonce">The authorization-request <c>nonce</c>.</param>
 /// <param name="mdocGeneratedNonce">The wallet-supplied <c>mdoc_generated_nonce</c> echoed alongside the vp_token.</param>
+/// <param name="pool">The memory pool the identifier digests are rented from.</param>
 /// <returns>The canonical CBOR encoding of <c>SessionTranscript</c>.</returns>
 public delegate ReadOnlyMemory<byte> EncodeMdocSessionTranscriptDelegate(
     string clientId,
     string responseUri,
     string authorizationRequestNonce,
-    ReadOnlySpan<byte> mdocGeneratedNonce);
+    ReadOnlySpan<byte> mdocGeneratedNonce,
+    BaseMemoryPool pool);

@@ -32,10 +32,10 @@ internal sealed class Oid4VciCredentialOfferEndpointTests
     private const string ClientId = "https://issuer.client.test";
 
     /// <summary>The base URI the registered client is reachable at.</summary>
-    private static readonly Uri ClientBaseUri = new("https://issuer.client.test");
+    private static Uri ClientBaseUri { get; } = new("https://issuer.client.test");
 
     /// <summary>The Credential Issuer identity the served offer carries (§4.1.1 credential_issuer).</summary>
-    private static readonly Uri OfferIssuer = new("https://credential-issuer.example.com");
+    private static Uri OfferIssuer { get; } = new("https://credential-issuer.example.com");
 
     /// <summary>The supported Credential Configuration identifier the offer advertises.</summary>
     private const string ConfigurationId = "UniversityDegree_dc_sd_jwt";
@@ -46,7 +46,7 @@ internal sealed class Oid4VciCredentialOfferEndpointTests
     /// <summary>The id the credential_offer_uri carries; the offer store is keyed by it.</summary>
     private const string OfferId = "GkurKxf5T0Y-mnPFCHqWOMiZi4VS138cQO_V7PZHAdM";
 
-    private static readonly ImmutableHashSet<CapabilityIdentifier> OfferCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> OfferCapabilities { get; } =
         ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.Oid4VciCredentialOfferEndpoint);
 
 

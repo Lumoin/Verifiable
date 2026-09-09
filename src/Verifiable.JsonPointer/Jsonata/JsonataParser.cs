@@ -483,7 +483,7 @@ public static class JsonataParser
             return JsonataValue.FromNumber(fractional);
         }
 
-        throw new JsonataParseException($"Invalid number literal '{token.ToString()}' at position {start}.", start);
+        throw new JsonataParseException($"Invalid number literal '{token}' at position {start}.", start);
     }
 
 

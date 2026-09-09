@@ -33,7 +33,7 @@ public static class ProtectedResourceChallenge
     public static ReadOnlySpan<byte> ResourceMetadataParameterUtf8 => "resource_metadata"u8;
 
     /// <summary>The <c>resource_metadata</c> challenge parameter name (RFC 9728 §5.1).</summary>
-    public static readonly string ResourceMetadataParameter = Utf8Constants.ToInternedString(ResourceMetadataParameterUtf8);
+    public static string ResourceMetadataParameter { get; } = Utf8Constants.ToInternedString(ResourceMetadataParameterUtf8);
 
 
     /// <summary>

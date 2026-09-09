@@ -51,11 +51,27 @@ internal static class FederationHttpClientTransport
                 .SendAsync(httpRequest, HttpCompletionOption.ResponseContentRead, cancellationToken)
                 .ConfigureAwait(false);
 
-            Dictionary<string, string> headers = new(StringComparer.OrdinalIgnoreCase);
-            if(httpResponse.Headers.Location is Uri location)
+            //Repeated field lines (RFC 9110 §5.3) are kept in received order, never comma-joined;
+            //FromReceived groups both header collections by name and takes RFC 9110 §5.5's recipient
+            //arm on a hostile line rather than throwing out of the fetch.
+            List<(string Name, string Value)> responsePairs = [];
+            foreach(KeyValuePair<string, IEnumerable<string>> header in httpResponse.Headers)
             {
-                headers["Location"] = location.OriginalString;
+                foreach(string value in header.Value)
+                {
+                    responsePairs.Add((header.Key, value));
+                }
             }
+
+            foreach(KeyValuePair<string, IEnumerable<string>> header in httpResponse.Content.Headers)
+            {
+                foreach(string value in header.Value)
+                {
+                    responsePairs.Add((header.Key, value));
+                }
+            }
+
+            HttpHeaderSet headers = HttpHeaderSet.FromReceived(responsePairs);
 
             byte[] body = await httpResponse.Content
                 .ReadAsByteArrayAsync(cancellationToken)
@@ -128,6 +144,8 @@ internal static class FederationHttpClientTransport
         }
         catch
         {
+            //token is fixture-provided wire input for this test transport; any decode failure is
+            //"not a JWT this helper can read" rather than an internal fault.
             return null;
         }
 

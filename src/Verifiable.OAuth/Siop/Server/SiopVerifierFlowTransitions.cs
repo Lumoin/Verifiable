@@ -26,7 +26,8 @@ namespace Verifiable.OAuth.Siop.Server;
 ///   </description></item>
 ///   <item><description>
 ///     Any non-terminal state + <see cref="SiopFlowFailed"/> -> <see cref="SiopVerifierFlowFailedState"/>.
-///     Terminal failure.
+///     Terminal failure, carrying the wire-safe <see cref="VerifierFlowRefusal"/> and any
+///     <see cref="Core.StatusList.CredentialStatusRefusal"/> the failing input supplied.
 ///   </description></item>
 /// </list>
 /// </remarks>
@@ -52,7 +53,9 @@ public static class SiopVerifierFlowTransitions
                                 ExpiresAt = state.ExpiresAt,
                                 Kind = FlowKind.SiopVerifierServer,
                                 Reason = fail.Reason,
-                                FailedAt = fail.FailedAt
+                                FailedAt = fail.FailedAt,
+                                Refusal = fail.Refusal,
+                                CredentialStatusRefusal = fail.CredentialStatusRefusal
                             },
                             StackAction<SiopVerifierStackSymbol>.None,
                             "SiopVerifierFlowFailed"),
@@ -272,7 +275,9 @@ public static class SiopVerifierFlowTransitions
                                 Subject = verified.Subject,
                                 SubjectSyntaxType = verified.SubjectSyntaxType,
                                 Nonce = verified.Nonce,
-                                VerifiedAt = verified.VerifiedAt
+                                VerifiedAt = verified.VerifiedAt,
+                                Credentials = verified.Credentials,
+                                CredentialStatuses = verified.CredentialStatuses
                             },
                             StackAction<SiopVerifierStackSymbol>.None,
                             "SelfIssuedAuthenticationVerified"),
@@ -294,7 +299,9 @@ public static class SiopVerifierFlowTransitions
                                 Subject = verified.Subject,
                                 SubjectSyntaxType = verified.SubjectSyntaxType,
                                 Nonce = verified.Nonce,
-                                VerifiedAt = verified.VerifiedAt
+                                VerifiedAt = verified.VerifiedAt,
+                                Credentials = verified.Credentials,
+                                CredentialStatuses = verified.CredentialStatuses
                             },
                             StackAction<SiopVerifierStackSymbol>.None,
                             "SelfIssuedAuthenticationVerified"),
@@ -316,7 +323,9 @@ public static class SiopVerifierFlowTransitions
                                 Subject = verified.Subject,
                                 SubjectSyntaxType = verified.SubjectSyntaxType,
                                 Nonce = verified.Nonce,
-                                VerifiedAt = verified.VerifiedAt
+                                VerifiedAt = verified.VerifiedAt,
+                                Credentials = verified.Credentials,
+                                CredentialStatuses = verified.CredentialStatuses
                             },
                             StackAction<SiopVerifierStackSymbol>.None,
                             "SelfIssuedAuthenticationVerified"),

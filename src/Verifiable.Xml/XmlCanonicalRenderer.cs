@@ -1136,6 +1136,13 @@ internal static class XmlCanonicalRenderer
     /// <param name="synthesizedXmlBase">The list the joined value is appended to.</param>
     /// <param name="hasSynthesizedXmlBase">Whether a non-empty joined value was produced.</param>
     /// <returns><see langword="true"/> when the fixup ran and consumed the element's own <c>xml:base</c>.</returns>
+    /// <remarks>
+    /// <strong>Manual disposal, not a <see langword="using"/> declaration.</strong> <c>reduced</c> is
+    /// reassigned once per reduction step as each ancestor's value is folded in (a <see langword="using"/>
+    /// declaration forbids any reassignment); the <see langword="finally"/> below disposes whichever list it
+    /// currently holds on every exit path, and each intermediate <c>joined</c> list is disposed on its own
+    /// throw path before <c>reduced</c> is replaced with it.
+    /// </remarks>
     private static bool TryFixupXmlBase(XmlNodeTable table, PooledStructList<RenderFrame> stack, int elementIndex, MemoryPool<byte> pool, PooledStructList<byte> synthesizedXmlBase, out bool hasSynthesizedXmlBase)
     {
         hasSynthesizedXmlBase = false;

@@ -15,7 +15,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// as defined in the specification.
 /// </para>
 /// <para>
-/// <b>Response parameters (Part 3, Section 22.4):</b>
+/// <b>Response parameters (Part 3, clause 22.4):</b>
 /// </para>
 /// <list type="bullet">
 ///   <item><description>pcrUpdateCounter (UINT32) - current value of the PCR update counter.</description></item>

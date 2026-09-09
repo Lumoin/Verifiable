@@ -37,7 +37,7 @@ public static class ClientIdMetadataMaterialization
     /// endpoints; <see cref="IsTokenEndpointRequest"/> distinguishes those by the wire shape
     /// instead (the presence of <c>grant_type</c>).
     /// </summary>
-    private static readonly FrozenSet<CapabilityIdentifier> UnambiguousTokenEndpointCapabilities = new[]
+    private static FrozenSet<CapabilityIdentifier> UnambiguousTokenEndpointCapabilities { get; } = new[]
     {
         WellKnownCapabilityIdentifiers.OAuthClientCredentials,
         WellKnownCapabilityIdentifiers.OAuthTokenExchange,

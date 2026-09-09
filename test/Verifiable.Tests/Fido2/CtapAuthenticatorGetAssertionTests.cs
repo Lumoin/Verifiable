@@ -36,7 +36,7 @@ internal sealed class CtapAuthenticatorGetAssertionTests
     [TestMethod]
     public async Task AllowListMatchSucceedsWithoutUserMember()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("ga-allowlist-match");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("ga-allowlist-match",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         byte[] credentialId = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0x11), TestContext.CancellationToken, resident: false);
@@ -73,7 +73,7 @@ internal sealed class CtapAuthenticatorGetAssertionTests
     [TestMethod]
     public async Task ResidentLookupSucceedsWithUserIdOnlyInResponse()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("ga-resident-lookup");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("ga-resident-lookup",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] userId = BuildFixedBytes(16, 0x12);
 
@@ -110,7 +110,7 @@ internal sealed class CtapAuthenticatorGetAssertionTests
     [TestMethod]
     public async Task PinUvAuthParamWithSupportedProtocolAndNoPinSetSucceedsWithUvClear()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("ga-pinuv-with-protocol");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("ga-pinuv-with-protocol",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         _ = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0x15), TestContext.CancellationToken);
@@ -141,7 +141,7 @@ internal sealed class CtapAuthenticatorGetAssertionTests
     [TestMethod]
     public async Task PinUvAuthParamWithUnsupportedProtocolReturnsInvalidParameter()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("ga-pinuv-unsupported-protocol");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("ga-pinuv-unsupported-protocol",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using IMemoryOwner<byte> pinUvAuthParamOwner = pool.Rent(16);
@@ -158,7 +158,7 @@ internal sealed class CtapAuthenticatorGetAssertionTests
     [TestMethod]
     public async Task PinUvAuthParamWithoutProtocolReturnsMissingParameter()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("ga-pinuv-without-protocol");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("ga-pinuv-without-protocol",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using IMemoryOwner<byte> pinUvAuthParamOwner = pool.Rent(16);
@@ -180,7 +180,7 @@ internal sealed class CtapAuthenticatorGetAssertionTests
     [TestMethod]
     public async Task UserVerificationTrueReturnsInvalidOption()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("ga-uv-true");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("ga-uv-true",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapGetAssertionRequest request = BuildGetAssertionRequest(pool, options: new CtapCommandOptions(UserVerification: true));
@@ -194,7 +194,7 @@ internal sealed class CtapAuthenticatorGetAssertionTests
     [TestMethod]
     public async Task ResidentKeyOptionTrueReturnsUnsupportedOption()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("ga-rk-true");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("ga-rk-true",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapGetAssertionRequest request = BuildGetAssertionRequest(pool, options: new CtapCommandOptions(ResidentKey: true));
@@ -208,7 +208,7 @@ internal sealed class CtapAuthenticatorGetAssertionTests
     [TestMethod]
     public async Task ResidentKeyOptionFalseAlsoReturnsUnsupportedOption()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("ga-rk-false");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("ga-rk-false",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapGetAssertionRequest request = BuildGetAssertionRequest(pool, options: new CtapCommandOptions(ResidentKey: false));
@@ -222,7 +222,7 @@ internal sealed class CtapAuthenticatorGetAssertionTests
     [TestMethod]
     public async Task NoResidentCredentialReturnsNoCredentials()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("ga-no-credentials-resident");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("ga-no-credentials-resident",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapGetAssertionRequest request = BuildGetAssertionRequest(pool);
@@ -236,7 +236,7 @@ internal sealed class CtapAuthenticatorGetAssertionTests
     [TestMethod]
     public async Task AllowListWithUnknownCredentialIdReturnsNoCredentials()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("ga-no-credentials-allowlist");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("ga-no-credentials-allowlist",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         byte[] unknownCredentialId = BuildFixedBytes(32, 0x99);
@@ -252,7 +252,7 @@ internal sealed class CtapAuthenticatorGetAssertionTests
     [TestMethod]
     public async Task UserPresenceFalsePreflightSucceedsWithUpClear()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("ga-up-false");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("ga-up-false",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         _ = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0x13), TestContext.CancellationToken);
@@ -285,7 +285,7 @@ internal sealed class CtapAuthenticatorGetAssertionTests
     [TestMethod]
     public async Task SignCountIncrementsAndEachSignatureVerifiesIndependently()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("ga-signcount");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("ga-signcount",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] userId = BuildFixedBytes(16, 0x14);
 

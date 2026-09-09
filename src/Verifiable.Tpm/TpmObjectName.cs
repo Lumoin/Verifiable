@@ -13,7 +13,7 @@ namespace Verifiable.Tpm;
 
 /// <summary>
 /// Computes a TPM object's Name and Qualified Name, generalized over the nameAlg carried in the object's
-/// public area (TPM 2.0 Library Part 1, clause 14, Table 6): <c>Name = nameAlg ‖ H_nameAlg(TPMT_PUBLIC)</c> and
+/// public area (TPM 2.0 Library Part 1, clause 13, Table 9): <c>Name = nameAlg ‖ H_nameAlg(TPMT_PUBLIC)</c> and
 /// <c>QN(object) = nameAlg ‖ H_nameAlg(QN(parent) ‖ Name(object))</c>.
 /// </summary>
 /// <remarks>
@@ -39,12 +39,16 @@ public static class TpmObjectName
     private const int NameAlgPrefixSize = sizeof(ushort);
 
     /// <summary>
-    /// Gets the digest width, in octets, of a supported Name algorithm.
+    /// Gets the digest width, in octets, of a supported Name algorithm — the single nameAlg-agility seam this
+    /// model uses for a Name, a Qualified Name, a creation data <c>pcrDigest</c>, and a <c>creationHash</c> alike
+    /// (TPM 2.0 Library Part 1, clause 13, Table 9; Part 2, clause 15.1, Table 261). Internal rather than private:
+    /// <see cref="Automata.TpmSimulator"/>'s creation-by-products builder sizes those two creation-data fields
+    /// under the object's OWN nameAlg through this same pair rather than a second, drift-prone width table.
     /// </summary>
     /// <param name="nameAlg">The Name algorithm.</param>
     /// <returns>The digest width in octets.</returns>
     /// <exception cref="NotSupportedException"><paramref name="nameAlg"/> is not a Name algorithm this model computes.</exception>
-    private static int DigestSize(TpmAlgIdConstants nameAlg) => nameAlg switch
+    internal static int DigestSize(TpmAlgIdConstants nameAlg) => nameAlg switch
     {
         TpmAlgIdConstants.TPM_ALG_SHA1 => 20,
         TpmAlgIdConstants.TPM_ALG_SHA256 => 32,
@@ -54,15 +58,18 @@ public static class TpmObjectName
     };
 
     /// <summary>
-    /// Gets the digest tag for a supported Name algorithm, for the registered asynchronous digest seam. SHA-1 is
-    /// composed inline (the convenience <see cref="CryptoTags"/> deliberately omit it) exactly as the simulator's
-    /// session hash dispatch already does; SHA-256/384/512 reuse the shared convenience tags.
+    /// Gets the digest tag for a supported Name algorithm, for the registered asynchronous digest seam — the
+    /// <see cref="DigestSize"/> counterpart of the same nameAlg-agility seam, shared by Name, Qualified Name,
+    /// <c>pcrDigest</c>, and <c>creationHash</c> computation. SHA-1 is composed inline (the convenience
+    /// <see cref="CryptoTags"/> deliberately omit it) exactly as the simulator's session hash dispatch already
+    /// does; SHA-256/384/512 reuse the shared convenience tags. Internal rather than private for the same reason
+    /// as <see cref="DigestSize"/>.
     /// </summary>
     /// <param name="nameAlg">The Name algorithm.</param>
     /// <returns>The digest tag.</returns>
     /// <exception cref="NotSupportedException"><paramref name="nameAlg"/> is not a Name algorithm this model computes.</exception>
-    [SuppressMessage("Security", "CA5350:Do Not Use Weak Cryptographic Algorithms", Justification = "SHA-1 is a valid TPM nameAlg this model still serves (TPM 2.0 Library Part 1, clause 14, Table 6); the tag is composed inline, never from a convenience CryptoTags member, so ordinary protocol code cannot reach it by accident.")]
-    private static Tag DigestTag(TpmAlgIdConstants nameAlg) => nameAlg switch
+    [SuppressMessage("Security", "CA5350:Do Not Use Weak Cryptographic Algorithms", Justification = "SHA-1 is a valid TPM nameAlg this model still serves (TPM 2.0 Library Part 1, clause 13, Table 9); the tag is composed inline, never from a convenience CryptoTags member, so ordinary protocol code cannot reach it by accident.")]
+    internal static Tag DigestTag(TpmAlgIdConstants nameAlg) => nameAlg switch
     {
         TpmAlgIdConstants.TPM_ALG_SHA1 => Tag.Create(HashAlgorithmName.SHA1).With(Purpose.Digest).With(EncodingScheme.Raw).With(MaterialSemantics.Direct),
         TpmAlgIdConstants.TPM_ALG_SHA256 => CryptoTags.Sha256Digest,
@@ -72,7 +79,7 @@ public static class TpmObjectName
     };
 
     /// <summary>
-    /// Computes an object's Name: <c>nameAlg ‖ H_nameAlg(TPMT_PUBLIC)</c> (TPM 2.0 Library Part 1, clause 14, Table 6),
+    /// Computes an object's Name: <c>nameAlg ‖ H_nameAlg(TPMT_PUBLIC)</c> (TPM 2.0 Library Part 1, clause 13, Table 9),
     /// through the registered asynchronous digest seam.
     /// </summary>
     /// <param name="marshalledPublicArea">The marshaled <c>TPMT_PUBLIC</c> (no <c>TPM2B</c> size prefix) to hash.</param>
@@ -99,12 +106,12 @@ public static class TpmObjectName
 
     /// <summary>
     /// Computes an object's Qualified Name: <c>QN = nameAlg ‖ H_nameAlg(QN(parent) ‖ Name(object))</c>
-    /// (TPM 2.0 Library Part 1, clause 14, Table 6), through the registered asynchronous digest seam.
+    /// (TPM 2.0 Library Part 1, clause 13, Table 9), through the registered asynchronous digest seam.
     /// </summary>
     /// <remarks>
     /// For a primary object created directly under a permanent hierarchy — every object this simulator
     /// creates today — <c>QN(parent)</c> is the hierarchy's own Name, which for a permanent handle is defined
-    /// to be the 4-octet big-endian handle value itself (Part 1, clause 14, Table 6); the caller supplies that value
+    /// to be the 4-octet big-endian handle value itself (Part 1, clause 13, Table 9); the caller supplies that value
     /// as <paramref name="parentQualifiedName"/>. A future parent that is itself a non-hierarchy loaded object
     /// would instead supply that object's own computed Qualified Name here.
     /// </remarks>

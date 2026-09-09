@@ -39,7 +39,7 @@ public static class WellKnownDpopValues
     /// proofs, per RFC 9449 §4.2. Distinguishes a DPoP proof JWS from
     /// other JWS shapes during structural parse.
     /// </summary>
-    public static readonly string ProofTypeHeader = Utf8Constants.ToInternedString(ProofTypeHeaderUtf8);
+    public static string ProofTypeHeader { get; } = Utf8Constants.ToInternedString(ProofTypeHeaderUtf8);
 
     /// <summary>
     /// The asymmetric JWS signature algorithms a DPoP proof may use, per RFC 9449 §4.2 —
@@ -48,7 +48,7 @@ public static class WellKnownDpopValues
     /// authorization server advertises as <c>dpop_signing_alg_values_supported</c>
     /// (RFC 9449 §5.1). Kept in sync with <c>DpopProofValidator.IsDpopProofAlg</c>.
     /// </summary>
-    public static readonly IReadOnlyList<string> SupportedSigningAlgorithms =
+    public static IReadOnlyList<string> SupportedSigningAlgorithms { get; } =
     [
         WellKnownJwaValues.Es256,
         WellKnownJwaValues.Es384,
@@ -67,44 +67,44 @@ public static class WellKnownDpopValues
     /// RFC 9449 §11.1 recommends a small window; 5 minutes matches typical
     /// deployments.
     /// </summary>
-    public static readonly TimeSpan DefaultReplayWindow = TimeSpan.FromMinutes(5);
+    public static TimeSpan DefaultReplayWindow { get; } = TimeSpan.FromMinutes(5);
 
     /// <summary>
     /// Maximum tolerated skew between the proof's <c>iat</c> claim and the
     /// receiver's current time, in either direction.
     /// </summary>
-    public static readonly TimeSpan DefaultIatSkew = TimeSpan.FromSeconds(30);
+    public static TimeSpan DefaultIatSkew { get; } = TimeSpan.FromSeconds(30);
 
     /// <summary>
     /// The length in bytes of the issuedAt field inside a binary-packed nonce.
     /// Encoded as Unix seconds in an int64 big-endian.
     /// </summary>
-    public static readonly int NonceIssuedAtByteLength = 8;
+    public static int NonceIssuedAtByteLength { get; } = 8;
 
     /// <summary>
     /// The length in bytes of the audience hash inside a binary-packed nonce.
     /// Computed as the first half of SHA-256 of the audience URI's
     /// <see cref="Uri.OriginalString"/>.
     /// </summary>
-    public static readonly int NonceAudienceHashByteLength = 16;
+    public static int NonceAudienceHashByteLength { get; } = 16;
 
     /// <summary>
     /// The length in bytes of the random field inside a binary-packed nonce.
     /// 128 bits is sufficient for collision resistance under agent-ready
     /// issuance volumes.
     /// </summary>
-    public static readonly int NonceRandomByteLength = 16;
+    public static int NonceRandomByteLength { get; } = 16;
 
     /// <summary>
     /// The length in bytes of the HMAC-SHA-256 tag at the end of a binary-packed
     /// nonce. Matches the natural HMAC-SHA-256 output length.
     /// </summary>
-    public static readonly int NonceHmacTagByteLength = 32;
+    public static int NonceHmacTagByteLength { get; } = 32;
 
     /// <summary>
     /// Default validity window for issued nonces. Validation accepts nonces
     /// whose <c>issuedAt</c> falls inside <c>now ± DefaultNonceValidityWindow</c>.
     /// 5 minutes matches the replay-window default.
     /// </summary>
-    public static readonly TimeSpan DefaultNonceValidityWindow = TimeSpan.FromMinutes(5);
+    public static TimeSpan DefaultNonceValidityWindow { get; } = TimeSpan.FromMinutes(5);
 }

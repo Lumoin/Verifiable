@@ -15,7 +15,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// including both the response handle and response parameters.
 /// </para>
 /// <para>
-/// <b>Response handle (Part 3, Section 24.1):</b>
+/// <b>Response handle (Part 3, clause 24.1):</b>
 /// </para>
 /// <list type="bullet">
 ///   <item><description>objectHandle (TPMI_DH_OBJECT) - handle for the created primary key.</description></item>

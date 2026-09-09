@@ -8,9 +8,9 @@ namespace Verifiable.Apdu.Automata;
 /// <summary>
 /// The input alphabet of the eMRTD card simulator's pushdown automaton: the commands a terminal sends
 /// (parsed from the wire by <see cref="CardSimulator"/> before they enter the automaton) and the
-/// action-result records fed back by the effectful loop. This slice models the plaintext read path —
+/// action-result records fed back by the effectful loop. The plaintext read path is modelled —
 /// SELECT of an elementary file and READ BINARY — plus GET CHALLENGE (the first command needing entropy)
-/// and a catch-all for the instructions it does not yet implement.
+/// and a catch-all for the instructions not yet implemented.
 /// </summary>
 public abstract record CardSimulatorInput;
 
@@ -223,7 +223,7 @@ public sealed record TerminalAuthenticationCompleted(InspectionSystemAccess Gran
 public sealed record TerminalAuthenticationFailed(StatusWord StatusWord): CardSimulatorInput;
 
 /// <summary>
-/// A command whose instruction byte this slice does not model. It is dispatched like any other command so
+/// A command whose instruction byte the simulator does not model. It is dispatched like any other command so
 /// the rejection is recorded in the trace, and answered with <c>6D00</c> (instruction not supported).
 /// </summary>
 /// <param name="Instruction">The instruction byte parsed from the command header.</param>

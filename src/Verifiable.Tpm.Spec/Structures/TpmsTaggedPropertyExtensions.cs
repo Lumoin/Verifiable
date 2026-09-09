@@ -73,7 +73,7 @@ public static class TpmsTaggedPropertyExtensions
             TpmPtConstants.TPM_PT_FAMILY_INDICATOR => "FAMILY_INDICATOR",
             TpmPtConstants.TPM_PT_LEVEL => "LEVEL",
             TpmPtConstants.TPM_PT_REVISION => "REVISION",
-            TpmPtConstants.TPM_PT_DAY_OF_YEAR => "DAY_OF_YEAR",
+            TpmPtConstants.TPM_PT_ERRATA => "ERRATA",
             TpmPtConstants.TPM_PT_YEAR => "YEAR",
             TpmPtConstants.TPM_PT_MANUFACTURER => "MANUFACTURER",
             TpmPtConstants.TPM_PT_VENDOR_STRING_1 => "VENDOR_STRING_1",

@@ -18,7 +18,7 @@ public static class SiopSubjectSyntaxTypes
     /// <c>urn:ietf:params:oauth:jwk-thumbprint</c> per
     /// <see href="https://www.rfc-editor.org/rfc/rfc9278">RFC 9278</see>.
     /// </summary>
-    public static readonly string JwkThumbprint = Utf8Constants.ToInternedString(JwkThumbprintUtf8);
+    public static string JwkThumbprint { get; } = Utf8Constants.ToInternedString(JwkThumbprintUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="JwkThumbprintSha256Prefix"/>.</summary>
     public static ReadOnlySpan<byte> JwkThumbprintSha256PrefixUtf8 => "urn:ietf:params:oauth:jwk-thumbprint:sha-256:"u8;
@@ -29,7 +29,7 @@ public static class SiopSubjectSyntaxTypes
     /// RFC 7638 thumbprint after this prefix:
     /// <c>urn:ietf:params:oauth:jwk-thumbprint:sha-256:NzbLsXh8…</c>.
     /// </summary>
-    public static readonly string JwkThumbprintSha256Prefix = Utf8Constants.ToInternedString(JwkThumbprintSha256PrefixUtf8);
+    public static string JwkThumbprintSha256Prefix { get; } = Utf8Constants.ToInternedString(JwkThumbprintSha256PrefixUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="DidPrefix"/>.</summary>
     public static ReadOnlySpan<byte> DidPrefixUtf8 => "did:"u8;
@@ -39,7 +39,7 @@ public static class SiopSubjectSyntaxTypes
     /// entry is <c>did:</c> followed by a method name (<c>did:example</c>), or bare
     /// <c>did</c> for all methods; a <c>sub</c> claim of this type is a full DID.
     /// </summary>
-    public static readonly string DidPrefix = Utf8Constants.ToInternedString(DidPrefixUtf8);
+    public static string DidPrefix { get; } = Utf8Constants.ToInternedString(DidPrefixUtf8);
 
 
     /// <summary>

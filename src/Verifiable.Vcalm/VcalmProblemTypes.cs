@@ -20,7 +20,7 @@ public static class VcalmProblemTypes
     /// The single problem type VCALM 1.0 itself defines, paired with the §2.4 MUST that an
     /// endpoint reject options it does not understand.
     /// </summary>
-    public static readonly string UnknownOptionProvided =
+    public static string UnknownOptionProvided { get; } =
         "https://www.w3.org/TR/vcalm#UNKNOWN_OPTION_PROVIDED";
 
     /// <summary>
@@ -28,14 +28,14 @@ public static class VcalmProblemTypes
     /// and MUST set <c>verified</c> to false). Anchored against the VCDM 2.0 §7.2 problem-details
     /// catalogue per the §3.8 Issue-3 dated-URL guidance.
     /// </summary>
-    public static readonly string CryptographicSecurityError =
+    public static string CryptographicSecurityError { get; } =
         "https://www.w3.org/TR/vc-data-model-2.0#CRYPTOGRAPHIC_SECURITY_ERROR";
 
     /// <summary>
     /// The malformed / data-model ERROR (§3.8.1: a data-model or malformed-context failure is
     /// unrecoverable and MUST set <c>verified</c> to false).
     /// </summary>
-    public static readonly string MalformedValueError =
+    public static string MalformedValueError { get; } =
         "https://www.w3.org/TR/vc-data-model-2.0#MALFORMED_VALUE_ERROR";
 
     /// <summary>
@@ -43,13 +43,13 @@ public static class VcalmProblemTypes
     /// does NOT flip <c>verified</c>) — emitted when <c>validFrom</c> is in the future or
     /// <c>validUntil</c> is in the past relative to the verification instant.
     /// </summary>
-    public static readonly string ValidityPeriodWarning =
+    public static string ValidityPeriodWarning { get; } =
         "https://www.w3.org/TR/vc-data-model-2.0#VALIDITY_PERIOD_WARNING";
 
     /// <summary>
     /// The status WARNING (§3.8.1: a status ProblemDetails is recoverable and does NOT flip
     /// <c>verified</c>) — emitted when the credential's status resolves to revoked or suspended.
     /// </summary>
-    public static readonly string StatusWarning =
+    public static string StatusWarning { get; } =
         "https://www.w3.org/TR/vc-data-model-2.0#STATUS_WARNING";
 }

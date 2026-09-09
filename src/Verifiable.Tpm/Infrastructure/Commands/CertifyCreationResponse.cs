@@ -11,7 +11,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Response structure (TPM 2.0 Library Part 3, Section 18.3) — identical shape to TPM2_Certify's response:
+/// Response structure (TPM 2.0 Library Part 3, clause 18.3) — identical shape to TPM2_Certify's response:
 /// </para>
 /// <list type="bullet">
 ///   <item><description>certifyInfo (TPM2B_ATTEST): the signed attestation (a marshaled TPMS_ATTEST of type TPM_ST_ATTEST_CREATION). The signature is over its raw bytes.</description></item>
@@ -62,7 +62,7 @@ public sealed class CertifyCreationResponse: IDisposable, ITpmWireType
         Tpm2bAttest certifyInfo = Tpm2bAttest.Parse(ref reader, pool);
         try
         {
-            //A TPM2_CertifyCreation response's attestation type is fixed to TPM_ST_ATTEST_CREATION (Part 3, §18.3).
+            //A TPM2_CertifyCreation response's attestation type is fixed to TPM_ST_ATTEST_CREATION (Part 3, clause 18.3).
             //Reject a type-confused body here rather than surfacing it as a successful response whose
             //Attested.Creation is null and faults the first consumer that reads it.
             if(certifyInfo.AttestationData.Type != TpmStConstants.TPM_ST_ATTEST_CREATION)

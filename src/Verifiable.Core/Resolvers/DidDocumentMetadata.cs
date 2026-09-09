@@ -84,7 +84,15 @@ public class DidDocumentMetadata: IEquatable<DidDocumentMetadata>
     /// </remarks>
     public IDictionary<string, object>? AdditionalData { get; init; }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Determines whether this metadata is equal to <paramref name="other"/> by comparing
+    /// <see cref="Created"/>, <see cref="Updated"/>, <see cref="Deactivated"/>, <see cref="NextUpdate"/>,
+    /// <see cref="VersionId"/>, <see cref="NextVersionId"/> and <see cref="CanonicalId"/>. Equality is
+    /// exact-type, not polymorphic over subtypes: a derived type adding further identity-bearing
+    /// members is never equal to a same-valued instance of this type.
+    /// </summary>
+    /// <param name="other">The metadata to compare against.</param>
+    /// <returns><see langword="true"/> if the metadata instances are equal; otherwise <see langword="false"/>.</returns>
     public virtual bool Equals(DidDocumentMetadata? other)
     {
         if(other is null)
@@ -114,7 +122,8 @@ public class DidDocumentMetadata: IEquatable<DidDocumentMetadata>
     }
 
     /// <inheritdoc />
-    public override bool Equals(object? obj) => obj is DidDocumentMetadata other && Equals(other);
+    public override bool Equals(object? obj) =>
+        obj is DidDocumentMetadata other && Equals(other);
 
     /// <inheritdoc />
     public override int GetHashCode()

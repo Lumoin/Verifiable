@@ -1,5 +1,5 @@
 using System.Buffers;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Mdoc;
 using Verifiable.Core.Model.Mdoc;
@@ -21,8 +21,8 @@ namespace Verifiable.Tests.Mdoc;
 [TestClass]
 internal sealed class MdocCoseKeyExtensionsTests
 {
-    private static readonly string PidDocType = EudiPid.AttestationType;
-    private static readonly string PidNamespace = EudiPid.Mdoc.Namespace;
+    private static string PidDocType { get; } = EudiPid.AttestationType;
+    private static string PidNamespace { get; } = EudiPid.Mdoc.Namespace;
     private const string VerifierClientId = "https://verifier.example/oid4vp/client";
     private const string VerifierResponseUri = "https://verifier.example/oid4vp/response";
     private const string AuthorizationRequestNonce = "auth-req-nonce-cosekey-01";
@@ -73,7 +73,7 @@ internal sealed class MdocCoseKeyExtensionsTests
             ReadOnlyMemory<byte> nonceMemory =
                 mdocGeneratedNonce.Memory[..Oid4VpMdocSessionTranscriptEncoder.MinimumMdocGeneratedNonceLength];
             ReadOnlyMemory<byte> sessionTranscript = Oid4VpMdocSessionTranscriptEncoder.Encode(
-                VerifierClientId, VerifierResponseUri, AuthorizationRequestNonce, nonceMemory.Span);
+                VerifierClientId, VerifierResponseUri, AuthorizationRequestNonce, nonceMemory.Span, BaseMemoryPool.Shared);
 
             using MdocPresentationDocument intermediate = new(
                 docType: issued.DocType,
@@ -102,7 +102,7 @@ internal sealed class MdocCoseKeyExtensionsTests
                 "Device key extracted from the MSO must equal the wallet's device public key.");
 
             ReadOnlyMemory<byte> reconstructedTranscript = Oid4VpMdocSessionTranscriptEncoder.Encode(
-                VerifierClientId, VerifierResponseUri, AuthorizationRequestNonce, nonceMemory.Span);
+                VerifierClientId, VerifierResponseUri, AuthorizationRequestNonce, nonceMemory.Span, BaseMemoryPool.Shared);
 
             bool isDeviceVerified = await parsedDocument.DeviceSigned!.VerifyAsync(
                 parsedDocument.DocType, reconstructedTranscript, deviceKeyFromMso,
@@ -170,9 +170,10 @@ internal sealed class MdocCoseKeyExtensionsTests
 
     private static byte[] CborText(string value)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteTextString(value);
 
-        return writer.Encode();
+        return buffer.WrittenSpan.ToArray();
     }
 }

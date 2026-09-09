@@ -223,6 +223,8 @@ public readonly struct XAdESDataObjectFormat: IEquatable<XAdESDataObjectFormat>
 
         if(scan == ElementScanResult.Found)
         {
+            //One disjunct per xsd:sequence child this element can repeat; a named predicate per child
+            //would only rename the grammar, not simplify it.
             bool isRepeat = (hasDescription && XmlSignatureModelGrammar.IsElement(table, child, XAdESIdentifiers.XAdESNamespaceV132Utf8, "Description"u8))
                 || (hasObjectIdentifier && XmlSignatureModelGrammar.IsElement(table, child, XAdESIdentifiers.XAdESNamespaceV132Utf8, "ObjectIdentifier"u8))
                 || (hasMimeType && XmlSignatureModelGrammar.IsElement(table, child, XAdESIdentifiers.XAdESNamespaceV132Utf8, "MimeType"u8))

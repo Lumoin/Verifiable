@@ -33,29 +33,29 @@ internal sealed class CredentialProofEnforcementFlowTests
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private const string ClientId = "https://wallet.client.test";
-    private static readonly Uri ClientBaseUri = new("https://wallet.client.test");
+    private static Uri ClientBaseUri { get; } = new("https://wallet.client.test");
     private const string OfferSubject = "urn:uuid:end-user-42";
     private const string ConfigurationId = "UniversityDegree_dc_sd_jwt";
     private const string CredentialNonce = "c-nonce-enforcement-42";
     private const string IssuedCredential = "issued-credential-opaque-42";
 
-    private static readonly ImmutableHashSet<CapabilityIdentifier> CredentialCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> CredentialCapabilities { get; } =
         ImmutableHashSet.Create(
             WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
             WellKnownCapabilityIdentifiers.Oid4VciPreAuthorizedCodeGrant,
             WellKnownCapabilityIdentifiers.Oid4VciCredentialEndpoint);
 
-    private static readonly System.Text.Json.JsonSerializerOptions JoseSerializationOptions =
+    private static System.Text.Json.JsonSerializerOptions JoseSerializationOptions { get; } =
         new(TestSetup.DefaultSerializationOptions)
         {
             Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
         };
 
-    private static readonly JwtHeaderSerializer HeaderSerializer =
+    private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)header, JoseSerializationOptions);
 
-    private static readonly JwtPayloadSerializer PayloadSerializer =
+    private static JwtPayloadSerializer PayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)payload, JoseSerializationOptions);
 
@@ -73,7 +73,7 @@ internal sealed class CredentialProofEnforcementFlowTests
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities);
 
         WireProofExpectationSeam(host);
-        bool seamIssued = WireIssuance(host);
+        WireIssuance(host);
 
         string issuerAudience = material.Registration.IssuerUri!.OriginalString;
         string proof = await MintProofAsync(issuerAudience, CredentialNonce).ConfigureAwait(false);

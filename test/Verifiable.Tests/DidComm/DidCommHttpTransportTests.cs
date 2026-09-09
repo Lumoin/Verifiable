@@ -27,9 +27,9 @@ namespace Verifiable.Tests.DidComm;
 [TestClass]
 internal sealed class DidCommHttpTransportTests
 {
-    private static readonly BaseMemoryPool Pool = BaseMemoryPool.Shared;
-    private static readonly Uri Endpoint = new("https://recipient.example/didcomm");
-    private static readonly Uri LoopbackEndpoint = new("https://127.0.0.1/inbox");
+    private static BaseMemoryPool Pool { get; } = BaseMemoryPool.Shared;
+    private static Uri Endpoint { get; } = new("https://recipient.example/didcomm");
+    private static Uri LoopbackEndpoint { get; } = new("https://127.0.0.1/inbox");
 
 
     [TestMethod]
@@ -161,7 +161,7 @@ internal sealed class DidCommHttpTransportTests
         await Assert.ThrowsExactlyAsync<ArgumentNullException>(
             async () => await message.TransmitAsync(Endpoint, null!, transport.Send, default).ConfigureAwait(false)).ConfigureAwait(false);
         await Assert.ThrowsExactlyAsync<ArgumentNullException>(
-            async () => await message.TransmitAsync(Endpoint, new ExchangeContext(), (DidCommSendDelegate)null!, default).ConfigureAwait(false)).ConfigureAwait(false);
+            async () => await message.TransmitAsync(Endpoint, new ExchangeContext(), null!, default).ConfigureAwait(false)).ConfigureAwait(false);
     }
 
 
@@ -262,17 +262,17 @@ internal sealed class DidCommHttpTransportTests
     //response body), or throws a transport failure or a cancellation.
     private sealed class FakeTransport
     {
-        private readonly int statusCode;
-        private readonly bool throwOnSend;
-        private readonly bool throwCancellation;
-        private readonly ReadOnlyMemory<byte> responseBody;
+        private int StatusCode { get; }
+        private bool ThrowOnSend { get; }
+        private bool ThrowCancellation { get; }
+        private ReadOnlyMemory<byte> ResponseBody { get; }
 
         public FakeTransport(int statusCode, bool throwOnSend = false, bool throwCancellation = false, ReadOnlyMemory<byte> responseBody = default)
         {
-            this.statusCode = statusCode;
-            this.throwOnSend = throwOnSend;
-            this.throwCancellation = throwCancellation;
-            this.responseBody = responseBody;
+            this.StatusCode = statusCode;
+            this.ThrowOnSend = throwOnSend;
+            this.ThrowCancellation = throwCancellation;
+            this.ResponseBody = responseBody;
         }
 
 
@@ -287,19 +287,19 @@ internal sealed class DidCommHttpTransportTests
         public ValueTask<OutboundResponse> SendAsync(OutboundRequest request, ExchangeContext context, CancellationToken cancellationToken)
         {
             Calls.Add(request);
-            if(throwCancellation)
+            if(ThrowCancellation)
             {
                 throw new OperationCanceledException(cancellationToken);
             }
 
-            if(throwOnSend)
+            if(ThrowOnSend)
             {
                 throw new InvalidOperationException("Simulated transport failure.");
             }
 
-            OutboundResponse response = responseBody.IsEmpty
-                ? new OutboundResponse { StatusCode = statusCode }
-                : new OutboundResponse { StatusCode = statusCode, Body = new TaggedMemory<byte>(responseBody, BufferTags.Json) };
+            OutboundResponse response = ResponseBody.IsEmpty
+                ? new OutboundResponse { StatusCode = StatusCode }
+                : new OutboundResponse { StatusCode = StatusCode, Body = new TaggedMemory<byte>(ResponseBody, BufferTags.Json) };
 
             return ValueTask.FromResult(response);
         }

@@ -1,25 +1,25 @@
 using CsCheck;
-using Ptr = Verifiable.JsonPointer.JsonPointer;
-using Seg = Verifiable.JsonPointer.JsonPointerSegment;
+using Ptr = Lumoin.Veritas.JsonPointer.JsonPointer;
+using Seg = Lumoin.Veritas.JsonPointer.JsonPointerSegment;
 
 namespace Verifiable.Tests.JsonPointer;
 
 [TestClass]
 internal sealed class JsonPointerPropertyTests
 {
-    private static readonly Gen<string> GenToken =
+    private static Gen<string> GenToken { get; } =
         Gen.String[Gen.Char.AlphaNumeric, 0, 10];
 
-    private static readonly Gen<Seg> GenSegment =
+    private static Gen<Seg> GenSegment { get; } =
         GenToken.Select(Seg.Create);
 
-    private static readonly Gen<Ptr> GenPointer =
+    private static Gen<Ptr> GenPointer { get; } =
         Gen.Int[0, 5].SelectMany(depth =>
             GenSegment.Array[depth, depth]
                .Select(segs => Ptr.FromSegments(segs)));
 
     //Generates tokens that include characters requiring escaping.
-    private static readonly Gen<string> GenTokenWithSpecialChars =
+    private static Gen<string> GenTokenWithSpecialChars { get; } =
         Gen.OneOf(
             Gen.Const("a/b"),
             Gen.Const("c~d"),

@@ -29,7 +29,7 @@ internal sealed class BackChannelLogoutTokenTests
 
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
-    private static readonly DateTimeOffset IssuedAt = DateTimeOffset.UnixEpoch.AddSeconds(1715305159);
+    private static DateTimeOffset IssuedAt { get; } = DateTimeOffset.UnixEpoch.AddSeconds(1715305159);
 
 
     /// <summary>Happy path: a Logout Token carrying both sub and sid round-trips and both are extracted.</summary>

@@ -14,7 +14,7 @@ internal sealed class MetadataPolicyOrchestratorTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly EntityTypeIdentifier RpType =
+    private static EntityTypeIdentifier RpType { get; } =
         WellKnownEntityTypeIdentifiers.OpenIdRelyingParty;
 
 
@@ -346,11 +346,6 @@ internal sealed class MetadataPolicyOrchestratorTests
         //Anchor's SS lists 'subset_of' and 'one_of' in metadata_policy_crit — both
         //are library-known operators on WellKnownMetadataPolicyOperators. The crit
         //check succeeds.
-        Dictionary<string, object> anchorCritList = new()
-        {
-            //metadata_policy_crit is a top-level claim; not nested under entity types.
-        };
-
         MintedStatement subjectEc = await FederationTestRing.MintEntityConfigurationAsync(
             subject, now, now.AddHours(1),
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);

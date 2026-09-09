@@ -9,6 +9,8 @@ using Verifiable.Apdu.Eac;
 using Verifiable.Apdu.Lds;
 using Verifiable.Apdu.SecureMessaging;
 using Verifiable.Cryptography;
+using Microsoft.Extensions.Time.Testing;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Apdu;
 
@@ -36,8 +38,8 @@ internal sealed class CardSimulatorTerminalAuthenticationTests
     private const string DocumentVerifierReference = "UTDVDE00001";
     private const string TerminalReference = "UTISDE00001";
 
-    private static readonly DateOnly Effective = new(2024, 1, 1);
-    private static readonly DateOnly Expiration = new(2026, 1, 1);
+    private static DateOnly Effective { get; } = new(2024, 1, 1);
+    private static DateOnly Expiration { get; } = new(2026, 1, 1);
 
 
     public required TestContext TestContext { get; set; }
@@ -176,7 +178,7 @@ internal sealed class CardSimulatorTerminalAuthenticationTests
         using ElementaryFile dataGroup1 = DataGroup1.Write(Td2MachineReadableZone, BaseMemoryPool.Shared);
 
         using var card = new CardSimulator(
-            "passport-terminal-auth", [efCom, dataGroup1], terminalAuthenticationTrustAnchor: trustAnchor, terminalAuthenticationDate: cardDate);
+            "passport-terminal-auth", [efCom, dataGroup1], terminalAuthenticationTrustAnchor: trustAnchor, terminalAuthenticationDate: cardDate, rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         using ApduDevice device = ApduDevice.Create(card.TransceiveAsync);
 
         (SecureMessagingSession bacSession, SymmetricKeyMemory accessEncryptionKey, SymmetricKeyMemory accessMacKey) =

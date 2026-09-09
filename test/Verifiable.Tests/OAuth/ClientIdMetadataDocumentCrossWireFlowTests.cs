@@ -198,6 +198,12 @@ internal sealed class ClientIdMetadataDocumentCrossWireFlowTests
 
             app.WireCimdMaterialization("default", documentHost.Certificate);
             app.Server.OAuth().ValidateClientCredentialsAsync = PrivateKeyJwtClientAuthentication.BuildValidator();
+            //The fetched document declares private_key_jwt (CIMD-047/048); the token endpoint now
+            //refuses a declared method it does not advertise before any validator runs (RFC 8414,
+            //Section 2), so the advertisement must agree with the document.
+            app.Server.OAuth().ClientAuthenticationMethodsSupported =
+                [ClientAuthenticationMethod.None, ClientAuthenticationMethod.PrivateKeyJwt];
+            app.Server.OAuth().ClientAssertionSigningAlgorithmsSupported = [alg];
 
             (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> flowStore) =
                 await app.CreateOAuthClientAndRegistrationAsync(
@@ -355,6 +361,12 @@ internal sealed class ClientIdMetadataDocumentCrossWireFlowTests
                 return resolve(clientMetadataUri, context, cancellationToken);
             };
             oauth.ValidateClientCredentialsAsync = PrivateKeyJwtClientAuthentication.BuildValidator();
+            //The fetched document declares private_key_jwt (CIMD-047/048); the token endpoint now
+            //refuses a declared method it does not advertise before any validator runs (RFC 8414,
+            //Section 2), so the advertisement must agree with the document.
+            oauth.ClientAuthenticationMethodsSupported =
+                [ClientAuthenticationMethod.None, ClientAuthenticationMethod.PrivateKeyJwt];
+            oauth.ClientAssertionSigningAlgorithmsSupported = [alg];
 
             (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> flowStore) =
                 await app.CreateOAuthClientAndRegistrationAsync(

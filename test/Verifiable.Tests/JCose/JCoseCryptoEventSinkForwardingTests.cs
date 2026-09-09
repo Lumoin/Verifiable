@@ -1,7 +1,7 @@
 using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
@@ -31,7 +31,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly JwtPartDecoder PartDecoder = JwtPartJson.Default;
+    private static JwtPartDecoder PartDecoder { get; } = JwtPartJson.Default;
 
 
     /// <summary>
@@ -57,7 +57,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
             payload,
             CoseSerialization.BuildSigStructure,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             BaseMemoryPool.Shared,
             eventSink: observed.Add,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -85,7 +85,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
 
         using CoseSign1Message message = await Verifiable.JCose.Cose.SignAsync(
             protectedHeader, unprotectedHeader: null, payload, CoseSerialization.BuildSigStructure,
-            privateKey, MicrosoftCryptographicFunctions.SignP256Async, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            privateKey, MicrosoftCryptographicFunctionsAdapter.SignP256Async, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var observed = new List<CryptoEvent>();
 
@@ -93,7 +93,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
             message,
             CoseSerialization.BuildSigStructure,
             publicKey,
-            MicrosoftCryptographicFunctions.VerifyP256Async,
+            MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             eventSink: observed.Add,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -126,7 +126,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
             JwtWireFixtures.EncodeJwtPart,
             TestSetup.Base64UrlEncoder,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             BaseMemoryPool.Shared,
             eventSink: observed.Add,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -160,13 +160,13 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
 
         var observed = new List<CryptoEvent>();
 
-        using(JwsMessage explicitSinkMessage = await Jws.SignAsync(
+        using(await Jws.SignAsync(
             protectedHeader,
             rawPayload,
             JwtWireFixtures.EncodeJwtPart,
             TestSetup.Base64UrlEncoder,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             BaseMemoryPool.Shared,
             unprotectedHeader: null,
             eventSink: observed.Add,
@@ -178,13 +178,13 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
         //No explicit sink this time: the event must still reach the process-wide global stream by default.
         var globalObserver = new TestObserver<CryptoEvent>();
         using(CryptographicKeyEvents.Events.Subscribe(globalObserver))
-        using(JwsMessage defaultRouteMessage = await Jws.SignAsync(
+        using(await Jws.SignAsync(
             protectedHeader,
             rawPayload,
             JwtWireFixtures.EncodeJwtPart,
             TestSetup.Base64UrlEncoder,
             privateKey,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             BaseMemoryPool.Shared,
             unprotectedHeader: null,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false))
@@ -213,7 +213,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
 
         using JwsMessage message = await Jws.SignAsync(
             header, payload, JwtWireFixtures.EncodeJwtPart, TestSetup.Base64UrlEncoder,
-            privateKey, MicrosoftCryptographicFunctions.SignP256Async, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            privateKey, MicrosoftCryptographicFunctionsAdapter.SignP256Async, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var observed = new List<CryptoEvent>();
 
@@ -221,7 +221,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
             message,
             TestSetup.Base64UrlEncoder,
             publicKey,
-            MicrosoftCryptographicFunctions.VerifyP256Async,
+            MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             BaseMemoryPool.Shared,
             eventSink: observed.Add,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -247,7 +247,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
 
         using JwsMessage signed = await Jws.SignAsync(
             protectedHeader, rawPayload, JwtWireFixtures.EncodeJwtPart, TestSetup.Base64UrlEncoder,
-            privateKey, MicrosoftCryptographicFunctions.SignP256Async, BaseMemoryPool.Shared,
+            privateKey, MicrosoftCryptographicFunctionsAdapter.SignP256Async, BaseMemoryPool.Shared,
             unprotectedHeader: null, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         JwsSignatureComponent signature = signed.Signatures[0];
@@ -259,7 +259,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
             base64UrlPayload: true,
             signature.SignatureBytes,
             TestSetup.Base64UrlEncoder,
-            MicrosoftCryptographicFunctions.VerifyP256Async,
+            MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             publicKey.AsReadOnlyMemory(),
             BaseMemoryPool.Shared,
             eventSink: observed.Add,
@@ -286,7 +286,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
 
         using JwsMessage message = await Jws.SignAsync(
             header, payload, JwtWireFixtures.EncodeJwtPart, TestSetup.Base64UrlEncoder,
-            privateKey, MicrosoftCryptographicFunctions.SignP256Async, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            privateKey, MicrosoftCryptographicFunctionsAdapter.SignP256Async, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string compact = JwsSerialization.SerializeCompact(message, TestSetup.Base64UrlEncoder);
         var observed = new List<CryptoEvent>();
@@ -296,7 +296,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
             TestSetup.Base64UrlDecoder,
             BaseMemoryPool.Shared,
             publicKey,
-            MicrosoftCryptographicFunctions.VerifyP256Async,
+            MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             Jws.DefaultMaxJwsLength,
             eventSink: observed.Add,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -322,7 +322,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
 
         using JwsMessage message = await Jws.SignAsync(
             header, payload, JwtWireFixtures.EncodeJwtPart, TestSetup.Base64UrlEncoder,
-            privateKey, MicrosoftCryptographicFunctions.SignP256Async, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            privateKey, MicrosoftCryptographicFunctionsAdapter.SignP256Async, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string compact = JwsSerialization.SerializeCompact(message, TestSetup.Base64UrlEncoder);
         var observed = new List<CryptoEvent>();
@@ -333,7 +333,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
             PartDecoder,
             BaseMemoryPool.Shared,
             publicKey,
-            MicrosoftCryptographicFunctions.VerifyP256Async,
+            MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             Jws.DefaultMaxJwsLength,
             eventSink: observed.Add,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -372,7 +372,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
             headerSerializer,
             payloadSerializer,
             TestSetup.Base64UrlEncoder,
-            MicrosoftCryptographicFunctions.SignP256Async,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             BaseMemoryPool.Shared,
             eventSink: observed.Add,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -479,12 +479,13 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
     /// <summary>Builds a minimal CBOR map payload for the COSE_Sign1 tests.</summary>
     private static byte[] BuildCborPayload()
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteTextString("fixture");
         writer.WriteTextString("jose-cose-forwarding");
         writer.WriteEndMap();
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -515,13 +516,13 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
     /// <summary>Binds the resolved private key material to the Microsoft P-256 signing function.</summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the returned PrivateKey transfers to the caller.")]
     private static ValueTask<PrivateKey> BindPrivateKey(PrivateKeyMemory material, int state, CancellationToken cancellationToken) =>
-        ValueTask.FromResult(new PrivateKey(material, "fixture-cose-key", MicrosoftCryptographicFunctions.SignP256Async));
+        ValueTask.FromResult(new PrivateKey(material, "fixture-cose-key", MicrosoftCryptographicFunctionsAdapter.SignP256Async));
 
 
     /// <summary>Binds the resolved public key material to the Microsoft P-256 verification function.</summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the returned PublicKey transfers to the caller.")]
     private static ValueTask<PublicKey> BindPublicKey(PublicKeyMemory material, int state, CancellationToken cancellationToken) =>
-        ValueTask.FromResult(new PublicKey(material, "fixture-cose-key", MicrosoftCryptographicFunctions.VerifyP256Async));
+        ValueTask.FromResult(new PublicKey(material, "fixture-cose-key", MicrosoftCryptographicFunctionsAdapter.VerifyP256Async));
 
 
     /// <summary>Resolver/binder test state carrying the raw P-256 key bytes for the Jws smoke test.</summary>
@@ -551,11 +552,11 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
     /// <summary>Binds the resolved private key material to the Microsoft P-256 signing function.</summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the returned PrivateKey transfers to the caller.")]
     private static ValueTask<PrivateKey> BindJwsPrivateKey(PrivateKeyMemory material, int state, CancellationToken cancellationToken) =>
-        ValueTask.FromResult(new PrivateKey(material, "fixture-jws-key", MicrosoftCryptographicFunctions.SignP256Async));
+        ValueTask.FromResult(new PrivateKey(material, "fixture-jws-key", MicrosoftCryptographicFunctionsAdapter.SignP256Async));
 
 
     /// <summary>Binds the resolved public key material to the Microsoft P-256 verification function.</summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the returned PublicKey transfers to the caller.")]
     private static ValueTask<PublicKey> BindJwsPublicKey(PublicKeyMemory material, int state, CancellationToken cancellationToken) =>
-        ValueTask.FromResult(new PublicKey(material, "fixture-jws-key", MicrosoftCryptographicFunctions.VerifyP256Async));
+        ValueTask.FromResult(new PublicKey(material, "fixture-jws-key", MicrosoftCryptographicFunctionsAdapter.VerifyP256Async));
 }

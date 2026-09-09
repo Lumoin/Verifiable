@@ -111,7 +111,7 @@ public readonly struct ResponseType: IEquatable<ResponseType>
     public static ResponseType CodeVpToken { get; } = new(9);
 
 
-    private static List<ResponseType> responseTypes { get; } =
+    private static List<ResponseType> RegisteredResponseTypes { get; } =
     [
         AuthorizationCode, Token, IdToken,
         CodeIdToken, CodeToken, IdTokenToken, CodeIdTokenToken,
@@ -120,7 +120,7 @@ public readonly struct ResponseType: IEquatable<ResponseType>
     ];
 
     /// <summary>Gets all registered response type values including any custom ones.</summary>
-    public static IReadOnlyList<ResponseType> ResponseTypes => responseTypes.AsReadOnly();
+    public static IReadOnlyList<ResponseType> ResponseTypes => RegisteredResponseTypes.AsReadOnly();
 
 
     /// <summary>
@@ -134,9 +134,9 @@ public readonly struct ResponseType: IEquatable<ResponseType>
     /// <exception cref="ArgumentException">Thrown when <paramref name="code"/> is already registered.</exception>
     public static ResponseType Create(int code)
     {
-        for(int i = 0; i < responseTypes.Count; ++i)
+        for(int i = 0; i < RegisteredResponseTypes.Count; ++i)
         {
-            if(responseTypes[i].Code == code)
+            if(RegisteredResponseTypes[i].Code == code)
             {
                 throw new ArgumentException(
                     $"A response type with code {code} is already registered.", nameof(code));
@@ -144,7 +144,7 @@ public readonly struct ResponseType: IEquatable<ResponseType>
         }
 
         ResponseType newResponseType = new(code);
-        responseTypes.Add(newResponseType);
+        RegisteredResponseTypes.Add(newResponseType);
         return newResponseType;
     }
 

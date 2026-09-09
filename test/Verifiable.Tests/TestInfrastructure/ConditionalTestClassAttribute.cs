@@ -22,7 +22,7 @@ namespace Verifiable.Tests.TestInfrastructure;
 ///     [TestMethod]  //Automatically upgraded to [ConditionalTestMethod].
 ///     public void TestRequiringTpm()
 ///     {
-///         using TpmDevice tpm = TpmDevice.Open();
+///         using TpmDevice tpm = TpmDevice.Open(BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 ///         //All tests in this class skip if no TPM available.
 ///     }
 /// }

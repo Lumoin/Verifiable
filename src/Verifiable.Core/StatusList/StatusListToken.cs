@@ -51,7 +51,31 @@ public sealed class StatusListToken
     /// Gets the maximum time in seconds that this token may be cached before
     /// a fresh copy should be retrieved.
     /// </summary>
-    public long? TimeToLive { get; init; }
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown by the property setter when assigned a value that is not positive — "ttl: … The value of
+    /// the claim MUST be a positive number encoded in JSON as a number." (Section 5.1).
+    /// </exception>
+    public long? TimeToLive
+    {
+        get => timeToLive;
+        init
+        {
+            if(value.HasValue)
+            {
+                ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value.Value);
+            }
+
+            timeToLive = value;
+        }
+    }
+
+    /// <summary>
+    /// The backing store <see cref="TimeToLive"/>'s validating <c>init</c> accessor assigns. A field
+    /// because an <c>init</c> accessor may assign a sibling field of its own declaring type outside a
+    /// constructor, but never a get-only auto-property's compiler-generated backing field, which only a
+    /// constructor of the declaring type may assign.
+    /// </summary>
+    private readonly long? timeToLive;
 
     /// <summary>
     /// Gets the embedded Status List containing the actual status data.

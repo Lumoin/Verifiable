@@ -25,29 +25,29 @@ public static class WellKnownProblemReportNames
     /// The problem-report Message Type URI — the value of the <c>type</c> header that identifies a message
     /// as a Report Problem Protocol 2.0 problem report (DIDComm v2.1 §Problem Reports).
     /// </summary>
-    public static readonly string ProblemReportType = Utf8Constants.ToInternedString(ProblemReportTypeUtf8);
+    public static string ProblemReportType { get; } = Utf8Constants.ToInternedString(ProblemReportTypeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Code"/>.</summary>
     public static ReadOnlySpan<byte> CodeUtf8 => "code"u8;
 
     /// <summary>The problem report <c>body.code</c> member — REQUIRED, the problem code (DIDComm v2.1 §Problem Reports).</summary>
-    public static readonly string Code = Utf8Constants.ToInternedString(CodeUtf8);
+    public static string Code { get; } = Utf8Constants.ToInternedString(CodeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Comment"/>.</summary>
     public static ReadOnlySpan<byte> CommentUtf8 => "comment"u8;
 
     /// <summary>The problem report <c>body.comment</c> member — OPTIONAL human-friendly text with <c>{n}</c> interpolation over <see cref="Args"/> (DIDComm v2.1 §Problem Reports).</summary>
-    public static readonly string Comment = Utf8Constants.ToInternedString(CommentUtf8);
+    public static string Comment { get; } = Utf8Constants.ToInternedString(CommentUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Args"/>.</summary>
     public static ReadOnlySpan<byte> ArgsUtf8 => "args"u8;
 
     /// <summary>The problem report <c>body.args</c> member — OPTIONAL situation values interpolated into <see cref="Comment"/> (DIDComm v2.1 §Problem Reports).</summary>
-    public static readonly string Args = Utf8Constants.ToInternedString(ArgsUtf8);
+    public static string Args { get; } = Utf8Constants.ToInternedString(ArgsUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="EscalateTo"/>.</summary>
     public static ReadOnlySpan<byte> EscalateToUtf8 => "escalate_to"u8;
 
     /// <summary>The problem report <c>body.escalate_to</c> member — OPTIONAL URI for more help on the issue (DIDComm v2.1 §Problem Reports).</summary>
-    public static readonly string EscalateTo = Utf8Constants.ToInternedString(EscalateToUtf8);
+    public static string EscalateTo { get; } = Utf8Constants.ToInternedString(EscalateToUtf8);
 }

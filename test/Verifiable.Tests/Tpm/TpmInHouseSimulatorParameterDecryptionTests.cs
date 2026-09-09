@@ -18,6 +18,7 @@ using Verifiable.Tpm.Spec.Attributes;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -27,14 +28,14 @@ namespace Verifiable.Tests.Tpm;
 /// command path the production code uses (<see cref="TpmCommandExecutor"/>, the real <see cref="CreateInput"/>,
 /// <see cref="TpmSession"/>, and the real response codecs): <c>TPM2_Create()</c> now accepts a parent-authorizing
 /// HMAC session (or <c>TPM_RS_PW</c>) paired with a SEPARATE bound HMAC session carrying the <c>decrypt</c>
-/// attribute that protects <c>inSensitive</c> (TPM 2.0 Library Part 1, clauses 19 and 21; Part 3, clauses 5.5,
+/// attribute that protects <c>inSensitive</c> (TPM 2.0 Library Part 1, clauses 18 and 20; Part 3, clauses 5.5,
 /// 5.6, and 12.1) — where previously a decrypt-attributed session had no effect at all.
 /// </summary>
 /// <remarks>
 /// <para>
 /// Every negative test is proven non-vacuous: the SAME bytes, with the mechanism under test intact, succeed; only
 /// the deliberately broken variant is rejected. The stripped-decrypt-session test is this suite's crown negative
-/// (R-B5): it proves the nonceTPMdecrypt fold (clause 17.6.3.4) actually binds the decrypt session into the
+/// (R-B5): it proves the nonceTPMdecrypt fold (clause 16.6.3.4) actually binds the decrypt session into the
 /// parent-authorizing session's command HMAC, so silently removing the decrypt session from the wire is detected
 /// as an authorization failure rather than merely disabling confidentiality.
 /// </para>
@@ -42,8 +43,8 @@ namespace Verifiable.Tests.Tpm;
 /// Two tests hand-assemble their own wire bytes and submit them directly to the simulator, firewalled to the wire
 /// with no back-channel into simulator internals: both use UNBOUND, UNSALTED HMAC sessions, whose session key is
 /// <c>KDFa(authHash, Empty, "ATH", nonceTPM, nonceCaller, bits)</c> — computable from the public start nonces
-/// alone (TPM 2.0 Library Part 1, clause 17.6.9). Independence here is at the composition level, not the
-/// primitive level: the command's cpHash and HMAC (clause 16.7 and clause 17.6.5) are assembled by hand, field
+/// alone (TPM 2.0 Library Part 1, clause 16.6.9). Independence here is at the composition level, not the
+/// primitive level: the command's cpHash and HMAC (clause 15.7 and clause 16.6.5) are assembled by hand, field
 /// by field, and computed through the project's own <c>Kdfa</c> and registered digest/HMAC seam — the same
 /// primitives <c>KdfaTests</c> pins to known-answer vectors — then compared against what the SIMULATOR accepted.
 /// This is the only way to reach the simulator's own size guard and to prove an independently-encrypted (rather
@@ -66,7 +67,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
 
     /// <summary>
     /// How many pooled carriers a started, unbound, unsalted session keeps outstanding for as long as it is
-    /// loaded: its retained nonceTPM alone (TPM 2.0 Library Part 1, clause 17.6.5).
+    /// loaded: its retained nonceTPM alone (TPM 2.0 Library Part 1, clause 16.6.5).
     /// </summary>
     private const int RetainedNonceTpmPerSession = 1;
 
@@ -75,6 +76,14 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
 
     /// <summary>The real authorization value carried, encrypted, inside <c>inSensitive</c>.</summary>
     private static byte[] IntendedUserAuth { get; } = [0x51, 0x52, 0x53, 0x54, 0x55];
+
+    /// <summary>The empty <c>TPM2B_DATA</c> wire image (a zero-length size prefix, no content) — the fixed
+    /// <c>outsideInfo</c> every hand-crafted command in this file used before a caller needed one non-empty.</summary>
+    private static byte[] EmptyOutsideInfoWire { get; } = [0x00, 0x00];
+
+    /// <summary>The empty <c>TPML_PCR_SELECTION</c> wire image (a zero <c>count</c>, no entries) — the fixed
+    /// <c>creationPCR</c> every hand-crafted command in this file used before a caller needed one non-empty.</summary>
+    private static byte[] EmptyCreationPcrWire { get; } = new byte[sizeof(uint)];
 
     /// <summary>Gets or sets the per-test context (supplies the cancellation token).</summary>
     public TestContext TestContext { get; set; } = null!;
@@ -101,7 +110,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -193,15 +202,15 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     /// <remarks>
     /// <para>
     /// "A session with this attribute does not need to be associated with an entity identified in the handle
-    /// area" (TPM 2.0 Library Part 1, clause 16.6.4, Table 12) states the permission the other way round: the
+    /// area" (TPM 2.0 Library Part 1, clause 15.6.4, Table 15) states the permission the other way round: the
     /// attribute MAY ride a session that authorizes nothing, and equally may ride one that authorizes something.
-    /// A single-session area of this shape is what clause 16.6.1 describes as "a single session can be used for
+    /// A single-session area of this shape is what clause 15.6.1 describes as "a single session can be used for
     /// authorization, encryption, decryption, and audit at the same time".
     /// </para>
     /// <para>
     /// The session here is unbound and unsalted and the parent carries a real authorization value, so its
     /// <c>sessionValue</c> is <c>sessionKey ‖ authValue</c> with an empty session key — the cipher key is
-    /// entirely the parent's authValue (clause 19.1's own observation about the unbound and unsalted case). That
+    /// entirely the parent's authValue (clause 18.1's own observation about the unbound and unsalted case). That
     /// makes the round trip a direct test of the entity term: a simulator keying the cipher on the session key
     /// alone would decrypt <c>inSensitive</c> to garbage, seal a garbage <c>userAuth</c>, and the unseal below
     /// would fail its authorization.
@@ -212,7 +221,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse parent = await CreatePasswordProtectedStorageParentAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -278,11 +287,11 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The attribute may ride an authorizing session (TPM 2.0 Library Part 1, clause 16.6.4, Table 12: "A session
+    /// The attribute may ride an authorizing session (TPM 2.0 Library Part 1, clause 15.6.4, Table 15: "A session
     /// with this attribute does not need to be associated with an entity identified in the handle area"), and
     /// when it does, its cipher key folds the entity's own authValue — <c>sessionValue</c> is
     /// <c>sessionKey ‖ authValue</c> "if a session is also being used for authorization", with the binding of the
-    /// session ignored (clause 19.1). The session here is unbound and unsalted, so the cipher key is entirely the
+    /// session ignored (clause 18.1). The session here is unbound and unsalted, so the cipher key is entirely the
     /// item's <c>userAuth</c>.
     /// </para>
     /// <para>
@@ -312,7 +321,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
             return result;
         }
 
-        using TpmDevice tpm = TpmDevice.Create(CaptureUnsealResponseAsync);
+        using TpmDevice tpm = TpmDevice.Create(CaptureUnsealResponseAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         long baseline = trackingPool.OutstandingCount;
         uint parentHandle = 0;
@@ -438,7 +447,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
 
     /// <summary>
     /// Starts an UNBOUND, UNSALTED HMAC session negotiating <paramref name="symmetric"/>. Such a session's
-    /// sessionKey is the Empty Buffer with no KDFa run at all (TPM 2.0 Library Part 1, clause 17.6.9), so
+    /// sessionKey is the Empty Buffer with no KDFa run at all (TPM 2.0 Library Part 1, clause 16.6.9), so
     /// whatever the caller hands it through <c>SetAuthValue</c> is the whole of its <c>sessionValue</c>.
     /// </summary>
     /// <param name="tpm">The TPM device.</param>
@@ -449,7 +458,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     private async Task<(uint SessionHandle, TpmSession Session)> StartUnboundHmacSessionAsync(
         TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, TpmtSymDef symmetric)
     {
-        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(SessionAlg, symmetric);
+        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(SessionAlg, TestEntropy.NewCounterStream(), pool, symmetric);
 
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             tpm, startInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
@@ -458,7 +467,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
         //The response's own nonceTPM carrier transfers into the session, which releases it on its own Dispose —
         //the ownership transfer the sibling bound-session helper in this file already relies on.
         StartAuthSessionResponse startResponse = startResult.Value;
-        var session = new TpmSession(new TpmHandle(startResponse.SessionHandle.Value), startResponse.NonceTPM, SessionAlg, pool, symmetric)
+        var session = new TpmSession(new TpmHandle(startResponse.SessionHandle.Value), startResponse.NonceTPM, SessionAlg, TestEntropy.NewCounterStream(), pool, symmetric)
         {
             SessionAttributes = TpmaSession.CONTINUE_SESSION
         };
@@ -472,7 +481,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     /// 1) — must succeed end to end over <c>TPM2_Create()</c>. Before the fix, the host computed ONE cpHash
     /// under the "first session with a real hash" rule and fed it to EVERY session's HMAC, and framed the
     /// response rpHash the same single-hash way; each session HMACs (and verifies) under its OWN algorithm
-    /// (TPM 2.0 Library Part 1, clause 16.7, equation 15/16), so a genuine, spec-legal mixed-hash command
+    /// (TPM 2.0 Library Part 1, clause 15.7, equation 15/16), so a genuine, spec-legal mixed-hash command
     /// diverged from what the (per-session-alg-correct) simulator computed and was falsely rejected. A SUCCESS
     /// result here means the host command-side cpHash, the host response-side rpHash
     /// (<c>TpmSession.VerifyAndUpdateAsync</c>), AND the simulator's own response-side rpHash
@@ -485,7 +494,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -534,7 +543,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -610,8 +619,10 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
                         //A malformed-PARAMETER rejection (not, say, ATTRIBUTES/HANDLE, which would indicate an
                         //unrelated bug in the session-area or handle plumbing) — also proves the simulator's
                         //decrypt is real: a passthrough bug would have let the well-formed plaintext through
-                        //unchanged, and well-formed plaintext never fails to decode this way.
-                        bool isMalformedParameter = createResult.ResponseCode is
+                        //unchanged, and well-formed plaintext never fails to decode this way. The decrypted
+                        //content's own malformation is parameter-encoded to inSensitive (Table 18, index 0), so
+                        //the comparison judges the base error underneath that designation.
+                        bool isMalformedParameter = createResult.ResponseCode.GetBaseError() is
                             TpmRcConstants.TPM_RC_SIZE or TpmRcConstants.TPM_RC_INSUFFICIENT or TpmRcConstants.TPM_RC_VALUE or TpmRcConstants.TPM_RC_TYPE;
                         Assert.IsTrue(isMalformedParameter,
                             $"Create must fail with a malformed-parameter code when it rejects the genuinely-XORed garbage, got '{createResult.ResponseCode}'.");
@@ -633,7 +644,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -669,7 +680,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
                         return await simulator.SubmitAsync(mutable, commandPool, ct).ConfigureAwait(false);
                     }
 
-                    using TpmDevice tamperingDevice = TpmDevice.Create(SetFirstSessionDecryptBitAsync);
+                    using TpmDevice tamperingDevice = TpmDevice.Create(SetFirstSessionDecryptBitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
                     using Tpm2bSensitiveCreate inSensitive = Tpm2bSensitiveCreate.ForSealedData(SecretBytes, IntendedUserAuth, pool);
                     using Tpm2bPublic sealTemplate = Tpm2bPublic.CreateSealedDataTemplate(SessionAlg, pool, authPolicy: default, noDa: true);
@@ -699,20 +710,19 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, registry, pool).ConfigureAwait(false);
         uint parentHandle = parent.ObjectHandle.Value;
         uint itemHandle = 0;
-        uint sessionHandle = 0;
 
         try
         {
             using LoadResponse loaded = await SealAndLoadPlainAsync(tpm, registry, pool, parentHandle).ConfigureAwait(false);
             itemHandle = loaded.ObjectHandle.Value;
 
-            (sessionHandle, TpmSession session, _, _) = await StartHmacSessionAsync(tpm, registry, pool, parentHandle, TpmtSymDef.Xor(SessionAlg)).ConfigureAwait(false);
+            (_, TpmSession session, _, _) = await StartHmacSessionAsync(tpm, registry, pool, parentHandle, TpmtSymDef.Xor(SessionAlg)).ConfigureAwait(false);
             using(session)
             {
                 session.SessionAttributes = TpmaSession.CONTINUE_SESSION;
@@ -731,7 +741,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
                     return await simulator.SubmitAsync(mutable, commandPool, ct).ConfigureAwait(false);
                 }
 
-                using TpmDevice tamperingDevice = TpmDevice.Create(SetDecryptBitAsync);
+                using TpmDevice tamperingDevice = TpmDevice.Create(SetDecryptBitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
                 UnsealInput unsealInput = UnsealInput.ForItem(loaded.ObjectHandle);
                 TpmResult<UnsealResponse> result = await TpmCommandExecutor.ExecuteAsync<UnsealResponse>(
@@ -756,7 +766,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -789,7 +799,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
                         return await simulator.SubmitAsync(mutable, commandPool, ct).ConfigureAwait(false);
                     }
 
-                    using TpmDevice tamperingDevice = TpmDevice.Create(SetSecondSessionDecryptBitAsync);
+                    using TpmDevice tamperingDevice = TpmDevice.Create(SetSecondSessionDecryptBitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
                     using Tpm2bSensitiveCreate inSensitive = Tpm2bSensitiveCreate.ForSealedData(SecretBytes, IntendedUserAuth, pool);
                     using Tpm2bPublic sealTemplate = Tpm2bPublic.CreateSealedDataTemplate(SessionAlg, pool, authPolicy: default, noDa: true);
@@ -819,7 +829,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -847,7 +857,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
                         return await simulator.SubmitAsync(command, commandPool, ct).ConfigureAwait(false);
                     }
 
-                    using TpmDevice capturingDevice = TpmDevice.Create(CaptureAsync);
+                    using TpmDevice capturingDevice = TpmDevice.Create(CaptureAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
                     using Tpm2bSensitiveCreate inSensitive = Tpm2bSensitiveCreate.ForSealedData(SecretBytes, IntendedUserAuth, pool);
                     using Tpm2bPublic sealTemplate = Tpm2bPublic.CreateSealedDataTemplate(SessionAlg, pool, authPolicy: default, noDa: true);
@@ -874,7 +884,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
                         //DA-exempt: a mismatched HMAC against it is TPM_RC_BAD_AUTH, never counted TPM_RC_AUTH_FAIL.
                         Assert.AreEqual(
                             SessionEncodedRc(TpmRcConstants.TPM_RC_BAD_AUTH, sessionIndex: 0), rc,
-                            $"Removing the decrypt session must make session 0's command HMAC mismatch (the fold, clause 17.6.3.4, no longer applies), got '{rc}'.");
+                            $"Removing the decrypt session must make session 0's command HMAC mismatch (the fold, clause 16.6.3.4, no longer applies), got '{rc}'.");
                     }
                 }
             }
@@ -892,7 +902,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -948,7 +958,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -970,22 +980,18 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     }
 
     /// <summary>
-    /// F3 regression (adversarial review, MINOR wrong RC): a locked-out TPM must reject <c>TPM2_Create()</c>
-    /// with <c>TPM_RC_LOCKOUT</c> when the parent is DA-protected, regardless of whether the parent-authorizing
-    /// session is a bound HMAC session or a plain <c>TPM_RS_PW</c>. Before the fix,
-    /// <c>OnCreateSealedObjectOverSessions</c> gated lockout only when the FIRST session was a real HMAC
-    /// session (<c>if(firstIsHmac &amp;&amp; parentIsDaProtected &amp;&amp; state.IsInLockout)</c>), so a
-    /// <c>TPM_RS_PW</c> parent-auth session paired with a decrypt-attributed HMAC companion — the two-session
-    /// shape <c>TryParseCreate</c> routes to this same function — skipped the lockout refusal entirely and
-    /// performed the Create while locked out (TPM 2.0 Library Part 3, clause 5.6, check 3: DA/Lockout is
-    /// checked before any credential is evaluated, unconditionally).
+    /// A locked-out TPM must reject <c>TPM2_Create()</c> with <c>TPM_RC_LOCKOUT</c> when the parent is
+    /// DA-protected, regardless of whether the parent-authorizing session is a bound HMAC session or a plain
+    /// <c>TPM_RS_PW</c>, and regardless of which of the two sessions in a two-session authorization area
+    /// carries the real HMAC: the DA/Lockout check (TPM 2.0 Library Part 3, clause 5.6, check 3) must run
+    /// before any credential is evaluated, unconditionally of session shape.
     /// </summary>
     [TestMethod]
     public async Task LockedOutTpmRejectsCreateOverPasswordAuthorizedDaProtectedParent()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         //A DA-protected storage parent (noDa: false) — the gate under test is keyed on this bit.
@@ -1011,7 +1017,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
 
             //2. Seal+load a THROWAWAY DA-protected object under the same parent and fail its Unseal password
             //LockoutTestMaxTries times. Any DA-protected auth surface feeds the ONE shared lockout counter (TPM
-            //2.0 Library Part 1, clause 17.8) — this is independent of the Create exploit exercised in step 3.
+            //2.0 Library Part 1, clause 16.8) — this is independent of the Create exploit exercised in step 3.
             using Tpm2bSensitiveCreate bruteForceSensitive = Tpm2bSensitiveCreate.ForSealedData(SecretBytes, IntendedUserAuth, pool);
             using Tpm2bPublic bruteForceTemplate = Tpm2bPublic.CreateSealedDataTemplate(SessionAlg, pool, authPolicy: default, noDa: false);
             using CreateInput bruteForceCreateInput = new(parentHandle, bruteForceSensitive, bruteForceTemplate, Tpm2bData.Empty, TpmlPcrSelection.Empty);
@@ -1045,8 +1051,9 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
             Assert.IsTrue(lockoutState.Value.IsLockedOut, "The TPM must be in Lockout mode before the Create exploit runs.");
 
             //3. THE EXPLOIT: TPM2_Create() with [TPM_RS_PW parent-auth session, bound HMAC decrypt-attributed
-            //companion] against the (now globally locked-out) DA-protected parent — the two-session shape that
-            //routes to OnCreateSealedObjectOverSessions via TryParseCreate's "!isSingleSession" branch.
+            //companion] against the (now globally locked-out) DA-protected parent — a two-session authorization
+            //area (TPM 2.0 Library Part 3, clause 5.6) whose lockout gate must fire regardless of which session
+            //carries the real HMAC.
             (decryptSessionHandle, TpmSession decryptSession, _, _) =
                 await StartHmacSessionAsync(tpm, registry, pool, parentHandle, TpmtSymDef.Xor(SessionAlg)).ConfigureAwait(false);
             using(decryptSession)
@@ -1082,28 +1089,33 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
 
     /// <summary>
     /// The outcome of <see cref="SendHandCraftedCreateAsync"/>: the response code, on success the created
-    /// object's private blob and public area, and the two session handles the helper started, so a caller that
-    /// accounts for pool rentals can flush them and settle the sessions' durable carriers.
+    /// object's private blob and public area, the two session handles the helper started (so a caller that
+    /// accounts for pool rentals can flush them and settle the sessions' durable carriers), and on success the
+    /// raw response parameter bytes (<c>outPrivate ‖ outPublic ‖ creationData ‖ creationHash ‖ creationTicket</c>)
+    /// for a caller that needs to independently parse the creation by-products this over-sessions path returns —
+    /// this helper itself does not walk past <c>outPublic</c>, so the creation-data proofs in
+    /// <c>TpmInHouseSimulatorCreationDataTests</c> parse the tail themselves.
     /// </summary>
     /// <param name="ResponseCode">The command's response code.</param>
     /// <param name="OutPrivate">The created object's private blob, or <see langword="null"/> when the command was refused.</param>
     /// <param name="OutPublic">The created object's public area, or <see langword="null"/> when the command was refused.</param>
     /// <param name="AuthorizingSessionHandle">The parent-authorizing session the helper started.</param>
     /// <param name="DecryptSessionHandle">The decrypt companion the helper started.</param>
-    private sealed record HandCraftedCreateResult(
-        TpmRcConstants ResponseCode, byte[]? OutPrivate, Tpm2bPublic? OutPublic, uint AuthorizingSessionHandle, uint DecryptSessionHandle);
+    /// <param name="ResponseParameters">A copy of the full response parameter area, or <see langword="null"/> when the command was refused.</param>
+    internal sealed record HandCraftedCreateResult(
+        TpmRcConstants ResponseCode, byte[]? OutPrivate, Tpm2bPublic? OutPublic, uint AuthorizingSessionHandle, uint DecryptSessionHandle, byte[]? ResponseParameters);
 
     /// <summary>
     /// Hand-assembles a <c>TPM2_Create()</c> over-sessions command with two UNBOUND, UNSALTED HMAC sessions (a
     /// parent-authorizing session and a SEPARATE decrypt session negotiating XOR), independently knows both
     /// session keys to be the Empty Buffer (neither session is bound nor salted, so no KDFa runs — Part 1
-    /// clause 17.6.9), independently XOR-encrypts <c>inSensitive</c>'s data portion via
+    /// clause 16.6.9), independently XOR-encrypts <c>inSensitive</c>'s data portion via
     /// <see cref="TpmParameterEncryption.XorAsync"/>, independently composes both command HMACs (equation 17
-    /// (Part 1, clause 17.6.5) plus the nonceTPMdecrypt fold, clause 17.6.3.4) through the project's registered digest/HMAC seam, and submits
+    /// (Part 1, clause 16.6.5) plus the nonceTPMdecrypt fold, clause 16.6.3.4) through the project's registered digest/HMAC seam, and submits
     /// the raw bytes directly to the simulator.
     /// </summary>
     /// <param name="corruptDeclaredInSensitiveSize">
-    /// When set, <c>inSensitive</c>'s own outer size field (never itself encrypted, Part 1 clause 21.1) is
+    /// When set, <c>inSensitive</c>'s own outer size field (never itself encrypted, Part 1 clause 20.1) is
     /// overwritten to declare far more bytes than actually follow, after encryption — proving the simulator's own
     /// truncated-size guard independently of the host executor's identical, unavoidable pre-flight guard.
     /// </param>
@@ -1113,10 +1125,32 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     /// that carrier's own factory refuses; <see langword="null"/> for the intended value, which is written by the
     /// production wire type as every other case here is.
     /// </param>
-    private static async Task<HandCraftedCreateResult> SendHandCraftedCreateAsync(
+    /// <param name="outsideInfoWire">
+    /// The raw, already-marshaled <c>outsideInfo</c> (<c>TPM2B_DATA</c>) octets, written straight to the wire
+    /// rather than through <see cref="Tpm2bData"/> so a proof can declare a width that carrier's own factory
+    /// refuses; <see langword="null"/> for the empty field (<see cref="EmptyOutsideInfoWire"/>).
+    /// </param>
+    /// <param name="creationPcrWire">
+    /// The raw, already-marshaled <c>creationPCR</c> (<c>TPML_PCR_SELECTION</c>) octets, written straight to the
+    /// wire rather than through <see cref="TpmlPcrSelection"/> so a proof can declare a count that member's own
+    /// parser refuses; <see langword="null"/> for the empty field (<see cref="EmptyCreationPcrWire"/>).
+    /// </param>
+    /// <param name="inPublicWire">
+    /// The raw, already-marshaled <c>inPublic</c> (<c>TPM2B_PUBLIC</c>) octets, written straight to the wire
+    /// instead of the sealed-data template this helper otherwise marshals, so a proof can declare an outer size
+    /// the actual encoded content does not back; <see langword="null"/> for the well-formed sealed-data
+    /// template.
+    /// </param>
+    internal static async Task<HandCraftedCreateResult> SendHandCraftedCreateAsync(
         TpmSimulator simulator, BaseMemoryPool pool, uint parentHandle, ReadOnlyMemory<byte> parentName,
-        bool corruptDeclaredInSensitiveSize, CancellationToken cancellationToken, byte[]? userAuthOverride = null)
+        bool corruptDeclaredInSensitiveSize, CancellationToken cancellationToken, byte[]? userAuthOverride = null,
+        byte[]? outsideInfoWire = null, byte[]? creationPcrWire = null, byte[]? inPublicWire = null)
     {
+        byte[] resolvedOutsideInfoWire = outsideInfoWire ?? EmptyOutsideInfoWire;
+        byte[] resolvedCreationPcrWire = creationPcrWire ?? EmptyCreationPcrWire;
+
+        //firstKey/decryptKey are tuple-deconstruction targets, disposed in this method's own finally block
+        //below because a using declaration cannot target a tuple-deconstruction assignment.
         (uint firstHandle, Tpm2bAuth firstKey, byte[] firstNonceTpm) = await StartUnboundHmacSessionWithIndependentKeyAsync(
             simulator, pool, TpmtSymDef.Null, cancellationToken).ConfigureAwait(false);
         (uint decryptHandle, Tpm2bAuth decryptKey, byte[] decryptNonceTpm) = await StartUnboundHmacSessionWithIndependentKeyAsync(
@@ -1154,31 +1188,39 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
             }
 
             //mask = KDFa(SHA256, decryptSessionKey, "XOR", nonceCaller, nonceTPM, sensitiveInnerSize·8) XORed in
-            //place (Part 1, clause 19.2, equation 4) — through the project's own XOR obfuscation primitive, the
+            //place (Part 1, clause 18.2, equation 4) — through the project's own XOR obfuscation primitive, the
             //same one a genuine decrypt session drives; independence here is that THIS test derives the key and
             //the nonces by hand rather than through a production TpmSession.
             await TpmParameterEncryption.XorAsync(
                 HashAlgorithmName.SHA256, decryptKey.AsReadOnlyMemory(), decryptNonceCaller, decryptNonceTpm, sensitiveInner, pool, cancellationToken).ConfigureAwait(false);
 
             using Tpm2bPublic inPublic = Tpm2bPublic.CreateSealedDataTemplate(SessionAlg, pool, authPolicy: default, noDa: true);
-            int inPublicSize = inPublic.GetSerializedSize();
+            int inPublicSize = inPublicWire?.Length ?? inPublic.GetSerializedSize();
 
             ushort declaredInnerSize = corruptDeclaredInSensitiveSize ? ushort.MaxValue : (ushort)sensitiveInnerSize;
 
-            //Parameters: inSensitive (declared size ‖ possibly-encrypted inner bytes) ‖ inPublic ‖ outsideInfo (empty) ‖ creationPCR (empty).
-            int parametersSize = sizeof(ushort) + sensitiveInnerSize + inPublicSize + sizeof(ushort) + sizeof(uint);
+            //Parameters: inSensitive (declared size ‖ possibly-encrypted inner bytes) ‖ inPublic ‖ outsideInfo ‖ creationPCR.
+            int parametersSize = sizeof(ushort) + sensitiveInnerSize + inPublicSize + resolvedOutsideInfoWire.Length + resolvedCreationPcrWire.Length;
             using IMemoryOwner<byte> parametersOwner = pool.Rent(parametersSize);
             Memory<byte> parameters = parametersOwner.Memory[..parametersSize];
             {
                 var paramWriter = new TpmWriter(parameters.Span);
                 paramWriter.WriteUInt16(declaredInnerSize);
                 paramWriter.WriteBytes(sensitiveInner.Span);
-                inPublic.WriteTo(ref paramWriter);
-                paramWriter.WriteUInt16(0); //outsideInfo: empty TPM2B_DATA.
-                paramWriter.WriteUInt32(0); //creationPCR: empty TPML_PCR_SELECTION (count = 0).
+                if(inPublicWire is null)
+                {
+                    inPublic.WriteTo(ref paramWriter);
+                }
+                else
+                {
+                    paramWriter.WriteBytes(inPublicWire);
+                }
+
+                paramWriter.WriteBytes(resolvedOutsideInfoWire);
+                paramWriter.WriteBytes(resolvedCreationPcrWire);
             }
 
-            //cpHash = H_SHA256(commandCode ‖ parentName ‖ parameters) — Part 1, clause 16.7, equation 15.
+            //cpHash = H_SHA256(commandCode ‖ parentName ‖ parameters) — Part 1, clause 15.7, equation 15.
             int cpHashInputLength = sizeof(uint) + parentName.Length + parametersSize;
             using IMemoryOwner<byte> cpHashInputOwner = pool.Rent(cpHashInputLength);
             {
@@ -1191,9 +1233,9 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
             using DigestValue cpHash = await CryptographicKeyEvents.ComputeDigestAsync(
                 cpHashInputOwner.Memory[..cpHashInputLength], outputByteLength: DigestSize, tag: DigestTag(), pool: pool, cancellationToken: cancellationToken).ConfigureAwait(false);
 
-            //Session 0 authorizes the parent, so its command HMAC folds the decrypt session's nonceTPM (clause
-            //17.6.3.4); the parent carries no retained authValue in this model, so the HMAC key is the session key
-            //alone (equivalent to equation 19 (Part 1, clause 17.6.9)'s degenerate form).
+            //Session 0 authorizes the parent, so its command HMAC folds the decrypt session's nonceTPM (Part 1,
+            //clause 16.6.5); the parent carries no retained authValue in this model, so the HMAC key is the session key
+            //alone (equivalent to equation 19 (Part 1, clause 16.6.9)'s degenerate form).
             using HmacValue firstHmac = await ComputeIndependentCommandHmacAsync(
                 firstKey.AsReadOnlyMemory(), cpHash.AsReadOnlyMemory(), firstNonceCaller, firstNonceTpm, decryptNonceTpm, firstAttributes, pool, cancellationToken).ConfigureAwait(false);
             using HmacValue decryptHmac = await ComputeIndependentCommandHmacAsync(
@@ -1231,14 +1273,17 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
 
             if(responseCode != TpmRcConstants.TPM_RC_SUCCESS || responseTag != (ushort)TpmStConstants.TPM_ST_SESSIONS)
             {
-                return new HandCraftedCreateResult(responseCode, null, null, firstHandle, decryptHandle);
+                return new HandCraftedCreateResult(responseCode, null, null, firstHandle, decryptHandle, null);
             }
 
-            //Success: the response parameter area (outPrivate ‖ outPublic) sits right after the parameterSize field;
-            //this test does not re-verify the response HMACs (already exercised by the parameter-encryption and
-            //session-auth flow tests) — only that the CONTENT round-trips.
+            //Success: the response parameter area (outPrivate ‖ outPublic ‖ creationData ‖ creationHash ‖
+            //creationTicket) sits right after the parameterSize field; this test does not re-verify the response
+            //HMACs (already exercised by the parameter-encryption and session-auth flow tests) — only that the
+            //CONTENT round-trips. A COPY of the whole area is also returned so a caller can independently parse
+            //the creation by-products this helper itself does not walk into.
             uint responseParameterSize = responseReader.ReadUInt32();
             ReadOnlySpan<byte> responseParameters = responseReader.PeekBytes((int)responseParameterSize);
+            byte[] responseParametersCopy = responseParameters.ToArray();
             var paramReader = new TpmReader(responseParameters);
             Tpm2bPrivate outPrivate = Tpm2bPrivate.Parse(ref paramReader, pool);
             Tpm2bPublic outPublic = Tpm2bPublic.Parse(ref paramReader, pool);
@@ -1248,7 +1293,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
                 outPrivateBytes = outPrivate.Span.ToArray();
             }
 
-            return new HandCraftedCreateResult(TpmRcConstants.TPM_RC_SUCCESS, outPrivateBytes, outPublic, firstHandle, decryptHandle);
+            return new HandCraftedCreateResult(TpmRcConstants.TPM_RC_SUCCESS, outPrivateBytes, outPublic, firstHandle, decryptHandle, responseParametersCopy);
         }
         finally
         {
@@ -1261,17 +1306,17 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     /// Starts an unbound, unsalted HMAC session through the production <c>TPM2_StartAuthSession()</c> path and
     /// returns its handle plus the session's INDEPENDENTLY known session key and initial nonceTPM. Because the
     /// session is neither bound nor salted, sessionKey is the Empty Buffer (TPM 2.0 Library Part 1, clause
-    /// 17.6.9) — no KDFa is run at all — so the "independent" oracle here is simply the empty key, not a
+    /// 16.6.9) — no KDFa is run at all — so the "independent" oracle here is simply the empty key, not a
     /// derivation. The caller disposes the returned <see cref="Tpm2bAuth"/>, which zeroes the key on release.
     /// </summary>
     private static async Task<(uint SessionHandle, Tpm2bAuth SessionKey, byte[] NonceTpm)> StartUnboundHmacSessionWithIndependentKeyAsync(
         TpmSimulator simulator, BaseMemoryPool pool, TpmtSymDef symmetric, CancellationToken cancellationToken)
     {
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_StartAuthSession, TpmResponseCodec.StartAuthSession);
 
-        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(SessionAlg, symmetric);
+        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(SessionAlg, TestEntropy.NewCounterStream(), pool, symmetric);
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             tpm, startInput, [], null, pool, registry, cancellationToken).ConfigureAwait(false);
         Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession (unbound) failed: '{startResult.ResponseCode}'.");
@@ -1283,8 +1328,8 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     }
 
     /// <summary>
-    /// Independent command-HMAC composition (TPM 2.0 Library Part 1, clause 17.6.5 equation 17, plus the
-    /// nonceTPMdecrypt fold of clause 17.6.3.4): <c>HMAC(sessionKey, cpHash ‖ nonceCaller ‖ nonceTPM ‖
+    /// Independent command-HMAC composition (TPM 2.0 Library Part 1, clause 16.6.5 equation 17, plus the
+    /// nonceTPMdecrypt fold of clause 16.6.3.4): <c>HMAC(sessionKey, cpHash ‖ nonceCaller ‖ nonceTPM ‖
     /// foldedNonces ‖ sessionAttributes)</c>, assembled via <see cref="TpmWriter"/> into a pooled buffer and
     /// computed through <c>CryptographicKeyEvents.ComputeHmacAsync</c> — the parent carries no retained authValue
     /// in this model, so the key is the session key alone.
@@ -1425,7 +1470,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     private sealed class SkipEncryptionHmacSession: TpmSessionBase, IDisposable
     {
         /// <summary>The wrapped, production session every other concern delegates to.</summary>
-        private readonly TpmSession inner;
+        private TpmSession Inner { get; }
 
         /// <summary>
         /// Wraps <paramref name="inner"/>, mirroring its session attributes and symmetric definition so the host
@@ -1434,22 +1479,22 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
         /// <param name="inner">The production session to wrap; disposed together with this instance.</param>
         public SkipEncryptionHmacSession(TpmSession inner)
         {
-            this.inner = inner;
+            this.Inner = inner;
             SessionAttributes = inner.SessionAttributes;
             Symmetric = inner.Symmetric;
         }
 
         /// <inheritdoc/>
-        public override TpmHandle SessionHandle => inner.SessionHandle;
+        public override TpmHandle SessionHandle => Inner.SessionHandle;
 
         /// <inheritdoc/>
-        public override TpmAlgIdConstants HashAlgorithm => inner.HashAlgorithm;
+        public override TpmAlgIdConstants HashAlgorithm => Inner.HashAlgorithm;
 
         /// <inheritdoc/>
-        public override ReadOnlyMemory<byte> NonceTpm => inner.NonceTpm;
+        public override ReadOnlyMemory<byte> NonceTpm => Inner.NonceTpm;
 
         /// <inheritdoc/>
-        public override void RollNonceCaller(BaseMemoryPool pool) => inner.RollNonceCaller(pool);
+        public override void RollNonceCaller(BaseMemoryPool pool) => Inner.RollNonceCaller(pool);
 
         /// <inheritdoc/>
         /// <remarks>Deliberately a no-op: the data is left exactly as received, unlike a genuine decrypt session.</remarks>
@@ -1457,29 +1502,29 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
             ValueTask.CompletedTask;
 
         /// <inheritdoc/>
-        public override int GetAuthCommandSize() => inner.GetAuthCommandSize();
+        public override int GetAuthCommandSize() => Inner.GetAuthCommandSize();
 
         /// <inheritdoc/>
         public override ValueTask<Tpm2bAuth?> PrepareAuthHmacAsync(
             ReadOnlyMemory<byte> cpHash, BaseMemoryPool pool, CancellationToken cancellationToken, ReadOnlyMemory<byte> foldedSessionNonces = default) =>
-            inner.PrepareAuthHmacAsync(cpHash, pool, cancellationToken, foldedSessionNonces);
+            Inner.PrepareAuthHmacAsync(cpHash, pool, cancellationToken, foldedSessionNonces);
 
         /// <inheritdoc/>
-        public override void WriteAuthCommand(ref TpmWriter writer, Tpm2bAuth? precomputedHmac) => inner.WriteAuthCommand(ref writer, precomputedHmac);
+        public override void WriteAuthCommand(ref TpmWriter writer, Tpm2bAuth? precomputedHmac) => Inner.WriteAuthCommand(ref writer, precomputedHmac);
 
         /// <inheritdoc/>
         public override ValueTask<bool> VerifyAndUpdateAsync(TpmsAuthResponse response, ReadOnlyMemory<byte> rpHash, BaseMemoryPool pool, CancellationToken cancellationToken) =>
-            inner.VerifyAndUpdateAsync(response, rpHash, pool, cancellationToken);
+            Inner.VerifyAndUpdateAsync(response, rpHash, pool, cancellationToken);
 
         /// <summary>Disposes the wrapped session.</summary>
-        public void Dispose() => inner.Dispose();
+        public void Dispose() => Inner.Dispose();
     }
 
 
     /// <summary>
     /// The format-one session-index encoding (TPM 2.0 Library Part 2, clause 6.6.2): RC + TPM_RC_S +
-    /// TPM_RC_n(0x100·(index+1)) — the test-side mirror of TpmLifecycleTransitions.SessionEncodedRc, transcribed
-    /// independently since production helpers are private.
+    /// TPM_RC_n(0x100·(index+1)) — the test-side mirror of Verifiable.Tpm.Spec.TpmRcExtensions.SessionEncodedRc,
+    /// transcribed independently since it is a spec-layer member reached from production code, not a test seam.
     /// </summary>
     private static TpmRcConstants SessionEncodedRc(TpmRcConstants baseRc, int sessionIndex) =>
         (TpmRcConstants)((uint)baseRc + (uint)TpmRcConstants.TPM_RC_S + (0x100u * (uint)(sessionIndex + 1)));
@@ -1493,7 +1538,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     private async Task<(uint SessionHandle, TpmSession Session, byte[] InitialNonceCaller, byte[] InitialNonceTpm)> StartHmacSessionAsync(
         TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, uint bindHandle, TpmtSymDef symmetric, TpmAlgIdConstants sessionAlg = SessionAlg)
     {
-        StartAuthSessionInput startInput = StartAuthSessionInput.CreateBoundUnsaltedHmacSession(bindHandle, sessionAlg, symmetric);
+        StartAuthSessionInput startInput = StartAuthSessionInput.CreateBoundUnsaltedHmacSession(bindHandle, sessionAlg, TestEntropy.NewCounterStream(), pool, symmetric);
 
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             tpm, startInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
@@ -1506,7 +1551,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
 
         TpmSession session = await TpmSession.CreateBoundAsync(
             new TpmHandle(startResponse.SessionHandle.Value), bindAuth.AsReadOnlyMemory(), startInput.NonceCaller,
-            startResponse.NonceTPM, sessionAlg, pool, symmetric: symmetric, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            startResponse.NonceTPM, sessionAlg, TestEntropy.NewCounterStream(), pool, symmetric: symmetric, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         session.SessionAttributes = TpmaSession.CONTINUE_SESSION;
 
@@ -1516,7 +1561,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     /// <summary>Loads a just-created sealed object back through the production <c>TPM2_Load()</c> path (password-authorized parent).</summary>
     /// <summary>
     /// An authValue "should not be larger than the digest size of the algorithm used to compute the Name of the
-    /// object" (TPM 2.0 Library Part 1, clause 17.6.4.2, enforced by the reference's <c>TPM2_Create()</c> with
+    /// object" (TPM 2.0 Library Part 1, clause 16.6.4.2, enforced by the reference's <c>TPM2_Create()</c> with
     /// <c>TPM_RC_SIZE</c>) — on the DECRYPTED path: a 33-octet <c>userAuth</c> against the SHA-256 nameAlg
     /// template, carried inside an XOR-encrypted <c>inSensitive</c>, is refused with <c>TPM_RC_SIZE</c> after
     /// decryption, exactly as the plain arm refuses it.
@@ -1526,7 +1571,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -1558,8 +1603,8 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
                         tpm, createInput, [parentAuthSession, decryptSession], [parent.Name.Span.ToArray()], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
                     Assert.AreEqual(
-                        TpmRcConstants.TPM_RC_SIZE, createResult.ResponseCode,
-                        "A decrypted userAuth wider than the nameAlg digest must be refused with TPM_RC_SIZE (Part 1, clause 17.6.4.2).");
+                        HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SIZE, 0), createResult.ResponseCode,
+                        "A decrypted userAuth wider than the nameAlg digest must be refused with TPM_RC_SIZE (Part 1, clause 16.6.4.2).");
                 }
             }
         }
@@ -1572,18 +1617,20 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     }
 
     /// <summary>
-    /// The <c>sizeof(TPMU_HA)</c> bound a <c>TPM2B_AUTH</c> carries (TPM 2.0 Library Part 2, clause 10.4.5, Table
-    /// 95, page 135, over clause 10.4.2, Table 92, page 134) applies to the userAuth RECOVERED from an encrypted
+    /// The <c>sizeof(TPMU_HA)</c> bound a <c>TPM2B_AUTH</c> carries (TPM 2.0 Library Part 2, clause 10.3.5, Table
+    /// 93) applies to the userAuth RECOVERED from an encrypted
     /// <c>inSensitive</c> exactly as it applies to a plaintext one, and this is the only authorization value on
     /// which it cannot be answered at the wire read: <c>inSensitive</c>'s OWN outer size field travels in the
-    /// clear (Part 1, clause 19.1, so the parser can delimit the field), but the nested
+    /// clear (Part 1, clause 18.1, so the parser can delimit the field), but the nested
     /// <c>TPMS_SENSITIVE_CREATE.userAuth</c> size field is inside the encrypted portion, and until the keystream
     /// is removed no parser can read it. So a declared width one octet past the bound is FIRST detectable after
-    /// decryption, and is <c>TPM_RC_SIZE</c> there — bare, as every other refusal read out of the recovered
-    /// structure is, since it is the recovered structure and not the frame that is malformed. The response code
-    /// is the same one the plain form answers, so a caller cannot tell from the code alone whether its keystream
-    /// or its input was wrong, which is the point: a wrong decryption key is undetectable (clause 19.1's
-    /// malleability note), so recovered garbage must be refused as a structure rather than trusted.
+    /// decryption, and is <c>TPM_RC_SIZE</c> there — designated to inSensitive, <c>TPM2_Create()</c>'s first
+    /// parameter (Table 18, index 0), exactly as every other failure of the recovered <c>TPMS_SENSITIVE_CREATE</c>
+    /// content is (TPM 2.0 Library Part 2, clause 6.6.2, Table 15), since it is a property of the recovered
+    /// structure and not of the decrypt step itself. The response code is the same one the plain form answers,
+    /// so a caller cannot tell from the code alone whether its keystream or its input was wrong, which is the
+    /// point: a wrong decryption key is undetectable (clause 18.1's malleability note), so recovered garbage
+    /// must be refused as a structure rather than trusted.
     /// </summary>
     /// <remarks>
     /// The command is hand-assembled and independently encrypted through
@@ -1607,7 +1654,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
         using var trackingPool = new MeteredHousePool();
         BaseMemoryPool pool = trackingPool.Pool;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -1625,8 +1672,8 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
                 TestContext.CancellationToken, userAuthOverride: pastBoundUserAuth).ConfigureAwait(false);
 
             Assert.AreEqual(
-                TpmRcConstants.TPM_RC_SIZE, result.ResponseCode,
-                "A recovered userAuth declaring a size past sizeof(TPMU_HA) is not a well-formed TPM2B_AUTH whatever key produced it, so it is TPM_RC_SIZE.");
+                HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SIZE, 0), result.ResponseCode,
+                "A recovered userAuth declaring a size past sizeof(TPMU_HA) is not a well-formed TPM2B_AUTH whatever key produced it, so it is TPM_RC_SIZE, parameter-encoded to inSensitive (Table 18, index 0).");
 
             Assert.AreEqual(
                 baseline + RetainedNonceTpmPerSession * 2, trackingPool.OutstandingCount,
@@ -1646,36 +1693,51 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     }
 
     /// <summary>
-    /// A <c>TPM2_Load()</c> blob DECLARING an over-wide authorization value — a well-formed
-    /// [length ‖ userAuth ‖ data] encoding whose 33-octet declared <c>userAuth</c> exceeds the SHA-256
-    /// nameAlg's digest — must be refused with <c>TPM_RC_SIZE</c>: this model's private blob carries no
-    /// integrity wrap yet, so the load-time bound (TPM 2.0 Library Part 1, clause 17.6.4.2) is what keeps a
-    /// hand-crafted blob from installing a wider authValue than <c>TPM2_Create()</c>'s own gate admits.
+    /// <c>inPublic</c> is never encrypted — only <c>inSensitive</c>, <c>TPM2_Create()</c>'s first parameter, is
+    /// subject to parameter encryption — so the session-authorized command decodes it directly off the wire, the
+    /// same as the plain password form: a declared <c>TPM2B_PUBLIC</c> outer size wider than the octets actually
+    /// present (here, the actual encoded template plus the trailing empty <c>outsideInfo</c>/<c>creationPCR</c>
+    /// fields) is a truncated frame, refused <c>TPM_RC_INSUFFICIENT</c> parameter-encoded to inPublic,
+    /// <c>TPM2_Create()</c>'s second parameter (Table 18, index 1) — over a genuine decrypt companion, which
+    /// never touches this unencrypted field at all.
+    /// <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Part 3, clause 5.8.2, Table 2; Part 2, clause 6.6.2, Table 15</see>.
     /// </summary>
     [TestMethod]
-    public async Task LoadingABlobDeclaringAnOverWideUserAuthIsRefusedWithSize()
+    public async Task CreateOverADecryptSessionWithAnOverDeclaredInPublicIsRefusedWithParameterEncodedInsufficient()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, registry, pool).ConfigureAwait(false);
         uint parentHandle = parent.ObjectHandle.Value;
+
+        //The empty outsideInfo (2 octets) and empty creationPCR (4 octets) this helper supplies by default leave
+        //only 6 trailing octets past inPublic's real content, so declaring 8 more than that overruns the frame.
+        const int OverDeclaredOctets = 8;
+        using Tpm2bPublic template = Tpm2bPublic.CreateSealedDataTemplate(SessionAlg, pool, authPolicy: default, noDa: true);
+        int publicSize = template.GetSerializedSize();
+        using IMemoryOwner<byte> marshaledTemplate = pool.Rent(publicSize);
+        var templateWriter = new TpmWriter(marshaledTemplate.Memory.Span[..publicSize]);
+        template.WriteTo(ref templateWriter);
+
+        byte[] overDeclaredInPublicWire = new byte[publicSize];
+        BinaryPrimitives.WriteUInt16BigEndian(overDeclaredInPublicWire, (ushort)(publicSize - sizeof(ushort) + OverDeclaredOctets));
+        marshaledTemplate.Memory.Span[sizeof(ushort)..publicSize].CopyTo(overDeclaredInPublicWire.AsSpan(sizeof(ushort)));
+
         try
         {
-            using CreateResponse legitimate = await SealPlainAsync(tpm, registry, pool, parentHandle).ConfigureAwait(false);
+            HandCraftedCreateResult result = await SendHandCraftedCreateAsync(
+                simulator, pool, parentHandle, parent.Name.Span.ToArray(), corruptDeclaredInSensitiveSize: false,
+                TestContext.CancellationToken, inPublicWire: overDeclaredInPublicWire).ConfigureAwait(false);
 
-            //[UINT16 = 33][33 filler octets][4 data octets]: structurally valid, over-wide declared userAuth.
-            byte[] craftedBlob = new byte[sizeof(ushort) + 33 + 4];
-            BinaryPrimitives.WriteUInt16BigEndian(craftedBlob, 33);
-            craftedBlob.AsSpan(sizeof(ushort), 33).Fill(0x5A);
-
-            TpmResult<LoadResponse> refused = await LoadSealedObjectRawExpectingAsync(
-                tpm, registry, pool, parentHandle, craftedBlob, ClonePublic(legitimate.OutPublic, pool)).ConfigureAwait(false);
             Assert.AreEqual(
-                TpmRcConstants.TPM_RC_SIZE, refused.ResponseCode,
-                "A crafted blob declaring a userAuth wider than the nameAlg digest must be refused with TPM_RC_SIZE.");
+                HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_INSUFFICIENT, 1), result.ResponseCode,
+                "Table 18: inPublic is TPM2_Create()'s second parameter (index 1); a declared width the frame cannot back is parameter-encoded TPM_RC_INSUFFICIENT there, over a decrypt companion exactly as the plain password form answers it.");
+
+            await FlushIfPresentAsync(tpm, registry, result.DecryptSessionHandle).ConfigureAwait(false);
+            await FlushIfPresentAsync(tpm, registry, result.AuthorizingSessionHandle).ConfigureAwait(false);
         }
         finally
         {
@@ -1684,17 +1746,171 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     }
 
     /// <summary>
-    /// A structurally MALFORMED <c>TPM2_Load()</c> private blob — empty, shorter than its own length prefix, or
-    /// declaring a <c>userAuth</c> length that overruns the blob — answers <c>TPM_RC_SIZE</c> on the wire
-    /// instead of crashing the recovery arithmetic: the blob is attacker-controlled input, so a structure of
-    /// the wrong size must be a response code, never an exception escaping the simulator.
+    /// <c>outsideInfo</c> is bounded by <c>sizeof(TPMT_HA)</c> (TPM 2.0 Library Part 2, clause 10.3.3, Table 91):
+    /// a declared width past that bound is refused <c>TPM_RC_SIZE</c> parameter-encoded to outsideInfo,
+    /// <c>TPM2_Create()</c>'s third parameter (Table 18, index 2), reached over a genuine decrypt companion —
+    /// <c>outsideInfo</c> follows the encrypted <c>inSensitive</c> in the clear, so the companion's keystream
+    /// never touches it, and the same bound the plain password form enforces applies unchanged.
+    /// <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Part 2, clause 10.3.3, Table 91; Part 2, clause 6.6.2, Table 15</see>.
     /// </summary>
     [TestMethod]
-    public async Task MalformedPrivateBlobsAreRefusedWithSizeInsteadOfCrashing()
+    public async Task CreateOverADecryptSessionWithAnOverBoundOutsideInfoIsRefusedWithParameterEncodedSize()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, registry, pool).ConfigureAwait(false);
+        uint parentHandle = parent.ObjectHandle.Value;
+
+        byte[] overBoundOutsideInfoWire = BuildOutsideInfoWire(BuildFilledContent(Tpm2bData.MaxSize + 1, 0xAB));
+
+        try
+        {
+            HandCraftedCreateResult result = await SendHandCraftedCreateAsync(
+                simulator, pool, parentHandle, parent.Name.Span.ToArray(), corruptDeclaredInSensitiveSize: false,
+                TestContext.CancellationToken, outsideInfoWire: overBoundOutsideInfoWire).ConfigureAwait(false);
+
+            Assert.AreEqual(
+                HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SIZE, 2), result.ResponseCode,
+                "Table 18: outsideInfo is TPM2_Create()'s third parameter (index 2); a declared width past sizeof(TPMT_HA) is parameter-encoded TPM_RC_SIZE there, over a decrypt companion exactly as the plain password form answers it.");
+
+            await FlushIfPresentAsync(tpm, registry, result.DecryptSessionHandle).ConfigureAwait(false);
+            await FlushIfPresentAsync(tpm, registry, result.AuthorizingSessionHandle).ConfigureAwait(false);
+        }
+        finally
+        {
+            await FlushIfPresentAsync(tpm, registry, parentHandle).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// A <c>creationPCR</c> naming more banks than <see cref="TpmlPcrSelection.MaxSelections"/> admits is
+    /// refused on the over-sessions <c>TPM2_Create()</c> tail decode exactly as it is on the plain-password
+    /// and <c>TPM2_CreatePrimary()</c> parse sites: a 17-bank selection is <c>creationPCR</c>'s own content
+    /// failure, designated to <c>creationPCR</c>, <c>TPM2_Create()</c>'s fourth parameter (Part 3, Table 18,
+    /// index 3) — and a genuinely non-empty <c>outsideInfo</c> rented just before the refusing
+    /// <c>creationPCR</c> parse must be released by that SAME refusing arm
+    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
+    /// Specification</see>, Part 2: Structures, clause 10.8.7, Table 128).
+    /// </summary>
+    [TestMethod]
+    public async Task CreateOverSessionsWithCreationPcrCountAboveTheListBoundIsRefusedWithSize()
+    {
+        using var trackingPool = new MeteredHousePool();
+        BaseMemoryPool pool = trackingPool.Pool;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, registry, pool).ConfigureAwait(false);
+        uint parentHandle = parent.ObjectHandle.Value;
+
+        byte[] nonEmptyOutsideInfoWire = BuildOutsideInfoWire(BuildFilledContent(32, 0xEE));
+        byte[] overCountCreationPcrWire = BuildPcrSelectionWire(TpmlPcrSelection.MaxSelections + 1, TpmAlgIdConstants.TPM_ALG_SHA256);
+
+        try
+        {
+            long baseline = trackingPool.OutstandingCount;
+
+            HandCraftedCreateResult result = await SendHandCraftedCreateAsync(
+                simulator, pool, parentHandle, parent.Name.Span.ToArray(), corruptDeclaredInSensitiveSize: false,
+                TestContext.CancellationToken, outsideInfoWire: nonEmptyOutsideInfoWire, creationPcrWire: overCountCreationPcrWire).ConfigureAwait(false);
+
+            Assert.AreEqual(
+                HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SIZE, 3), result.ResponseCode,
+                "creationPCR is TPM2_Create()'s fourth parameter (Table 18, index 3); a count above MaxSelections (Table 128) is parameter-encoded TPM_RC_SIZE.");
+
+            Assert.AreEqual(
+                baseline + RetainedNonceTpmPerSession * 2, trackingPool.OutstandingCount,
+                "The refusing arm must dispose the already-rented, non-empty outsideInfo along with everything else the parse rented for the refused command, so the only carriers still outstanding before any flush are the two sessions' retained nonceTPMs.");
+
+            await FlushIfPresentAsync(tpm, registry, result.DecryptSessionHandle).ConfigureAwait(false);
+            await FlushIfPresentAsync(tpm, registry, result.AuthorizingSessionHandle).ConfigureAwait(false);
+
+            Assert.AreEqual(
+                baseline, trackingPool.OutstandingCount,
+                "Flushing the two sessions must return the count to where it started.");
+        }
+        finally
+        {
+            await FlushIfPresentAsync(tpm, registry, parentHandle).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Marshals <paramref name="content"/> as a raw <c>TPM2B_DATA</c> wire image (a 2-octet size prefix then the
+    /// octets themselves), for <see cref="SendHandCraftedCreateAsync"/>'s <c>outsideInfoWire</c> parameter.
+    /// </summary>
+    /// <param name="content">The content octets to marshal.</param>
+    /// <returns>The marshaled wire octets.</returns>
+    private static byte[] BuildOutsideInfoWire(ReadOnlySpan<byte> content)
+    {
+        byte[] octets = new byte[sizeof(ushort) + content.Length];
+        var writer = new TpmWriter(octets);
+        writer.WriteTpm2b(content);
+
+        return octets;
+    }
+
+    /// <summary>
+    /// Builds a byte array of <paramref name="length"/> octets, every one <paramref name="fill"/> — a
+    /// deliberately non-zero, non-empty payload so <see cref="BuildOutsideInfoWire"/> never marshals the shared
+    /// empty sentinel a pool-balance assertion would find vacuous.
+    /// </summary>
+    /// <param name="length">How many octets to fill.</param>
+    /// <param name="fill">The octet value every position gets.</param>
+    /// <returns>The filled byte array.</returns>
+    private static byte[] BuildFilledContent(int length, byte fill)
+    {
+        byte[] bytes = new byte[length];
+        Array.Fill(bytes, fill);
+
+        return bytes;
+    }
+
+    /// <summary>
+    /// Builds a <c>TPML_PCR_SELECTION</c> wire image naming <paramref name="selectionCount"/> banks over
+    /// <paramref name="bank"/>, each selecting PCR 0 over the three octets that cover PCRs 0 to 23 — the shape
+    /// needed to drive the list's count past <see cref="TpmlPcrSelection.MaxSelections"/>, which
+    /// <see cref="TpmlPcrSelection.Parse"/> itself refuses to build in-process, for
+    /// <see cref="SendHandCraftedCreateAsync"/>'s <c>creationPcrWire</c> parameter.
+    /// </summary>
+    /// <param name="selectionCount">How many bank selections to name.</param>
+    /// <param name="bank">The hash algorithm every named selection uses.</param>
+    /// <returns>The marshaled selection octets.</returns>
+    private static byte[] BuildPcrSelectionWire(int selectionCount, TpmAlgIdConstants bank)
+    {
+        const int SelectionSize = sizeof(ushort) + sizeof(byte) + 3;
+        byte[] octets = new byte[sizeof(uint) + (selectionCount * SelectionSize)];
+        var writer = new TpmWriter(octets);
+        writer.WriteUInt32((uint)selectionCount);
+        for(int i = 0; i < selectionCount; i++)
+        {
+            writer.WriteUInt16((ushort)bank);
+            writer.WriteByte(3);
+            writer.WriteByte(0x01);
+            writer.WriteByte(0x00);
+            writer.WriteByte(0x00);
+        }
+
+        return octets;
+    }
+
+    /// <summary>
+    /// A hand-crafted <c>TPM2_Load()</c> blob that passes the structural gate — a correctly-sized integrity
+    /// field over a plausible ciphertext — is refused with <c>TPM_RC_INTEGRITY</c>: the outer HMAC is keyed by
+    /// the parent's protection seed (TPM 2.0 Library Part 1, Clause 19, equations 35 and 36), which no party
+    /// outside the TPM holds, so a blob the parent did not wrap cannot verify no matter how well-formed its
+    /// shape is (Part 3, clause 12.2 has the integrity value checked before anything is decrypted).
+    /// </summary>
+    [TestMethod]
+    public async Task LoadingAWellShapedForgedBlobIsRefusedWithIntegrity()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -1703,21 +1919,143 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
         {
             using CreateResponse legitimate = await SealPlainAsync(tpm, registry, pool, parentHandle).ConfigureAwait(false);
 
-            //Empty; a single octet (shorter than the UINT16 length prefix); a declared length overrunning the blob.
-            byte[][] malformedBlobs = [[], [0x00], [0xFF, 0xFF]];
+            //[UINT16 = 32][32 filler octets][48 filler octets]: the declared integrity width matches the
+            //SHA-256 parent's digest and the remainder is long enough to hold a marshaled TPM2B_IV and a
+            //marshaled sensitive area, so only the HMAC compare itself can refuse this shape.
+            byte[] craftedBlob = new byte[sizeof(ushort) + 32 + 48];
+            BinaryPrimitives.WriteUInt16BigEndian(craftedBlob, 32);
+            craftedBlob.AsSpan(sizeof(ushort)).Fill(0x5A);
+
+            TpmResult<LoadResponse> refused = await LoadSealedObjectRawExpectingAsync(
+                tpm, registry, pool, parentHandle, craftedBlob, ClonePublic(legitimate.OutPublic, pool)).ConfigureAwait(false);
+            Assert.AreEqual(
+                HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_INTEGRITY, 0), refused.ResponseCode,
+                "A forged blob the parent never wrapped must fail the outer-HMAC compare with TPM_RC_INTEGRITY at inPrivate, parameter 1 of Table 20.");
+        }
+        finally
+        {
+            await FlushIfPresentAsync(tpm, registry, parentHandle).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Any single-octet corruption of a legitimate wrapped blob is refused with <c>TPM_RC_INTEGRITY</c>: a flip
+    /// inside the integrity value, the marshaled <c>TPM2B_IV</c>, or the ciphertext fails the outer-HMAC compare
+    /// (TPM 2.0 Library Part 3, clause 12.2: the integrity value shall be checked before the private area is
+    /// decrypted and unmarshalled), while a flip in the DECLARED integrity width fails the structural gate ahead
+    /// of it with the same code, so a probe cannot tell the gates apart. The UNMODIFIED blob presented with a
+    /// DIFFERENT public area is refused identically: the outer HMAC binds the sensitive area to the object's
+    /// Name (Part 1, Clause 19, equation 36), so a swapped <c>inPublic</c> changes the Name the check recomputes
+    /// under.
+    /// </summary>
+    [TestMethod]
+    public async Task TamperedBlobAndSwappedPublicAreaAreRefusedWithIntegrity()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, registry, pool).ConfigureAwait(false);
+        uint parentHandle = parent.ObjectHandle.Value;
+        try
+        {
+            using CreateResponse legitimate = await SealPlainAsync(tpm, registry, pool, parentHandle).ConfigureAwait(false);
+            byte[] blobOctets = legitimate.OutPrivate.Span.ToArray();
+
+            //One flipped octet per region of the [width ‖ integrity ‖ TPM2B_IV ‖ ciphertext] layout: the
+            //declared width's low octet (the structural gate) and the integrity value's, IV's, and ciphertext's
+            //first octets (the decrypt effect's own outer-HMAC compare) all answer TPM_RC_INTEGRITY at
+            //inPrivate, TPM2_Load()'s sole parameter (Table 20, P1).
+            int[] tamperOffsets = [1, sizeof(ushort), sizeof(ushort) + 32 + sizeof(ushort), sizeof(ushort) + 32 + sizeof(ushort) + 16];
+            for(int offsetIndex = 0; offsetIndex < tamperOffsets.Length; offsetIndex++)
+            {
+                int tamperOffset = tamperOffsets[offsetIndex];
+                byte[] tamperedBlob = (byte[])blobOctets.Clone();
+                tamperedBlob[tamperOffset] ^= 0xFF;
+
+                TpmResult<LoadResponse> refused = await LoadSealedObjectRawExpectingAsync(
+                    tpm, registry, pool, parentHandle, tamperedBlob, ClonePublic(legitimate.OutPublic, pool)).ConfigureAwait(false);
+                TpmRcConstants expected = HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_INTEGRITY, 0);
+                Assert.AreEqual(
+                    expected, refused.ResponseCode,
+                    $"A blob with octet {tamperOffset} flipped must be refused with TPM_RC_INTEGRITY at inPrivate, parameter 1 of Table 20.");
+            }
+
+            //The same untampered octets under a public area whose authPolicy differs: a different Name, so the
+            //recomputed HMAC differs and the bind to the original public area holds. The helper owns and
+            //disposes the clone it is handed, the sibling-call idiom.
+            using Tpm2bPublic differentTemplate = Tpm2bPublic.CreateSealedDataTemplate(SessionAlg, pool, DistinctPolicyDigest(), noDa: true);
+            TpmResult<LoadResponse> swapped = await LoadSealedObjectRawExpectingAsync(
+                tpm, registry, pool, parentHandle, blobOctets, ClonePublic(differentTemplate, pool)).ConfigureAwait(false);
+            Assert.AreEqual(
+                HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_INTEGRITY, 0), swapped.ResponseCode,
+                "The legitimate blob under a different public area must fail the Name-bound integrity check at inPrivate, parameter 1 of Table 20.");
+        }
+        finally
+        {
+            await FlushIfPresentAsync(tpm, registry, parentHandle).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// A structurally MALFORMED <c>TPM2_Load()</c> private blob answers a response code, never an exception
+    /// escaping the simulator: an EMPTY blob is a structure of the wrong size (<c>TPM_RC_SIZE</c> — TPM 2.0
+    /// Library Part 3, clause 12.2: "If inPrivate.size is zero, the load will fail", the clause naming no code
+    /// of its own, so clause 5.8, Table 2's size-parameter code answers), while every non-empty shape that
+    /// cannot hold a well-formed wrap — too short for the integrity field, a declared integrity width that is
+    /// not the parent nameAlg's digest width, or no room for a ciphertext — is <c>TPM_RC_INTEGRITY</c>, the
+    /// same refusal a failed HMAC compare gives, so a probe learns nothing about WHICH gate refused.
+    /// </summary>
+    [TestMethod]
+    public async Task MalformedPrivateBlobsAreRefusedWithACodeInsteadOfCrashing()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, registry, pool).ConfigureAwait(false);
+        uint parentHandle = parent.ObjectHandle.Value;
+        try
+        {
+            using CreateResponse legitimate = await SealPlainAsync(tpm, registry, pool, parentHandle).ConfigureAwait(false);
+
+            TpmResult<LoadResponse> empty = await LoadSealedObjectRawExpectingAsync(
+                tpm, registry, pool, parentHandle, [], ClonePublic(legitimate.OutPublic, pool)).ConfigureAwait(false);
+            Assert.AreEqual(
+                HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SIZE, 0), empty.ResponseCode,
+                "An empty private blob is a structure of the wrong size, refused with TPM_RC_SIZE.");
+
+            //A single octet; a width prefix that is not the parent's digest width; a correct width prefix with
+            //the integrity field truncated; a full integrity field with no room for any ciphertext.
+            byte[] truncatedIntegrity = new byte[sizeof(ushort) + 16];
+            BinaryPrimitives.WriteUInt16BigEndian(truncatedIntegrity, 32);
+            byte[] noCiphertext = new byte[sizeof(ushort) + 32];
+            BinaryPrimitives.WriteUInt16BigEndian(noCiphertext, 32);
+            byte[][] malformedBlobs = [[0x00], [0xFF, 0xFF], truncatedIntegrity, noCiphertext];
             foreach(byte[] malformedBlob in malformedBlobs)
             {
                 TpmResult<LoadResponse> refused = await LoadSealedObjectRawExpectingAsync(
                     tpm, registry, pool, parentHandle, malformedBlob, ClonePublic(legitimate.OutPublic, pool)).ConfigureAwait(false);
                 Assert.AreEqual(
-                    TpmRcConstants.TPM_RC_SIZE, refused.ResponseCode,
-                    $"A malformed private blob of {malformedBlob.Length} octet(s) must be refused with TPM_RC_SIZE, never an exception.");
+                    HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_INTEGRITY, 0), refused.ResponseCode,
+                    $"A malformed private blob of {malformedBlob.Length} octet(s) must be refused with TPM_RC_INTEGRITY, never an exception.");
             }
         }
         finally
         {
             await FlushIfPresentAsync(tpm, registry, parentHandle).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>Builds a distinct non-empty SHA-256-width authorization policy digest, so a sealed-data public area built over it names a different object than the plain template.</summary>
+    private static byte[] DistinctPolicyDigest()
+    {
+        byte[] digest = new byte[32];
+        digest.AsSpan().Fill(0xA7);
+
+        return digest;
     }
 
     /// <summary>Seals a fixed secret under an empty-adjacent legitimate authValue via the password-only Create form and returns the response; the caller owns and must dispose it.</summary>
@@ -1847,7 +2185,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     /// </summary>
     private async Task<TpmSimulator> CreateOperationalAsync(BaseMemoryPool pool)
     {
-        var simulator = new TpmSimulator("tpm-in-house-param-decryption", signingBackend: BouncyCastleTpmEccSigningBackend.Create());
+        var simulator = new TpmSimulator("tpm-in-house-param-decryption", signingBackend: BouncyCastleTpmEccSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await IssueStartupClearAsync(simulator, pool).ConfigureAwait(false);
 

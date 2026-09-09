@@ -24,9 +24,9 @@ namespace Verifiable.Tests.Cryptography;
 [TestClass]
 internal sealed class CmsCertificatesSetToleranceTests
 {
-    private static readonly DateTimeOffset NotBefore = SyntheticPassportFactory.NotBefore;
-    private static readonly DateTimeOffset NotAfter = SyntheticPassportFactory.NotAfter;
-    private static readonly DateTimeOffset SigningTime = new(2025, 3, 14, 0, 0, 0, TimeSpan.Zero);
+    private static DateTimeOffset NotBefore { get; } = SyntheticPassportFactory.NotBefore;
+    private static DateTimeOffset NotAfter { get; } = SyntheticPassportFactory.NotAfter;
+    private static DateTimeOffset SigningTime { get; } = new(2025, 3, 14, 0, 0, 0, TimeSpan.Zero);
 
 
     public required TestContext TestContext { get; set; }

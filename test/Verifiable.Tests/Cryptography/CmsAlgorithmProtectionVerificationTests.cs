@@ -23,8 +23,8 @@ namespace Verifiable.Tests.Cryptography;
 [TestClass]
 internal sealed class CmsAlgorithmProtectionVerificationTests
 {
-    private static readonly DateTimeOffset NotBefore = SyntheticPassportFactory.NotBefore;
-    private static readonly DateTimeOffset NotAfter = SyntheticPassportFactory.NotAfter;
+    private static DateTimeOffset NotBefore { get; } = SyntheticPassportFactory.NotBefore;
+    private static DateTimeOffset NotAfter { get; } = SyntheticPassportFactory.NotAfter;
 
     /// <summary>The digest algorithm the framework's <c>CmsSigner</c>-backed minting defaults to (SHA-256), which every fixture below signs its RSA certificate's <c>SignerInfo</c> under.</summary>
     private const string ActualDigestAlgorithmOid = WellKnownOids.Sha256;

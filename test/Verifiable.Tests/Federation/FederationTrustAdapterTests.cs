@@ -1,6 +1,8 @@
 using Verifiable.Core.Assessment;
 using Verifiable.OAuth.Federation;
 using Verifiable.OAuth.Trust;
+using Microsoft.Extensions.Time.Testing;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Federation;
 
@@ -43,7 +45,7 @@ internal sealed class FederationTrustAdapterTests
             ClockSkew = TimeSpan.FromMinutes(5)
         };
 
-        ClaimIssueResult result = await TrustChainValidator.Default()
+        ClaimIssueResult result = await TrustChainValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch))
             .ValidateAsync(context, "federation-trust-adapter-test", cancellationToken)
             .ConfigureAwait(false);
 

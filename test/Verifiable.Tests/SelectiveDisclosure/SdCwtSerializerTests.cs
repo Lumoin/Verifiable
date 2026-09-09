@@ -1,6 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Buffers;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Cbor;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -24,7 +24,7 @@ namespace Verifiable.Tests.SelectiveDisclosure;
 [TestClass]
 internal sealed class SdCwtSerializerTests
 {
-    private static readonly byte[] TestSalt = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+    private static byte[] TestSalt { get; } = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
                                                 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10];
 
 
@@ -38,7 +38,7 @@ internal sealed class SdCwtSerializerTests
 
         byte[] cbor = SdCwtSerializer.SerializeDisclosure(disclosure);
 
-        var reader = new CborReader(cbor, CborConformanceMode.Lax);
+        var reader = new CborReader(cbor, CborOptions.Lax);
         int? length = reader.ReadStartArray();
 
         Assert.AreEqual(3, length, "Property disclosure must have 3 elements.");
@@ -61,7 +61,7 @@ internal sealed class SdCwtSerializerTests
 
         byte[] cbor = SdCwtSerializer.SerializeDisclosure(disclosure);
 
-        var reader = new CborReader(cbor, CborConformanceMode.Lax);
+        var reader = new CborReader(cbor, CborOptions.Lax);
         int? length = reader.ReadStartArray();
 
         Assert.AreEqual(2, length, "Array element disclosure must have 2 elements.");
@@ -213,8 +213,8 @@ internal sealed class SdCwtSerializerTests
 
         byte[] cbor = SdCwtSerializer.SerializeDisclosure(disclosure);
 
-        byte[] digest1 = SdCwtSerializer.ComputeDisclosureDigest(cbor, WellKnownHashAlgorithms.Sha256Iana);
-        byte[] digest2 = SdCwtSerializer.ComputeDisclosureDigest(cbor, WellKnownHashAlgorithms.Sha256Iana);
+        byte[] digest1 = SdCwtSerializer.ComputeDisclosureDigest(cbor, WellKnownHashAlgorithms.Sha256Iana, BaseMemoryPool.Shared);
+        byte[] digest2 = SdCwtSerializer.ComputeDisclosureDigest(cbor, WellKnownHashAlgorithms.Sha256Iana, BaseMemoryPool.Shared);
 
         Assert.AreSequenceEqual(digest1, digest2, "Digest must be deterministic.");
     }
@@ -226,7 +226,7 @@ internal sealed class SdCwtSerializerTests
         using SdDisclosure disclosure = SdDisclosure.CreateProperty(TestSalts.FromBytes(TestSalt), "name", "John");
 
         byte[] cbor = SdCwtSerializer.SerializeDisclosure(disclosure);
-        byte[] digest = SdCwtSerializer.ComputeDisclosureDigest(cbor, "sha-256");
+        byte[] digest = SdCwtSerializer.ComputeDisclosureDigest(cbor, "sha-256", BaseMemoryPool.Shared);
 
         Assert.HasCount(32, digest, "SHA-256 digest must be 32 bytes.");
     }
@@ -238,7 +238,7 @@ internal sealed class SdCwtSerializerTests
         using SdDisclosure disclosure = SdDisclosure.CreateProperty(TestSalts.FromBytes(TestSalt), "name", "John");
 
         byte[] cbor = SdCwtSerializer.SerializeDisclosure(disclosure);
-        byte[] digest = SdCwtSerializer.ComputeDisclosureDigest(cbor, "sha-384");
+        byte[] digest = SdCwtSerializer.ComputeDisclosureDigest(cbor, "sha-384", BaseMemoryPool.Shared);
 
         Assert.HasCount(48, digest, "SHA-384 digest must be 48 bytes.");
     }
@@ -247,6 +247,9 @@ internal sealed class SdCwtSerializerTests
     [TestMethod]
     public void WriteSdClaimsHeaderProducesValidCbor()
     {
+        //disclosures is a collection of disposables, not one disposable value: a using declaration disposes
+        //one variable's own value, not a collection's elements, so the foreach below in the finally block
+        //is the release point.
         var disclosures = new List<SdDisclosure>
         {
             SdDisclosure.CreateProperty(TestSalts.FromBytes(TestSalt), "name", "John"),
@@ -255,18 +258,22 @@ internal sealed class SdCwtSerializerTests
 
         try
         {
-            var writer = new CborWriter(CborConformanceMode.Canonical);
+            var buffer = new ArrayBufferWriter<byte>();
+            var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
             writer.WriteStartMap(1);
             SdCwtSerializer.WriteSdClaimsHeader(writer, disclosures);
             writer.WriteEndMap();
-            byte[] cbor = writer.Encode();
+            byte[] cbor = buffer.WrittenSpan.ToArray();
 
             //Verify structure.
-            var reader = new CborReader(cbor, CborConformanceMode.Lax);
+            var reader = new CborReader(cbor, CborOptions.Lax);
             reader.ReadStartMap();
             int key = reader.ReadInt32();
             Assert.AreEqual(SdCwtSerializer.SdClaimsHeaderKey, key);
 
+            //parsed is a collection of disposables, not one disposable value: a using declaration disposes
+            //one variable's own value, not a collection's elements, so the foreach below in the finally
+            //block is the release point.
             IReadOnlyList<SdDisclosure> parsed = SdCwtSerializer.ReadSdClaimsHeader(
                 ref reader, TestSalts.TestSaltTag, BaseMemoryPool.Shared);
             try
@@ -299,14 +306,15 @@ internal sealed class SdCwtSerializerTests
     public void ParseDisclosureThrowsForInvalidArrayLength()
     {
         //Create CBOR array with 4 elements (invalid).
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteStartArray(4);
         writer.WriteByteString(TestSalt);
         writer.WriteTextString("name");
         writer.WriteTextString("value");
         writer.WriteTextString("extra");
         writer.WriteEndArray();
-        byte[] cbor = writer.Encode();
+        byte[] cbor = buffer.WrittenSpan.ToArray();
 
         Assert.Throws<CborContentException>(() => SdCwtSerializer.ParseDisclosure(cbor, TestSalts.TestSaltTag, BaseMemoryPool.Shared));
     }
@@ -320,8 +328,8 @@ internal sealed class SdCwtSerializerTests
             "test_claim",
             "test_value");
 
-        byte[] cbor1 = SdCwtSerializer.SerializeDisclosure(disclosure, CborConformanceMode.Canonical);
-        byte[] cbor2 = SdCwtSerializer.SerializeDisclosure(disclosure, CborConformanceMode.Canonical);
+        byte[] cbor1 = SdCwtSerializer.SerializeDisclosure(disclosure, CborConformanceMode.RfcCanonical);
+        byte[] cbor2 = SdCwtSerializer.SerializeDisclosure(disclosure, CborConformanceMode.RfcCanonical);
 
         Assert.AreSequenceEqual(cbor1, cbor2, "Canonical encoding must be deterministic.");
     }
@@ -330,6 +338,9 @@ internal sealed class SdCwtSerializerTests
     [TestMethod]
     public void ComputeSdHashProducesConsistentOutput()
     {
+        //disclosures is a collection of disposables, not one disposable value: a using declaration disposes
+        //one variable's own value, not a collection's elements, so the foreach below in the finally block
+        //is the release point.
         var disclosures = new List<SdDisclosure>
         {
             SdDisclosure.CreateProperty(TestSalts.FromBytes(TestSalt), "name", "John"),
@@ -339,7 +350,8 @@ internal sealed class SdCwtSerializerTests
         try
         {
             //Serialize sd_claims array.
-            var writer = new CborWriter(CborConformanceMode.Canonical);
+            var buffer = new ArrayBufferWriter<byte>();
+            var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
             writer.WriteStartArray(disclosures.Count);
             foreach(var d in disclosures)
             {
@@ -347,10 +359,10 @@ internal sealed class SdCwtSerializerTests
                 writer.WriteEncodedValue(encoded);
             }
             writer.WriteEndArray();
-            byte[] sdClaimsCbor = writer.Encode();
+            byte[] sdClaimsCbor = buffer.WrittenSpan.ToArray();
 
-            byte[] hash1 = SdCwtSerializer.ComputeSdHash(sdClaimsCbor, WellKnownHashAlgorithms.Sha256Iana);
-            byte[] hash2 = SdCwtSerializer.ComputeSdHash(sdClaimsCbor, WellKnownHashAlgorithms.Sha256Iana);
+            byte[] hash1 = SdCwtSerializer.ComputeSdHash(sdClaimsCbor, WellKnownHashAlgorithms.Sha256Iana, BaseMemoryPool.Shared);
+            byte[] hash2 = SdCwtSerializer.ComputeSdHash(sdClaimsCbor, WellKnownHashAlgorithms.Sha256Iana, BaseMemoryPool.Shared);
 
             Assert.AreSequenceEqual(hash1, hash2, "SD hash must be deterministic.");
         }

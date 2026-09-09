@@ -9,11 +9,11 @@ namespace Verifiable.Tests.Federation;
 [TestClass]
 internal sealed class MetadataPolicyMergerTests
 {
-    private static readonly EntityTypeIdentifier RpType =
+    private static EntityTypeIdentifier RpType { get; } =
         WellKnownEntityTypeIdentifiers.OpenIdRelyingParty;
 
-    private static readonly string[] ProfileEmail = ["profile", "email"];
-    private static readonly string[] OpenIdProfile = ["openid", "profile"];
+    private static string[] ProfileEmail { get; } = ["profile", "email"];
+    private static string[] OpenIdProfile { get; } = ["openid", "profile"];
 
 
     [TestMethod]
@@ -34,10 +34,10 @@ internal sealed class MetadataPolicyMergerTests
     {
         EntityTypeMetadataPolicy upstream = MakeBlock(
             ("grant_types",
-                (WellKnownMetadataPolicyOperators.SubsetOf, (object)new List<object> { "authorization_code" })));
+                (WellKnownMetadataPolicyOperators.SubsetOf, new List<object> { "authorization_code" })));
         EntityTypeMetadataPolicy downstream = MakeBlock(
             ("id_token_signed_response_alg",
-                (WellKnownMetadataPolicyOperators.OneOf, (object)new List<object> { "ES256" })));
+                (WellKnownMetadataPolicyOperators.OneOf, new List<object> { "ES256" })));
 
         MetadataPolicyMergeResult result = MetadataPolicyMerger.Merge(upstream, downstream);
 
@@ -51,10 +51,10 @@ internal sealed class MetadataPolicyMergerTests
     {
         EntityTypeMetadataPolicy upstream = MakeBlock(
             ("scope",
-                (WellKnownMetadataPolicyOperators.SubsetOf, (object)new List<object> { "openid", "profile", "email" })));
+                (WellKnownMetadataPolicyOperators.SubsetOf, new List<object> { "openid", "profile", "email" })));
         EntityTypeMetadataPolicy downstream = MakeBlock(
             ("scope",
-                (WellKnownMetadataPolicyOperators.SubsetOf, (object)new List<object> { "profile", "email", "address" })));
+                (WellKnownMetadataPolicyOperators.SubsetOf, new List<object> { "profile", "email", "address" })));
 
         MetadataPolicyMergeResult result = MetadataPolicyMerger.Merge(upstream, downstream);
 
@@ -72,10 +72,10 @@ internal sealed class MetadataPolicyMergerTests
         //"may thus be an empty array []" — an empty result is not a conflict.
         EntityTypeMetadataPolicy upstream = MakeBlock(
             ("scope",
-                (WellKnownMetadataPolicyOperators.SubsetOf, (object)new List<object> { "openid" })));
+                (WellKnownMetadataPolicyOperators.SubsetOf, new List<object> { "openid" })));
         EntityTypeMetadataPolicy downstream = MakeBlock(
             ("scope",
-                (WellKnownMetadataPolicyOperators.SubsetOf, (object)new List<object> { "profile" })));
+                (WellKnownMetadataPolicyOperators.SubsetOf, new List<object> { "profile" })));
 
         MetadataPolicyMergeResult result = MetadataPolicyMerger.Merge(upstream, downstream);
 
@@ -91,10 +91,10 @@ internal sealed class MetadataPolicyMergerTests
     {
         EntityTypeMetadataPolicy upstream = MakeBlock(
             ("scope",
-                (WellKnownMetadataPolicyOperators.Add, (object)new List<object> { "openid" })));
+                (WellKnownMetadataPolicyOperators.Add, new List<object> { "openid" })));
         EntityTypeMetadataPolicy downstream = MakeBlock(
             ("scope",
-                (WellKnownMetadataPolicyOperators.Add, (object)new List<object> { "profile" })));
+                (WellKnownMetadataPolicyOperators.Add, new List<object> { "profile" })));
 
         MetadataPolicyMergeResult result = MetadataPolicyMerger.Merge(upstream, downstream);
 
@@ -125,9 +125,9 @@ internal sealed class MetadataPolicyMergerTests
     public void ValueConflictRejects()
     {
         EntityTypeMetadataPolicy upstream = MakeBlock(
-            ("scope", (WellKnownMetadataPolicyOperators.Value, (object)"openid")));
+            ("scope", (WellKnownMetadataPolicyOperators.Value, "openid")));
         EntityTypeMetadataPolicy downstream = MakeBlock(
-            ("scope", (WellKnownMetadataPolicyOperators.Value, (object)"profile")));
+            ("scope", (WellKnownMetadataPolicyOperators.Value, "profile")));
 
         MetadataPolicyMergeResult result = MetadataPolicyMerger.Merge(upstream, downstream);
 
@@ -140,9 +140,9 @@ internal sealed class MetadataPolicyMergerTests
     public void ValueEqualOnBothSidesMerges()
     {
         EntityTypeMetadataPolicy upstream = MakeBlock(
-            ("scope", (WellKnownMetadataPolicyOperators.Value, (object)"openid")));
+            ("scope", (WellKnownMetadataPolicyOperators.Value, "openid")));
         EntityTypeMetadataPolicy downstream = MakeBlock(
-            ("scope", (WellKnownMetadataPolicyOperators.Value, (object)"openid")));
+            ("scope", (WellKnownMetadataPolicyOperators.Value, "openid")));
 
         MetadataPolicyMergeResult result = MetadataPolicyMerger.Merge(upstream, downstream);
 
@@ -159,10 +159,10 @@ internal sealed class MetadataPolicyMergerTests
         //Merge rejects with the post-merge combination check.
         EntityTypeMetadataPolicy upstream = MakeBlock(
             ("scope",
-                (WellKnownMetadataPolicyOperators.SubsetOf, (object)new List<object> { "openid", "profile" })));
+                (WellKnownMetadataPolicyOperators.SubsetOf, new List<object> { "openid", "profile" })));
         EntityTypeMetadataPolicy downstream = MakeBlock(
             ("scope",
-                (WellKnownMetadataPolicyOperators.OneOf, (object)new List<object> { "openid" })));
+                (WellKnownMetadataPolicyOperators.OneOf, new List<object> { "openid" })));
 
         MetadataPolicyMergeResult result = MetadataPolicyMerger.Merge(upstream, downstream);
 
@@ -201,7 +201,7 @@ internal sealed class MetadataPolicyMergerTests
             {
                 [WellKnownEntityTypeIdentifiers.OpenIdRelyingParty] = MakeBlock(
                     ("scope",
-                        (WellKnownMetadataPolicyOperators.SubsetOf, (object)new List<object> { "openid", "profile" }))),
+                        (WellKnownMetadataPolicyOperators.SubsetOf, new List<object> { "openid", "profile" }))),
             },
         };
         MetadataPolicySnapshot downstream = new()
@@ -210,7 +210,7 @@ internal sealed class MetadataPolicyMergerTests
             {
                 [WellKnownEntityTypeIdentifiers.OpenIdProvider] = MakeBlock(
                     ("scope",
-                        (WellKnownMetadataPolicyOperators.SubsetOf, (object)new List<object> { "openid" })))
+                        (WellKnownMetadataPolicyOperators.SubsetOf, new List<object> { "openid" })))
                 with
                 {
                     EntityType = WellKnownEntityTypeIdentifiers.OpenIdProvider,

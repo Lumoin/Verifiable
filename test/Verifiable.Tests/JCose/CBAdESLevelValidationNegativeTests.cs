@@ -2,7 +2,7 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Time.Testing;
@@ -260,9 +260,10 @@ internal sealed class CBAdESLevelValidationNegativeTests
         //CB-5.2.6-05: the adoTst message-imprint input for an attached payload is the CBOR byte string
         //wrapping the payload bytes (never the raw payload bytes alone) -- built independently here, never via
         //CBAdESMessageImprints, matching this file's independent-oracle discipline.
-        var imprintInputWriter = new CborWriter(CborConformanceMode.Canonical);
+        var imprintInputWriterBuffer = new ArrayBufferWriter<byte>();
+        var imprintInputWriter = new CborWriter(imprintInputWriterBuffer, CborOptions.RfcCanonical);
         imprintInputWriter.WriteByteString(payload);
-        byte[] payloadTimestampImprintInput = imprintInputWriter.Encode();
+        byte[] payloadTimestampImprintInput = imprintInputWriterBuffer.WrittenSpan.ToArray();
 
         byte[] tokenBytes;
         using(PkiCertificateMemory token = await X509ChainTestRingTimestamping.MintTimestampTokenAsync(
@@ -1450,8 +1451,7 @@ internal sealed class CBAdESLevelValidationNegativeTests
         VerificationDelegate verifyThenCancel = async (dataToVerify, signatureToVerify, publicKeyMaterial, context, cancellationToken) =>
         {
             Interlocked.Increment(ref cancelTriggerCallCount);
-            (bool isVerified, CryptoEvent? evt) = await MicrosoftCryptographicFunctions.VerifyP256Async(
-                dataToVerify, signatureToVerify, publicKeyMaterial, context, cancellationToken).ConfigureAwait(false);
+            (bool isVerified, CryptoEvent? evt) = await MicrosoftCryptographicFunctions.VerifyP256Async(dataToVerify, signatureToVerify, publicKeyMaterial, new FakeTimeProvider(TestClock.CanonicalEpoch), context, cancellationToken).ConfigureAwait(false);
             await cts.CancelAsync().ConfigureAwait(false);
 
             return (isVerified, evt);
@@ -1628,7 +1628,8 @@ internal sealed class CBAdESLevelValidationNegativeTests
             + 1            // step 9: signature value.
             + precedingUHeadersElements.Count; // steps 10/11: the preceding elements, verbatim, in order.
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartArray(itemCount);
         writer.WriteTextString("Signature1");
         writer.WriteByteString(bodyProtectedHeader);
@@ -1647,7 +1648,7 @@ internal sealed class CBAdESLevelValidationNegativeTests
         }
 
         writer.WriteEndArray();
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -1731,7 +1732,8 @@ internal sealed class CBAdESLevelValidationNegativeTests
     /// <returns>The encoded protected-header map bytes.</returns>
     private static byte[] BuildBaselineProtectedHeaderBytes(int algorithm, DateTimeOffset issuedAt, byte[] x5tDigestBytes)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(3);
 
         writer.WriteInt32(1); // alg, RFC 9052 section 3.1.
@@ -1747,7 +1749,7 @@ internal sealed class CBAdESLevelValidationNegativeTests
         WriteHashAlgorithmDigestPairOracle(writer, new AdESDigestAlgorithmIntegerIdentifier(WellKnownCoseAlgorithms.Sha256), x5tDigestBytes);
 
         writer.WriteEndMap();
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -1764,7 +1766,8 @@ internal sealed class CBAdESLevelValidationNegativeTests
     /// <returns>The encoded protected-header map bytes.</returns>
     private static byte[] BuildProtectedHeaderBytesWithPayloadTimestamp(int algorithm, DateTimeOffset issuedAt, byte[] x5tDigestBytes, Action<CborWriter> writeAdoTst)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(4);
 
         writer.WriteInt32(1); // alg, RFC 9052 section 3.1.
@@ -1783,7 +1786,7 @@ internal sealed class CBAdESLevelValidationNegativeTests
         writeAdoTst(writer);
 
         writer.WriteEndMap();
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -1796,12 +1799,13 @@ internal sealed class CBAdESLevelValidationNegativeTests
     /// <returns>The encoded <c>UHeaderInstance</c> map bytes.</returns>
     private static byte[] BuildUnsignedHeaderElementBytes(int label, Action<CborWriter> writeValue)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(1);
         writer.WriteInt32(label);
         writeValue(writer);
         writer.WriteEndMap();
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -1812,7 +1816,8 @@ internal sealed class CBAdESLevelValidationNegativeTests
     /// <returns>The encoded <c>uHeaders</c> array bytes.</returns>
     private static byte[] BuildUnsignedHeadersArrayBytes(IReadOnlyList<byte[]> elements)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
         writer.WriteStartArray(elements.Count);
         foreach(byte[] element in elements)
         {
@@ -1820,7 +1825,7 @@ internal sealed class CBAdESLevelValidationNegativeTests
         }
 
         writer.WriteEndArray();
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -1859,15 +1864,16 @@ internal sealed class CBAdESLevelValidationNegativeTests
     /// <returns>The encoded <c>COSE_Sign1</c> wire bytes.</returns>
     private static byte[] BuildCoseSign1Bytes(byte[] protectedHeader, byte[]? uHeadersArrayBytes, byte[] payload, byte[] signature)
     {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
-        writer.WriteTag((CborTag)18); // COSE_Sign1_Tagged, RFC 9052 section 2 / clause 4.3.
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
+        writer.WriteTag(new CborTag((ulong)18)); // COSE_Sign1_Tagged, RFC 9052 section 2 / clause 4.3.
         writer.WriteStartArray(4);
         writer.WriteByteString(protectedHeader);
         WriteUnprotectedMapOracle(writer, uHeadersArrayBytes);
         writer.WriteByteString(payload);
         writer.WriteByteString(signature);
         writer.WriteEndArray();
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -1875,7 +1881,7 @@ internal sealed class CBAdESLevelValidationNegativeTests
 
     /// <summary>
     /// Signs <paramref name="sigStructure"/> with <paramref name="privateKey"/> via
-    /// <see cref="MicrosoftCryptographicFunctions.SignP256Async"/>, returning the raw signature bytes for
+    /// <see cref="MicrosoftCryptographicFunctionsAdapter.SignP256Async"/>, returning the raw signature bytes for
     /// direct splicing into an independently minted <c>COSE_Sign1</c> array.
     /// </summary>
     /// <param name="privateKey">The private key to sign with.</param>
@@ -1884,8 +1890,7 @@ internal sealed class CBAdESLevelValidationNegativeTests
     /// <returns>The raw signature bytes.</returns>
     private static async ValueTask<byte[]> SignSigStructureAsync(PrivateKeyMemory privateKey, byte[] sigStructure, CancellationToken cancellationToken)
     {
-        (Signature signature, _) = await MicrosoftCryptographicFunctions.SignP256Async(
-            privateKey.AsReadOnlyMemory(), sigStructure, BaseMemoryPool.Shared, cancellationToken: cancellationToken).ConfigureAwait(false);
+        (Signature signature, _) = await MicrosoftCryptographicFunctions.SignP256Async(privateKey.AsReadOnlyMemory(), sigStructure, BaseMemoryPool.Shared, cancellationToken: cancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch)).ConfigureAwait(false);
         using(signature)
         {
             return signature.AsReadOnlySpan().ToArray();
@@ -2138,7 +2143,7 @@ internal sealed class CBAdESLevelValidationNegativeTests
                 CBAdESSignatureSerialization.ParseCBAdESSign1,
                 CoseSerialization.BuildSigStructure,
                 publicKey,
-                MicrosoftCryptographicFunctions.VerifyP256Async,
+                MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
                 dereference: null,
                 dereferenceContext: null,
                 externalDetachedPayload: null,

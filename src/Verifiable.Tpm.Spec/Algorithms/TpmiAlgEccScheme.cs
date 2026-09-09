@@ -14,14 +14,14 @@ namespace Verifiable.Tpm.Spec.Algorithms;
 /// <para>
 /// <b>Valid values:</b> the ECC signing schemes — <c>TPM_ALG_ECDSA</c>, <c>TPM_ALG_ECDAA</c>,
 /// <c>TPM_ALG_SM2</c>, <c>TPM_ALG_ECSCHNORR</c>, <c>TPM_ALG_EDDSA</c>, <c>TPM_ALG_EDDSA_PH</c> — the four
-/// asymmetric signing schemes whose Table 11 <c>Dep</c> column names <c>ECC</c> — and the ECC key-exchange
+/// asymmetric signing schemes Table 8 groups under its ECC Schemes heading — and the ECC key-exchange
 /// methods — <c>TPM_ALG_ECDH</c>, <c>TPM_ALG_ECMQV</c> — plus, where the embedding structure admits it (the
 /// table's leading <c>+</c>), <c>TPM_ALG_NULL</c>. <c>TPM_ALG_LMS</c> and <c>TPM_ALG_XMSS</c> are asymmetric
 /// signing schemes too but carry no <c>Dep</c>, so this ECC-restricted table excludes them. Unmarshaling any
 /// other value is <c>TPM_RC_SCHEME</c>.
 /// </para>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 11.2.5.4, Table 199.
+/// Specification reference: TPM 2.0 Library Part 2, clause 11.2.5.4, Table 200.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]

@@ -54,7 +54,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentFlowTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-capstone-1");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-capstone-1",BaseMemoryPool.Shared);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         await EstablishPinAsync(harness, pool, cancellationToken).ConfigureAwait(false);
@@ -115,7 +115,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentFlowTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-capstone-2");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-capstone-2",BaseMemoryPool.Shared);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         await EstablishPinAsync(harness, pool, cancellationToken).ConfigureAwait(false);
@@ -167,7 +167,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentFlowTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-capstone-3");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-capstone-3",BaseMemoryPool.Shared);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         CtapGetAssertionRequest zeroEnrollmentUvRequest = BuildGetAssertionRequest(pool, options: new CtapCommandOptions(UserVerification: true));
@@ -228,7 +228,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentFlowTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator lockoutSimulator = CreateSimulator("bio-capstone-4-lockout", simulateBuiltInUv: static () => CtapBuiltInUvAttemptOutcome.MatchFailure);
+        using CtapAuthenticatorSimulator lockoutSimulator = CreateSimulator("bio-capstone-4-lockout", BaseMemoryPool.Shared, simulateBuiltInUv: static () => CtapBuiltInUvAttemptOutcome.MatchFailure);
         using CtapNfcTransportHarness lockoutHarness = await CtapNfcTransportHarness.CreateAsync(lockoutSimulator, pool, cancellationToken).ConfigureAwait(false);
 
         await EstablishPinAsync(lockoutHarness, pool, cancellationToken).ConfigureAwait(false);
@@ -261,7 +261,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentFlowTests
             CtapAuthenticatorState.MaxUvRetries, await GetUvRetriesAsync(lockoutHarness, pool, cancellationToken).ConfigureAwait(false),
             "a correct clientPIN entry (0x09 issuance) must restore uvRetries to its maximum, observed on the wire.");
 
-        using CtapAuthenticatorSimulator resetSimulator = CreateSimulator("bio-capstone-4-reset");
+        using CtapAuthenticatorSimulator resetSimulator = CreateSimulator("bio-capstone-4-reset",BaseMemoryPool.Shared);
         using CtapNfcTransportHarness resetHarness = await CtapNfcTransportHarness.CreateAsync(resetSimulator, pool, cancellationToken).ConfigureAwait(false);
 
         await EstablishPinAsync(resetHarness, pool, cancellationToken).ConfigureAwait(false);
@@ -297,7 +297,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentFlowTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-capstone-5");
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-capstone-5",BaseMemoryPool.Shared);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         var getModalityRequest = new CtapBioEnrollmentRequest(GetModality: true);

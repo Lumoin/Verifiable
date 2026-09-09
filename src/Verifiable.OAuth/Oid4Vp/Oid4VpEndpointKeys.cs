@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Core;
 using Verifiable.Cryptography.Text;
 
@@ -59,5 +60,7 @@ public static class Oid4VpEndpointKeys
     /// or direct-post requests arrive.
     /// </para>
     /// </remarks>
-    public static readonly string RequestUri = Utf8Constants.ToInternedString(RequestUriUtf8);
+    [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
+        Justification = "This member is the library's internal context-bag KEY NAME 'oid4vp.endpoint.requestUri' (compared as a string, never dereferenced), not the URL it identifies.")]
+    public static string RequestUri { get; } = Utf8Constants.ToInternedString(RequestUriUtf8);
 }

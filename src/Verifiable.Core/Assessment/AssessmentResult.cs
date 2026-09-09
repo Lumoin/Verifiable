@@ -182,7 +182,10 @@ namespace Verifiable.Core.Assessment
         /// <see cref="ClaimIssueCompletionStatus.Complete"/>.
         /// </description></item>
         /// <item><description>
-        /// All claims have <see cref="ClaimOutcome.Success"/> outcome.
+        /// Every claim has <see cref="ClaimOutcome.Success"/> or <see cref="ClaimOutcome.NotApplicable"/>
+        /// outcome — a rule the input does not trigger (for example, a <c>did:key</c> document's absent
+        /// <c>@context</c>, which <see cref="Validation.ContextValidationRules.ValidateDidDocumentContextAsync"/>
+        /// reports as not applicable rather than failing) does not sink the assessment.
         /// </description></item>
         /// </list>
         /// </remarks>
@@ -201,7 +204,7 @@ namespace Verifiable.Core.Assessment
             //even when the token was cancelled during claim generation.
 
             var allClaimsValid = claimsToAssess.IsComplete
-                && claimsToAssess.Claims.All(claim => claim.Outcome == ClaimOutcome.Success);
+                && claimsToAssess.Claims.All(claim => claim.Outcome is ClaimOutcome.Success or ClaimOutcome.NotApplicable);
 
             var assessmentId = Guid.NewGuid().ToString();
             var assessmentContext = new AssessmentContext();
@@ -247,7 +250,19 @@ namespace Verifiable.Core.Assessment
         /// <see cref="ClaimIssueCompletionStatus.Complete"/>.
         /// </description></item>
         /// <item><description>
-        /// All claims have <see cref="ClaimOutcome.Success"/> outcome.
+        /// Every claim has <see cref="ClaimOutcome.Success"/> outcome. Unlike
+        /// <see cref="DefaultKeyDidAssessorAsync"/>, this assessor does not widen to
+        /// <see cref="ClaimOutcome.NotApplicable"/>. This assessor is a public delegate a caller
+        /// pairs with any rule set, so it makes no assumption about what those rules report:
+        /// telling a rule that could not apply to a claim apart from one that legitimately does
+        /// not apply here is a distinction only the rule set's own design can draw, not this
+        /// assessor, so admitting <see cref="ClaimOutcome.NotApplicable"/> by default would risk
+        /// masking a claim that genuinely failed. A caller whose rule set reports
+        /// <see cref="ClaimOutcome.NotApplicable"/> for a legal input — for example the
+        /// DID-method-agnostic
+        /// <see cref="Validation.ContextValidationRules.ValidateDidDocumentContextAsync"/>, which
+        /// reports it for a <c>did:web</c> document with no <c>@context</c> — widens explicitly
+        /// with its own <see cref="AssessDelegateAsync"/> rather than through this default.
         /// </description></item>
         /// </list>
         /// </remarks>
@@ -266,7 +281,7 @@ namespace Verifiable.Core.Assessment
             //even when the token was cancelled during claim generation.
 
             var allClaimsValid = claimsToAssess.IsComplete
-                && claimsToAssess.Claims.All(claim => claim.Outcome == ClaimOutcome.Success);
+                && claimsToAssess.Claims.All(claim => claim.Outcome is ClaimOutcome.Success);
 
             var assessmentId = Guid.NewGuid().ToString();
             var assessmentContext = new AssessmentContext();

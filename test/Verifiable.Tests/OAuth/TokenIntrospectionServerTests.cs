@@ -30,10 +30,10 @@ internal sealed class TokenIntrospectionServerTests
     private const string ClientId = "https://introspection.client.test";
 
     /// <summary>The base URI the registered client is reachable at.</summary>
-    private static readonly Uri ClientBaseUri = new("https://introspection.client.test");
+    private static Uri ClientBaseUri { get; } = new("https://introspection.client.test");
 
     /// <summary>The single capability the introspection endpoint requires.</summary>
-    private static readonly ImmutableHashSet<CapabilityIdentifier> IntrospectionCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> IntrospectionCapabilities { get; } =
         ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.OAuthTokenIntrospection);
 
 

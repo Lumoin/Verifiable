@@ -42,25 +42,25 @@ public readonly struct EntropyAssessor: IEquatable<EntropyAssessor>
     public static EntropyAssessor Unknown { get; } = new(4);
 
 
-    private static List<EntropyAssessor> assessors { get; } =
+    private static List<EntropyAssessor> RegisteredAssessors { get; } =
         [Source, OperatingSystem, Registry, ExternalMonitor, Unknown];
 
     /// <summary>Gets all registered assessor values.</summary>
-    public static IReadOnlyList<EntropyAssessor> Assessors => assessors.AsReadOnly();
+    public static IReadOnlyList<EntropyAssessor> Assessors => RegisteredAssessors.AsReadOnly();
 
     /// <summary>Creates a new assessor value. Use codes above 1000.</summary>
     public static EntropyAssessor Create(int code)
     {
-        for(int i = 0; i < assessors.Count; ++i)
+        for(int i = 0; i < RegisteredAssessors.Count; ++i)
         {
-            if(assessors[i].Code == code)
+            if(RegisteredAssessors[i].Code == code)
             {
                 throw new ArgumentException("Code already exists.");
             }
         }
 
         var newAssessor = new EntropyAssessor(code);
-        assessors.Add(newAssessor);
+        RegisteredAssessors.Add(newAssessor);
         return newAssessor;
     }
 
@@ -143,25 +143,25 @@ public readonly struct EntropyAssessmentMethod: IEquatable<EntropyAssessmentMeth
     public static EntropyAssessmentMethod Unknown { get; } = new(3);
 
 
-    private static List<EntropyAssessmentMethod> methods { get; } =
+    private static List<EntropyAssessmentMethod> RegisteredMethods { get; } =
         [SelfTest, OnlineStatistical, ExternalAudit, Unknown];
 
     /// <summary>Gets all registered assessment method values.</summary>
-    public static IReadOnlyList<EntropyAssessmentMethod> Methods => methods.AsReadOnly();
+    public static IReadOnlyList<EntropyAssessmentMethod> Methods => RegisteredMethods.AsReadOnly();
 
     /// <summary>Creates a new assessment method value. Use codes above 1000.</summary>
     public static EntropyAssessmentMethod Create(int code)
     {
-        for(int i = 0; i < methods.Count; ++i)
+        for(int i = 0; i < RegisteredMethods.Count; ++i)
         {
-            if(methods[i].Code == code)
+            if(RegisteredMethods[i].Code == code)
             {
                 throw new ArgumentException("Code already exists.");
             }
         }
 
         var newMethod = new EntropyAssessmentMethod(code);
-        methods.Add(newMethod);
+        RegisteredMethods.Add(newMethod);
         return newMethod;
     }
 
@@ -240,25 +240,25 @@ public readonly struct EntropyOutcome: IEquatable<EntropyOutcome>
     public static EntropyOutcome Unknown { get; } = new(3);
 
 
-    private static List<EntropyOutcome> outcomes { get; } =
+    private static List<EntropyOutcome> RegisteredOutcomes { get; } =
         [Healthy, Degraded, Failed, Unknown];
 
     /// <summary>Gets all registered outcome values.</summary>
-    public static IReadOnlyList<EntropyOutcome> Outcomes => outcomes.AsReadOnly();
+    public static IReadOnlyList<EntropyOutcome> Outcomes => RegisteredOutcomes.AsReadOnly();
 
     /// <summary>Creates a new outcome value. Use codes above 1000.</summary>
     public static EntropyOutcome Create(int code)
     {
-        for(int i = 0; i < outcomes.Count; ++i)
+        for(int i = 0; i < RegisteredOutcomes.Count; ++i)
         {
-            if(outcomes[i].Code == code)
+            if(RegisteredOutcomes[i].Code == code)
             {
                 throw new ArgumentException("Code already exists.");
             }
         }
 
         var newOutcome = new EntropyOutcome(code);
-        outcomes.Add(newOutcome);
+        RegisteredOutcomes.Add(newOutcome);
         return newOutcome;
     }
 

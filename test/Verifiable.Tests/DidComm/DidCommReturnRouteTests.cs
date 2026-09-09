@@ -31,8 +31,8 @@ internal sealed class DidCommReturnRouteTests
     /// <summary>The test context, for cancellation and diagnostics.</summary>
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly BaseMemoryPool Pool = BaseMemoryPool.Shared;
-    private static readonly ExchangeContext Context = new();
+    private static BaseMemoryPool Pool { get; } = BaseMemoryPool.Shared;
+    private static ExchangeContext Context { get; } = new();
 
     private const string DidPrefix = "did:example";
     private const string Recipient = "did:example:recipient";

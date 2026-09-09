@@ -1,12 +1,14 @@
+using Lumoin.Base;
+using Lumoin.Veritas.Canonicalization;
+using Lumoin.Veritas.Core;
+using Lumoin.Veritas.Json.Stj;
+using Lumoin.Veritas.JsonLd;
 using Microsoft.Extensions.Caching.Memory;
 using System.Security;
 using System.Security.Cryptography;
 using System.Text;
-using VDS.RDF;
-using VDS.RDF.JsonLd;
-using VDS.RDF.JsonLd.Syntax;
-using VDS.RDF.Parsing;
 using Verifiable.Core;
+using VeritasContextResolver = Lumoin.Veritas.LinkedData.ContextResolverDelegate;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Json;
@@ -152,8 +154,8 @@ internal static class CanonicalizationTestUtilities
     /// <returns>A task representing the asynchronous operation.</returns>
     /// <remarks>
     /// <para>
-    /// <strong>Critical for Production Use:</strong> This method MUST be called before any
-    /// synchronous JSON-LD parsing operations to avoid deadlocks from sync-over-async patterns.
+    /// <strong>Purpose:</strong> Warms the resolver's cache so canonicalization does not pay a
+    /// remote fetch (with its integrity verification) for a known context on first use.
     /// </para>
     /// <para>
     /// <strong>Usage Pattern:</strong>
@@ -167,7 +169,7 @@ internal static class CanonicalizationTestUtilities
     /// //2. Pre-warm cache asynchronously (once at startup).
     /// await CanonicalizationUtilities.PreWarmContextCacheAsync(contextResolver);
     /// 
-    /// //3. Now safe to use in synchronous document loader.
+    /// //3. Canonicalize; each remote @context resolves through the async resolver.
     /// var canonicalizer = CanonicalizationUtilities.CreateRdfcCanonicalizer();
     /// var result = await canonicalizer(json, contextResolver, cancellationToken);
     /// </code>
@@ -175,9 +177,8 @@ internal static class CanonicalizationTestUtilities
     /// This pattern:
     /// </para>
     /// <list type="bullet">
-    /// <item><description>Performs all I/O and async operations upfront.</description></item>
-    /// <item><description>Ensures the synchronous document loader only reads from cache.</description></item>
-    /// <item><description>Prevents deadlocks from captured synchronization contexts.</description></item>
+    /// <item><description>Performs the known-context I/O and integrity verification upfront.</description></item>
+    /// <item><description>Keeps every later resolution a cache read.</description></item>
     /// <item><description>Enables fast, deterministic canonicalization.</description></item>
     /// </list>
     /// </remarks>
@@ -253,7 +254,7 @@ internal static class CanonicalizationTestUtilities
     }
 
     /// <summary>
-    /// Creates an RDFC-1.0 canonicalization delegate using dotNetRdf.
+    /// Creates an RDFC-1.0 canonicalization delegate backed by the Lumoin.Veritas RDF stack.
     /// </summary>
     /// <returns>A canonicalization delegate for RDF Dataset Canonicalization.</returns>
     /// <remarks>
@@ -265,64 +266,75 @@ internal static class CanonicalizationTestUtilities
     /// The canonicalization process:
     /// </para>
     /// <list type="number">
-    /// <item><description>Parses JSON-LD to RDF using the provided context resolver.</description></item>
-    /// <item><description>Loads RDF triples into a triple store.</description></item>
-    /// <item><description>Applies RDFC-1.0 canonicalization algorithm.</description></item>
-    /// <item><description>Serializes to N-Quads format.</description></item>
+    /// <item><description>Parses the JSON-LD document and expands it (JSON-LD 1.1), resolving every
+    /// remote <c>@context</c> asynchronously through the caller's resolver so the per-call
+    /// <see cref="ExchangeContext"/> rides each fetch.</description></item>
+    /// <item><description>Serializes the expanded document to RDF quads.</description></item>
+    /// <item><description>Applies the RDFC-1.0 canonicalization algorithm with SHA-256 and
+    /// serializes to sorted canonical N-Quads.</description></item>
     /// </list>
     /// <para>
     /// <strong>Context Resolution Security:</strong> The context resolver MUST ensure integrity
     /// of fetched contexts as per <see href="https://www.w3.org/TR/vc-data-integrity/#context-validation"/>.
     /// </para>
-    /// <para>
-    /// <strong>Important:</strong> Call <see cref="PreWarmContextCacheAsync"/> before using this
-    /// canonicalizer to ensure all contexts are cached and avoid synchronous blocking.
-    /// </para>
     /// </remarks>
     public static CanonicalizationDelegate CreateRdfcCanonicalizer()
     {
-        return (json, contextResolver, context, cancellationToken) =>
+        return async (json, contextResolver, context, cancellationToken) =>
         {
-            var store = new TripleStore();
-            var parserOptions = new JsonLdProcessorOptions
+            //The bridge carries the per-call ExchangeContext into every remote @context fetch;
+            //a null resolver resolves nothing, and expansion fails on the first remote context.
+            VeritasContextResolver resolveContext = async (uri, resolveCancellation) =>
             {
-                ProcessingMode = JsonLdProcessingMode.JsonLd11,
-                DocumentLoader = CreateDotNetRdfContextLoader(contextResolver, context)
+                string? resolved = contextResolver == null
+                    ? null
+                    : await contextResolver(uri, context, resolveCancellation).ConfigureAwait(false);
+
+                return resolved == null ? null : Utf8StringInterner.Shared.Intern(resolved);
             };
-            var parser = new JsonLdParser(parserOptions);
 
-            using var reader = new StringReader(json);
-            parser.Load(store, reader);
+            var document = StjJsonAdapter.Parse(Utf8StringInterner.Shared.Intern(json));
+            var expanded = await JsonLdExpansionTree.ExpandAsync(
+                document,
+                baseUrl: null,
+                resolveContext,
+                StjJsonAdapter.Parse,
+                cancellationToken).ConfigureAwait(false);
 
-            var canonicalizer = new RdfCanonicalizer();
-            var canonicalizedResult = canonicalizer.Canonicalize(store);
+            using var pool = new Utf8StringPool();
 
-            //Extract the RDFC label map (canonical_id → original_bnode_id).
-            //dotNetRdf's IssuedIdentifiersMap maps input → canonical (original → c14n).
-            //We invert it for our convention: canonical → original.
-            //
-            //dotNetRdf may include the "_:" prefix in identifier strings. We strip it
-            //to match the format used by BlankNodeRelabeling.LabelMap (bare identifiers
-            //like "c14n0", not "_:c14n0").
+            //The serializer issues blank labels per serialization in encounter order and exposes the
+            //document-to-issued map; the derive flows' full-vs-reduced label-map join rides those
+            //per-document labels.
+            JsonLdRdfSerializationResult serialized = JsonLdRdfSerializer.Serialize(expanded, pool);
+
+            //RDFC-1.0 requires SHA-256; SHA256.HashData is the same provider the library registers
+            //for HashFunctionDelegate at startup. A false return is the canonicalizer's work-budget
+            //refusal for a poison graph.
+            if(!RdfCanonicalizer.TryCanonicalizeWithMap(serialized.Quads, SHA256.HashData, out RdfCanonicalizationResult? canonicalized))
+            {
+                throw new InvalidOperationException(
+                    "RDF canonicalization exceeded its work budget: the dataset's blank-node structure is a poison graph.");
+            }
+
+            //IssuedIdentifiers maps original blank-node label → canonical c14nN label. LabelMap
+            //carries the inverse orientation, canonical → original, as bare identifiers matching
+            //BlankNodeRelabeling's HMAC label maps.
             Dictionary<string, string>? labelMap = null;
-            if(canonicalizedResult.IssuedIdentifiersMap is { Count: > 0 } issuedMap)
+            if(canonicalized.IssuedIdentifiers is { Count: > 0 } issuedMap)
             {
                 labelMap = new Dictionary<string, string>(issuedMap.Count, StringComparer.Ordinal);
                 foreach(var (originalId, canonicalId) in issuedMap)
                 {
-                    var bareOriginal = StripBlankNodePrefix(originalId);
-                    var bareCanonical = StripBlankNodePrefix(canonicalId);
-                    labelMap[bareCanonical] = bareOriginal;
+                    labelMap[StripBlankNodePrefix(canonicalId)] = StripBlankNodePrefix(originalId);
                 }
             }
 
-            var result = new CanonicalizationResult
+            return new CanonicalizationResult
             {
-                CanonicalForm = canonicalizedResult.SerializedNQuads,
+                CanonicalForm = canonicalized.Canonical,
                 LabelMap = labelMap
             };
-
-            return ValueTask.FromResult(result);
         };
     }
 
@@ -498,73 +510,6 @@ internal static class CanonicalizationTestUtilities
 
         return Convert.ToHexString(hashBytes).ToUpperInvariant();
     }
-
-    /// <summary>
-    /// Creates a dotNetRdf document loader that reads from pre-warmed context cache.
-    /// </summary>
-    /// <param name="contextResolver">The context resolver with pre-warmed cache.</param>
-    /// <returns>A document loader function for dotNetRdf's JSON-LD parser.</returns>
-    /// <remarks>
-    /// <para>
-    /// <strong>Important:</strong> This method expects that <see cref="PreWarmContextCacheAsync"/>
-    /// has been called to populate the cache. The loader uses <see cref="Task.Run"/> to avoid
-    /// capturing synchronization contexts, but contexts should already be cached to avoid I/O.
-    /// </para>
-    /// <para>
-    /// <strong>Design Rationale:</strong>
-    /// </para>
-    /// <list type="bullet">
-    /// <item><description>dotNetRdf's DocumentLoader interface is synchronous: <c>Func&lt;Uri, JsonLdLoaderOptions?, RemoteDocument&gt;</c>.</description></item>
-    /// <item><description>Our <see cref="ContextResolverDelegate"/> is async to support network I/O and integrity checks.</description></item>
-    /// <item><description>Using <c>.GetAwaiter().GetResult()</c> directly can cause deadlocks in sync contexts.</description></item>
-    /// <item><description><see cref="Task.Run"/> isolates the async work from the calling synchronization context.</description></item>
-    /// <item><description>Pre-warming the cache ensures this only reads from cache (fast, synchronous).</description></item>
-    /// </list>
-    /// <para>
-    /// If a context is not in cache, an exception is thrown rather than blocking on network I/O.
-    /// </para>
-    /// </remarks>
-    private static Func<Uri, JsonLdLoaderOptions?, RemoteDocument> CreateDotNetRdfContextLoader(ContextResolverDelegate? contextResolver, ExchangeContext context)
-    {
-        return (uri, options) =>
-        {
-            string? contextJson = null;
-
-            if(contextResolver != null)
-            {
-                //Use Task.Run to avoid captured synchronization context issues.
-                //Context should already be cached from PreWarmContextCacheAsync.
-                try
-                {
-                    contextJson = Task.Run(async () =>
-                        await contextResolver(uri, context, CancellationToken.None).ConfigureAwait(false)).GetAwaiter().GetResult();
-                }
-                catch(Exception ex)
-                {
-                    throw new JsonLdProcessorException(
-                        JsonLdErrorCode.LoadingDocumentFailed,
-                        $"Failed to resolve context URI: {uri}. " +
-                        "Ensure PreWarmContextCacheAsync was called before canonicalization. " +
-                        $"Inner exception: {ex.Message}",
-                        ex);
-                }
-            }
-
-            if(contextJson == null)
-            {
-                throw new JsonLdProcessorException(
-                    JsonLdErrorCode.LoadingDocumentFailed,
-                    $"Failed to resolve context URI: {uri}. Context not found in cache. Ensure PreWarmContextCacheAsync was called with a resolver that can handle this URI, or use CreateTestContextResolver() for tests.");
-            }
-
-            return new RemoteDocument
-            {
-                DocumentUrl = uri,
-                Document = contextJson
-            };
-        };
-    }
-
 
     /// <summary>
     /// Strips the <c>"_:"</c> prefix from a blank node identifier if present.

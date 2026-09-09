@@ -231,26 +231,26 @@ public static class DynamicRegistrationHandlers
             if(metadata.RedirectUris.Count > 0)
             {
                 JsonAppender.AppendUriArrayField(
-                    sb, "redirect_uris", metadata.RedirectUris, ref first);
+                    sb, ClientMetadataParameterNames.RedirectUris, metadata.RedirectUris, ref first);
             }
             if(metadata.TokenEndpointAuthMethod is not null)
             {
                 JsonAppender.AppendStringField(
-                    sb, "token_endpoint_auth_method",
+                    sb, ClientMetadataParameterNames.TokenEndpointAuthMethod,
                     ClientAuthenticationMethodNames.GetName(metadata.TokenEndpointAuthMethod.Value),
                     ref first);
             }
             if(metadata.ClientName is not null)
             {
-                JsonAppender.AppendStringField(sb, "client_name", metadata.ClientName, ref first);
+                JsonAppender.AppendStringField(sb, ClientMetadataParameterNames.ClientName, metadata.ClientName, ref first);
             }
             if(metadata.ClientUri is not null)
             {
-                JsonAppender.AppendUriField(sb, "client_uri", metadata.ClientUri, ref first);
+                JsonAppender.AppendUriField(sb, ClientMetadataParameterNames.ClientUri, metadata.ClientUri, ref first);
             }
             if(metadata.Scope is not null)
             {
-                JsonAppender.AppendStringField(sb, "scope", metadata.Scope, ref first);
+                JsonAppender.AppendStringField(sb, ClientMetadataParameterNames.Scope, metadata.Scope, ref first);
             }
             if(metadata.AuthorizationDetailsTypes is not null)
             {
@@ -262,7 +262,7 @@ public static class DynamicRegistrationHandlers
             }
             if(metadata.JwksUri is not null)
             {
-                JsonAppender.AppendUriField(sb, "jwks_uri", metadata.JwksUri, ref first);
+                JsonAppender.AppendUriField(sb, ClientMetadataParameterNames.JwksUri, metadata.JwksUri, ref first);
             }
             sb.Append('}');
 

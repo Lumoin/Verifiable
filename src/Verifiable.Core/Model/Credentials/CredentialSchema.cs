@@ -76,7 +76,14 @@ public class CredentialSchema: IEquatable<CredentialSchema>
     public IDictionary<string, object>? AdditionalData { get; set; }
 
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Determines whether this schema is equal to <paramref name="other"/> by comparing
+    /// <see cref="Id"/> and <see cref="Type"/>. Equality is exact-type, not polymorphic over
+    /// subtypes: a derived type adding further identity-bearing members is never equal to a
+    /// same-valued instance of this type.
+    /// </summary>
+    /// <param name="other">The credential schema to compare against.</param>
+    /// <returns><see langword="true"/> if the schemas are equal; otherwise <see langword="false"/>.</returns>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public bool Equals(CredentialSchema? other)
     {
@@ -90,6 +97,11 @@ public class CredentialSchema: IEquatable<CredentialSchema>
             return true;
         }
 
+        if(GetType() != other.GetType())
+        {
+            return false;
+        }
+
         return string.Equals(Id, other.Id, StringComparison.Ordinal)
             && string.Equals(Type, other.Type, StringComparison.Ordinal);
     }
@@ -97,7 +109,8 @@ public class CredentialSchema: IEquatable<CredentialSchema>
 
     /// <inheritdoc/>
     [EditorBrowsable(EditorBrowsableState.Never)]
-    public override bool Equals([NotNullWhen(true)] object? obj) => obj is CredentialSchema other && Equals(other);
+    public override bool Equals([NotNullWhen(true)] object? obj) =>
+        obj is CredentialSchema other && Equals(other);
 
 
     /// <inheritdoc/>

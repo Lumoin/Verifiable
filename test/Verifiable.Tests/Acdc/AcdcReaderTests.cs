@@ -17,7 +17,7 @@ namespace Verifiable.Tests.Acdc;
 internal sealed class AcdcReaderTests
 {
     /// <summary>The field order of the expanded attribute block, used to check the decode preserves it.</summary>
-    private static readonly string[] AttributeBlockFieldOrder = ["d", "u", "i", "name", "level"];
+    private static string[] AttributeBlockFieldOrder { get; } = ["d", "u", "i", "name", "level"];
 
 
     /// <summary>

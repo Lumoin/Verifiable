@@ -15,7 +15,7 @@ namespace Verifiable.Core.StatusList;
 /// <c>statusListCredential</c> URL, verifies it via the existing credential surface, and decodes
 /// its <c>encodedList</c> with <see cref="BitstringStatusListCodec.DecodeList"/> before calling
 /// <see cref="GetStatus"/>. This mirrors how the IETF
-/// <see cref="StatusListValidation.GetStatus(StatusListToken, StatusListReference, DateTimeOffset)"/>
+/// <see cref="StatusListValidation.GetStatus(StatusListToken, StatusListReference, DateTimeOffset, StatusListFreshnessPolicy?)"/>
 /// operates on an already-parsed token.
 /// </para>
 /// </remarks>

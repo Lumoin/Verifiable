@@ -54,7 +54,7 @@ internal sealed class CtapAuthenticatorExtensionsFlowTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("ext-capstone-happy");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("ext-capstone-happy",BaseMemoryPool.Shared);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         await EstablishPinAsync(harness, pool, cancellationToken).ConfigureAwait(false);
@@ -107,7 +107,7 @@ internal sealed class CtapAuthenticatorExtensionsFlowTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("ext-capstone-enforcement");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("ext-capstone-enforcement",BaseMemoryPool.Shared);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         byte[] level3CredentialIdBytes = await RegisterCredentialOverRealTransportAsync(
@@ -191,7 +191,7 @@ internal sealed class CtapAuthenticatorExtensionsFlowTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("ext-capstone-unauthorized");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("ext-capstone-unauthorized",BaseMemoryPool.Shared);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         ReadOnlyMemory<byte> extensions = CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialExtensionsInput(minPinLength: true);
@@ -219,7 +219,7 @@ internal sealed class CtapAuthenticatorExtensionsFlowTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("ext-capstone-reset");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("ext-capstone-reset",BaseMemoryPool.Shared);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         await EstablishPinAsync(harness, pool, cancellationToken).ConfigureAwait(false);
@@ -272,7 +272,7 @@ internal sealed class CtapAuthenticatorExtensionsFlowTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("hmac-secret-mc-annotation");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("hmac-secret-mc-annotation",BaseMemoryPool.Shared);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         await AssertHmacSecretAnnotationAsync(harness, pool, "mc-true.example", hmacSecret: true, expectAnnotation: true, cancellationToken).ConfigureAwait(false);
@@ -327,6 +327,10 @@ internal sealed class CtapAuthenticatorExtensionsFlowTests
         //returns a non-nullable ReadOnlyMemory<byte>, so a ternary against the null literal infers the
         //wrong Nullable<ReadOnlyMemory<byte>> shape for the absent branch (documented at
         //CtapMakeCredentialGetAssertionFixtures.RegisterCredentialAsync's own identical construction).
+        //Assigned via if/else rather than a ternary: CtapMakeCredentialRequestCborReader's own documented
+        //reason for the identical shape (a byte[]-typed present branch and a null absent branch would infer
+        //a byte[]-typed conditional expression whose implicit conversion to ReadOnlyMemory<byte> turns even
+        //a null array into a non-null empty one).
         ReadOnlyMemory<byte>? extensions;
         if(credProtect is int requestedCredProtect)
         {

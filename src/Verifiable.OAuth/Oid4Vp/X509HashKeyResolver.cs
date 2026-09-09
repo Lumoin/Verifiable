@@ -101,6 +101,9 @@ public static class X509HashKeyResolver
         ArgumentNullException.ThrowIfNull(base64UrlEncoder);
         ArgumentNullException.ThrowIfNull(pool);
 
+        //chain is a per-certificate list, not one disposable value, so it is disposed in its own
+        //finally rather than through a using declaration; leafKey transfers ownership to the caller
+        //on success and is disposed only on the throw path below.
         IReadOnlyList<PkiCertificateMemory> chain = parseX5c(x5cValues, pool);
 
         try

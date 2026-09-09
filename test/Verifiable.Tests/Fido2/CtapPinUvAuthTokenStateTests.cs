@@ -71,6 +71,45 @@ internal sealed class CtapPinUvAuthTokenStateTests
 
 
     /// <summary>
+    /// <see cref="CtapPinUvAuthTokenState.Initial"/> mints its 32-byte token from the pool the caller
+    /// passes, never a hidden default; disposing the returned state returns that carrier.
+    /// </summary>
+    [TestMethod]
+    public void InitialRentsTheTokenFromThePassedPool()
+    {
+        using var trackingPool = new MeteredHousePool();
+
+        CtapPinUvAuthTokenState state = CtapPinUvAuthTokenState.Initial(trackingPool.Pool);
+        Assert.IsGreaterThan(0L, trackingPool.RentedCount, "Initial must rent its token buffer from the passed pool.");
+
+        state.Dispose();
+
+        Assert.AreEqual(0L, trackingPool.OutstandingCount, "Disposing the initial state must return the token carrier it rented.");
+    }
+
+
+    /// <summary>
+    /// <see cref="CtapPinUvAuthTokenState.ResetToken"/> mints its FRESH 32-byte token from the pool the
+    /// caller passes (disposing the superseded token itself); disposing the returned state returns the
+    /// fresh carrier.
+    /// </summary>
+    [TestMethod]
+    public void ResetTokenRentsAFreshTokenFromThePassedPool()
+    {
+        using var trackingPool = new MeteredHousePool();
+        CtapPinUvAuthTokenState original = CtapPinUvAuthTokenState.Initial(trackingPool.Pool);
+
+        long rentedBeforeReset = trackingPool.RentedCount;
+        CtapPinUvAuthTokenState reset = original.ResetToken(trackingPool.Pool);
+        Assert.IsGreaterThan(rentedBeforeReset, trackingPool.RentedCount, "ResetToken must rent a fresh token buffer from the passed pool.");
+
+        reset.Dispose();
+
+        Assert.AreEqual(0L, trackingPool.OutstandingCount, "Disposing the reset state must return the fresh token carrier: ResetToken itself disposes the superseded one.");
+    }
+
+
+    /// <summary>
     /// <c>beginUsingPinUvAuthToken(userIsPresent: false)</c> — the shape every PIN-path token-issuance
     /// tail uses (CTAP 2.3, line 5910/6020) — sets userVerified true, userPresent false, and in use true.
     /// </summary>
@@ -415,7 +454,9 @@ internal sealed class CtapPinUvAuthTokenStateTests
     /// <see cref="CtapPinUvAuthTokenState.Initial"/> and <see cref="CtapPinUvAuthTokenState.Dispose"/>
     /// zero every pooled buffer they touch before it returns to the pool — the transient entropy draw
     /// and the final token buffer alike — observed through the tracking-pool public seam, without any
-    /// test-only hook in production code.
+    /// test-only hook in production code. <c>state</c> is disposed explicitly, not via a
+    /// <see langword="using"/> declaration, because the outstanding-count assertion right after it must
+    /// see the token buffer already returned.
     /// </summary>
     [TestMethod]
     public void InitialAndDisposeZeroEveryTrackedBufferBeforeReturningItToThePool()

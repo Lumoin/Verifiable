@@ -4,6 +4,7 @@ using System.Buffers.Binary;
 using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Cryptography;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Extensions.Policy;
@@ -14,6 +15,7 @@ using Verifiable.Tpm.Spec.Attributes;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -23,7 +25,7 @@ namespace Verifiable.Tests.Tpm;
 /// <see cref="TpmDeviceExtensions"/> policy commands, <see cref="TpmCommandExecutor"/>, and the real
 /// command/response codecs). Each test starts a real or trial policy session, builds <c>aHash</c> from the
 /// session's real, retained nonceTPM, signs it through the production <c>TPM2_Sign()</c> wire path, and drives
-/// <c>TPM2_PolicySigned()</c> itself over the wire (TPM 2.0 Library Part 3, Section 23.3).
+/// <c>TPM2_PolicySigned()</c> itself over the wire (TPM 2.0 Library Part 3, clause 23.3).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -33,7 +35,7 @@ namespace Verifiable.Tests.Tpm;
 /// on-device fold agree end to end, not merely that the two happen to call the same formula.
 /// </para>
 /// <para>
-/// The negative tests each isolate one rung of the check ladder (TPM 2.0 Library Part 3, Section 23.2.2): a
+/// The negative tests each isolate one rung of the check ladder (TPM 2.0 Library Part 3, clause 23.2.2): a
 /// mismatched non-empty caller nonce, an expired deadline, a wrong-sized <c>cpHashA</c>, a cpHash latch conflict,
 /// and a corrupted signature. Because the ladder runs nonceTPM → expiration → cpHashA → scheme/verification in
 /// that order, several negative tests use a placeholder signature that is never actually reached.
@@ -47,6 +49,15 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
 
     /// <summary>The RSA modulus size in bits used by the RSA/mixed-hash test.</summary>
     private const ushort Rsa2048KeyBits = 2048;
+
+    /// <summary>
+    /// A transient handle value naming no loaded object in a freshly-brought-operational simulator — stands in
+    /// for <c>authObject</c> in tests whose refusal fires at the parse, before either handle resolves.
+    /// </summary>
+    private const uint ArbitraryAuthObjectHandle = 0x8000_0001;
+
+    /// <summary>The <c>policySession</c> counterpart of <see cref="ArbitraryAuthObjectHandle"/>, distinct from it.</summary>
+    private const uint ArbitraryPolicySessionHandle = 0x0300_0001;
 
     /// <summary>The fixed secret sealed and recovered by the flagship flow test.</summary>
     private static byte[] SecretBytes { get; } = "Bind this secret to a TPM2_PolicySigned() authorization."u8.ToArray();
@@ -65,7 +76,7 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -82,7 +93,7 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
         byte[] authPolicy = new byte[size];
         Span<byte> zero = stackalloc byte[size];
         zero.Clear();
-        _ = TpmPolicyDigest.ExtendForSigned(zero, authorityName, policyRef, SessionAlg, authPolicy);
+        _ = TpmPolicyDigest.ExtendForSigned(zero, authorityName, policyRef, SessionAlg, authPolicy, pool);
 
         uint policyHandle = 0;
         uint itemHandle = 0;
@@ -156,7 +167,7 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
                 digest.PolicyDigest.AsReadOnlySpan().SequenceEqual(authPolicy),
                 "The simulator's policyDigest after PolicySigned must match the independently predicted ExtendForSigned value.");
 
-            using TpmPolicySession policySession = TpmPolicySession.ForSession(policyHandle, SessionAlg, pool);
+            using TpmPolicySession policySession = TpmPolicySession.ForSession(policyHandle, SessionAlg, TestEntropy.NewCounterStream(), pool);
             UnsealInput unsealInput = UnsealInput.ForItem(loaded.ObjectHandle);
 
             TpmResult<UnsealResponse> unsealResult = await TpmCommandExecutor.ExecuteAsync<UnsealResponse>(
@@ -178,7 +189,7 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
     }
 
     /// <summary>
-    /// Verifies a trial session skips every parameter and signature check (Part 3, Section 23.3: "the TPM will
+    /// Verifies a trial session skips every parameter and signature check (Part 3, clause 23.3: "the TPM will
     /// not check the signature... as if a properly signed authorization was received") and folds the digest
     /// identically to the host prediction, even fed a placeholder signature that is never verified.
     /// </summary>
@@ -187,7 +198,7 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse authorityKey = await CreateEccAuthorityKeyAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -222,7 +233,7 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
             byte[] predicted = new byte[size];
             Span<byte> zero = stackalloc byte[size];
             zero.Clear();
-            _ = TpmPolicyDigest.ExtendForSigned(zero, authorityName, policyRef, SessionAlg, predicted);
+            _ = TpmPolicyDigest.ExtendForSigned(zero, authorityName, policyRef, SessionAlg, predicted, pool);
 
             Assert.IsTrue(
                 digest.PolicyDigest.AsReadOnlySpan().SequenceEqual(predicted),
@@ -236,14 +247,14 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
 
     /// <summary>
     /// Verifies a corrupted signature is rejected with <c>TPM_RC_SIGNATURE</c> on a real (non-trial) session
-    /// (TPM 2.0 Library Part 3, Section 23.3).
+    /// (TPM 2.0 Library Part 3, clause 23.3).
     /// </summary>
     [TestMethod]
     public async Task PolicySignedWithCorruptedSignatureReturnsSignature()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse authorityKey = await CreateEccAuthorityKeyAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -285,7 +296,7 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
                 TpmAlgIdConstants.TPM_ALG_ECDSA, TpmAlgIdConstants.TPM_ALG_SHA256, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsFalse(policySignedResult.IsSuccess, "A corrupted signature must be rejected.");
-            Assert.AreEqual(TpmRcConstants.TPM_RC_SIGNATURE, policySignedResult.ResponseCode);
+            Assert.AreEqual(HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SIGNATURE, 4), policySignedResult.ResponseCode, "A corrupted signature (auth) must be refused with TPM_RC_SIGNATURE at auth, parameter 5 of Table 144.");
         }
         finally
         {
@@ -296,7 +307,7 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
     /// <summary>
     /// Verifies a non-empty caller nonceTPM that does not match the session's retained nonce is rejected with
     /// <c>TPM_RC_VALUE</c>, before the (placeholder, never-reached) signature is ever verified. TPM 2.0 Library
-    /// Part 3, clause 23.2.2, printed page 189, rule 1 names the code: "nonceTPM - If this parameter is not the
+    /// Part 3, clause 23.2.2, printed page 209, rule 1 names the code: "nonceTPM - If this parameter is not the
     /// Empty Buffer, and it does not match policySession&#8594;nonceTPM, then the TPM shall return
     /// TPM_RC_VALUE."
     /// </summary>
@@ -305,7 +316,7 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse authorityKey = await CreateEccAuthorityKeyAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -331,7 +342,7 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
                 TpmAlgIdConstants.TPM_ALG_ECDSA, TpmAlgIdConstants.TPM_ALG_SHA256, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsFalse(policySignedResult.IsSuccess, "A mismatched non-empty caller nonce must be rejected.");
-            Assert.AreEqual(TpmRcConstants.TPM_RC_VALUE, policySignedResult.ResponseCode);
+            Assert.AreEqual(HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_VALUE, 0), policySignedResult.ResponseCode, "Table 144: nonceTPM is TPM2_PolicySigned()'s first parameter (parameter 1); a mismatched non-empty caller nonce is parameter-encoded TPM_RC_VALUE at index 0.");
         }
         finally
         {
@@ -342,7 +353,7 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
     /// <summary>
     /// Verifies a positive expiration whose absolute (empty-nonce) deadline has already passed is rejected with
     /// <c>TPM_RC_EXPIRED</c>, ahead of the (placeholder, never-reached) signature verification (TPM 2.0 Library
-    /// Part 3, Section 23.2.2). The simulator advances a large fixed quantum per command, so the deadline is
+    /// Part 3, clause 23.2.2). The simulator advances a large fixed quantum per command, so the deadline is
     /// already behind <c>state.Time</c> by the time <c>TPM2_PolicySigned()</c> itself is dispatched.
     /// </summary>
     [TestMethod]
@@ -350,7 +361,7 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool, clockAdvanceQuantumMs: 5000).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse authorityKey = await CreateEccAuthorityKeyAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -374,7 +385,7 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
                 TpmAlgIdConstants.TPM_ALG_ECDSA, TpmAlgIdConstants.TPM_ALG_SHA256, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsFalse(policySignedResult.IsSuccess, "An already-expired deadline must be rejected.");
-            Assert.AreEqual(TpmRcConstants.TPM_RC_EXPIRED, policySignedResult.ResponseCode);
+            Assert.AreEqual(HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_EXPIRED, 3), policySignedResult.ResponseCode, "Table 144: expiration is TPM2_PolicySigned()'s fourth parameter (parameter 4); an already-expired deadline is parameter-encoded TPM_RC_EXPIRED at index 3.");
         }
         finally
         {
@@ -385,14 +396,14 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
     /// <summary>
     /// Verifies a non-empty <c>cpHashA</c> whose size does not equal the session's digest width is rejected with
     /// <c>TPM_RC_SIZE</c>, ahead of the (placeholder, never-reached) signature verification (TPM 2.0 Library Part
-    /// 3, Section 23.2.2).
+    /// 3, clause 23.2.2).
     /// </summary>
     [TestMethod]
     public async Task PolicySignedWithWrongSizedCpHashAReturnsSize()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse authorityKey = await CreateEccAuthorityKeyAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -415,7 +426,7 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
                 TpmAlgIdConstants.TPM_ALG_ECDSA, TpmAlgIdConstants.TPM_ALG_SHA256, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsFalse(policySignedResult.IsSuccess, "A cpHashA of the wrong size must be rejected.");
-            Assert.AreEqual(TpmRcConstants.TPM_RC_SIZE, policySignedResult.ResponseCode);
+            Assert.AreEqual(HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SIZE, 1), policySignedResult.ResponseCode, "Table 144: cpHashA is TPM2_PolicySigned()'s second parameter (parameter 2); a cpHashA of the wrong size is parameter-encoded TPM_RC_SIZE at index 1.");
         }
         finally
         {
@@ -424,7 +435,7 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
     }
 
     /// <summary>
-    /// Verifies the session's cpHash latch is first-writer-wins (TPM 2.0 Library Part 3, Section 23.2.4): a first,
+    /// Verifies the session's cpHash latch is first-writer-wins (TPM 2.0 Library Part 3, clause 23.2.4): a first,
     /// genuinely signature-verified PolicySigned latches <c>cpHashA</c>, and a second call on the same session with
     /// a different (but correctly sized) <c>cpHashA</c> is rejected with <c>TPM_RC_CPHASH</c> ahead of its own
     /// (placeholder, never-reached) signature verification.
@@ -434,7 +445,7 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse authorityKey = await CreateEccAuthorityKeyAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -493,7 +504,7 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
 
     /// <summary>
     /// A signature that fails to verify must NOT latch <c>cpHashA</c> onto the session (TPM 2.0 Library Part 3,
-    /// Section 23.2.4's latch is part of a SUCCESSFUL <c>PolicyUpdate()</c>, not a pre-verification side effect
+    /// clause 23.2.4's latch is part of a SUCCESSFUL <c>PolicyUpdate()</c>, not a pre-verification side effect
     /// of merely proposing a cpHashA): a first call carrying a non-empty <c>cpHashA</c> but a signature that does
     /// not verify is rejected with <c>TPM_RC_SIGNATURE</c>, and a SECOND, genuinely verified call on the SAME
     /// session with a DIFFERENT <c>cpHashA</c> must then succeed — proving the failed first call left the
@@ -504,7 +515,7 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse authorityKey = await CreateEccAuthorityKeyAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -551,7 +562,7 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
                 authorityHandle, sessionHandle, nonceTpm, firstCpHash, ReadOnlyMemory<byte>.Empty, 0, corruptedFirstSignature.AsReadOnlyMemory(),
                 TpmAlgIdConstants.TPM_ALG_ECDSA, TpmAlgIdConstants.TPM_ALG_SHA256, TestContext.CancellationToken).ConfigureAwait(false);
             Assert.IsFalse(firstResult.IsSuccess, "A signature that does not verify must be rejected.");
-            Assert.AreEqual(TpmRcConstants.TPM_RC_SIGNATURE, firstResult.ResponseCode);
+            Assert.AreEqual(HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SIGNATURE, 4), firstResult.ResponseCode, "A signature that does not verify (auth) must be refused with TPM_RC_SIGNATURE at auth, parameter 5 of Table 144.");
 
             //Second call, same session: a genuine signature over a DIFFERENT cpHashA. If the failed first call
             //had latched firstCpHash, this would be rejected with TPM_RC_CPHASH instead of succeeding.
@@ -592,7 +603,7 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse authorityKey = await CreateRsaAuthorityKeyAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -643,7 +654,7 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
             byte[] predicted = new byte[size];
             Span<byte> zero = stackalloc byte[size];
             zero.Clear();
-            _ = TpmPolicyDigest.ExtendForSigned(zero, authorityName, policyRef, SessionAlg, predicted);
+            _ = TpmPolicyDigest.ExtendForSigned(zero, authorityName, policyRef, SessionAlg, predicted, pool);
 
             Assert.IsTrue(
                 digest.PolicyDigest.AsReadOnlySpan().SequenceEqual(predicted),
@@ -659,16 +670,16 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
     /// Verifies a negative <c>expiration</c> on a real (non-trial) session mints a genuine
     /// <c>TPMT_TK_AUTH</c> — tag <c>TPM_ST_AUTH_SIGNED</c>, the authority key's own hierarchy, a non-empty
     /// SHA-256-width digest, and an 8-byte <c>TPM2B_TIMEOUT</c> — instead of the NULL ticket a non-negative
-    /// expiration produces (TPM 2.0 Library Part 3, Section 23.2.5). An empty caller nonceTPM makes the
+    /// expiration produces (TPM 2.0 Library Part 3, clause 23.2.5). An empty caller nonceTPM makes the
     /// deadline absolute (Time-base, not session-relative), so the ticket's bit 63 (expires-on-reset,
-    /// Section 10.4.10) must be set.
+    /// clause 10.3.10) must be set.
     /// </summary>
     [TestMethod]
     public async Task PolicySignedWithNegativeExpirationAndEmptyNonceMintsARealTicketThatExpiresOnReset()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse authorityKey = await CreateEccAuthorityKeyAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -725,14 +736,14 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
     /// <see cref="PolicySignedWithNegativeExpirationAndEmptyNonceMintsARealTicketThatExpiresOnReset"/>, but with
     /// the session's real (non-empty) nonceTPM supplied — a session-relative deadline — so bit 63
     /// (expires-on-reset) must be CLEAR: the nonceTPM presence, not the sign of expiration alone, decides that
-    /// bit (TPM 2.0 Library Part 2, Section 10.4.10).
+    /// bit (TPM 2.0 Library Part 2, clause 10.3.10).
     /// </summary>
     [TestMethod]
     public async Task PolicySignedWithNegativeExpirationAndNonEmptyNonceMintsARealTicketThatDoesNotExpireOnReset()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse authorityKey = await CreateEccAuthorityKeyAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -783,7 +794,7 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
 
     /// <summary>
     /// Verifies a positive (not yet expired) <c>expiration</c> on a real session still returns a NULL ticket:
-    /// only a NEGATIVE expiration requests a ticket (TPM 2.0 Library Part 3, Section 23.2.5) — the deadline
+    /// only a NEGATIVE expiration requests a ticket (TPM 2.0 Library Part 3, clause 23.2.5) — the deadline
     /// magnitude is identical either way, so this isolates the sign as the sole "mint a ticket" signal.
     /// </summary>
     [TestMethod]
@@ -791,7 +802,7 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse authorityKey = await CreateEccAuthorityKeyAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -829,6 +840,223 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
 
             using PolicySignedResponse policySigned = policySignedResult.Value;
             Assert.IsTrue(policySigned.PolicyTicket.IsNull, "A non-negative expiration must return a NULL ticket, even when the deadline itself is valid and far in the future.");
+        }
+        finally
+        {
+            await FlushIfPresentAsync(tpm, sessionHandle).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// A <c>auth.sigAlg</c> of <c>TPM_ALG_NULL</c> is refused with <c>TPM_RC_SCHEME</c> at the wire, before
+    /// either handle resolves — the same refusal <c>TPM2_VerifySignature()</c>'s <c>signature</c> parameter
+    /// enforces, and for the same reason: <c>TPMT_SIGNATURE.sigAlg</c> is itself marked
+    /// <c>+TPMI_ALG_SIG_SCHEME</c> (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM
+    /// 2.0 Library Specification</see>, Part 2: Structures, clause 11.3.6, Table 219), but a NULL selector picks
+    /// no <c>TPMU_SIGNATURE</c> member at all, and Table 219's own note requires <c>[sigAlg]signature</c> to be
+    /// "the actual signature information" — <c>auth</c> needs a genuine signature to authorize the session.
+    /// </summary>
+    [TestMethod]
+    public async Task PolicySignedWithNullSigAlgReturnsScheme()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+
+        byte[] body = BuildSigAlgOnlyBody(TpmAlgIdConstants.TPM_ALG_NULL);
+        TpmRcConstants code = await SubmitPolicySignedCommandAsync(simulator, pool, ArbitraryAuthObjectHandle, ArbitraryPolicySessionHandle, body).ConfigureAwait(false);
+
+        Assert.AreEqual(
+            HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SCHEME, 4), code,
+            "Table 144: auth is TPM2_PolicySigned()'s fifth parameter (index 4); a NULL auth.sigAlg must be refused there at the wire (Table 219).");
+    }
+
+    /// <summary>
+    /// A <c>auth.sigAlg</c> naming an algorithm that is not a signing scheme at all is refused with
+    /// <c>TPM_RC_SCHEME</c> (TPM 2.0 Library Part 2, Structures, clause 11.3.6, Table 219).
+    /// </summary>
+    [TestMethod]
+    public async Task PolicySignedWithUnsupportedSigAlgReturnsScheme()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+
+        byte[] body = BuildSigAlgOnlyBody(TpmAlgIdConstants.TPM_ALG_SHA256);
+        TpmRcConstants code = await SubmitPolicySignedCommandAsync(simulator, pool, ArbitraryAuthObjectHandle, ArbitraryPolicySessionHandle, body).ConfigureAwait(false);
+
+        Assert.AreEqual(
+            HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SCHEME, 4), code,
+            "Table 144: auth is TPM2_PolicySigned()'s fifth parameter (index 4); a sigAlg naming no signing scheme at all must be refused there (Table 219).");
+    }
+
+    /// <summary>
+    /// An ECDSA <c>signatureR</c> declaring more than <see cref="Tpm2bEccParameter.MaxSize"/> is refused with
+    /// <c>TPM_RC_SIZE</c> — the same bound <c>TPM2_VerifySignature()</c> enforces (TPM 2.0 Library Part 2,
+    /// clause 11.3.2, Table 214's <c>signatureR</c>, itself a <c>TPM2B_ECC_PARAMETER</c>, clause 11.2.5.1,
+    /// Table 197) — even though the parse resolves neither handle.
+    /// </summary>
+    [TestMethod]
+    public async Task PolicySignedWithSignatureROverBoundReturnsSize()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+
+        byte[] body = BuildEcdsaSignatureBody(
+            TpmAlgIdConstants.TPM_ALG_ECDSA, TpmAlgIdConstants.TPM_ALG_SHA256,
+            declaredRSize: Tpm2bEccParameter.MaxSize + 1, actualRBytesProvided: Tpm2bEccParameter.MaxSize + 1,
+            declaredSSize: 32, actualSBytesProvided: 32);
+        TpmRcConstants code = await SubmitPolicySignedCommandAsync(simulator, pool, ArbitraryAuthObjectHandle, ArbitraryPolicySessionHandle, body).ConfigureAwait(false);
+
+        Assert.AreEqual(HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SIZE, 4), code, "auth is TPM2_PolicySigned()'s fifth parameter (Table 144, index 4); signatureR over Tpm2bEccParameter.MaxSize must be parameter-encoded TPM_RC_SIZE (Table 214/197).");
+    }
+
+    /// <summary>The <c>signatureS</c> counterpart of <see cref="PolicySignedWithSignatureROverBoundReturnsSize"/>.</summary>
+    [TestMethod]
+    public async Task PolicySignedWithSignatureSOverBoundReturnsSize()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+
+        byte[] body = BuildEcdsaSignatureBody(
+            TpmAlgIdConstants.TPM_ALG_ECDSA, TpmAlgIdConstants.TPM_ALG_SHA256,
+            declaredRSize: 32, actualRBytesProvided: 32,
+            declaredSSize: Tpm2bEccParameter.MaxSize + 1, actualSBytesProvided: Tpm2bEccParameter.MaxSize + 1);
+        TpmRcConstants code = await SubmitPolicySignedCommandAsync(simulator, pool, ArbitraryAuthObjectHandle, ArbitraryPolicySessionHandle, body).ConfigureAwait(false);
+
+        Assert.AreEqual(HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SIZE, 4), code, "auth is TPM2_PolicySigned()'s fifth parameter (Table 144, index 4); signatureS over Tpm2bEccParameter.MaxSize must be parameter-encoded TPM_RC_SIZE (Table 214/197).");
+    }
+
+    /// <summary>
+    /// An RSA <c>rsaSignature</c> declaring more than <see cref="Tpm2bPublicKeyRsa.MaxRsaKeyBytes"/> is refused
+    /// with <c>TPM_RC_SIZE</c> (TPM 2.0 Library Part 2, clause 11.3.1, Table 212's <c>sig</c>, itself a
+    /// <c>TPM2B_PUBLIC_KEY_RSA</c>, clause 11.2.4.6, Table 194).
+    /// </summary>
+    [TestMethod]
+    public async Task PolicySignedWithRsaSignatureOverBoundReturnsSize()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+
+        byte[] body = BuildRsaSignatureBody(
+            TpmAlgIdConstants.TPM_ALG_RSASSA, TpmAlgIdConstants.TPM_ALG_SHA256,
+            declaredSigSize: Tpm2bPublicKeyRsa.MaxRsaKeyBytes + 1, actualSigBytesProvided: Tpm2bPublicKeyRsa.MaxRsaKeyBytes + 1);
+        TpmRcConstants code = await SubmitPolicySignedCommandAsync(simulator, pool, ArbitraryAuthObjectHandle, ArbitraryPolicySessionHandle, body).ConfigureAwait(false);
+
+        Assert.AreEqual(HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SIZE, 4), code, "auth is TPM2_PolicySigned()'s fifth parameter (Table 144, index 4); rsaSignature over Tpm2bPublicKeyRsa.MaxRsaKeyBytes must be parameter-encoded TPM_RC_SIZE (Table 212/194).");
+    }
+
+    /// <summary>
+    /// A <c>signatureR</c> that is BOTH over <see cref="Tpm2bEccParameter.MaxSize"/> AND truncated is refused
+    /// with <c>TPM_RC_SIZE</c>, not <c>TPM_RC_INSUFFICIENT</c> — bound-before-truncation, the same order
+    /// <see cref="TpmInHouseSimulatorVerifySignatureTests.VerifySignatureWithOverBoundAndTruncatedSignatureRReturnsSize"/>
+    /// pins for <c>TPM2_VerifySignature()</c>.
+    /// </summary>
+    [TestMethod]
+    public async Task PolicySignedWithOverBoundAndTruncatedSignatureRReturnsSize()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+
+        byte[] body = BuildEcdsaSignatureBody(
+            TpmAlgIdConstants.TPM_ALG_ECDSA, TpmAlgIdConstants.TPM_ALG_SHA256,
+            declaredRSize: Tpm2bEccParameter.MaxSize + 68, actualRBytesProvided: 10,
+            declaredSSize: 0, actualSBytesProvided: 0);
+        TpmRcConstants code = await SubmitPolicySignedCommandAsync(simulator, pool, ArbitraryAuthObjectHandle, ArbitraryPolicySessionHandle, body).ConfigureAwait(false);
+
+        Assert.AreEqual(HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SIZE, 4), code, "auth is TPM2_PolicySigned()'s fifth parameter (Table 144, index 4); an over-bound signatureR is parameter-encoded TPM_RC_SIZE even when the frame is also too short to supply it.");
+    }
+
+    /// <summary>
+    /// The within-bound complement of <see cref="PolicySignedWithOverBoundAndTruncatedSignatureRReturnsSize"/>,
+    /// mirroring
+    /// <see cref="TpmInHouseSimulatorVerifySignatureTests.VerifySignatureWithWithinBoundTruncatedSignatureRReturnsInsufficient"/>:
+    /// a <c>signatureR</c> declared WITHIN <see cref="Tpm2bEccParameter.MaxSize"/> but whose frame carries fewer
+    /// octets than declared is refused with <c>TPM_RC_INSUFFICIENT</c>, not <c>TPM_RC_SIZE</c>.
+    /// </summary>
+    [TestMethod]
+    public async Task PolicySignedWithWithinBoundTruncatedSignatureRReturnsInsufficient()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+
+        byte[] body = BuildEcdsaSignatureBody(
+            TpmAlgIdConstants.TPM_ALG_ECDSA, TpmAlgIdConstants.TPM_ALG_SHA256,
+            declaredRSize: 32, actualRBytesProvided: 10,
+            declaredSSize: 0, actualSBytesProvided: 0);
+        TpmRcConstants code = await SubmitPolicySignedCommandAsync(simulator, pool, ArbitraryAuthObjectHandle, ArbitraryPolicySessionHandle, body).ConfigureAwait(false);
+
+        Assert.AreEqual(
+            HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_INSUFFICIENT, 4), code,
+            "auth is TPM2_PolicySigned()'s fifth parameter (Table 144, index 4); a within-bound signatureR whose frame is too short to supply it is parameter-encoded TPM_RC_INSUFFICIENT, not TPM_RC_SIZE.");
+    }
+
+    /// <summary>
+    /// The <c>TPM2_PolicySigned()</c> counterpart of
+    /// <see cref="TpmInHouseSimulatorVerifySignatureTests.VerifySignatureWithOddCombinedSignatureRAndSLengthDoesNotReturnSize"/>:
+    /// an ECDSA <c>signatureR</c>/<c>signatureS</c> pair whose independently-bounded, independently-supplied
+    /// lengths combine to an ODD total is accepted at the wire, not refused with <c>TPM_RC_SIZE</c> — Table 214
+    /// relates neither field's size to the other — so the parse reaches <c>policySession</c> (the 2nd handle in
+    /// the handle area, index 1, checked before <c>authObject</c>), which is not loaded and answers
+    /// <c>TPM_RC_REFERENCE_H1</c> (TPM 2.0 Library Part 3, clause 5.4, step 2.4).
+    /// </summary>
+    [TestMethod]
+    public async Task PolicySignedWithOddCombinedSignatureRAndSLengthDoesNotReturnSize()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+
+        byte[] body = BuildEcdsaSignatureBody(
+            TpmAlgIdConstants.TPM_ALG_ECDSA, TpmAlgIdConstants.TPM_ALG_SHA256,
+            declaredRSize: 32, actualRBytesProvided: 32,
+            declaredSSize: 31, actualSBytesProvided: 31);
+        TpmRcConstants code = await SubmitPolicySignedCommandAsync(simulator, pool, ArbitraryAuthObjectHandle, ArbitraryPolicySessionHandle, body).ConfigureAwait(false);
+
+        Assert.AreEqual(
+            TpmRcConstants.TPM_RC_REFERENCE_H1, code,
+            "An ECDSA signature whose r and s independently-supplied lengths combine to an odd total must parse cleanly, reaching the unloaded policySession (index 1) check, TPM_RC_REFERENCE_H1 (TPM 2.0 Library Part 3, clause 5.4, step 2.4), rather than being refused with TPM_RC_SIZE.");
+    }
+
+    /// <summary>
+    /// A trial session with a genuinely non-empty, in-bound signature skips ALL signature verification (TPM 2.0
+    /// Library Part 3, clause 23.3) and still folds the digest, exactly as
+    /// <see cref="PolicySignedTrialSessionPredictsTheSameDigestAsAHostPrediction"/> proves with a placeholder —
+    /// and, against an ABSOLUTE metered-pool baseline, the parsed <c>TpmtSignature</c> carrier is released by the
+    /// trial arm rather than leaking a pinned rental it never verifies.
+    /// </summary>
+    [TestMethod]
+    public async Task PolicySignedTrialSessionWithNonEmptySignatureBalancesThePool()
+    {
+        using var trackingPool = new MeteredHousePool();
+        using TpmSimulator simulator = await CreateOperationalAsync(trackingPool.Pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryResponse authorityKey = await CreateEccAuthorityKeyAsync(tpm, registry, trackingPool.Pool).ConfigureAwait(false);
+        uint authorityHandle = authorityKey.ObjectHandle.Value;
+        byte[] policyRef = "trial-pool-balance-ref"u8.ToArray();
+        byte[] nonEmptySignature = new byte[64];
+        Array.Fill(nonEmptySignature, (byte)0x5A);
+
+        uint sessionHandle = 0;
+        try
+        {
+            TpmResult<StartAuthSessionResponse> startResult = await tpm.StartTrialPolicySessionAsync(
+                SessionAlg, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession (trial) failed: '{startResult.ResponseCode}'.");
+
+            using StartAuthSessionResponse session = startResult.Value;
+            sessionHandle = session.SessionHandle.Value;
+
+            long baseline = trackingPool.OutstandingCount;
+
+            TpmResult<PolicySignedResponse> policySignedResult = await tpm.PolicySignedAsync(
+                authorityHandle, sessionHandle, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, policyRef, 0, nonEmptySignature,
+                TpmAlgIdConstants.TPM_ALG_ECDSA, TpmAlgIdConstants.TPM_ALG_SHA256, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(policySignedResult.IsSuccess, $"PolicySigned (trial, non-empty signature) failed: '{policySignedResult.ResponseCode}'.");
+            policySignedResult.Value.Dispose();
+
+            Assert.AreEqual(
+                baseline, trackingPool.OutstandingCount,
+                "The trial arm must release the parsed, non-empty TpmtSignature carrier — it verifies no signature at all.");
         }
         finally
         {
@@ -900,7 +1128,7 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
 
     /// <summary>
     /// Builds <c>aHash = H_authAlg(nonceTPM || expiration || cpHashA || policyRef)</c> (TPM 2.0 Library Part 3,
-    /// Section 23.3, equation 13) through the registered async digest seam: raw TPM2B payload bytes only, no size
+    /// clause 23.3, equation 13) through the registered async digest seam: raw TPM2B payload bytes only, no size
     /// prefixes, expiration as a 4-octet big-endian two's complement integer. Independent of
     /// <see cref="TpmPolicyDigest"/>, which computes an entirely different hash (the policyDigest fold).
     /// </summary>
@@ -983,6 +1211,143 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
     }
 
     /// <summary>
+    /// Hand-frames a <c>TPM2_PolicySigned()</c> command whose <c>auth</c> (<c>TPMT_SIGNATURE</c>) body is
+    /// supplied verbatim — letting a caller express a declared/actual TPM2B size mismatch or an over-bound
+    /// declared size that <see cref="TpmDeviceExtensions.PolicySignedAsync"/>'s typed parameters cannot. No
+    /// authorization area: neither <c>authObject</c> nor <c>policySession</c> requires authorization (TPM 2.0
+    /// Library Part 3, Table 144), the same as <c>TPM2_VerifySignature()</c>. nonceTPM, cpHashA and policyRef are
+    /// framed empty and expiration zero, since these tests only probe the trailing signature body.
+    /// </summary>
+    /// <param name="pool">The memory pool.</param>
+    /// <param name="authObject">The <c>authObject</c> handle value.</param>
+    /// <param name="policySession">The <c>policySession</c> handle value.</param>
+    /// <param name="signatureBody">The already-marshaled <c>TPMT_SIGNATURE</c> body (sigAlg, and whatever follows it), verbatim.</param>
+    /// <param name="length">The framed command's total length.</param>
+    /// <returns>The rented, framed command buffer.</returns>
+    private static IMemoryOwner<byte> FramePolicySignedCommand(
+        BaseMemoryPool pool, uint authObject, uint policySession, ReadOnlySpan<byte> signatureBody, out int length)
+    {
+        length = TpmHeader.HeaderSize + 2 * sizeof(uint) + 3 * sizeof(ushort) + sizeof(int) + signatureBody.Length;
+        IMemoryOwner<byte> owner = pool.Rent(length);
+        try
+        {
+            var writer = new TpmWriter(owner.Memory.Span[..length]);
+            var header = new TpmHeader((ushort)TpmStConstants.TPM_ST_NO_SESSIONS, (uint)length, (uint)TpmCcConstants.TPM_CC_PolicySigned);
+            header.WriteTo(ref writer);
+            writer.WriteUInt32(authObject);
+            writer.WriteUInt32(policySession);
+            writer.WriteTpm2b(ReadOnlySpan<byte>.Empty);
+            writer.WriteTpm2b(ReadOnlySpan<byte>.Empty);
+            writer.WriteTpm2b(ReadOnlySpan<byte>.Empty);
+            writer.WriteInt32(0);
+            writer.WriteBytes(signatureBody);
+
+            return owner;
+        }
+        catch
+        {
+            owner.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Submits a hand-framed <c>TPM2_PolicySigned()</c> built by <see cref="FramePolicySignedCommand"/> straight
+    /// to the simulator (bypassing <see cref="TpmDeviceExtensions.PolicySignedAsync"/>) and yields the response
+    /// code.
+    /// </summary>
+    /// <param name="simulator">The simulator to submit against.</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <param name="authObject">The <c>authObject</c> handle value.</param>
+    /// <param name="policySession">The <c>policySession</c> handle value.</param>
+    /// <param name="signatureBody">The already-marshaled <c>TPMT_SIGNATURE</c> body, verbatim.</param>
+    /// <returns>The response code.</returns>
+    private async Task<TpmRcConstants> SubmitPolicySignedCommandAsync(
+        TpmSimulator simulator, BaseMemoryPool pool, uint authObject, uint policySession, byte[] signatureBody)
+    {
+        using IMemoryOwner<byte> commandOwner = FramePolicySignedCommand(pool, authObject, policySession, signatureBody, out int length);
+
+        TpmResult<TpmResponse> submitResult = await simulator.SubmitAsync(commandOwner.Memory[..length], pool, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(submitResult.IsSuccess, "The hand-framed command must reach the simulator.");
+
+        using TpmResponse response = submitResult.Value;
+        var reader = new TpmReader(response.AsReadOnlySpan());
+        TpmHeader responseHeader = TpmHeader.Parse(ref reader);
+
+        return (TpmRcConstants)responseHeader.Code;
+    }
+
+    /// <summary>Builds a <c>TPMT_SIGNATURE</c> body carrying only the <c>sigAlg</c> selector — enough to probe the wire-level scheme gate, which refuses before reading anything past it.</summary>
+    /// <param name="sigAlg">The selector value to write.</param>
+    /// <returns>The two-octet body.</returns>
+    private static byte[] BuildSigAlgOnlyBody(TpmAlgIdConstants sigAlg)
+    {
+        byte[] body = new byte[sizeof(ushort)];
+        var writer = new TpmWriter(body);
+        writer.WriteUInt16((ushort)sigAlg);
+
+        return body;
+    }
+
+    /// <summary>
+    /// Builds an ECDSA <c>TPMT_SIGNATURE</c> body: sigAlg, hashAlg, then signatureR and signatureS each as an
+    /// independently declared/actual TPM2B pair.
+    /// </summary>
+    /// <param name="sigAlg">The signature algorithm selector.</param>
+    /// <param name="hashAlg">The hash algorithm carried inside the member.</param>
+    /// <param name="declaredRSize">signatureR's declared TPM2B size.</param>
+    /// <param name="actualRBytesProvided">The octets the frame actually carries for signatureR.</param>
+    /// <param name="declaredSSize">signatureS's declared TPM2B size.</param>
+    /// <param name="actualSBytesProvided">The octets the frame actually carries for signatureS.</param>
+    /// <returns>The marshaled body.</returns>
+    private static byte[] BuildEcdsaSignatureBody(
+        TpmAlgIdConstants sigAlg, TpmAlgIdConstants hashAlg,
+        int declaredRSize, int actualRBytesProvided, int declaredSSize, int actualSBytesProvided)
+    {
+        byte[] body = new byte[2 * sizeof(ushort) + sizeof(ushort) + actualRBytesProvided + sizeof(ushort) + actualSBytesProvided];
+        var writer = new TpmWriter(body);
+        writer.WriteUInt16((ushort)sigAlg);
+        writer.WriteUInt16((ushort)hashAlg);
+        writer.WriteUInt16((ushort)declaredRSize);
+        if(actualRBytesProvided > 0)
+        {
+            writer.WriteBytes(new byte[actualRBytesProvided]);
+        }
+
+        writer.WriteUInt16((ushort)declaredSSize);
+        if(actualSBytesProvided > 0)
+        {
+            writer.WriteBytes(new byte[actualSBytesProvided]);
+        }
+
+        return body;
+    }
+
+    /// <summary>
+    /// The RSA counterpart of <see cref="BuildEcdsaSignatureBody"/>: sigAlg, hashAlg, then the single
+    /// <c>rsaSignature</c> TPM2B with an independently declared/actual size.
+    /// </summary>
+    /// <param name="sigAlg">The signature algorithm selector (RSASSA or RSAPSS).</param>
+    /// <param name="hashAlg">The hash algorithm carried inside the member.</param>
+    /// <param name="declaredSigSize">rsaSignature's declared TPM2B size.</param>
+    /// <param name="actualSigBytesProvided">The octets the frame actually carries for rsaSignature.</param>
+    /// <returns>The marshaled body.</returns>
+    private static byte[] BuildRsaSignatureBody(TpmAlgIdConstants sigAlg, TpmAlgIdConstants hashAlg, int declaredSigSize, int actualSigBytesProvided)
+    {
+        byte[] body = new byte[2 * sizeof(ushort) + sizeof(ushort) + actualSigBytesProvided];
+        var writer = new TpmWriter(body);
+        writer.WriteUInt16((ushort)sigAlg);
+        writer.WriteUInt16((ushort)hashAlg);
+        writer.WriteUInt16((ushort)declaredSigSize);
+        if(actualSigBytesProvided > 0)
+        {
+            writer.WriteBytes(new byte[actualSigBytesProvided]);
+        }
+
+        return body;
+    }
+
+    /// <summary>
     /// Creates a response codec registry covering the executor-driven commands these tests issue directly (the
     /// policy assertion device verbs run through their own self-contained extension-method registries).
     /// </summary>
@@ -1027,7 +1392,7 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
             "tpm-in-house-policysigned",
             signingBackend: BouncyCastleTpmEccSigningBackend.Create(),
             rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create(),
-            clockAdvanceQuantumMs: clockAdvanceQuantumMs);
+            clockAdvanceQuantumMs: clockAdvanceQuantumMs, rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await BringOperationalAsync(simulator, pool).ConfigureAwait(false);
 

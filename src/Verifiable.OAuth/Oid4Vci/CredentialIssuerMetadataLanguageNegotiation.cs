@@ -61,16 +61,16 @@ public static class CredentialIssuerMetadataLanguageNegotiation
         }
 
         string? bestLocale = null;
-        double bestQuality = 0.0;
+        decimal bestQuality = 0.0m;
         int bestSpecificity = -1;
         int bestCandidateOrder = int.MaxValue;
         for(int candidateOrder = 0; candidateOrder < candidateLocales.Count; candidateOrder++)
         {
             string locale = candidateLocales[candidateOrder];
-            (double quality, int specificity) = ScoreLocale(locale, ranges);
+            (decimal quality, int specificity) = ScoreLocale(locale, ranges);
 
             //A zero weight (q=0) explicitly refuses a language; it never wins.
-            if(quality <= 0.0)
+            if(quality <= 0.0m)
             {
                 continue;
             }
@@ -174,11 +174,13 @@ public static class CredentialIssuerMetadataLanguageNegotiation
     /// <summary>
     /// Scores a candidate <paramref name="locale"/> against the parsed ranges: the quality weight of
     /// the most specific range that matches it (by RFC 3066 prefix-fold), with the matched range's
-    /// subtag count as the specificity tie-breaker.
+    /// subtag count as the specificity tie-breaker. The weight is carried as <see cref="decimal"/>
+    /// rather than <see cref="double"/> so the RFC 9110 §12.5.4 three-fractional-digit <c>q</c> value
+    /// compares exactly, with no binary floating-point representation error.
     /// </summary>
-    private static (double Quality, int Specificity) ScoreLocale(string locale, List<AcceptLanguageRange> ranges)
+    private static (decimal Quality, int Specificity) ScoreLocale(string locale, List<AcceptLanguageRange> ranges)
     {
-        double bestQuality = 0.0;
+        decimal bestQuality = 0.0m;
         int bestSpecificity = -1;
         foreach(AcceptLanguageRange range in ranges)
         {
@@ -245,7 +247,7 @@ public static class CredentialIssuerMetadataLanguageNegotiation
                 continue;
             }
 
-            double quality = ReadQuality(parts);
+            decimal quality = ReadQuality(parts);
             int specificity = tag == "*" ? 0 : CountSubtags(tag);
             ranges.Add(new AcceptLanguageRange(tag, quality, specificity));
         }
@@ -255,7 +257,7 @@ public static class CredentialIssuerMetadataLanguageNegotiation
 
 
     /// <summary>Reads the <c>q=</c> weight from an element's parameters, defaulting to <c>1.0</c>.</summary>
-    private static double ReadQuality(string[] parts)
+    private static decimal ReadQuality(string[] parts)
     {
         for(int i = 1; i < parts.Length; i++)
         {
@@ -267,12 +269,12 @@ public static class CredentialIssuerMetadataLanguageNegotiation
 
             string weight = parameter[2..];
 
-            return double.TryParse(weight, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsed)
-                ? Math.Clamp(parsed, 0.0, 1.0)
-                : 1.0;
+            return decimal.TryParse(weight, NumberStyles.Float, CultureInfo.InvariantCulture, out decimal parsed)
+                ? Math.Clamp(parsed, 0.0m, 1.0m)
+                : 1.0m;
         }
 
-        return 1.0;
+        return 1.0m;
     }
 
 
@@ -293,5 +295,5 @@ public static class CredentialIssuerMetadataLanguageNegotiation
 
 
     /// <summary>A parsed <c>Accept-Language</c> range: the tag, its quality weight, and its subtag specificity.</summary>
-    private readonly record struct AcceptLanguageRange(string Tag, double Quality, int Specificity);
+    private readonly record struct AcceptLanguageRange(string Tag, decimal Quality, int Specificity);
 }

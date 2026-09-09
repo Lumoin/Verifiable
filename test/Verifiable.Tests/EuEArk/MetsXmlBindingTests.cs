@@ -415,7 +415,7 @@ internal sealed class MetsXmlBindingTests
 
         _ = deep.Append("</structMap>");
 
-        using MetsParseResult result = await ParseDocumentAsync(AllAttributes, ValidHeader + deep.ToString()).ConfigureAwait(false);
+        using MetsParseResult result = await ParseDocumentAsync(AllAttributes, ValidHeader + deep).ConfigureAwait(false);
 
         Assert.AreEqual(MetsParseStatus.LimitExceeded, result.Status);
         Assert.IsNull(result.Document);
@@ -444,7 +444,7 @@ internal sealed class MetsXmlBindingTests
 
         _ = nested.Append("</structMap>");
 
-        using MetsParseResult result = await ParseDocumentAsync(AllAttributes, ValidHeader + nested.ToString()).ConfigureAwait(false);
+        using MetsParseResult result = await ParseDocumentAsync(AllAttributes, ValidHeader + nested).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsValid, result.FailureReason);
 

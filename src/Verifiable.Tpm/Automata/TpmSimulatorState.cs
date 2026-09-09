@@ -40,12 +40,13 @@ namespace Verifiable.Tpm.Automata;
 /// The startup type recorded by the most recent <c>TPM2_Shutdown()</c>, or <see langword="null"/> when
 /// no orderly Shutdown(STATE) is pending — either none was recorded or a startup has consumed it.
 /// Determines whether a subsequent <c>Startup(STATE)</c> can resume (TPM 2.0 Library Part 1, clause
-/// 10.2.3.2). A disorderly power loss is not modelled in this skeleton: power-on is always the orderly
+/// 9.2.3.2). A disorderly power loss is not modelled in this skeleton: power-on is always the orderly
 /// <c>_TPM_Init</c>, which preserves a recorded shutdown until a startup consumes it.
 /// </param>
 /// <param name="Clock">
-/// The free-running clock in milliseconds (TPM 2.0 Library Part 1, clause 36.3): never rolled back by a startup
-/// of any kind, only advanced by <see cref="ClockAdvanceQuantumMs"/> per dispatched command
+/// The free-running clock in milliseconds (TPM 2.0 Library Part 1, clause 33.3): never rolled back by a startup
+/// of any kind, only advanced per dispatched command by however many milliseconds <see cref="ClockRate"/>
+/// converts <see cref="ClockAdvanceQuantumMs"/>'s oscillator ticks into
 /// (<c>TpmLifecycleTransitions.OnCommand</c>) or set forward by a successful <c>TPM2_ClockSet()</c>. The single
 /// exception is <c>TPM2_Clear()</c>, which sets it to zero (Part 3, clause 24.6.1) — an owner change discards the
 /// timeline the old owner's attestations were measured against, which is why <see cref="ClockSafe"/> is
@@ -53,18 +54,18 @@ namespace Verifiable.Tpm.Automata;
 /// </param>
 /// <param name="Time">
 /// The time in milliseconds since the last <c>_TPM_Init</c>/<c>TPM2_Startup()</c> (TPM 2.0 Library Part 1,
-/// clause 36.2): advances with <see cref="Clock"/> on every dispatched command and is reset to zero by every
+/// clause 33.2): advances with <see cref="Clock"/> on every dispatched command and is reset to zero by every
 /// <c>TPM2_Startup()</c> (Reset, Restart, and Resume alike), unlike <see cref="Clock"/>.
 /// </param>
 /// <param name="ResetCount">
-/// The count of TPM Resets since the last <c>TPM2_Clear()</c> (TPM 2.0 Library Part 1, clause 36.4):
+/// The count of TPM Resets since the last <c>TPM2_Clear()</c> (TPM 2.0 Library Part 1, clause 33.4):
 /// incremented on every TPM Reset, reset to zero only by <c>TPM2_Clear()</c> (Part 3, clause 24.6.1).
 /// </param>
 /// <param name="TimeEpoch">
 /// The TPM's current time epoch — the carrier for the <c>[timeEpoch]</c> term folded into a
-/// <c>TPMT_TK_AUTH</c> ticket's HMAC (TPM 2.0 Library Part 2, clause 10.7.5, Table 111's equation 6) whenever
+/// <c>TPMT_TK_AUTH</c> ticket's HMAC (TPM 2.0 Library Part 2, clause 10.6.6, Table 114's equation 6) whenever
 /// the ticket has a non-zero timeout. Its purpose is invalidating a time-based assertion — live or ticketed —
-/// across a discontinuity in the TPM's time measurement (Part 1, clause 17.7.12); this simulator models that
+/// across a discontinuity in the TPM's time measurement (Part 1, clause 16.7.12); this simulator models that
 /// discontinuity as every completed <c>TPM2_Startup()</c> (Reset, Restart, and Resume alike, since <see
 /// cref="Time"/> resets to zero in all three here), not Reset alone. The value carries no secrecy requirement
 /// of its own — the ticket HMAC's actual secrecy comes entirely from the per-hierarchy proof, never from
@@ -76,13 +77,13 @@ namespace Verifiable.Tpm.Automata;
 /// assertions rely on, for a value that does not need it.
 /// </param>
 /// <param name="RestartCount">
-/// The count of TPM Restarts and Resumes since the last TPM Reset (TPM 2.0 Library Part 1, clause 36.5):
+/// The count of TPM Restarts and Resumes since the last TPM Reset (TPM 2.0 Library Part 1, clause 33.5):
 /// incremented on every TPM Restart or TPM Resume, reset to zero by a TPM Reset and by <c>TPM2_Clear()</c>
 /// (TPM 2.0 Library Part 3, clause 24.6.1).
 /// </param>
 /// <param name="ClockSafe">
 /// Whether the reported <see cref="Clock"/> value is guaranteed not to repeat a previously reported one
-/// (TPM 2.0 Library Part 1, clause 36.3). Set to <see cref="TpmiYesNo.Yes"/> by a successful
+/// (TPM 2.0 Library Part 1, clause 33.3). Set to <see cref="TpmiYesNo.Yes"/> by a successful
 /// <c>TPM2_ClockSet()</c> (TPM 2.0 Library Part 3, clause 29.2), by <c>TPM2_Clear()</c> alongside the
 /// <see cref="Clock"/> it zeroes (clause 24.6.1's "set Safe to YES"), and by a TPM Reset that either followed an
 /// orderly <c>TPM2_Shutdown(CLEAR)</c> or is this TPM's very first Reset (<see cref="ResetCount"/> was zero
@@ -91,19 +92,32 @@ namespace Verifiable.Tpm.Automata;
 /// disorderly power loss following prior operation.
 /// </param>
 /// <param name="ClockAdvanceQuantumMs">
-/// The fixed number of milliseconds <see cref="Clock"/> and <see cref="Time"/> advance for every admitted
-/// command, fixed at construction (the simulator's stand-in for a real TPM's free-running Time oscillator,
-/// TPM 2.0 Library Part 1, clause 36.1) and unaffected by any transition.
+/// The fixed oscillator tick count every admitted command contributes, fixed at construction and unaffected by
+/// any transition — the simulator's per-command stand-in for a real TPM's free-running oscillator (TPM 2.0
+/// Library Part 1, clause 33.1). <see cref="ClockRate"/> is what turns this tick count into the milliseconds
+/// <see cref="Clock"/> and <see cref="Time"/> actually advance by.
+/// </param>
+/// <param name="ClockRate">
+/// The oscillator divisor and its unconsumed tick residue (TPM 2.0 Library Part 2, clause 6.7): governs how
+/// many milliseconds each command's <see cref="ClockAdvanceQuantumMs"/> ticks convert into, and is itself what
+/// a successful <c>TPM2_ClockRateAdjust()</c> changes. Set from the pending step BEFORE the command that
+/// requested it dispatches its own advance, so the new rate governs every command from the NEXT one onward
+/// (TPM 2.0 Library Part 3, clause 29.3.1). Persists across every <c>TPM2_Startup()</c>, <c>TPM2_Shutdown()</c>,
+/// <c>_TPM_Init</c> and <c>TPM2_Clear()</c> — none of those transitions' <c>with</c> blocks mention it, and a
+/// record's <c>with</c> carries every unmentioned field forward unchanged (Part 1, clause 33.3.6: "The TPM may
+/// store adjustments to the nominal clock rate in volatile memory."; Part 3, clause 29.3.1: "Changes to the
+/// current Clock update rate adjustment need not be persisted across TPM power cycles." — neither sentence
+/// requires the reset this state deliberately does not perform).
 /// </param>
 /// <param name="FailedTries">
 /// The dictionary-attack failure counter (<c>failedTries</c>, reported as <c>TPM_PT_LOCKOUT_COUNTER</c>):
 /// incremented on each <c>TPM_RC_AUTH_FAIL</c>, reset by <c>TPM2_DictionaryAttackLockReset()</c>
-/// (TPM 2.0 Library Part 1, clause 17.8).
+/// (TPM 2.0 Library Part 1, clause 16.8).
 /// </param>
 /// <param name="MaxTries">
 /// The number of authorization failures tolerated before lockout engages (<c>maxTries</c>, reported as
 /// <c>TPM_PT_MAX_AUTH_FAIL</c>). The TPM is in Lockout mode once <see cref="FailedTries"/> reaches this
-/// value (clause 17.8.3 states <c>failedTries == maxTries</c>; see <see cref="IsInLockout"/> for the
+/// value (clause 16.8.3 states <c>failedTries == maxTries</c>; see <see cref="IsInLockout"/> for the
 /// defensive <c>&gt;=</c> comparison).
 /// </param>
 /// <param name="RecoveryTime">
@@ -115,14 +129,14 @@ namespace Verifiable.Tpm.Automata;
 /// (<c>lockoutRecovery</c>, reported as <c>TPM_PT_LOCKOUT_RECOVERY</c>).
 /// </param>
 /// <param name="LockoutAuth">
-/// The lockout-hierarchy authorization value (TPM 2.0 Library Part 1, clause 17.8.5), checked by
+/// The lockout-hierarchy authorization value (TPM 2.0 Library Part 1, clause 16.8.5), checked by
 /// <c>TPM2_DictionaryAttackLockReset()</c> and <c>TPM2_DictionaryAttackParameters()</c>. Empty by default,
 /// mirroring <see cref="OwnerAuth"/>; <c>TPM2_HierarchyChangeAuth()</c> rotates it and <c>TPM2_Clear()</c>
-/// returns it to the Empty Buffer (TPM 2.0 Library Part 1, clause 11.7).
+/// returns it to the Empty Buffer (TPM 2.0 Library Part 1, clause 10.7).
 /// </param>
 /// <param name="LockoutAuthEnabled">
 /// Whether <see cref="LockoutAuth"/> may currently be used, independent of <see cref="FailedTries"/> and
-/// <see cref="MaxTries"/> (clause 17.8.5): a single failed <c>lockoutAuth</c> use clears this regardless of the
+/// <see cref="MaxTries"/> (clause 16.8.5): a single failed <c>lockoutAuth</c> use clears this regardless of the
 /// counters, and it self-heals only after <see cref="LockoutRecovery"/> seconds of elapsed <see cref="Time"/>
 /// (or, when <see cref="LockoutRecovery"/> is zero, only a TPM Reset re-arms it). <see langword="true"/> for a
 /// freshly powered-off TPM.
@@ -130,20 +144,20 @@ namespace Verifiable.Tpm.Automata;
 /// <param name="LastFailedTriesRecoveryTime">
 /// The <see cref="Time"/> value the self-heal accounting for <see cref="FailedTries"/> is anchored to: reset to
 /// the current <see cref="Time"/> on every counted authorization failure, and advanced by whole multiples of
-/// <see cref="RecoveryTime"/> seconds as decrements are applied (clause 17.8.4).
+/// <see cref="RecoveryTime"/> seconds as decrements are applied (clause 16.8.4).
 /// </param>
 /// <param name="LastLockoutAuthFailureTime">
 /// The <see cref="Time"/> value at which <see cref="LockoutAuthEnabled"/> was last cleared by a failed
 /// <c>lockoutAuth</c> use — the anchor <see cref="LockoutRecovery"/> seconds are measured from before it
-/// self-heals back to enabled (clause 17.8.5).
+/// self-heals back to enabled (clause 16.8.5).
 /// </param>
 /// <param name="NvIndexes">
 /// The defined NV Indexes, keyed by handle. Populated by <c>TPM2_NV_DefineSpace()</c> and consulted by
 /// <c>TPM2_NV_Read()</c>; the dictionary-attack/PIN flow drives authorization failures through a
-/// DA-protected NV Index (TPM 2.0 Library Part 1, clause 17.8.1).
+/// DA-protected NV Index (TPM 2.0 Library Part 1, clause 16.8.1).
 /// </param>
 /// <param name="NvCounterHighWaterMark">
-/// The phantom counter (TPM 2.0 Library Part 1, clause 37.2.6.3 NOTE 2/NOTE 6): the highest value any
+/// The phantom counter (TPM 2.0 Library Part 1, clause 34.2.6.3 NOTE 2/NOTE 6): the highest value any
 /// <c>TPM_NT_COUNTER</c> Index has held at the moment it was deleted by <c>TPM2_NV_UndefineSpace()</c>. The
 /// first <c>TPM2_NV_Increment()</c> of a newly (re)defined counter seeds from this value plus one, so deleting
 /// and redefining the same handle can never repeat or roll back a value that Name has already reported. Zero
@@ -155,21 +169,21 @@ namespace Verifiable.Tpm.Automata;
 /// </param>
 /// <param name="OwnerAuth">
 /// The owner-hierarchy authorization value. Owner authorization is not dictionary-attack protected
-/// (clause 17.8.1), so a wrong owner authValue is a plain bad-authorization, never a counter-feeding
+/// (clause 16.8.1), so a wrong owner authValue is a plain bad-authorization, never a counter-feeding
 /// auth-failure. Empty by default; <c>TPM2_HierarchyChangeAuth()</c> sets it and <c>TPM2_Clear()</c> returns it
-/// to the Empty Buffer (TPM 2.0 Library Part 1, clause 11.4).
+/// to the Empty Buffer (TPM 2.0 Library Part 1, clause 10.4).
 /// </param>
 /// <param name="EndorsementAuth">
-/// The endorsement-hierarchy authorization value (TPM 2.0 Library Part 1, clause 11.5). Like
+/// The endorsement-hierarchy authorization value (TPM 2.0 Library Part 1, clause 10.5). Like
 /// <see cref="OwnerAuth"/> it is a permanent-entity authValue outside dictionary-attack protection
-/// (clause 17.8.1), so a mismatch is a plain bad-authorization. Empty at manufacture.
+/// (clause 16.8.1), so a mismatch is a plain bad-authorization. Empty at manufacture.
 /// </param>
 /// <param name="PlatformAuth">
-/// The platform-hierarchy authorization value (TPM 2.0 Library Part 1, clause 11.3). Platform authorizations
+/// The platform-hierarchy authorization value (TPM 2.0 Library Part 1, clause 10.3). Platform authorizations
 /// are categorically exempt from dictionary-attack gating (Part 3, clause 25.1: authorizations for entities in
 /// the Platform hierarchy are never locked out), which is what makes it the recovery path when every other
 /// hierarchy is locked. Empty at manufacture, and empty again after every TPM Reset and TPM Restart: "On TPM
-/// Reset or TPM Restart, platformAuth is set to an EmptyAuth" (clause 11.3), which Part 3, clause 9.3 states as
+/// Reset or TPM Restart, platformAuth is set to an EmptyAuth" (clause 10.3), which Part 3, clause 9.3 states as
 /// a bullet on both startup forms, "platformAuth and platformPolicy shall be set to the Empty Buffer". Only a
 /// TPM Resume carries an installed value forward. That per-boot lifetime is what separates it from
 /// <see cref="OwnerAuth"/> and <see cref="LockoutAuth"/>, which persist until <c>TPM2_Clear()</c>: platform
@@ -178,11 +192,11 @@ namespace Verifiable.Tpm.Automata;
 /// </param>
 /// <param name="OwnerAuthPolicy">
 /// The storage hierarchy's authorization policy digest (<c>ownerPolicy</c>, TPM 2.0 Library Part 1, clause
-/// 11.4), in an owned pooled <c>TPM2B_DIGEST</c> carrier (Part 2, clause 10.4.2, Table 92) the state replaces
+/// 11.4), in an owned pooled <c>TPM2B_DIGEST</c> carrier (Part 2, clause 10.3.2, Table 90) the state replaces
 /// through <see cref="WithHierarchyAuthPolicy"/> and releases at <c>TPM2_Clear()</c> or teardown. Empty means
 /// policy authorization of the owner hierarchy is disabled, not that every policy matches:
 /// "When the authPolicy is empty, it cannot match any policyDigest value so the use of authPolicy is disabled"
-/// (clause 11.2, Table 5). Empty at manufacture.
+/// (Part 1, clause 10.2, Table 8). Empty at manufacture.
 /// </param>
 /// <param name="OwnerAuthPolicyHashAlg">
 /// The hash algorithm <see cref="OwnerAuthPolicy"/> is expressed under, which also fixes that digest's length.
@@ -191,7 +205,7 @@ namespace Verifiable.Tpm.Automata;
 /// </param>
 /// <param name="EndorsementAuthPolicy">
 /// The endorsement hierarchy's authorization policy digest (<c>endorsementPolicy</c>, TPM 2.0 Library Part 1,
-/// clause 11.5), carrying the same empty-means-disabled rule as <see cref="OwnerAuthPolicy"/>. Empty at
+/// clause 10.5), carrying the same empty-means-disabled rule as <see cref="OwnerAuthPolicy"/>. Empty at
 /// manufacture.
 /// </param>
 /// <param name="EndorsementAuthPolicyHashAlg">
@@ -202,7 +216,7 @@ namespace Verifiable.Tpm.Automata;
 /// The platform hierarchy's authorization policy digest (<c>platformPolicy</c>, TPM 2.0 Library Part 1, clause
 /// 11.3), carrying the same empty-means-disabled rule as <see cref="OwnerAuthPolicy"/>. Empty at manufacture,
 /// and returned to the Empty Buffer by every TPM Reset and TPM Restart on the same bullet that empties
-/// <see cref="PlatformAuth"/> beside it (Part 3, clause 9.3; clause 11.3's "platformPolicy is set to an Empty
+/// <see cref="PlatformAuth"/> beside it (Part 3, clause 9.3; clause 10.3's "platformPolicy is set to an Empty
 /// Policy"), so a TPM Resume is the only startup form an installed platform policy survives. Alone among the
 /// four hierarchy policies it therefore closes its own policy path at each boot rather than persisting until
 /// the command that installed it is issued again.
@@ -215,9 +229,9 @@ namespace Verifiable.Tpm.Automata;
 /// </param>
 /// <param name="LockoutAuthPolicy">
 /// The lockout entity's authorization policy digest (<c>lockoutPolicy</c>, TPM 2.0 Library Part 1, clause
-/// 11.7), carrying the same empty-means-disabled rule as <see cref="OwnerAuthPolicy"/>. It is the one policy
+/// 10.7), carrying the same empty-means-disabled rule as <see cref="OwnerAuthPolicy"/>. It is the one policy
 /// among the four whose satisfaction is exempted from Lockout mode for
-/// <c>TPM2_DictionaryAttackLockReset()</c> (clause 17.8.5). Empty at manufacture.
+/// <c>TPM2_DictionaryAttackLockReset()</c> (clause 16.8.5). Empty at manufacture.
 /// </param>
 /// <param name="LockoutAuthPolicyHashAlg">
 /// The hash algorithm <see cref="LockoutAuthPolicy"/> is expressed under, on the same
@@ -225,7 +239,7 @@ namespace Verifiable.Tpm.Automata;
 /// </param>
 /// <param name="PhEnable">
 /// The platform hierarchy's enable (<c>phEnable</c>, <c>TPMA_STARTUP_CLEAR.phEnable</c>; TPM 2.0 Library Part
-/// 1, clause 11.3). While CLEAR, neither <see cref="PlatformAuth"/> nor <see cref="PlatformAuthPolicy"/> can
+/// 1, clause 10.3). While CLEAR, neither <see cref="PlatformAuth"/> nor <see cref="PlatformAuthPolicy"/> can
 /// authorize anything and no object in the platform hierarchy can be used. Its asymmetry is the strongest of
 /// the four: it is SET at manufacture and re-SET by every completed <c>TPM2_Startup()</c> — Reset, Restart and
 /// Resume alike, on Part 3, clause 9.3's every-startup bullet "phEnable shall be SET" — and no command can ever
@@ -234,28 +248,28 @@ namespace Verifiable.Tpm.Automata;
 /// </param>
 /// <param name="ShEnable">
 /// The storage hierarchy's enable (<c>shEnable</c>, <c>TPMA_STARTUP_CLEAR.shEnable</c>; TPM 2.0 Library Part 1,
-/// clause 11.4). While CLEAR, neither <see cref="OwnerAuth"/> nor <see cref="OwnerAuthPolicy"/> can authorize
+/// clause 10.4). While CLEAR, neither <see cref="OwnerAuth"/> nor <see cref="OwnerAuthPolicy"/> can authorize
 /// anything and NV Indexes with <c>TPMA_NV_PLATFORMCREATE</c> CLEAR are inaccessible (Part 3, clause 24.2.1).
 /// SET at manufacture and re-SET by a TPM Reset and a TPM Restart alike (clause 9.3 names "phEnableNV, shEnable
 /// and ehEnable shall be SET" on both), but not by a TPM Resume, which carries it forward as it was.
 /// </param>
 /// <param name="EhEnable">
 /// The endorsement hierarchy's enable (<c>ehEnable</c>, <c>TPMA_STARTUP_CLEAR.ehEnable</c>; TPM 2.0 Library
-/// Part 1, clause 11.5). While CLEAR, neither <see cref="EndorsementAuth"/> nor
+/// Part 1, clause 10.5). While CLEAR, neither <see cref="EndorsementAuth"/> nor
 /// <see cref="EndorsementAuthPolicy"/> can authorize anything and no object in the endorsement hierarchy can be
 /// used. SET at manufacture and re-SET by a TPM Reset and a TPM Restart alike, but not by a TPM Resume, on the
-/// same clause 9.3 bullet that governs <see cref="ShEnable"/>.
+/// same clause 8.3 bullet that governs <see cref="ShEnable"/>.
 /// </param>
 /// <param name="PhEnableNV">
 /// The platform NV enable (<c>phEnableNV</c>, <c>TPMA_STARTUP_CLEAR.phEnableNV</c>; TPM 2.0 Library Part 1,
-/// clause 11.1). It gates the NV space the platform firmware defines independently of
+/// clause 10.1). It gates the NV space the platform firmware defines independently of
 /// <see cref="PhEnable"/>: while CLEAR, every NV Index with <c>TPMA_NV_PLATFORMCREATE</c> SET is inaccessible
 /// (Part 3, clause 24.2.1). SET at manufacture and re-SET by a TPM Reset and a TPM Restart alike, but not by a
 /// TPM Resume, on the same clause 9.3 bullet that governs <see cref="ShEnable"/>.
 /// </param>
 /// <param name="DisableClear">
 /// Whether <c>TPM2_Clear()</c> is refused (<c>TPMA_PERMANENT.disableClear</c>; TPM 2.0 Library Part 1, clause
-/// 11.8.2: "If disableClear is CLEAR, then TPM2_Clear() can be authorized using either Platform Authorization
+/// 10.8.2: "If disableClear is CLEAR, then TPM2_Clear() can be authorized using either Platform Authorization
 /// or Lockout Authorization. If the control is SET, then TPM2_Clear() is not functional"). Alone among the
 /// controls modelled beside it this one is fixed once, at manufacture, to <see langword="false"/>: it appears
 /// in none of Part 3 clause 9.3's Reset, Restart, or Resume bullet lists, so no <c>TPM2_Startup()</c> form
@@ -264,7 +278,7 @@ namespace Verifiable.Tpm.Automata;
 /// <param name="StorageProofSeed">
 /// The rotatable seed the storage and endorsement hierarchy proofs (<c>shProof</c>, <c>ehProof</c>) derive
 /// from — the simulator's stand-in for the Storage Primary Seed a real TPM keeps in NV (TPM 2.0 Library Part 1,
-/// clauses 12.4.4 and 12.5). It is state rather than a construction-time constant precisely because
+/// clauses 11.4.4 and 11.5). It is state rather than a construction-time constant precisely because
 /// <c>TPM2_Clear()</c> replaces it from the RNG (Part 3, clause 24.6.1), which is the whole mechanism by which
 /// outstanding owner/endorsement tickets and saved contexts stop verifying: they are HMACs keyed by a proof
 /// derived from this seed, so rotating it invalidates them structurally, with no revocation pass over any
@@ -277,40 +291,80 @@ namespace Verifiable.Tpm.Automata;
 /// <param name="TransientObjects">
 /// The loaded transient objects, keyed by handle. Populated by <c>TPM2_CreatePrimary()</c> and consulted by
 /// <c>TPM2_Sign()</c>; the object/signing path the create-then-sign slice exercises (TPM 2.0 Library Part 3,
-/// clauses 24.1 and 20.2).
+/// clauses 24.1 and 20.5). <c>TPM2_ContextSave()</c> copies an object out without removing it — "the original
+/// context remains in the TPM and the TPM retains its handle" (TPM 2.0 Library Part 1, clause 27.4) — so a
+/// save leaves this dictionary untouched; <c>TPM2_ContextLoad()</c> inserts the restored object under a freshly
+/// drawn handle alongside whatever copy, if any, is still loaded here.
 /// </param>
 /// <param name="PersistentObjects">
 /// The persistent objects, keyed by their persistent handle (<c>TPM_HT_PERSISTENT</c>, MSO <c>0x81</c>).
 /// <c>TPM2_EvictControl()</c> persists a transient object here (a copy, the transient stays loaded) and evicts
 /// one from here; this is the object-persistence half of a provisioning flow (TPM 2.0 Library Part 3, clause 28.5).
 /// </param>
-/// <param name="LoadedSealedObjects">
-/// The loaded sealed data objects, keyed by transient handle. Populated by <c>TPM2_Load()</c> of a wrapped
-/// KEYEDHASH object and consulted by <c>TPM2_Unseal()</c>; the seal-then-unseal path the create/load/unseal
-/// slice exercises (TPM 2.0 Library Part 3, clauses 12.1, 12.2, and 12.7).
+/// <param name="LoadedKeyedHashObjects">
+/// The loaded KEYEDHASH objects — sealed data objects and HMAC keys — keyed by transient handle. Populated by
+/// <c>TPM2_Load()</c> of a wrapped KEYEDHASH object and consulted by <c>TPM2_Unseal()</c>, <c>TPM2_HMAC()</c>,
+/// <c>TPM2_HMAC_Start()</c>, <c>TPM2_ReadPublic()</c> and <c>TPM2_Duplicate()</c> (TPM 2.0 Library Part 3,
+/// clauses 12.1, 12.2, 12.4, 12.7, 15.5, 17.2 and 13.1). <c>TPM2_ContextSave()</c> copies an object out without
+/// removing it (TPM 2.0 Library Part 1, clause 27.4); <c>TPM2_ContextLoad()</c> inserts the restored object
+/// under a freshly drawn handle alongside whatever copy, if any, is still loaded here. A loaded KEYEDHASH object
+/// occupies one of
+/// the <see cref="MaxLoadedObjects"/> slots and, carrying the hierarchy of the Storage Parent it was loaded under
+/// (<see cref="KeyedHashObjectState.Hierarchy"/>), is evicted by <c>TPM2_Clear()</c> and <c>TPM2_HierarchyControl()</c>
+/// with the rest of that hierarchy's residents, exactly as a <see cref="TransientObjects"/> key is (Part 1, clause
+/// 27.4: "all objects associated with that hierarchy are flushed from TPM memory").
+/// </param>
+/// <param name="SequenceObjects">
+/// The open sequence contexts, keyed by transient handle. Populated by <c>TPM2_HashSequenceStart()</c>
+/// (TPM 2.0 Library Part 3, clause 17.4, Table 85 — a hash or an Event Sequence, no handle at all),
+/// <c>TPM2_SignSequenceStart()</c> (clause 17.5, Table 87) or <c>TPM2_VerifySequenceStart()</c> (clause 17.6,
+/// Table 89) — none of them with any authorization (Auth Index None on the key-bound pair's
+/// <c>keyHandle</c>) — and fed by <c>TPM2_SequenceUpdate()</c>; consumed and flushed by a successful
+/// <c>TPM2_SequenceComplete()</c> (clause 17.8), <c>TPM2_SignSequenceComplete()</c> (clauses 17.5, 17.7 and
+/// 20.6) or <c>TPM2_VerifySequenceComplete()</c> (clause 20.3). <c>TPM2_ContextSave()</c> copies a sequence out
+/// without removing it (TPM 2.0 Library Part 1, clause 27.4); <c>TPM2_ContextLoad()</c> inserts the restored
+/// sequence under a freshly drawn handle alongside whatever copy, if any, is still open here. A sequence
+/// context lives in the NULL hierarchy (Part 1, clause 27.2.4), so — unlike
+/// <see cref="TransientObjects"/> — this table is untouched by <c>TPM2_Clear()</c> or
+/// <c>TPM2_HierarchyControl()</c> and is swept only by <c>TPM2_FlushContext()</c>, <c>TPM2_Startup()</c>, its
+/// own owning command's successful completion, or simulator teardown. An open sequence occupies one of the
+/// <see cref="MaxLoadedObjects"/> object slots like any transient object, so every Start command answers
+/// <c>TPM_RC_OBJECT_MEMORY</c> once the slots are exhausted; the octets each sequence retains
+/// (<see cref="SequenceObjectState.Segments"/>) are not bounded — a real TPM keeps only a running hash state per
+/// open sequence, this simulator keeps the parsed segments for the registered digest seam.
 /// </param>
 /// <param name="Sha256PcrBank">
-/// The SHA-256 Platform Configuration Register bank. Read by <c>TPM2_PCR_Read()</c> and hashed into the
-/// composite digest <c>TPM2_Quote()</c> signs (TPM 2.0 Library Part 1, clause 17.1). Initialized to its reset
-/// image at power-on; this slice models no <c>TPM2_PCR_Extend()</c>, so the registers stay at their reset value.
+/// The SHA-256 Platform Configuration Register bank. Extended by <c>TPM2_PCR_Extend()</c>, <c>TPM2_PCR_Event()</c>
+/// and <c>TPM2_EventSequenceComplete()</c> (TPM 2.0 Library Part 1, clause 14.2), reset by <c>TPM2_PCR_Reset()</c>
+/// and re-initialized by <c>TPM2_Startup()</c> (clause 14.1), read by <c>TPM2_PCR_Read()</c> and hashed into the
+/// composite digest <c>TPM2_Quote()</c> signs (clause 14.6). Initialized to its PC Client reset image at power-on
+/// (<see cref="PcrBankState.Sha256AtReset"/>).
 /// </param>
 /// <param name="PcrUpdateCounter">
 /// The count of PCR changes this TPM has recorded (<c>pcrUpdateCounter</c>), framed by <c>TPM2_PCR_Read()</c>
 /// and captured by a <c>TPM2_PolicyPCR()</c> assertion so that session can be invalidated once the value moves
-/// (TPM 2.0 Library Part 1, clause 17.1). <c>TPM2_Clear()</c> increments it for exactly that reason — "This
+/// (TPM 2.0 Library Part 1, clause 14.9 (PCR Change Tracking)). <c>TPM2_Clear()</c> increments it for exactly that reason — "This
 /// permits an application to create a policy session that is invalidated on TPM2_Clear()... The session is
-/// invalidated even if the PCR selection is empty" (Part 3, clause 24.6.1). Zero for a freshly manufactured TPM.
+/// invalidated even if the PCR selection is empty" (Part 3, clause 24.6.1). Every extend or reset of a counted
+/// register moves it once (<see cref="PcClientPcrAttributes.IsUpdateCounted"/>), and <c>TPM2_Startup()</c>
+/// re-initializes it — a TPM Reset clears it and then counts every register re-initialized (Part 4
+/// <c>PCRStartup</c>). Zero for a freshly manufactured TPM until its first Startup.
 /// </param>
 /// <param name="PolicySessions">
 /// The started policy (enhanced authorization) sessions, keyed by session handle. Populated by
 /// <c>TPM2_StartAuthSession()</c>, driven by the <c>TPM2_Policy*()</c> command family (each advancing the
 /// session's policyDigest), read by <c>TPM2_PolicyGetDigest()</c>, and released by <c>TPM2_FlushContext()</c>
-/// (TPM 2.0 Library Part 1, clause 17.7).
+/// (TPM 2.0 Library Part 1, clause 16.7). <c>TPM2_ContextSave()</c> is the second release-from-RAM path: it
+/// removes the session's entry here and records its sequence in <see cref="SavedSessionContexts"/>, and
+/// <c>TPM2_ContextLoad()</c> reinstalls the record at the same handle it held before the save (TPM 2.0 Library
+/// Part 1, clause 27.5).
 /// </param>
 /// <param name="NextObjectHandle">
-/// The handle the next created transient object receives, advanced on each <c>TPM2_CreatePrimary()</c>. Starts
-/// at <see cref="TransientHandleBase"/> (the base of the <c>TPM_HT_TRANSIENT</c> range, TPM 2.0 Library Part 2,
-/// clause 7.2).
+/// The handle the next allocated transient object receives, advanced by every command that fills an object slot
+/// (<c>TPM2_CreatePrimary()</c>, <c>TPM2_Load()</c>, <c>TPM2_SignSequenceStart()</c>,
+/// <c>TPM2_VerifySequenceStart()</c>) — each of which first requires a free slot (<see cref="HasFreeObjectSlot"/>).
+/// Starts at <see cref="TransientHandleBase"/> (the base of the <c>TPM_HT_TRANSIENT</c> range, TPM 2.0 Library
+/// Part 2, clause 7.2).
 /// </param>
 /// <param name="NextSessionHandle">
 /// The handle the next started policy session receives, advanced on each <c>TPM2_StartAuthSession()</c>. Starts
@@ -320,12 +374,99 @@ namespace Verifiable.Tpm.Automata;
 /// <param name="HmacSessions">
 /// The started bound HMAC sessions with parameter encryption, keyed by session handle. Populated by
 /// <c>TPM2_StartAuthSession()</c> for an HMAC session, driven by encrypt-attributed commands (each rolling the
-/// session's nonceTPM), and released by <c>TPM2_FlushContext()</c> (TPM 2.0 Library Part 1, clauses 17.6 and 19).
+/// session's nonceTPM), and released by <c>TPM2_FlushContext()</c> (TPM 2.0 Library Part 1, clauses 16.6 and 18).
+/// <c>TPM2_ContextSave()</c> is the second release-from-RAM path: it removes the session's entry here and
+/// records its sequence in <see cref="SavedSessionContexts"/>, and <c>TPM2_ContextLoad()</c> reinstalls the
+/// record at the same handle it held before the save (TPM 2.0 Library Part 1, clause 27.5). Each session also
+/// carries its own audit digest and audit status (<see cref="HmacSessionState.AuditDigest"/>,
+/// <see cref="HmacSessionState.IsAudit"/>), and loses whatever bind value it started with the first time it is
+/// used for audit (clause 17.1).
 /// </param>
 /// <param name="NextHmacSessionHandle">
 /// The handle the next started HMAC session receives, advanced on each HMAC <c>TPM2_StartAuthSession()</c>. Starts
 /// at <see cref="HmacSessionHandleBase"/> (the base of the <c>TPM_HT_HMAC_SESSION</c> range, TPM 2.0 Library Part
-/// 2, clause 7.2), disjoint from the policy-session and transient-object ranges.
+/// 2, clause 6.2), disjoint from the policy-session and transient-object ranges.
+/// </param>
+/// <param name="TotalResetCount">
+/// A counter that increments on every TPM Reset and is NEVER zeroed, not even by <c>TPM2_Clear()</c> — the
+/// simulator's stand-in for the reference implementation's <c>gp.totalResetCount</c> (TPM 2.0 Library Part 4,
+/// <c>Global.h</c>, incremented by <c>TPM2_Startup()</c>) and for the <c>resetValue</c> term Part 1, clause 27.3.2's context-integrity HMAC folds:
+/// "either a counter value that increments on each TPM Reset and is not reset over the lifetime of the TPM or a
+/// random value that changes on each TPM Reset". Unlike <see cref="ResetCount"/>, which <c>TPM2_Clear()</c>
+/// zeroes alongside <see cref="RestartCount"/>, this value survives a clear, so it is what binds a saved
+/// context's protection key to a specific Reset epoch across the TPM's whole lifetime rather than only since the
+/// last clear.
+/// </param>
+/// <param name="ClearCount">
+/// A counter that increments on every TPM Reset and every TPM Restart, and is never zeroed — the simulator's
+/// stand-in for the reference implementation's <c>gr.clearCount</c> (TPM 2.0 Library Part 4). TPM 2.0 Library
+/// Part 1, clause 27.3.2: "a counter value that is incremented on each TPM Restart and may be incremented or set
+/// to zero on TPM Reset. This value is only included if the handle value is 80 00 00 0216" — folded into the
+/// context-integrity HMAC only for a Transient Object whose own <c>stClear</c> attribute is SET
+/// (<see cref="Spec.Handles.TpmiDhSaved.StClearTransientObject"/>), which is what makes such an object's saved
+/// context unloadable after a TPM Restart even though its blob's other terms are unchanged.
+/// </param>
+/// <param name="ObjectContextId">
+/// The sequence-number counter for Transient Object and sequence-object contexts (TPM 2.0 Library Part 1,
+/// clause 27.2.2: "The counter (objectContextID) provides sequence numbers for Transient Objects. This counter
+/// is incremented each time an object context is saved."), zero at manufacture, reset to zero by a TPM Reset
+/// alone (Part 3, clause 9.3: "the object context sequence number is reset to zero") and left untouched by
+/// <c>TPM2_Clear()</c>.
+/// </param>
+/// <param name="SessionContextCounter">
+/// The sequence-number counter for session contexts — Part 1, clause 27.2.2's <c>contextCounter</c>: "The
+/// counter (contextCounter) is used to provide sequence numbers for sessions and increments when a session
+/// context is created or loaded". This TPM advances it at two points only: a <c>TPM2_ContextSave()</c> of a
+/// session (Part 4's <c>Session.c</c>, <c>SessionContextSave</c>) and a <c>TPM2_ContextLoad()</c> of one
+/// (Part 2, clause 14.6.1: "the sequence counter for sessions increments when a session is created or when
+/// it is loaded (TPM2_ContextLoad())"). <c>TPM2_StartAuthSession()</c> does not advance it: the
+/// creation-time increment both clauses name is not what this model does. Zero at manufacture, reset to
+/// zero by a TPM Reset alone, and left untouched by <c>TPM2_Clear()</c>.
+/// </param>
+/// <param name="SavedSessionContexts">
+/// The load-once tracking table for a session whose context has been saved off the TPM: its handle mapped to
+/// the sequence its blob carries. TPM 2.0 Library Part 1, clause 27.5: "the data describing the session's state
+/// may be either on the TPM or saved off the TPM, but not both. Further, a saved session context may only be
+/// loaded once." <c>TPM2_ContextSave()</c> of a session removes it from <see cref="HmacSessions"/> or
+/// <see cref="PolicySessions"/> and adds its entry here; <c>TPM2_ContextLoad()</c> consumes the entry and
+/// reinstalls the session at the same handle; <c>TPM2_FlushContext()</c> of a saved handle removes the entry
+/// directly (TPM 2.0 Library Part 3, clause 28.4.1). Emptied by a TPM Reset (Part 3, clause 9.3: "tracking data
+/// for saved session contexts shall be set to its initial value") and by <c>TPM2_Clear()</c> (Part 2, clause
+/// 14.7.1: "Previously saved sessions shall not be loadable after the SPS changes", the storage primary seed
+/// change Part 3, clause 24.6.1 performs); left untouched by a TPM Restart or Resume (Part 1, clause 27.5:
+/// "Saved session contexts are not invalidated and may be reloaded after a TPM Restart or TPM Resume").
+/// </param>
+/// <param name="ExclusiveAuditSession">
+/// The handle of the current TPM-wide exclusive audit session, or <see langword="null"/> when none (Part 4's
+/// <c>TPM_RH_UNASSIGNED</c>) — TPM 2.0 Library Part 1, clause 17.2: "The TPM keeps track of the current
+/// exclusive session. At most, one active session can have the auditExclusive status." Set when a session
+/// becomes exclusive (first use as an audit session, or a command with <c>auditReset</c> SET) and cleared when
+/// an auditable command runs without it, when it is flushed, or at <c>TPM2_Startup()</c>; left untouched by
+/// <c>TPM2_ContextSave()</c>/<c>TPM2_ContextLoad()</c> and by the commands whose Part 3 command table fixes
+/// <c>TPM_ST_NO_SESSIONS</c>.
+/// </param>
+/// <param name="CurrentCommandCode">
+/// The command code of the command presently being processed, stamped by <c>OnCommand</c> alongside the
+/// precondition check and cleared once that command's response is framed — in-flight command state, like
+/// <see cref="NextAction"/> and <see cref="ResponseIntent"/>, never serialized and always <see langword="null"/>
+/// between commands. Read by the completing transition's exclusive-audit-session bookkeeping to know whether
+/// the just-completed command was one Part 3's own tables admit a session for at all.
+/// </param>
+/// <param name="PendingAudit">
+/// The in-flight audit of the command presently being processed — <see langword="null"/> until the audit-claiming
+/// session's command HMAC has verified, and always <see langword="null"/> between commands. Like
+/// <see cref="CurrentCommandCode"/>, this is in-flight command state, never serialized; the completing transition
+/// disposes and clears it on every completion, success or refusal alike (TPM 2.0 Library Part 1, clause 17.5).
+/// </param>
+/// <param name="PendingSessionFrame">
+/// The response framing already built for a no-authorization command's authorization area, while its own inner
+/// transition runs to produce the plain terminal intent that framing wraps (TPM 2.0 Library Part 1, clause
+/// 15.6.1) — <see langword="null"/> until <c>CompleteNoAuthOverSessions</c> stamps it, and always
+/// <see langword="null"/> between commands, mirroring <see cref="PendingAudit"/>'s in-flight, never-serialized
+/// shape. <c>ApplyPendingSessionFrame</c> consumes and clears it the moment the inner dispatch produces a fresh
+/// terminal <see cref="TpmResponseIntent"/>, whether that intent succeeds (the frame moves onto a declared
+/// <see cref="TpmFrameNoAuthSessionsAction"/>) or not (the frame is disposed and the inner's own bare response
+/// stands, TPM 2.0 Library Part 3, clause 5.9).
 /// </param>
 /// <param name="NextAction">The effectful action the runner must execute next; <see cref="NullAction.Instance"/> when none.</param>
 /// <param name="ResponseIntent">The logical response produced by the last command, or <see langword="null"/> when none (e.g. after <c>_TPM_Init</c>).</param>
@@ -342,6 +483,7 @@ public sealed record TpmSimulatorState(
     uint RestartCount,
     TpmiYesNo ClockSafe,
     ulong ClockAdvanceQuantumMs,
+    TpmClockRate ClockRate,
     uint FailedTries,
     uint MaxTries,
     uint RecoveryTime,
@@ -371,7 +513,8 @@ public sealed record TpmSimulatorState(
     StorageProofSeed StorageProofSeed,
     ImmutableDictionary<TpmiDhObject, TransientKeyState> TransientObjects,
     ImmutableDictionary<TpmiDhPersistent, TransientKeyState> PersistentObjects,
-    ImmutableDictionary<TpmiDhObject, SealedObjectState> LoadedSealedObjects,
+    ImmutableDictionary<TpmiDhObject, KeyedHashObjectState> LoadedKeyedHashObjects,
+    ImmutableDictionary<TpmiDhObject, SequenceObjectState> SequenceObjects,
     PcrBankState Sha256PcrBank,
     uint PcrUpdateCounter,
     ImmutableDictionary<TpmiShPolicy, PolicySessionState> PolicySessions,
@@ -379,6 +522,15 @@ public sealed record TpmSimulatorState(
     uint NextObjectHandle,
     uint NextSessionHandle,
     uint NextHmacSessionHandle,
+    ulong TotalResetCount,
+    uint ClearCount,
+    ulong ObjectContextId,
+    ulong SessionContextCounter,
+    ImmutableDictionary<TpmiDhContext, ulong> SavedSessionContexts,
+    TpmiShHmac? ExclusiveAuditSession,
+    TpmCcConstants? CurrentCommandCode,
+    TpmPendingAudit? PendingAudit,
+    TpmPendingSessionFrame? PendingSessionFrame,
     PdaAction NextAction,
     TpmResponseIntent? ResponseIntent)
 {
@@ -388,11 +540,11 @@ public sealed record TpmSimulatorState(
     /// <summary>
     /// The digest size, in octets, of the hash this simulated TPM uses to protect the integrity of a saved
     /// context — SHA-256 here — and therefore two things at once: the width of a hierarchy proof (TPM 2.0
-    /// Library Part 1, clause 12.5) and the largest authorization value a hierarchy may be given.
+    /// Library Part 1, clause 11.5) and the largest authorization value a hierarchy may be given.
     /// </summary>
     /// <remarks>
     /// A hierarchy has no Name algorithm, so the general authValue bound "not larger than the digest size of the
-    /// algorithm used to compute the Name of the object" (Part 1, clause 17.6.4.2) has nothing to bind to; the
+    /// algorithm used to compute the Name of the object" (Part 1, clause 16.6.4.2) has nothing to bind to; the
     /// same clause names the substitute for such an entity — "the hash algorithm used for context integrity" —
     /// which Part 3, clause 24.8.1 restates as <c>TPM2_HierarchyChangeAuth()</c>'s own rule with a worked
     /// example. It is one implementation-selected constant for the whole TPM, not a per-hierarchy value, which is
@@ -401,12 +553,41 @@ public sealed record TpmSimulatorState(
     public const int ContextIntegrityDigestSize = 32;
 
     /// <summary>
+    /// The largest gap this TPM tolerates between a saved session context's sequence and the current
+    /// <see cref="SessionContextCounter"/> before a load is refused — the reference implementation's
+    /// <c>MAX_CONTEXT_GAP</c> (TPM 2.0 Library Part 4), 2^16. Table 28's <c>TPM_PT_CONTEXT_GAP_MAX</c> reports
+    /// this value less one: "the maximum allowed difference (unsigned) between the contextID values of two saved
+    /// session contexts. This value shall be 2^n − 1, where n is at least 16" (TPM 2.0 Library Part 2, clause
+    /// 6.13).
+    /// </summary>
+    public const ulong MaxContextGap = 65_536ul;
+
+    /// <summary>
     /// The shared Empty-Buffer session key: what a session that is neither bound nor salted carries
-    /// (TPM 2.0 Library Part 1, clause 17.6.9 — no KDFa runs at all). Backed by
+    /// (TPM 2.0 Library Part 1, clause 16.6.9 — no KDFa runs at all). Backed by
     /// <see cref="EmptyMemoryOwner"/>, so the one instance is safe to alias across every such session
     /// and immune to disposal.
     /// </summary>
     public static SymmetricKeyMemory EmptySessionKey { get; } = new(EmptyMemoryOwner.Instance, TpmTags.SessionKey);
+
+    /// <summary>
+    /// The shared empty private-key sentinel: what a public-only loaded object carries in
+    /// <see cref="TransientKeyState.PrivateKey"/> when <c>TPM2_LoadExternal()</c> loads only its public area
+    /// (TPM 2.0 Library Part 3, clause 12.3.1: "The command allows loading of a public area or both a public
+    /// and sensitive area"). Backed by <see cref="EmptyMemoryOwner"/>, so the one instance is safe to alias
+    /// across every such object and immune to disposal, matching <see cref="EmptySessionKey"/> and
+    /// <see cref="StorageProofSeed.Empty"/>.
+    /// </summary>
+    public static PrivateKeyMemory EmptyPrivateKey { get; } = new(EmptyMemoryOwner.Instance, Tag.Empty);
+
+    /// <summary>
+    /// The shared empty public-point sentinel: what an RSA object carries in
+    /// <see cref="TransientKeyState.PublicPoint"/>, which holds a value only for an elliptic-curve key (TPM 2.0
+    /// Library Part 1, clause 21's ECDH-based secret exchange is ECC-only). Backed by
+    /// <see cref="EmptyMemoryOwner"/>, so the one instance is safe to alias across every RSA object and immune
+    /// to disposal, matching <see cref="EmptyPrivateKey"/> and <see cref="EmptySessionKey"/>.
+    /// </summary>
+    public static EncodedEcPoint EmptyPublicPoint { get; } = new(EmptyMemoryOwner.Instance, Tag.Empty);
 
     /// <summary>
     /// The base handle of the <c>TPM_HT_TRANSIENT</c> range (TPM 2.0 Library Part 2, clause 7.2): the handle the
@@ -415,10 +596,48 @@ public sealed record TpmSimulatorState(
     public const uint TransientHandleBase = 0x8000_0000;
 
     /// <summary>
+    /// The number of object slots this simulated TPM's RAM holds — the platform constant a real TPM reports as
+    /// <c>TPM_PT_HR_TRANSIENT_MIN</c>, "the minimum number of transient objects that can be held in TPM RAM",
+    /// which "shall be no less than the minimum value required by the platform-specific specification to which
+    /// the TPM is built" (TPM 2.0 Library Part 2, clause 6.13, Table 28) — the TCG PC Client Platform TPM Profile
+    /// requires no fewer than three; eight is a generous discrete-TPM value. A transient
+    /// key (<see cref="TransientObjects"/>), a loaded sealed object (<see cref="LoadedKeyedHashObjects"/>), and an
+    /// open sequence context (<see cref="SequenceObjects"/>) each occupy one slot; a persistent object lives in
+    /// NV and takes none (the Part 1, clause 27.4 allowance to move one into a slot for processing is not
+    /// modelled). Once every slot is taken, each allocating command answers <c>TPM_RC_OBJECT_MEMORY</c> until
+    /// <c>TPM2_FlushContext()</c>, a completing sequence command, or <c>TPM2_Startup()</c> frees one (Part 1,
+    /// clauses 27.4 and 36.3.2; Part 3, clause 6.2, Table 3).
+    /// </summary>
+    public const int MaxLoadedObjects = 8;
+
+    /// <summary>
+    /// The number of object slots currently occupied: the transient keys, loaded sealed objects, and open sequence
+    /// contexts, one slot each (<see cref="MaxLoadedObjects"/>).
+    /// </summary>
+    public int LoadedObjectCount => TransientObjects.Count + LoadedKeyedHashObjects.Count + SequenceObjects.Count;
+
+    /// <summary>
+    /// Whether at least one object slot is free for the next allocating command; when <see langword="false"/>,
+    /// that command answers <c>TPM_RC_OBJECT_MEMORY</c> (<see cref="MaxLoadedObjects"/>).
+    /// </summary>
+    public bool HasFreeObjectSlot => LoadedObjectCount < MaxLoadedObjects;
+
+    /// <summary>
     /// The base handle of the <c>TPM_HT_PERSISTENT</c> range (TPM 2.0 Library Part 2, clause 7.2): a persistent
     /// handle has the most-significant octet <c>0x81</c>. <c>TPM2_EvictControl()</c> assigns handles in this range.
+    /// Also the inclusive lower bound of the owner sub-range <c>TPM2_EvictControl()</c> assigns and addresses
+    /// under <c>TPM_RH_OWNER</c> authorization (TPM 2.0 Library Part 3, clause 28.5.1, items 3.1 and 8: "81 00
+    /// 00 00₁₆ to 81 7F FF FF₁₆").
     /// </summary>
     public const uint PersistentHandleBase = 0x8100_0000;
+
+    /// <summary>
+    /// The inclusive lower bound of the platform sub-range of <c>TPM_HT_PERSISTENT</c> handles
+    /// <c>TPM2_EvictControl()</c> assigns and addresses under <c>TPM_RH_PLATFORM</c> authorization (TPM 2.0
+    /// Library Part 3, clause 28.5.1, item 3.2: "81 80 00 00₁₆ to 81 FF FF FF₁₆"); the owner sub-range
+    /// (<see cref="PersistentHandleBase"/>) runs up to one below this value.
+    /// </summary>
+    public const uint PlatformPersistentHandleBase = 0x8180_0000;
 
     /// <summary>
     /// The base handle of the <c>TPM_HT_POLICY_SESSION</c> range (TPM 2.0 Library Part 2, clause 7.2): a policy
@@ -449,7 +668,7 @@ public sealed record TpmSimulatorState(
 
     /// <summary>
     /// Gets a value indicating whether the TPM is in dictionary-attack Lockout mode, i.e. the failure
-    /// counter has reached the tolerated maximum (TPM 2.0 Library Part 1, clause 17.8.3). The spec
+    /// counter has reached the tolerated maximum (TPM 2.0 Library Part 1, clause 16.8.3). The spec
     /// states <c>failedTries == maxTries</c>; this uses <c>&gt;=</c> defensively so an overshoot can
     /// never read as "out of lockout". <see cref="MaxTries"/> zero is fail-CLOSED, not disabled: with
     /// <see cref="FailedTries"/> a <see cref="uint"/> (always <c>&gt;= 0</c>), <c>FailedTries &gt;= 0</c>
@@ -511,7 +730,9 @@ public sealed record TpmSimulatorState(
     /// Gets a value indicating whether <paramref name="hierarchy"/> is one of the four handles a primary object
     /// can be created under — <c>TPM_RH_OWNER</c>, <c>TPM_RH_ENDORSEMENT</c>, <c>TPM_RH_PLATFORM</c>, or
     /// <c>TPM_RH_NULL</c> — that is, the value set of <c>TPMI_RH_HIERARCHY</c>, the type of
-    /// <c>TPM2_CreatePrimary()</c>'s <c>primaryHandle</c> (TPM 2.0 Library Part 2, clause 9.20).
+    /// <c>TPM2_CreatePrimary()</c>'s <c>primaryHandle</c> (TPM 2.0 Library Part 2, clause 9.13, Table 59) — the
+    /// older, pre-firmware-limited four-value set; v185's full <c>TPMI_RH_HIERARCHY</c> also admits the
+    /// firmware-limited and SVN-limited hierarchies, which this simulator does not model.
     /// </summary>
     /// <remarks>
     /// It differs from <see cref="IsHierarchyAuthHandle"/> at both ends: the null hierarchy has no authValue of
@@ -556,7 +777,7 @@ public sealed record TpmSimulatorState(
     /// </summary>
     /// <remarks>
     /// An empty digest is the disabled state, not a wildcard: "When the authPolicy is empty, it cannot match any
-    /// policyDigest value so the use of authPolicy is disabled" (TPM 2.0 Library Part 1, clause 11.2, Table 5).
+    /// policyDigest value so the use of authPolicy is disabled" (TPM 2.0 Library Part 1, clause 10.2, Table 8).
     /// A handle outside <see cref="IsHierarchyAuthHandle"/>'s set therefore answers <see langword="false"/> with
     /// that same empty, match-nothing digest, so the unresolved case fails closed either way.
     /// </remarks>
@@ -680,12 +901,12 @@ public sealed record TpmSimulatorState(
     /// <summary>
     /// Gets a value indicating whether the enable governing <paramref name="hierarchy"/> is currently SET, the
     /// precondition on which "neither the corresponding authValue nor authPolicy can authorize operations"
-    /// turns (TPM 2.0 Library Part 1, clause 11.2).
+    /// turns (TPM 2.0 Library Part 1, clause 10.2).
     /// </summary>
     /// <remarks>
     /// This answers the enable question only. <c>TPM_RH_LOCKOUT</c> and <c>TPM_RH_NULL</c> have no enable bit at
     /// all — lockout is governed by <see cref="LockoutAuthEnabled"/> and the dictionary-attack counters (clause
-    /// 11.7), not by <c>TPMA_STARTUP_CLEAR</c> — so they answer <see langword="true"/>, as does any handle that
+    /// 10.7), not by <c>TPMA_STARTUP_CLEAR</c> — so they answer <see langword="true"/>, as does any handle that
     /// names no hierarchy. Whether the handle is admissible for a given command is the caller's separate check
     /// (<see cref="IsHierarchyAuthHandle"/> for the commands whose interface type is
     /// <c>TPMI_RH_HIERARCHY_AUTH</c>).
@@ -711,7 +932,7 @@ public sealed record TpmSimulatorState(
     /// <c>TPM2_Startup()</c> form ever restores are fixed: every hierarchy authValue and authorization policy
     /// starts empty, all four enables start SET, and <see cref="DisableClear"/> starts
     /// <see langword="false"/> — <c>TPM2_Clear()</c> is permitted out of the box (TPM 2.0 Library Part 1,
-    /// clause 11.8.2).
+    /// clause 10.8.2).
     /// </remarks>
     /// <param name="tpmId">The stable identifier of this simulated TPM.</param>
     /// <param name="configuredSelfTest">The modelled self-test behaviour.</param>
@@ -749,6 +970,7 @@ public sealed record TpmSimulatorState(
             0u,
             TpmiYesNo.Yes,
             clockAdvanceQuantumMs,
+            TpmClockRate.Nominal,
             0u,
             DefaultMaxTries,
             DefaultRecoveryTimeSeconds,
@@ -778,7 +1000,8 @@ public sealed record TpmSimulatorState(
             initialStorageProofSeed ?? Automata.StorageProofSeed.Empty,
             ImmutableDictionary<TpmiDhObject, TransientKeyState>.Empty,
             ImmutableDictionary<TpmiDhPersistent, TransientKeyState>.Empty,
-            ImmutableDictionary<TpmiDhObject, SealedObjectState>.Empty,
+            ImmutableDictionary<TpmiDhObject, KeyedHashObjectState>.Empty,
+            ImmutableDictionary<TpmiDhObject, SequenceObjectState>.Empty,
             PcrBankState.Sha256AtReset(),
             0u,
             ImmutableDictionary<TpmiShPolicy, PolicySessionState>.Empty,
@@ -786,6 +1009,15 @@ public sealed record TpmSimulatorState(
             TransientHandleBase,
             PolicySessionHandleBase,
             HmacSessionHandleBase,
+            0ul,
+            0u,
+            0ul,
+            0ul,
+            ImmutableDictionary<TpmiDhContext, ulong>.Empty,
+            null,
+            null,
+            null,
+            null,
             NullAction.Instance,
             null);
 }

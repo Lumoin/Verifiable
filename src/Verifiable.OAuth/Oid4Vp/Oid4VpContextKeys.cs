@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography.Text;
 
 namespace Verifiable.OAuth.Oid4Vp;
@@ -32,7 +33,7 @@ public static class Oid4VpContextKeys
     /// The prepared DCQL query describing the credentials the Verifier requires.
     /// Value type: <see cref="Verifiable.Core.Dcql.PreparedDcqlQuery"/>.
     /// </summary>
-    public static readonly string PreparedQuery = Utf8Constants.ToInternedString(PreparedQueryUtf8);
+    public static string PreparedQuery { get; } = Utf8Constants.ToInternedString(PreparedQueryUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="TransactionNonce"/>.</summary>
     public static ReadOnlySpan<byte> TransactionNonceUtf8 => "oid4vp.transactionNonce"u8;
@@ -41,7 +42,7 @@ public static class Oid4VpContextKeys
     /// The transaction nonce bound into the JAR and echoed in the VP token.
     /// Value type: <see cref="TransactionNonce"/>.
     /// </summary>
-    public static readonly string TransactionNonce = Utf8Constants.ToInternedString(TransactionNonceUtf8);
+    public static string TransactionNonce { get; } = Utf8Constants.ToInternedString(TransactionNonceUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="DecryptionKeyId"/>.</summary>
     public static ReadOnlySpan<byte> DecryptionKeyIdUtf8 => "oid4vp.decryptionKeyId"u8;
@@ -52,7 +53,7 @@ public static class Oid4VpContextKeys
     /// is published in <c>client_metadata.jwks</c> inside the JAR.
     /// Value type: <see cref="Verifiable.Cryptography.KeyId"/>.
     /// </summary>
-    public static readonly string DecryptionKeyId = Utf8Constants.ToInternedString(DecryptionKeyIdUtf8);
+    public static string DecryptionKeyId { get; } = Utf8Constants.ToInternedString(DecryptionKeyIdUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="RedirectUri"/>.</summary>
     public static ReadOnlySpan<byte> RedirectUriUtf8 => "oid4vp.redirectUri"u8;
@@ -64,7 +65,9 @@ public static class Oid4VpContextKeys
     /// Value type: <see cref="Uri"/>, or absent for cross-device flows.
     /// Set by the application before dispatching the direct_post call.
     /// </summary>
-    public static readonly string RedirectUri = Utf8Constants.ToInternedString(RedirectUriUtf8);
+    [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
+        Justification = "This member is the library's internal context-bag KEY NAME 'oid4vp.redirectUri' (compared as a string, never dereferenced), not the redirect URL it identifies.")]
+    public static string RedirectUri { get; } = Utf8Constants.ToInternedString(RedirectUriUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="TransactionData"/>.</summary>
     public static ReadOnlySpan<byte> TransactionDataUtf8 => "oid4vp.transactionData"u8;
@@ -76,7 +79,7 @@ public static class Oid4VpContextKeys
     /// descriptors. Set by the application before dispatching the PAR request
     /// when transaction-data binding is required.
     /// </summary>
-    public static readonly string TransactionData = Utf8Constants.ToInternedString(TransactionDataUtf8);
+    public static string TransactionData { get; } = Utf8Constants.ToInternedString(TransactionDataUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Oid4VpResponseMode"/>.</summary>
     public static ReadOnlySpan<byte> Oid4VpResponseModeUtf8 => "oid4vp.responseMode"u8;
@@ -89,7 +92,7 @@ public static class Oid4VpContextKeys
     /// the PAR request when a non-default mode is required. Value type:
     /// <see cref="string"/>.
     /// </summary>
-    public static readonly string Oid4VpResponseMode = Utf8Constants.ToInternedString(Oid4VpResponseModeUtf8);
+    public static string Oid4VpResponseMode { get; } = Utf8Constants.ToInternedString(Oid4VpResponseModeUtf8);
 
 
     /// <summary>The UTF-8 source literal of <see cref="JarAdditionalHeaderClaims"/>.</summary>
@@ -110,7 +113,7 @@ public static class Oid4VpContextKeys
     /// <see cref="JarExtensions"/>. Per OID4VP 1.0 §5.9.3 the appropriate
     /// header set depends on the client_id prefix the deployment uses.
     /// </remarks>
-    public static readonly string JarAdditionalHeaderClaims = Utf8Constants.ToInternedString(JarAdditionalHeaderClaimsUtf8);
+    public static string JarAdditionalHeaderClaims { get; } = Utf8Constants.ToInternedString(JarAdditionalHeaderClaimsUtf8);
 
 
     //Library-internal keys — placed on the context by library code before
@@ -145,7 +148,7 @@ public static class Oid4VpContextKeys
     /// can map the inbound handle back to the internal flow identifier.
     /// </para>
     /// </remarks>
-    public static readonly string ParHandle = Utf8Constants.ToInternedString(ParHandleUtf8);
+    public static string ParHandle { get; } = Utf8Constants.ToInternedString(ParHandleUtf8);
 
 
     //Output keys — set by the endpoint delegates, read by the application
@@ -160,7 +163,9 @@ public static class Oid4VpContextKeys
     /// or deep link.
     /// Value type: <see cref="Uri"/>.
     /// </summary>
-    public static readonly string GeneratedRequestUri = Utf8Constants.ToInternedString(GeneratedRequestUriUtf8);
+    [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
+        Justification = "This member is the library's internal context-bag KEY NAME 'oid4vp.generatedRequestUri' (compared as a string, never dereferenced), not the URL it identifies.")]
+    public static string GeneratedRequestUri { get; } = Utf8Constants.ToInternedString(GeneratedRequestUriUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="CompactJar"/>.</summary>
     public static ReadOnlySpan<byte> CompactJarUtf8 => "oid4vp.compactJar"u8;
@@ -171,5 +176,5 @@ public static class Oid4VpContextKeys
     /// HTTP response.
     /// Value type: <see cref="string"/>.
     /// </summary>
-    public static readonly string CompactJar = Utf8Constants.ToInternedString(CompactJarUtf8);
+    public static string CompactJar { get; } = Utf8Constants.ToInternedString(CompactJarUtf8);
 }

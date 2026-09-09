@@ -14,8 +14,8 @@ namespace Verifiable.Tests.OAuth;
 [TestClass]
 internal sealed class JsonAppenderTests
 {
-    private static readonly string[] SampleTags = ["alpha", "beta"];
-    private static readonly Uri[] SampleRedirectUris =
+    private static string[] SampleTags { get; } = ["alpha", "beta"];
+    private static Uri[] SampleRedirectUris { get; } =
     [
         new Uri("https://example.org/cb"),
         new Uri("https://wallet.example.com/cb2?state=abc")

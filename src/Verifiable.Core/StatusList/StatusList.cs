@@ -61,8 +61,17 @@ public sealed class StatusList: IDisposable, IEquatable<StatusList>
     /// Gets the order in which entries are packed within each byte:
     /// <see cref="BitOrder.LeastSignificantFirst"/> for the IETF Token Status List,
     /// <see cref="BitOrder.MostSignificantFirst"/> for the W3C Bitstring Status List.
+    /// The IETF write sites (<see cref="EnsureIetfBitOrder"/> and its callers) refuse a
+    /// <see cref="BitOrder.MostSignificantFirst"/> list rather than ship its bytes under an IETF label.
     /// </summary>
     public BitOrder BitOrder { get; }
+
+    /// <summary>
+    /// Gets whether this Status List's bytes are packed the way the IETF Token Status List's Section 4.1
+    /// requires: <see cref="BitOrder.LeastSignificantFirst"/>. A W3C Bitstring Status List (packed
+    /// <see cref="BitOrder.MostSignificantFirst"/>) is not directly writable as a Token Status List.
+    /// </summary>
+    public bool IsIetfPacked => BitOrder == BitOrder.LeastSignificantFirst;
 
     /// <summary>
     /// Gets or sets an optional URI to the Status List Aggregation endpoint.
@@ -138,7 +147,17 @@ public sealed class StatusList: IDisposable, IEquatable<StatusList>
     }
 
     /// <summary>
-    /// Creates a Status List by decompressing ZLIB-compressed data.
+    /// The default ceiling <see cref="Decompress"/> enforces on the inflated byte count when no
+    /// explicit bound is supplied: 32 MiB. An 8-bit Status List of 33,554,432 entries is already far
+    /// beyond any deployed Token Status List, so this is a generous ceiling against a decompression
+    /// bomb — a small compressed payload crafted to inflate to gigabytes — rather than a realistic
+    /// capacity limit.
+    /// </summary>
+    public const int DefaultMaxDecompressedByteCount = 32 * 1024 * 1024;
+
+    /// <summary>
+    /// Creates a Status List by decompressing ZLIB-compressed data, bounded by
+    /// <see cref="DefaultMaxDecompressedByteCount"/>.
     /// </summary>
     /// <param name="compressedData">The ZLIB-compressed byte array.</param>
     /// <param name="bitSize">The number of bits per entry.</param>
@@ -155,7 +174,43 @@ public sealed class StatusList: IDisposable, IEquatable<StatusList>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="compressedData"/> or <paramref name="pool"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="compressedData"/> is empty.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="bitSize"/> is not a valid value.</exception>
-    public static StatusList FromCompressed(ReadOnlySpan<byte> compressedData, StatusListBitSize bitSize, BaseMemoryPool pool, BitOrder bitOrder)
+    /// <exception cref="InvalidDataException">
+    /// Thrown when <paramref name="compressedData"/> is not a valid ZLIB stream, or inflates past
+    /// <see cref="DefaultMaxDecompressedByteCount"/>.
+    /// </exception>
+    public static StatusList FromCompressed(ReadOnlySpan<byte> compressedData, StatusListBitSize bitSize, BaseMemoryPool pool, BitOrder bitOrder) =>
+        FromCompressed(compressedData, bitSize, pool, bitOrder, DefaultMaxDecompressedByteCount);
+
+    /// <summary>
+    /// Creates a Status List by decompressing ZLIB-compressed data, bounded by
+    /// <paramref name="maxDecompressedByteCount"/> — the wire-facing overload for a caller (a Status
+    /// List Token resolver reading a remote Status Provider's answer) that must not let an attacker-sized
+    /// compressed payload inflate without limit.
+    /// </summary>
+    /// <param name="compressedData">The ZLIB-compressed byte array.</param>
+    /// <param name="bitSize">The number of bits per entry.</param>
+    /// <param name="pool">
+    /// The memory pool to allocate the decompressed data into.
+    /// Use <see cref="BaseMemoryPool"/> for proper disposal and zeroing.
+    /// </param>
+    /// <param name="bitOrder">
+    /// The order entries are packed within each byte:
+    /// <see cref="BitOrder.LeastSignificantFirst"/> for the IETF Token Status List,
+    /// <see cref="BitOrder.MostSignificantFirst"/> for the W3C Bitstring Status List.
+    /// </param>
+    /// <param name="maxDecompressedByteCount">The inflated byte count ceiling. Must be positive.</param>
+    /// <returns>A new <see cref="StatusList"/> instance with the decompressed data.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="compressedData"/> or <paramref name="pool"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="compressedData"/> is empty.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when <paramref name="bitSize"/> is not a valid value, or <paramref name="maxDecompressedByteCount"/> is not positive.
+    /// </exception>
+    /// <exception cref="InvalidDataException">
+    /// Thrown when <paramref name="compressedData"/> is not a valid ZLIB stream, or inflates past
+    /// <paramref name="maxDecompressedByteCount"/>.
+    /// </exception>
+    public static StatusList FromCompressed(
+        ReadOnlySpan<byte> compressedData, StatusListBitSize bitSize, BaseMemoryPool pool, BitOrder bitOrder, int maxDecompressedByteCount)
     {
         if(compressedData.IsEmpty)
         {
@@ -164,8 +219,9 @@ public sealed class StatusList: IDisposable, IEquatable<StatusList>
 
         ValidateBitSize(bitSize);
         ArgumentNullException.ThrowIfNull(pool);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxDecompressedByteCount);
 
-        byte[] decompressed = Decompress(compressedData);
+        byte[] decompressed = Decompress(compressedData, maxDecompressedByteCount);
         int bits = (int)bitSize;
         int capacity = decompressed.Length * 8 / bits;
 
@@ -291,6 +347,43 @@ public sealed class StatusList: IDisposable, IEquatable<StatusList>
         return output.ToArray();
     }
 
+    /// <summary>
+    /// Refuses <paramref name="statusList"/> when it is not packed the way Section 4.1 of the Token
+    /// Status List specification requires, so an IETF write site (the Section 5.1 JWT claims, the
+    /// Section 4.2 JSON member, the Section 4.3 CBOR map) never ships a W3C Bitstring Status List's
+    /// bytes as-is under an IETF label.
+    /// </summary>
+    /// <param name="statusList">The Status List an IETF write site is about to encode.</param>
+    /// <param name="parameterName">The caller's own parameter name, reported on the throw.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="statusList"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="statusList"/> is packed <see cref="BitOrder.MostSignificantFirst"/> —
+    /// "Each index identifies a contiguous block of bits in the byte array, with the blocks being
+    /// packed into bytes from the least significant bit (&quot;0&quot;) to the most significant bit
+    /// (&quot;7&quot;)." A <see cref="BitOrder.MostSignificantFirst"/> list is packed for the W3C
+    /// Bitstring Status List instead and MUST be rebuilt index-by-index — never byte-copied — into a
+    /// <see cref="BitOrder.LeastSignificantFirst"/> list before it can be written as a Token Status
+    /// List.
+    /// See <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list-21#section-4.1">Token Status List, Section 4.1</see>.
+    /// </exception>
+    public static void EnsureIetfBitOrder(StatusList statusList, string parameterName)
+    {
+        ArgumentNullException.ThrowIfNull(statusList);
+
+        if(!statusList.IsIetfPacked)
+        {
+            throw new ArgumentException(
+                "Each index identifies a contiguous block of bits in the byte array, with the blocks " +
+                "being packed into bytes from the least significant bit (\"0\") to the most significant " +
+                "bit (\"7\") (Token Status List, Section 4.1: " +
+                "https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list-21#section-4.1). " +
+                "This Status List is packed most-significant-bit-first, the W3C Bitstring Status List's " +
+                "order; it must be rebuilt index-by-index, never byte-copied, into a " +
+                "least-significant-bit-first list before it can be written as a Token Status List.",
+                parameterName);
+        }
+    }
+
 
     /// <summary>
     /// Releases the memory back to the pool.
@@ -390,12 +483,39 @@ public sealed class StatusList: IDisposable, IEquatable<StatusList>
     }
 
 
-    private static byte[] Decompress(ReadOnlySpan<byte> compressedData)
+    /// <summary>
+    /// Inflates <paramref name="compressedData"/>, refusing to accumulate past
+    /// <paramref name="maxDecompressedByteCount"/> — read in bounded chunks, so a crafted zlib stream
+    /// that would otherwise inflate to gigabytes from a small compressed input (a decompression bomb)
+    /// is caught the moment the running total crosses the ceiling, rather than after materializing it.
+    /// </summary>
+    /// <param name="compressedData">The ZLIB-compressed byte array.</param>
+    /// <param name="maxDecompressedByteCount">The inflated byte count ceiling.</param>
+    /// <returns>The inflated bytes, no larger than <paramref name="maxDecompressedByteCount"/>.</returns>
+    /// <exception cref="InvalidDataException">
+    /// Thrown when <paramref name="compressedData"/> is not a valid ZLIB stream, or inflates past
+    /// <paramref name="maxDecompressedByteCount"/>.
+    /// </exception>
+    private static byte[] Decompress(ReadOnlySpan<byte> compressedData, int maxDecompressedByteCount)
     {
         using var input = new MemoryStream(compressedData.ToArray());
         using var zlib = new ZLibStream(input, CompressionMode.Decompress);
         using var output = new MemoryStream();
-        zlib.CopyTo(output);
+
+        Span<byte> chunk = stackalloc byte[4096];
+        long totalRead = 0;
+        int read;
+        while((read = zlib.Read(chunk)) > 0)
+        {
+            totalRead += read;
+            if(totalRead > maxDecompressedByteCount)
+            {
+                throw new InvalidDataException(
+                    $"The Status List's compressed data inflates past the {maxDecompressedByteCount}-byte ceiling.");
+            }
+
+            output.Write(chunk[..read]);
+        }
 
         return output.ToArray();
     }

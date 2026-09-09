@@ -133,7 +133,8 @@ internal sealed class Fido2CredentialSignerEs256KTests
             StoredSignCount = 0,
             StoredUvInitialized = true,
             ResponseUserHandle = responseUserHandle,
-            StoredUserHandle = storedUserHandle
+            StoredUserHandle = storedUserHandle,
+            ExtensionProcessingPool = BaseMemoryPool.Shared
         };
 
         return await Fido2AssertionVerifier.VerifyAsync(

@@ -15,6 +15,8 @@ using Verifiable.Tpm.Spec.Attributes;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
+using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -25,14 +27,14 @@ namespace Verifiable.Tests.Tpm;
 /// <see cref="TpmCommandExecutor"/>, and the real
 /// command/response codecs). Every test mints a real ticket through <c>TPM2_PolicySigned()</c> or
 /// <c>TPM2_PolicySecret()</c> (a negative <c>expiration</c>), flushes the minting session, and replays the
-/// ticket into a fresh session via <c>TPM2_PolicyTicket()</c> (TPM 2.0 Library Part 3, Section 23.5).
+/// ticket into a fresh session via <c>TPM2_PolicyTicket()</c> (TPM 2.0 Library Part 3, clause 23.5).
 /// </summary>
 /// <remarks>
 /// <para>
 /// The two happy-path tests each assert the replayed digest equals the ORIGINAL command's own fold
 /// (<see cref="TpmPolicyDigest.ExtendForSigned"/>/<see cref="TpmPolicyDigest.ExtendForSecret"/>) — proving
 /// <c>PolicyUpdate()</c> is dispatched by the ticket's own tag, never by <c>TPM_CC_PolicyTicket</c> itself
-/// (Section 23.5.1).
+/// (clause 23.5.1).
 /// </para>
 /// <para>
 /// The negative tests isolate one rung of the check ladder (trial → timeout size → expiry → cpHashA →
@@ -44,7 +46,7 @@ namespace Verifiable.Tests.Tpm;
 /// <see cref="EquationTwelveTicketDigestIsAVerifiableHmacOfTheInjectedSeedAndTimeEpoch"/> is the independent,
 /// oracle-free proof that the ticket digest really is
 /// <c>HMAC(proof, tag || cpHash || policyRef || authName || timeout || timeEpoch || resetCount)</c> — equation
-/// 12 (TPM 2.0 Library Part 2, Section 10.7.5, Table 111) — hand-assembled and HMAC'd in this file, not merely
+/// 12 (TPM 2.0 Library Part 2, clause 10.6.6, Table 114) — hand-assembled and HMAC'd in this file, not merely
 /// re-invoking the implementation under test. It reproduces the simulator's own <c>TimeEpoch</c> derivation
 /// (a one-time FNV-1a fold of the injected seed, then one well-known MurmurHash3 64-bit finalizer regeneration
 /// per completed <c>TPM2_Startup()</c>) from those two algorithms' own public definitions, the same technique
@@ -68,15 +70,15 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
     /// Verifies a ticket minted by <c>TPM2_PolicySecret()</c> (tag <c>TPM_ST_AUTH_SECRET</c>), replayed on a
     /// FRESH session via <c>TPM2_PolicyTicket()</c>, folds the digest identically to the original command's own
     /// <see cref="TpmPolicyDigest.ExtendForSecret"/> — proving the replay is a true stand-in for the original
-    /// authorization, not a distinct "used a ticket" branch of the policy tree (TPM 2.0 Library Part 1, Section
-    /// 17.7.12).
+    /// authorization, not a distinct "used a ticket" branch of the policy tree (TPM 2.0 Library Part 1, clause
+    /// 16.7.12).
     /// </summary>
     [TestMethod]
     public async Task PolicyTicketReplaysAPolicySecretTicketAndFoldsIdenticallyToTheOriginalCommand()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         byte[] policyRef = "policyticket-secret-ref"u8.ToArray();
         byte[] authName = new byte[sizeof(uint)];
@@ -137,7 +139,7 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
             byte[] predicted = new byte[size];
             Span<byte> zero = stackalloc byte[size];
             zero.Clear();
-            TpmPolicyDigest.ExtendForSecret(zero, authName, policyRef, SessionAlg, predicted);
+            TpmPolicyDigest.ExtendForSecret(zero, authName, policyRef, SessionAlg, predicted, pool);
 
             Assert.IsTrue(
                 digest.PolicyDigest.AsReadOnlySpan().SequenceEqual(predicted),
@@ -159,7 +161,7 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse authorityKey = await CreateEccAuthorityKeyAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -235,7 +237,7 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
             byte[] predicted = new byte[size];
             Span<byte> zero = stackalloc byte[size];
             zero.Clear();
-            TpmPolicyDigest.ExtendForSigned(zero, authorityName, policyRef, SessionAlg, predicted);
+            TpmPolicyDigest.ExtendForSigned(zero, authorityName, policyRef, SessionAlg, predicted, pool);
 
             Assert.IsTrue(
                 digest.PolicyDigest.AsReadOnlySpan().SequenceEqual(predicted),
@@ -250,9 +252,9 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
     /// <summary>
     /// The single most direct observation of what <c>TPM2_Clear()</c> does, and the reason the hierarchy proofs
     /// are split at all: a clear "change[s] the storage primary seed (SPS) to a new value from the TPM's random
-    /// number generator" and with it "shProof and ehProof" (TPM 2.0 Library Part 3, Section 24.6.1), while the
+    /// number generator" and with it "shProof and ehProof" (TPM 2.0 Library Part 3, clause 24.6.1), while the
     /// platform proof appears nowhere on that list. A ticket is an HMAC keyed by its hierarchy's proof (Part 1,
-    /// Section 12.5), and there is no invalidation pass over any list of outstanding tickets - "When the SPS is
+    /// clause 11.5), and there is no invalidation pass over any list of outstanding tickets - "When the SPS is
     /// changed, shProof will change so that the saved contexts cannot be reloaded" is the whole mechanism. So an
     /// owner-hierarchy ticket minted before a clear must stop re-verifying afterwards (<c>TPM_RC_TICKET</c>, the
     /// recompute-and-compare failure) while a platform-hierarchy ticket minted in the same breath must still
@@ -262,8 +264,8 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
     /// <remarks>
     /// Both tickets are minted against the minting session's own retained <c>nonceTPM</c>, which makes the
     /// authorization session-bound rather than absolute and therefore leaves <c>expiresOnReset</c> CLEAR (Part 3,
-    /// Section 23.2.2). That matters here: with it SET, equation 12 folds <c>resetCount</c> into the ticket
-    /// digest (Part 2, Section 10.7.5, Table 111), and a clear sets <c>resetCount</c> to zero - so BOTH tickets
+    /// clause 23.2.2). That matters here: with it SET, equation 12 folds <c>resetCount</c> into the ticket
+    /// digest (Part 2, clause 10.6.6, Table 114), and a clear sets <c>resetCount</c> to zero - so BOTH tickets
     /// would die and the proof split would be unobservable. Excluding that term isolates the proof.
     /// </remarks>
     [TestMethod]
@@ -271,7 +273,7 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         byte[] ownerPolicyRef = "clear-owner-ticket-ref"u8.ToArray();
         byte[] platformPolicyRef = "clear-platform-ticket-ref"u8.ToArray();
@@ -293,17 +295,17 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
         Assert.IsTrue(clearResult.IsSuccess, $"TPM2_Clear failed: '{clearResult.ResponseCode}'.");
 
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_TICKET, await ReplayTicketAsync(tpm, ownerTicket, ownerPolicyRef).ConfigureAwait(false),
-            "A rotated shProof stops an owner-hierarchy ticket from re-verifying - structurally, with no revocation pass over any list.");
+            HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_TICKET, 4), await ReplayTicketAsync(tpm, ownerTicket, ownerPolicyRef).ConfigureAwait(false),
+            "A rotated shProof stops an owner-hierarchy ticket from re-verifying at ticket, parameter 5 of Table 148 - structurally, with no revocation pass over any list.");
         Assert.AreEqual(
             TpmRcConstants.TPM_RC_SUCCESS, await ReplayTicketAsync(tpm, platformTicket, platformPolicyRef).ConfigureAwait(false),
-            "The platform proof is not on Section 24.6.1's effect list, so a platform-hierarchy ticket must survive an owner change intact.");
+            "The platform proof is not on clause 24.6.1's effect list, so a platform-hierarchy ticket must survive an owner change intact.");
     }
 
     /// <summary>
     /// A trial session rejects <c>TPM2_PolicyTicket()</c> outright with <c>TPM_RC_ATTRIBUTES</c> — a genuine,
-    /// deliberate exception to Section 23.1's general "trial sessions always succeed" default, established only
-    /// by the reference implementation's own explicit rejection (Section 23.5.1 itself says nothing about
+    /// deliberate exception to clause 23.1's general "trial sessions always succeed" default, established only
+    /// by the reference implementation's own explicit rejection (clause 23.5.1 itself says nothing about
     /// trial sessions: a trial session predicts a digest without holding real authorization material, and a
     /// ticket IS real authorization material, so "predicting" via a ticket is meaningless). Checked first,
     /// unconditionally, before even the timeout size is inspected.
@@ -313,7 +315,7 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         uint sessionHandle = 0;
         try
@@ -332,7 +334,7 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
                 sessionHandle, garbageTimeout, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, garbageTicket, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsFalse(ticketResult.IsSuccess, "A trial session must reject TPM2_PolicyTicket().");
-            Assert.AreEqual(TpmRcConstants.TPM_RC_ATTRIBUTES, ticketResult.ResponseCode);
+            Assert.AreEqual(HmacKeyHarness.HandleEncodedRc(TpmRcConstants.TPM_RC_ATTRIBUTES, 0), ticketResult.ResponseCode, "Table 148: policySession is TPM2_PolicyTicket()'s sole handle (handle 1); a trial session is handle-encoded TPM_RC_ATTRIBUTES at index 0.");
         }
         finally
         {
@@ -342,9 +344,9 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
 
     /// <summary>
     /// A <c>timeout</c> whose wire length is not exactly 8 octets is rejected with <c>TPM_RC_SIZE</c> — a
-    /// tighter rule than Part 2 Table 100's general "8 or less" for <c>TPM2B_TIMEOUT</c>, specific to this
+    /// tighter rule than Part 2 Table 98's general "8 or less" for <c>TPM2B_TIMEOUT</c>, specific to this
     /// command because it must extract the expires-on-reset flag bit and reproduce the exact 64-bit value that
-    /// was hashed into the original ticket. Part 4's <c>TPM2_PolicyTicket()</c>, printed page 654, states the
+    /// was hashed into the original ticket. Part 4's <c>TPM2_PolicyTicket()</c> states the
     /// rule as <c>if(in-&gt;timeout.t.size != sizeof(UINT64)) return TPM_RCS_SIZE + RC_PolicyTicket_timeout;</c>.
     /// </summary>
     [TestMethod]
@@ -352,7 +354,7 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         uint sessionHandle = 0;
         try
@@ -371,7 +373,7 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
                 sessionHandle, wrongSizeTimeout, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, garbageTicket, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsFalse(ticketResult.IsSuccess, "A timeout that is not exactly 8 bytes must be rejected.");
-            Assert.AreEqual(TpmRcConstants.TPM_RC_SIZE, ticketResult.ResponseCode);
+            Assert.AreEqual(HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SIZE, 0), ticketResult.ResponseCode, "Table 148: timeout is TPM2_PolicyTicket()'s first parameter (parameter 1); a timeout that is not exactly 8 bytes is parameter-encoded TPM_RC_SIZE at index 0.");
         }
         finally
         {
@@ -381,7 +383,7 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
 
     /// <summary>
     /// A <c>timeout</c> whose de-flagged value is already behind the TPM's live Time is rejected with
-    /// <c>TPM_RC_EXPIRED</c> (TPM 2.0 Library Part 3, Section 23.2.2, shared with PolicySigned/PolicySecret).
+    /// <c>TPM_RC_EXPIRED</c> (TPM 2.0 Library Part 3, clause 23.2.2, shared with PolicySigned/PolicySecret).
     /// This isolates the check itself: the caller supplies the timeout wire value directly rather than
     /// replaying a genuinely minted one, exactly as the sibling PolicySigned negative tests isolate one ladder
     /// rung with placeholder values for everything downstream.
@@ -391,7 +393,7 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         uint sessionHandle = 0;
         try
@@ -414,7 +416,7 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
                 sessionHandle, tinyTimeout, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, garbageTicket, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsFalse(ticketResult.IsSuccess, "An already-expired timeout must be rejected.");
-            Assert.AreEqual(TpmRcConstants.TPM_RC_EXPIRED, ticketResult.ResponseCode);
+            Assert.AreEqual(HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_EXPIRED, 0), ticketResult.ResponseCode, "Table 148: timeout is TPM2_PolicyTicket()'s first parameter (parameter 1); an already-expired timeout is parameter-encoded TPM_RC_EXPIRED at index 0.");
         }
         finally
         {
@@ -424,7 +426,7 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
 
     /// <summary>
     /// A non-empty <c>cpHashA</c> whose size does not equal the session's digest width is rejected with
-    /// <c>TPM_RC_SIZE</c>. A zero <c>timeout</c> skips the expiry check entirely (Section 23.2.2's shared
+    /// <c>TPM_RC_SIZE</c>. A zero <c>timeout</c> skips the expiry check entirely (clause 23.2.2's shared
     /// <c>PolicyParameterChecks</c> only evaluates expiry when the timeout is non-zero), isolating this rung.
     /// </summary>
     [TestMethod]
@@ -432,7 +434,7 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         uint sessionHandle = 0;
         try
@@ -452,7 +454,7 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
                 sessionHandle, zeroTimeout, wrongSizedCpHash, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, garbageTicket, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsFalse(ticketResult.IsSuccess, "A cpHashA of the wrong size must be rejected.");
-            Assert.AreEqual(TpmRcConstants.TPM_RC_SIZE, ticketResult.ResponseCode);
+            Assert.AreEqual(HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SIZE, 1), ticketResult.ResponseCode, "Table 148: cpHashA is TPM2_PolicyTicket()'s second parameter (parameter 2); a cpHashA of the wrong size is parameter-encoded TPM_RC_SIZE at index 1.");
         }
         finally
         {
@@ -461,7 +463,7 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
     }
 
     /// <summary>
-    /// The session's cpHash latch is first-writer-wins for PolicyTicket too (TPM 2.0 Library Part 3, Section
+    /// The session's cpHash latch is first-writer-wins for PolicyTicket too (TPM 2.0 Library Part 3, clause
     /// 23.2.4): a first, genuinely verified replay latches <c>cpHashA</c>, and a second replay on the same
     /// session with a different (but correctly sized) <c>cpHashA</c> is rejected with <c>TPM_RC_CPHASH</c>
     /// ahead of its own (garbage, never-reached) ticket-digest recompute.
@@ -471,7 +473,7 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         byte[] firstCpHash = new byte[Sha256DigestSize];
         Array.Fill(firstCpHash, (byte)0x11);
@@ -543,7 +545,7 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
 
     /// <summary>
     /// A ticket that fails the HMAC recompute must NOT latch <c>cpHashA</c> onto the session (TPM 2.0 Library
-    /// Part 3, Section 23.2.4's latch is part of a SUCCESSFUL <c>PolicyUpdate()</c>, not a pre-verification side
+    /// Part 3, clause 23.2.4's latch is part of a SUCCESSFUL <c>PolicyUpdate()</c>, not a pre-verification side
     /// effect of merely proposing a cpHashA): a first replay carrying a non-empty <c>cpHashA</c> and a tampered
     /// ticket digest is rejected with <c>TPM_RC_TICKET</c>, and a SECOND, genuinely successful assertion on the
     /// SAME session with a DIFFERENT <c>cpHashA</c> must then succeed — proving the failed first replay left the
@@ -554,7 +556,7 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         byte[] policyRef = "policyticket-latch-empty-ref"u8.ToArray();
         byte[] authName = new byte[sizeof(uint)];
@@ -586,7 +588,7 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
             TpmResult<PolicyTicketResponse> firstResult = await tpm.PolicyTicketAsync(
                 sessionHandle, minted.timeoutBytes, firstCpHash, policyRef, authName, tamperedTicket, TestContext.CancellationToken).ConfigureAwait(false);
             Assert.IsFalse(firstResult.IsSuccess, "A tampered ticket digest must be rejected.");
-            Assert.AreEqual(TpmRcConstants.TPM_RC_TICKET, firstResult.ResponseCode);
+            Assert.AreEqual(HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_TICKET, 4), firstResult.ResponseCode, "A tampered ticket digest must be refused with TPM_RC_TICKET at ticket, parameter 5 of Table 148.");
 
             //Second assertion, same session: a genuine PolicySecret authorization over a DIFFERENT cpHashA. If
             //the failed first replay had latched firstCpHash, this would be rejected with TPM_RC_CPHASH instead
@@ -605,7 +607,7 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
 
     /// <summary>
     /// A ticket digest tampered by one flipped octet fails the HMAC recompute and is rejected with
-    /// <c>TPM_RC_TICKET</c> (TPM 2.0 Library Part 3, clause 23.5.1, printed page 201: "If these tickets match,
+    /// <c>TPM_RC_TICKET</c> (TPM 2.0 Library Part 3, clause 23.5.1, printed page 221: "If these tickets match,
     /// then the TPM will create a TPM2B_NAME (objectName) using authName and update the context of
     /// policySession") — the constant-time
     /// <c>CryptographicOperations.FixedTimeEquals</c> compare this simulator uses for every ticket check.
@@ -615,7 +617,7 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         byte[] policyRef = "policyticket-tamper-ref"u8.ToArray();
         byte[] authName = new byte[sizeof(uint)];
@@ -642,7 +644,7 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
                 sessionHandle, minted.timeoutBytes, ReadOnlyMemory<byte>.Empty, policyRef, authName, tamperedTicket, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsFalse(ticketResult.IsSuccess, "A tampered ticket digest must be rejected.");
-            Assert.AreEqual(TpmRcConstants.TPM_RC_TICKET, ticketResult.ResponseCode);
+            Assert.AreEqual(HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_TICKET, 4), ticketResult.ResponseCode, "A tampered ticket digest must be refused with TPM_RC_TICKET at ticket, parameter 5 of Table 148.");
         }
         finally
         {
@@ -654,8 +656,8 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
     /// A ticket replayed with a DIFFERENT <c>hierarchy</c> than the one it was actually minted under fails the
     /// HMAC recompute (the caller-supplied hierarchy is used AS-IS to select the proof, never independently
     /// re-derived) and is rejected with the same <c>TPM_RC_TICKET</c> a tampered digest gets — not a distinct
-    /// "wrong hierarchy" code (TPM 2.0 Library Part 3, clause 23.5.1, printed page 201; Part 4's
-    /// <c>TPM2_PolicyTicket()</c>, printed page 654, passes <c>in-&gt;ticket.hierarchy</c> straight into
+    /// "wrong hierarchy" code (TPM 2.0 Library Part 3, clause 23.5.1, printed page 221; Part 4's
+    /// <c>TPM2_PolicyTicket()</c> passes <c>in-&gt;ticket.hierarchy</c> straight into
     /// <c>TicketComputeAuth</c>).
     /// </summary>
     [TestMethod]
@@ -663,7 +665,7 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         byte[] policyRef = "policyticket-wronghierarchy-ref"u8.ToArray();
         byte[] authName = new byte[sizeof(uint)];
@@ -688,7 +690,7 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
                 sessionHandle, minted.timeoutBytes, ReadOnlyMemory<byte>.Empty, policyRef, authName, wrongHierarchyTicket, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsFalse(ticketResult.IsSuccess, "A ticket replayed against the wrong hierarchy must be rejected.");
-            Assert.AreEqual(TpmRcConstants.TPM_RC_TICKET, ticketResult.ResponseCode);
+            Assert.AreEqual(HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_TICKET, 4), ticketResult.ResponseCode, "A ticket replayed against the wrong hierarchy must be refused with TPM_RC_TICKET at ticket, parameter 5 of Table 148.");
         }
         finally
         {
@@ -697,8 +699,53 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
     }
 
     /// <summary>
-    /// R-7: an illegal <c>TPMT_TK_AUTH.tag</c> (neither <c>TPM_ST_AUTH_SIGNED</c> nor <c>TPM_ST_AUTH_SECRET</c>)
-    /// is rejected with <c>TPM_RC_TAG</c> at the wire reader (Part 2, Table 111: "TPM_RC_TAG error returned when
+    /// A genuine, untampered ticket replayed with a DIFFERENT <c>policyRef</c> than the one it was minted under
+    /// fails the HMAC recompute — equation 12 (TPM 2.0 Library Part 2, Table 114) folds <c>policyRef</c> into
+    /// the ticket digest — and is rejected with <c>TPM_RC_TICKET</c> (TPM 2.0 Library Part 3, clause 23.5.1):
+    /// the digest and hierarchy are the ones actually minted; only the caller-supplied <c>policyRef</c> differs.
+    /// </summary>
+    [TestMethod]
+    public async Task PolicyTicketWithAMismatchedPolicyRefReturnsTicket()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
+
+        byte[] mintedPolicyRef = "policyticket-mismatch-minted-ref"u8.ToArray();
+        byte[] replayedPolicyRef = "policyticket-mismatch-replayed-ref"u8.ToArray();
+        byte[] authName = new byte[sizeof(uint)];
+        BinaryPrimitives.WriteUInt32BigEndian(authName, (uint)TpmRh.TPM_RH_OWNER);
+
+        (byte[] timeoutBytes, byte[] ticketDigestBytes, TpmStConstants ticketTag, TpmiRhHierarchy ticketHierarchy) minted =
+            await MintPolicySecretTicketAsync(tpm, (uint)TpmRh.TPM_RH_OWNER, mintedPolicyRef, pool).ConfigureAwait(false);
+
+        uint sessionHandle = 0;
+        try
+        {
+            TpmResult<StartAuthSessionResponse> startResult = await tpm.StartPolicySessionAsync(
+                SessionAlg, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession failed: '{startResult.ResponseCode}'.");
+
+            using StartAuthSessionResponse session = startResult.Value;
+            sessionHandle = session.SessionHandle.Value;
+
+            //The original ticket octets and hierarchy, unmodified, replayed against a DIFFERENT policyRef.
+            using TpmtTkAuth genuineTicket = TpmtTkAuth.Create(minted.ticketTag, minted.ticketHierarchy, minted.ticketDigestBytes, pool);
+            TpmResult<PolicyTicketResponse> ticketResult = await tpm.PolicyTicketAsync(
+                sessionHandle, minted.timeoutBytes, ReadOnlyMemory<byte>.Empty, replayedPolicyRef, authName, genuineTicket, TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.IsFalse(ticketResult.IsSuccess, "A ticket replayed under a different policyRef must be rejected.");
+            Assert.AreEqual(HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_TICKET, 4), ticketResult.ResponseCode, "A ticket replayed under a different policyRef must be refused with TPM_RC_TICKET at ticket, parameter 5 of Table 148.");
+        }
+        finally
+        {
+            await FlushIfPresentAsync(tpm, sessionHandle).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// An illegal <c>TPMT_TK_AUTH.tag</c> (neither <c>TPM_ST_AUTH_SIGNED</c> nor <c>TPM_ST_AUTH_SECRET</c>)
+    /// is rejected with <c>TPM_RC_TAG</c> at the wire reader (Part 2, Table 114: "TPM_RC_TAG error returned when
     /// tag is not TPM_ST_AUTH_*") — the only place this constraint is actually enforced, since the
     /// re-verification recompute has no independent tag-legality check of its own (an illegal tag would still
     /// recompute a comparable, if forgery-resistant, HMAC).
@@ -708,7 +755,7 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         uint sessionHandle = 0;
         try
@@ -727,7 +774,9 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
                 sessionHandle, zeroTimeout, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, illegalTicket, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsFalse(ticketResult.IsSuccess, "An illegal ticket tag must be rejected.");
-            Assert.AreEqual(TpmRcConstants.TPM_RC_TAG, ticketResult.ResponseCode);
+            Assert.AreEqual(
+                HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_TAG, 4), ticketResult.ResponseCode,
+                "Table 148: ticket is TPM2_PolicyTicket()'s fifth parameter (index 4).");
         }
         finally
         {
@@ -736,7 +785,7 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
     }
 
     /// <summary>
-    /// <c>TPMT_TK_AUTH.hierarchy</c> is typed <c>TPMI_RH_HIERARCHY+</c> (TPM 2.0 Library Part 2, Table 111):
+    /// <c>TPMT_TK_AUTH.hierarchy</c> is typed <c>TPMI_RH_HIERARCHY+</c> (TPM 2.0 Library Part 2, Table 114):
     /// its legal set is exactly <c>{TPM_RH_OWNER, TPM_RH_PLATFORM, TPM_RH_ENDORSEMENT, TPM_RH_NULL}</c>. A
     /// ticket carrying a hierarchy value outside that set — for example a transient-object-range handle — is
     /// rejected with <c>TPM_RC_VALUE</c> at the wire reader, the same layer <c>TPMT_TK_AUTH.tag</c>'s own
@@ -748,7 +797,7 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         uint sessionHandle = 0;
         try
@@ -767,7 +816,9 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
                 sessionHandle, zeroTimeout, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, illegalHierarchyTicket, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsFalse(ticketResult.IsSuccess, "A ticket hierarchy outside TPMI_RH_HIERARCHY+'s legal set must be rejected.");
-            Assert.AreEqual(TpmRcConstants.TPM_RC_VALUE, ticketResult.ResponseCode);
+            Assert.AreEqual(
+                HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_VALUE, 4), ticketResult.ResponseCode,
+                "Table 148: ticket is TPM2_PolicyTicket()'s fifth parameter (index 4).");
         }
         finally
         {
@@ -777,7 +828,7 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
 
     /// <summary>
     /// The independent equation 12 known-answer test: hand-assembles <c>tag || cpHash || policyRef || authName
-    /// || timeout || timeEpoch || resetCount</c> (TPM 2.0 Library Part 2, Section 10.7.5, Table 111) and HMACs
+    /// || timeout || timeEpoch || resetCount</c> (TPM 2.0 Library Part 2, clause 10.6.6, Table 114) and HMACs
     /// it with a proof and a TimeEpoch both reproduced from the injected seed's own public, well-known
     /// derivation algorithms (SHA-256(seed || hierarchy) for the proof; one FNV-1a fold plus one MurmurHash3
     /// 64-bit finalizer regeneration for TimeEpoch) — comparing the result against a production-minted ticket.
@@ -792,10 +843,10 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] seed = Convert.FromHexString("A1B2C3D4E5F60718293A4B5C6D7E8F90A1B2C3D4E5F60718293A4B5C6D7E8F90");
 
-        using var simulator = new TpmSimulator("tpm-in-house-policyticket-kat", seed: seed, clockAdvanceQuantumMs: 0);
+        using var simulator = new TpmSimulator("tpm-in-house-policyticket-kat", seed: seed, clockAdvanceQuantumMs: 0, rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await BringOperationalAsync(simulator, pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         byte[] cpHash = await ComputeSha256Async("policyticket-kat-cphash"u8.ToArray(), pool, TestContext.CancellationToken).ConfigureAwait(false);
         byte[] policyRef = "policyticket-kat-ref"u8.ToArray();
@@ -915,7 +966,7 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
 
     /// <summary>
     /// Builds <c>aHash = H_authAlg(nonceTPM || expiration || cpHashA || policyRef)</c> (TPM 2.0 Library Part 3,
-    /// Section 23.3, equation 13) through the registered async digest seam.
+    /// clause 23.3, equation 13) through the registered async digest seam.
     /// </summary>
     private static async Task<byte[]> ComputeAHashAsync(
         ReadOnlyMemory<byte> nonceTpm, int expiration, ReadOnlyMemory<byte> cpHashA, ReadOnlyMemory<byte> policyRef,
@@ -994,7 +1045,7 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
     }
 
     /// <summary>
-    /// Equation 12's own field order, byte-for-byte (TPM 2.0 Library Part 2, Section 10.7.5, Table 111):
+    /// Equation 12's own field order, byte-for-byte (TPM 2.0 Library Part 2, clause 10.6.6, Table 114):
     /// <c>tag || cpHash || policyRef || authName || timeout || timeEpoch || resetCount</c>.
     /// </summary>
     private static byte[] BuildAuthTicketMessage(
@@ -1054,7 +1105,7 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
     /// <summary>
     /// Mints a real <c>TPM_ST_AUTH_SECRET</c> ticket against <paramref name="authHandle"/> over a fresh policy
     /// session, supplying that session's own retained <c>nonceTPM</c> so the authorization is session-bound and
-    /// <c>expiresOnReset</c> stays CLEAR (TPM 2.0 Library Part 3, Section 23.2.2), then flushes the minting
+    /// <c>expiresOnReset</c> stays CLEAR (TPM 2.0 Library Part 3, clause 23.2.2), then flushes the minting
     /// session so the replay runs against a session that never saw the original command.
     /// </summary>
     /// <param name="tpm">The TPM device.</param>
@@ -1173,7 +1224,7 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
     /// </summary>
     private async Task<TpmSimulator> CreateOperationalAsync(BaseMemoryPool pool)
     {
-        var simulator = new TpmSimulator("tpm-in-house-policyticket", signingBackend: BouncyCastleTpmEccSigningBackend.Create());
+        var simulator = new TpmSimulator("tpm-in-house-policyticket", signingBackend: BouncyCastleTpmEccSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await BringOperationalAsync(simulator, pool).ConfigureAwait(false);
 

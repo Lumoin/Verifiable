@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Fido2;
 
 namespace Verifiable.Cbor.Ctap;
@@ -51,7 +51,7 @@ public static class CtapParameterMapReader
     {
         try
         {
-            var reader = new CborReader(parametersCbor, CborConformanceMode.Ctap2Canonical);
+            var reader = new CborReader(parametersCbor, CborOptions.Ctap2Canonical);
             int? entryCount = reader.ReadStartMap();
 
             var rawValuesByKey = new Dictionary<int, ReadOnlyMemory<byte>>();
@@ -75,7 +75,7 @@ public static class CtapParameterMapReader
 
             return rawValuesByKey;
         }
-        catch(CborContentException exception)
+        catch(CborException exception)
         {
             throw new Fido2FormatException(Fido2FormatFailureKind.MalformedCbor, "The CTAP2 command parameter bytes are not valid CTAP2 canonical CBOR.", exception);
         }

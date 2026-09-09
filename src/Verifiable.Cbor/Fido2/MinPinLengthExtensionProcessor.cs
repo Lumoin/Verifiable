@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Core.Assessment;
@@ -79,7 +79,7 @@ public static class MinPinLengthExtensionProcessor
     {
         try
         {
-            var reader = new CborReader(value, CborConformanceMode.Ctap2Canonical);
+            var reader = new CborReader(value, CborOptions.Ctap2Canonical);
             ulong length = reader.ReadUInt64();
             if(reader.BytesRemaining != 0)
             {
@@ -88,7 +88,7 @@ public static class MinPinLengthExtensionProcessor
 
             return checked((int)length);
         }
-        catch(Exception exception) when(exception is CborContentException or InvalidOperationException or OverflowException)
+        catch(Exception exception) when(exception is CborException or InvalidOperationException or OverflowException)
         {
             throw new Fido2FormatException("The minPinLength extension output is not a valid CBOR unsigned integer.", exception);
         }

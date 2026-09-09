@@ -12,6 +12,8 @@ using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Spec.Constants;
+using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -32,7 +34,7 @@ internal sealed class TpmEntropyProviderTests
     {
         const int ByteLength = 16;
         using TpmDevice device = await CreateOperationalDeviceAsync("tpm-entropy-nonce").ConfigureAwait(false);
-        var provider = new TpmEntropyProvider(device, BaseMemoryPool.Shared, emittedBy: "tpm-entropy-nonce");
+        var provider = new TpmEntropyProvider(device, BaseMemoryPool.Shared, new FakeTimeProvider(TestClock.CanonicalEpoch), emittedBy: "tpm-entropy-nonce");
 
         (Nonce result, CryptoEvent? evt) = provider.GenerateNonce(ByteLength, Tag.Create(Purpose.Nonce), BaseMemoryPool.Shared);
 
@@ -46,6 +48,7 @@ internal sealed class TpmEntropyProviderTests
         Assert.AreEqual(EntropySource.Tpm, consumed.Source);
         Assert.AreEqual(ByteLength, consumed.ByteCount);
         Assert.AreEqual(Purpose.Nonce, consumed.Purpose);
+        Assert.AreEqual(TestClock.CanonicalEpoch, consumed.OccurredAt, "OccurredAt must equal the passed TimeProvider's instant exactly.");
     }
 
     [TestMethod]
@@ -53,7 +56,7 @@ internal sealed class TpmEntropyProviderTests
     {
         const int ByteLength = 24;
         using TpmDevice device = await CreateOperationalDeviceAsync("tpm-entropy-salt").ConfigureAwait(false);
-        var provider = new TpmEntropyProvider(device, BaseMemoryPool.Shared, emittedBy: "tpm-entropy-salt");
+        var provider = new TpmEntropyProvider(device, BaseMemoryPool.Shared, new FakeTimeProvider(TestClock.CanonicalEpoch), emittedBy: "tpm-entropy-salt");
 
         (Salt result, CryptoEvent? evt) = provider.GenerateSalt(ByteLength, Tag.Create(Purpose.Salt), BaseMemoryPool.Shared);
 
@@ -74,7 +77,7 @@ internal sealed class TpmEntropyProviderTests
         //Larger than a single TPM2_GetRandom can return, so FillFromTpm must issue several draws.
         const int ByteLength = TpmLifecycleTransitions.MaxRandomBytes * 2 + 5;
         using TpmDevice device = await CreateOperationalDeviceAsync("tpm-entropy-chunk").ConfigureAwait(false);
-        var provider = new TpmEntropyProvider(device, BaseMemoryPool.Shared, emittedBy: "tpm-entropy-chunk");
+        var provider = new TpmEntropyProvider(device, BaseMemoryPool.Shared, new FakeTimeProvider(TestClock.CanonicalEpoch), emittedBy: "tpm-entropy-chunk");
 
         (Nonce result, _) = provider.GenerateNonce(ByteLength, Tag.Empty, BaseMemoryPool.Shared);
 
@@ -88,7 +91,7 @@ internal sealed class TpmEntropyProviderTests
     public async Task AssessHealthReportsHealthyForPassingSelfTest()
     {
         using TpmDevice device = await CreateOperationalDeviceAsync("tpm-entropy-healthy").ConfigureAwait(false);
-        var provider = new TpmEntropyProvider(device, BaseMemoryPool.Shared, emittedBy: "tpm-entropy-healthy");
+        var provider = new TpmEntropyProvider(device, BaseMemoryPool.Shared, new FakeTimeProvider(TestClock.CanonicalEpoch), emittedBy: "tpm-entropy-healthy");
 
         (EntropyHealthObservation observation, EntropyHealthAssessedEvent assessed) = await provider.AssessHealthAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -111,7 +114,7 @@ internal sealed class TpmEntropyProviderTests
     public async Task AssessHealthReportsFailedForFailingSelfTest()
     {
         using TpmDevice device = await CreateOperationalDeviceAsync("tpm-entropy-failed", TpmSelfTestBehavior.Fails).ConfigureAwait(false);
-        var provider = new TpmEntropyProvider(device, BaseMemoryPool.Shared, emittedBy: "tpm-entropy-failed");
+        var provider = new TpmEntropyProvider(device, BaseMemoryPool.Shared, new FakeTimeProvider(TestClock.CanonicalEpoch), emittedBy: "tpm-entropy-failed");
 
         (EntropyHealthObservation observation, _) = await provider.AssessHealthAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -125,7 +128,7 @@ internal sealed class TpmEntropyProviderTests
     {
         const string TpmId = "tpm-entropy-factory";
         using TpmDevice device = await CreateOperationalDeviceAsync(TpmId).ConfigureAwait(false);
-        var provider = new TpmEntropyProvider(device, BaseMemoryPool.Shared, emittedBy: TpmId);
+        var provider = new TpmEntropyProvider(device, BaseMemoryPool.Shared, new FakeTimeProvider(TestClock.CanonicalEpoch), emittedBy: TpmId);
 
         //A qualifier unique to this test isolates the registration from other tests sharing the
         //process-wide factory.
@@ -168,8 +171,8 @@ internal sealed class TpmEntropyProviderTests
         ValueTask<TpmResult<TpmResponse>> TestingHandler(ReadOnlyMemory<byte> command, BaseMemoryPool handlerPool, CancellationToken cancellationToken) =>
             ValueTask.FromResult(HeaderOnlyResponse(TpmRcConstants.TPM_RC_TESTING, handlerPool));
 
-        using TpmDevice device = TpmDevice.Create(TestingHandler);
-        var provider = new TpmEntropyProvider(device, BaseMemoryPool.Shared, emittedBy: "tpm-entropy-testing");
+        using TpmDevice device = TpmDevice.Create(TestingHandler, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
+        var provider = new TpmEntropyProvider(device, BaseMemoryPool.Shared, new FakeTimeProvider(TestClock.CanonicalEpoch), emittedBy: "tpm-entropy-testing");
 
         (EntropyHealthObservation observation, _) = await provider.AssessHealthAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -187,8 +190,8 @@ internal sealed class TpmEntropyProviderTests
         ValueTask<TpmResult<TpmResponse>> TransportFailHandler(ReadOnlyMemory<byte> command, BaseMemoryPool handlerPool, CancellationToken cancellationToken) =>
             ValueTask.FromResult(TpmResult<TpmResponse>.TransportError(TransportCode));
 
-        using TpmDevice device = TpmDevice.Create(TransportFailHandler);
-        var provider = new TpmEntropyProvider(device, BaseMemoryPool.Shared, emittedBy: "tpm-entropy-transport");
+        using TpmDevice device = TpmDevice.Create(TransportFailHandler, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
+        var provider = new TpmEntropyProvider(device, BaseMemoryPool.Shared, new FakeTimeProvider(TestClock.CanonicalEpoch), emittedBy: "tpm-entropy-transport");
 
         (EntropyHealthObservation observation, _) = await provider.AssessHealthAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -202,7 +205,7 @@ internal sealed class TpmEntropyProviderTests
         Justification = "The simulator is the test class's durable chip: its ownership rides the returned TpmDevice's submit delegate for the rest of the test, and its pooled state is reclaimed with the suite's process-wide pool.")]
     private async Task<TpmDevice> CreateOperationalDeviceAsync(string tpmId, TpmSelfTestBehavior selfTest = TpmSelfTestBehavior.Passes)
     {
-        var simulator = new TpmSimulator(tpmId, selfTest);
+        var simulator = new TpmSimulator(tpmId,selfTest: selfTest, rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;
@@ -212,7 +215,7 @@ internal sealed class TpmEntropyProviderTests
 
         Assert.AreEqual(TpmLifecyclePhase.Operational, simulator.CurrentPhase);
 
-        return TpmDevice.Create(simulator.SubmitAsync);
+        return TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
     }
 
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",

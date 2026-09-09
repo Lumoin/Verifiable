@@ -36,7 +36,7 @@ namespace Verifiable.Cryptography;
 /// </remarks>
 public static class CryptographicKeyEvents
 {
-    private static CryptoSubject subject { get; } = new();
+    private static CryptoSubject Subject { get; } = new();
 
 
     /// <summary>
@@ -51,7 +51,7 @@ public static class CryptographicKeyEvents
     /// alongside other concurrent operations in the same process) must synchronize its own state; the
     /// stream itself never serializes delivery to a single subscriber against itself.
     /// </remarks>
-    public static IObservable<CryptoEvent> Events => subject;
+    public static IObservable<CryptoEvent> Events => Subject;
 
 
     /// <summary>
@@ -61,7 +61,7 @@ public static class CryptographicKeyEvents
     /// workload, dispose, and leave the count exactly as it found it (see <c>Verifiable</c>'s
     /// <c>CryptoEventProvenance.CaptureAsync</c>, the CLI/MCP consumer).
     /// </summary>
-    internal static int SubscriberCountForTests => subject.ObserverCount;
+    internal static int SubscriberCountForTests => Subject.ObserverCount;
 
 
     /// <summary>
@@ -74,7 +74,7 @@ public static class CryptographicKeyEvents
     /// to the same stream by default regardless of which route reached it. See <see cref="CryptoEventSink"/>
     /// for the rationale.
     /// </summary>
-    public static CryptoEventSink DefaultSink { get; } = subject.OnNext;
+    public static CryptoEventSink DefaultSink { get; } = Subject.OnNext;
 
 
     /// <summary>
@@ -95,7 +95,7 @@ public static class CryptographicKeyEvents
     {
         if(cryptoEvent is not null)
         {
-            subject.OnNext(cryptoEvent);
+            Subject.OnNext(cryptoEvent);
         }
     }
 
@@ -136,7 +136,7 @@ public static class CryptographicKeyEvents
 
         if(evt is not null)
         {
-            subject.OnNext(evt);
+            Subject.OnNext(evt);
         }
 
         return result;
@@ -184,7 +184,7 @@ public static class CryptographicKeyEvents
 
         if(evt is not null)
         {
-            subject.OnNext(evt);
+            Subject.OnNext(evt);
         }
 
         return keys;
@@ -227,7 +227,7 @@ public static class CryptographicKeyEvents
 
         if(evt is not null)
         {
-            subject.OnNext(evt);
+            Subject.OnNext(evt);
         }
 
         return result;
@@ -258,7 +258,7 @@ public static class CryptographicKeyEvents
 
         if(evt is not null)
         {
-            subject.OnNext(evt);
+            Subject.OnNext(evt);
         }
 
         return result;
@@ -389,7 +389,7 @@ public static class CryptographicKeyEvents
 
         if(evt is not null)
         {
-            subject.OnNext(evt);
+            Subject.OnNext(evt);
         }
 
         return result;
@@ -442,7 +442,7 @@ public static class CryptographicKeyEvents
 
         if(evt is not null)
         {
-            subject.OnNext(evt);
+            Subject.OnNext(evt);
         }
 
         return isValid;
@@ -473,6 +473,10 @@ public static class CryptographicKeyEvents
     internal sealed class CryptoSubject: IObservable<CryptoEvent>
     {
         private volatile IObserver<CryptoEvent>[] observers = [];
+
+        /// <summary>
+        /// A field, not a property: a lock target must be one instance that no accessor can re-mint.
+        /// </summary>
         private readonly object gate = new();
 
 

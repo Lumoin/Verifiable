@@ -102,7 +102,7 @@ internal sealed class SdJwtClaimRedactionPropertyTests
                 json, disclosablePaths, TestSalts.DefaultGenerator(),
                 SdJwtSerializer.SerializeDisclosure,
                 SdJwtPathExtraction.ComputeDisclosureDigest,
-                TestSetup.Base64UrlEncoder, WellKnownHashAlgorithms.Sha256Iana);
+                TestSetup.Base64UrlEncoder, WellKnownHashAlgorithms.Sha256Iana, BaseMemoryPool.Shared);
 
             Assert.HasCount(disclosableCount, disclosures);
 

@@ -41,7 +41,7 @@ internal sealed class CtapAuthenticatorClientPinFlowTests
     [TestMethod]
     public async Task RpClientDrivesSimulatorOverRealApduTransportAndDerivesSharedSecret()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("clientpin-flow-authenticator");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("clientpin-flow-authenticator",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, TestContext.CancellationToken);
@@ -95,7 +95,7 @@ internal sealed class CtapAuthenticatorClientPinFlowTests
     [TestMethod]
     public async Task RpClientDrivesFullPinEstablishmentAndTokenIssuanceJourneyOverRealApduTransport()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("clientpin-flow-capstone");
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("clientpin-flow-capstone",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, TestContext.CancellationToken);
 
@@ -192,7 +192,7 @@ internal sealed class CtapAuthenticatorClientPinFlowTests
     [TestMethod]
     public async Task RpClientDrivesMakeCredentialAndGetAssertionWithPinUvAuthTokenOverRealApduTransport()
     {
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("pinuv-mcga-capstone");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("pinuv-mcga-capstone",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, TestContext.CancellationToken);
 

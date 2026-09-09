@@ -93,7 +93,15 @@ public class RelatedResource: IEquatable<RelatedResource>
     public IDictionary<string, object>? AdditionalData { get; set; }
 
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Determines whether this related resource is equal to <paramref name="other"/> by comparing
+    /// <see cref="Id"/>, <see cref="DigestSRI"/>, <see cref="DigestMultibase"/> and
+    /// <see cref="MediaType"/>. Equality is exact-type, not polymorphic over subtypes: a derived
+    /// type adding further identity-bearing members is never equal to a same-valued instance of
+    /// this type.
+    /// </summary>
+    /// <param name="other">The related resource to compare against.</param>
+    /// <returns><see langword="true"/> if the related resources are equal; otherwise <see langword="false"/>.</returns>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public bool Equals(RelatedResource? other)
     {
@@ -105,6 +113,11 @@ public class RelatedResource: IEquatable<RelatedResource>
         if(ReferenceEquals(this, other))
         {
             return true;
+        }
+
+        if(GetType() != other.GetType())
+        {
+            return false;
         }
 
         return string.Equals(Id, other.Id, StringComparison.Ordinal)

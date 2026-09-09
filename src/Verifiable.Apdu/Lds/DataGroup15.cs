@@ -48,21 +48,21 @@ public sealed class DataGroup15: IDisposable
     private const int BitStringTag = 0x03;
     private const int NullTag = 0x05;
 
-    private readonly EncodedEcPoint? ellipticCurvePublicKey;
-    private readonly RsaPublicKey? rsaPublicKey;
+    private EncodedEcPoint? RawEllipticCurvePublicKey { get; }
+    private RsaPublicKey? RawRsaPublicKey { get; }
     private bool disposed;
 
 
     private DataGroup15(EncodedEcPoint ellipticCurvePublicKey)
     {
-        this.ellipticCurvePublicKey = ellipticCurvePublicKey;
+        this.RawEllipticCurvePublicKey = ellipticCurvePublicKey;
         KeyType = ActiveAuthenticationKeyType.EllipticCurve;
     }
 
 
     private DataGroup15(RsaPublicKey rsaPublicKey)
     {
-        this.rsaPublicKey = rsaPublicKey;
+        this.RawRsaPublicKey = rsaPublicKey;
         KeyType = ActiveAuthenticationKeyType.Rsa;
     }
 
@@ -73,12 +73,12 @@ public sealed class DataGroup15: IDisposable
     /// <summary>Gets the chip's elliptic-curve Active Authentication public key (SEC1 uncompressed, tagged with its curve). Owned by this data group.</summary>
     /// <exception cref="InvalidOperationException">Thrown when <see cref="KeyType"/> is not <see cref="ActiveAuthenticationKeyType.EllipticCurve"/>.</exception>
     public EncodedEcPoint EllipticCurvePublicKey =>
-        ellipticCurvePublicKey ?? throw new InvalidOperationException("DG15 does not carry an elliptic-curve Active Authentication public key.");
+        RawEllipticCurvePublicKey ?? throw new InvalidOperationException("DG15 does not carry an elliptic-curve Active Authentication public key.");
 
     /// <summary>Gets the chip's RSA Active Authentication public key (DER <c>RSAPublicKey</c>). Owned by this data group.</summary>
     /// <exception cref="InvalidOperationException">Thrown when <see cref="KeyType"/> is not <see cref="ActiveAuthenticationKeyType.Rsa"/>.</exception>
     public RsaPublicKey RsaPublicKey =>
-        rsaPublicKey ?? throw new InvalidOperationException("DG15 does not carry an RSA Active Authentication public key.");
+        RawRsaPublicKey ?? throw new InvalidOperationException("DG15 does not carry an RSA Active Authentication public key.");
 
 
     /// <summary>
@@ -227,8 +227,8 @@ public sealed class DataGroup15: IDisposable
     {
         if(!disposed)
         {
-            ellipticCurvePublicKey?.Dispose();
-            rsaPublicKey?.Dispose();
+            RawEllipticCurvePublicKey?.Dispose();
+            RawRsaPublicKey?.Dispose();
             disposed = true;
         }
     }

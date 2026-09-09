@@ -1,5 +1,5 @@
 using System.Buffers;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Fido2;
 
@@ -7,7 +7,7 @@ namespace Verifiable.Cbor.Fido2;
 
 /// <summary>
 /// The shipped default for <see cref="ParseFidoU2fAttestationStatementDelegate"/>: decodes a
-/// <c>fido-u2f</c> attestation statement's CBOR bytes using System.Formats.Cbor.
+/// <c>fido-u2f</c> attestation statement's CBOR bytes.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -57,7 +57,7 @@ public static class FidoU2fAttestationStatementCborReader
         List<PkiCertificateMemory>? x5c = null;
         try
         {
-            var reader = new CborReader(attestationStatement, CborConformanceMode.Ctap2Canonical);
+            var reader = new CborReader(attestationStatement, CborOptions.Ctap2Canonical, pool);
             int? entryCount = reader.ReadStartMap();
 
             ReadOnlyMemory<byte>? sig = null;
@@ -106,7 +106,7 @@ public static class FidoU2fAttestationStatementCborReader
 
             return new FidoU2fAttestationStatement(sig.Value, x5c);
         }
-        catch(Exception exception) when(exception is CborContentException or InvalidOperationException or OverflowException or FormatException)
+        catch(Exception exception) when(exception is CborException or InvalidOperationException or OverflowException or FormatException)
         {
             DisposeAll(x5c);
             throw new Fido2FormatException("The fido-u2f attestation statement bytes are not valid CTAP2 canonical CBOR conforming to the fido-u2f attStmt syntax.", exception);

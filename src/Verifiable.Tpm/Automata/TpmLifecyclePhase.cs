@@ -1,7 +1,7 @@
 namespace Verifiable.Tpm.Automata;
 
 /// <summary>
-/// The basic operational phases of a TPM, as defined in TPM 2.0 Library Part 1, clause 10
+/// The basic operational phases of a TPM, as defined in TPM 2.0 Library Part 1, clause 9
 /// ("TPM Operational States").
 /// </summary>
 /// <remarks>

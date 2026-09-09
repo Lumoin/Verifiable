@@ -10,12 +10,12 @@ namespace Verifiable.Tests.Federation;
 [TestClass]
 internal sealed class MetadataPolicyApplicatorTests
 {
-    private static readonly EntityTypeIdentifier RpType =
+    private static EntityTypeIdentifier RpType { get; } =
         WellKnownEntityTypeIdentifiers.OpenIdRelyingParty;
 
-    private static readonly string[] ExpectedAddedScope = ["openid", "profile", "email"];
-    private static readonly string[] ExpectedDefaultScope = ["openid", "profile"];
-    private static readonly string[] ExpectedTrimmedGrantTypes = ["authorization_code"];
+    private static string[] ExpectedAddedScope { get; } = ["openid", "profile", "email"];
+    private static string[] ExpectedDefaultScope { get; } = ["openid", "profile"];
+    private static string[] ExpectedTrimmedGrantTypes { get; } = ["authorization_code"];
 
 
     [TestMethod]
@@ -42,7 +42,7 @@ internal sealed class MetadataPolicyApplicatorTests
             ["scope"] = "openid",
         };
         EntityTypeMetadataPolicy policy = MakePolicy(
-            ("scope", (WellKnownMetadataPolicyOperators.Value, (object)"openid profile email")));
+            ("scope", (WellKnownMetadataPolicyOperators.Value, "openid profile email")));
 
         MetadataPolicyApplyResult result = MetadataPolicyApplicator.Apply(declared, policy);
 
@@ -59,7 +59,7 @@ internal sealed class MetadataPolicyApplicatorTests
             ["scope"] = new List<object> { "openid", "profile" },
         };
         EntityTypeMetadataPolicy policy = MakePolicy(
-            ("scope", (WellKnownMetadataPolicyOperators.Add, (object)new List<object> { "email" })));
+            ("scope", (WellKnownMetadataPolicyOperators.Add, new List<object> { "email" })));
 
         MetadataPolicyApplyResult result = MetadataPolicyApplicator.Apply(declared, policy);
 
@@ -74,7 +74,7 @@ internal sealed class MetadataPolicyApplicatorTests
     {
         IReadOnlyDictionary<string, object> declared = new Dictionary<string, object>();
         EntityTypeMetadataPolicy policy = MakePolicy(
-            ("scope", (WellKnownMetadataPolicyOperators.Default, (object)new List<object> { "openid", "profile" })));
+            ("scope", (WellKnownMetadataPolicyOperators.Default, new List<object> { "openid", "profile" })));
 
         MetadataPolicyApplyResult result = MetadataPolicyApplicator.Apply(declared, policy);
 
@@ -92,7 +92,7 @@ internal sealed class MetadataPolicyApplicatorTests
             ["scope"] = "declared_value",
         };
         EntityTypeMetadataPolicy policy = MakePolicy(
-            ("scope", (WellKnownMetadataPolicyOperators.Default, (object)"default_value")));
+            ("scope", (WellKnownMetadataPolicyOperators.Default, "default_value")));
 
         MetadataPolicyApplyResult result = MetadataPolicyApplicator.Apply(declared, policy);
 
@@ -110,7 +110,7 @@ internal sealed class MetadataPolicyApplicatorTests
         };
         EntityTypeMetadataPolicy policy = MakePolicy(
             ("id_token_signed_response_alg",
-                (WellKnownMetadataPolicyOperators.OneOf, (object)new List<object> { "ES256", "PS256" })));
+                (WellKnownMetadataPolicyOperators.OneOf, new List<object> { "ES256", "PS256" })));
 
         MetadataPolicyApplyResult result = MetadataPolicyApplicator.Apply(declared, policy);
 
@@ -131,7 +131,7 @@ internal sealed class MetadataPolicyApplicatorTests
         };
         EntityTypeMetadataPolicy policy = MakePolicy(
             ("grant_types",
-                (WellKnownMetadataPolicyOperators.SubsetOf, (object)new List<object> { "authorization_code", "refresh_token" })));
+                (WellKnownMetadataPolicyOperators.SubsetOf, new List<object> { "authorization_code", "refresh_token" })));
 
         MetadataPolicyApplyResult result = MetadataPolicyApplicator.Apply(declared, policy);
 
@@ -151,7 +151,7 @@ internal sealed class MetadataPolicyApplicatorTests
         };
         EntityTypeMetadataPolicy policy = MakePolicy(
             ("grant_types",
-                (WellKnownMetadataPolicyOperators.SubsetOf, (object)new List<object> { "authorization_code", "refresh_token" })));
+                (WellKnownMetadataPolicyOperators.SubsetOf, new List<object> { "authorization_code", "refresh_token" })));
 
         MetadataPolicyApplyResult result = MetadataPolicyApplicator.Apply(declared, policy);
 
@@ -170,7 +170,7 @@ internal sealed class MetadataPolicyApplicatorTests
         };
         EntityTypeMetadataPolicy policy = MakePolicy(
             ("scope",
-                (WellKnownMetadataPolicyOperators.SupersetOf, (object)new List<object> { "openid" })));
+                (WellKnownMetadataPolicyOperators.SupersetOf, new List<object> { "openid" })));
 
         MetadataPolicyApplyResult result = MetadataPolicyApplicator.Apply(declared, policy);
 
@@ -200,7 +200,7 @@ internal sealed class MetadataPolicyApplicatorTests
         //"true" must be a policy error, not a silently-ignored (non-essential) parameter.
         IReadOnlyDictionary<string, object> declared = new Dictionary<string, object>();
         EntityTypeMetadataPolicy policy = MakePolicy(
-            ("scope", (WellKnownMetadataPolicyOperators.Essential, (object)"true")));
+            ("scope", (WellKnownMetadataPolicyOperators.Essential, "true")));
 
         MetadataPolicyApplyResult result = MetadataPolicyApplicator.Apply(declared, policy);
 

@@ -64,7 +64,7 @@ internal static class McpToolNames
     /// <summary>
     /// All available tool names.
     /// </summary>
-    public static readonly string[] All =
+    public static string[] All { get; } =
     [
         GetTpmInfo,
         SaveTpmInfoToFile,

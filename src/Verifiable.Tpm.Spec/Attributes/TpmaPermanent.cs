@@ -14,7 +14,7 @@ namespace Verifiable.Tpm.Spec.Attributes;
 /// Retrieval: <c>TPM2_GetCapability(capability == TPM_CAP_TPM_PROPERTIES, property == TPM_PT_PERMANENT)</c>.
 /// </para>
 /// <para>
-/// Specification: <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2: Structures, section 8.6 (TPMA_PERMANENT).
+/// Specification: <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2: Structures, clause 8.6 (TPMA_PERMANENT).
 /// </para>
 /// </remarks>
 [Flags]

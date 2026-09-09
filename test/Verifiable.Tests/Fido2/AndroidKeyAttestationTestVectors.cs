@@ -1,7 +1,9 @@
-using System.Formats.Cbor;
+using System.Buffers;
+using Lumoin.Veritas.Cbor;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Org.BouncyCastle.Asn1;
+using Verifiable.Cbor;
 using Verifiable.Cryptography;
 using Verifiable.Fido2;
 using Verifiable.Tests.X509;
@@ -196,7 +198,9 @@ internal static class AndroidKeyAttestationTestVectors
     /// <returns>The encoded <c>attStmt</c> bytes.</returns>
     internal static byte[] EncodeAndroidKeyAttStmt(int alg, byte[] sig, IReadOnlyList<byte[]> x5c)
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(3);
         writer.WriteTextString("alg");
         writer.WriteInt32(alg);
@@ -212,7 +216,7 @@ internal static class AndroidKeyAttestationTestVectors
         writer.WriteEndArray();
         writer.WriteEndMap();
 
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 

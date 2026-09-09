@@ -40,8 +40,8 @@ internal sealed class WebVhDidUrlDereferencerTests
     private const string Domain = "example.com";
     private const string GenesisTime = "2025-01-01T00:00:00Z";
 
-    private static readonly EncodeDelegate Base58Encoder = DefaultCoderSelector.SelectEncoder(typeof(PublicKeyMultibase));
-    private static readonly DecodeDelegate Base58Decoder = DefaultCoderSelector.SelectDecoder(typeof(PublicKeyMultibase));
+    private static EncodeDelegate Base58Encoder { get; } = DefaultCoderSelector.SelectEncoder(typeof(PublicKeyMultibase));
+    private static DecodeDelegate Base58Decoder { get; } = DefaultCoderSelector.SelectDecoder(typeof(PublicKeyMultibase));
 
     private static JsonSerializerOptions JsonOptions { get; } = TestSetup.DefaultSerializationOptions;
 
@@ -483,7 +483,7 @@ internal sealed class WebVhDidUrlDereferencerTests
     {
         VerifiablePresentation unsigned = new()
         {
-            Context = new Context { Contexts = [Context.Credentials20] },
+            Context = Context.FromIris(Context.Credentials20),
             Type = ["VerifiablePresentation"],
             Holder = did
         };
@@ -555,7 +555,7 @@ internal sealed class WebVhDidUrlDereferencerTests
             SerializePresentation,
             SerializeProofOptions,
             Base58Decoder,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             BaseMemoryPool.Shared);
 
         DidResolver composed = DidResolverComposition.Build(
@@ -597,16 +597,16 @@ internal sealed class WebVhDidUrlDereferencerTests
     //a 404. The body is served as the transport-owned JSON-tagged buffer the guarded fetch returns.
     private sealed class RoutingTransport
     {
-        private readonly Dictionary<string, (int Status, byte[]? Body, string? ContentType)> routes;
+        private Dictionary<string, (int Status, byte[]? Body, string? ContentType)> Routes { get; }
 
         public RoutingTransport(Dictionary<string, (int Status, byte[]? Body, string? ContentType)> routes)
         {
-            this.routes = routes;
+            this.Routes = routes;
         }
 
         public OutboundTransportDelegate Delegate => (request, context, cancellationToken) =>
         {
-            if(!routes.TryGetValue(request.Target.AbsoluteUri, out (int Status, byte[]? Body, string? ContentType) route))
+            if(!Routes.TryGetValue(request.Target.AbsoluteUri, out (int Status, byte[]? Body, string? ContentType) route))
             {
                 route = (404, null, null);
             }
@@ -615,9 +615,9 @@ internal sealed class WebVhDidUrlDereferencerTests
                 ? TaggedMemory<byte>.Empty
                 : new TaggedMemory<byte>(route.Body, BufferTags.Json);
 
-            IReadOnlyDictionary<string, string> headers = route.ContentType is null
-                ? OutboundRequest.EmptyHeaders
-                : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["Content-Type"] = route.ContentType };
+            HttpHeaderSet headers = route.ContentType is null
+                ? HttpHeaderSet.Empty
+                : HttpHeaderSet.FromPairs((WellKnownHttpHeaderNames.ContentType, route.ContentType));
 
             return ValueTask.FromResult(new OutboundResponse { StatusCode = route.Status, Body = body, Headers = headers });
         };

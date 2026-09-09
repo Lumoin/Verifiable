@@ -29,7 +29,7 @@ public static class WellKnownTokenTypes
     /// The OAuth 2.0 access token response field name (<c>access_token</c>) per
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.1">RFC 6749 §5.1</see>.
     /// </summary>
-    public static readonly string AccessToken = Utf8Constants.ToInternedString(AccessTokenUtf8);
+    public static string AccessToken { get; } = Utf8Constants.ToInternedString(AccessTokenUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="IdToken"/>.</summary>
     public static ReadOnlySpan<byte> IdTokenUtf8 => "id_token"u8;
@@ -38,7 +38,7 @@ public static class WellKnownTokenTypes
     /// The OpenID Connect ID Token response field name (<c>id_token</c>) per
     /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#TokenResponse">OIDC Core §3.1.3.3</see>.
     /// </summary>
-    public static readonly string IdToken = Utf8Constants.ToInternedString(IdTokenUtf8);
+    public static string IdToken { get; } = Utf8Constants.ToInternedString(IdTokenUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="RefreshToken"/>.</summary>
     public static ReadOnlySpan<byte> RefreshTokenUtf8 => "refresh_token"u8;
@@ -47,7 +47,7 @@ public static class WellKnownTokenTypes
     /// The OAuth 2.0 refresh token response field name (<c>refresh_token</c>) per
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.1">RFC 6749 §5.1</see>.
     /// </summary>
-    public static readonly string RefreshToken = Utf8Constants.ToInternedString(RefreshTokenUtf8);
+    public static string RefreshToken { get; } = Utf8Constants.ToInternedString(RefreshTokenUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="LogoutToken"/>.</summary>
     public static ReadOnlySpan<byte> LogoutTokenUtf8 => "logout_token"u8;
@@ -56,7 +56,7 @@ public static class WellKnownTokenTypes
     /// The OpenID Connect Back-Channel Logout token type name (<c>logout_token</c>) per
     /// <see href="https://openid.net/specs/openid-connect-backchannel-1_0.html#LogoutToken">OIDC Back-Channel Logout §2.4</see>.
     /// </summary>
-    public static readonly string LogoutToken = Utf8Constants.ToInternedString(LogoutTokenUtf8);
+    public static string LogoutToken { get; } = Utf8Constants.ToInternedString(LogoutTokenUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="IdJag"/>.</summary>
     public static ReadOnlySpan<byte> IdJagUtf8 => "id_jag"u8;
@@ -69,7 +69,7 @@ public static class WellKnownTokenTypes
     /// name. Distinct from <see cref="AccessToken"/> because an ID-JAG is short-lived and is not an
     /// access token.
     /// </summary>
-    public static readonly string IdJag = Utf8Constants.ToInternedString(IdJagUtf8);
+    public static string IdJag { get; } = Utf8Constants.ToInternedString(IdJagUtf8);
 
 
     /// <summary>

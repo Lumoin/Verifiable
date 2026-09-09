@@ -657,6 +657,11 @@ public static class AsicContainerAugmentation
     /// <exception cref="AsicContainerAugmentationException">When the container carries no CAdES object, or carries an archive manifest whose chain the change would break.</exception>
     /// <exception cref="CAdESAugmentationException">When a CAdES object cannot be augmented.</exception>
     /// <exception cref="TimestampAcquisitionException">When the authority could not be reached, or its answer does not verify.</exception>
+    /// <remarks>
+    /// <strong>Manual disposal, not a <see langword="using"/> declaration.</strong> <c>replacements</c> is a
+    /// per-signature dictionary of replacement entries, not one disposable value, so its values are disposed
+    /// in the <see langword="finally"/> below rather than through a <see langword="using"/> declaration.
+    /// </remarks>
     public static async ValueTask<AsicContainerAugmentationResult> AddSignatureTimestampsAsync(
         AsicContainerSignatureTimestampContext context,
         BaseMemoryPool pool,
@@ -708,7 +713,9 @@ public static class AsicContainerAugmentation
     /// <remarks>
     /// Synchronous by nature, as <see cref="CAdESSignatureAugmentation.AddValidationData"/> is: placing
     /// validation material is a splice over octets the caller already holds, with no digest and no authority to
-    /// wait for.
+    /// wait for. <c>replacements</c> is a per-signature dictionary of replacement entries, not one
+    /// disposable value, so its values are disposed in the <see langword="finally"/> below rather than
+    /// through a <see langword="using"/> declaration.
     /// </remarks>
     public static AsicContainerAugmentationResult AddSignatureValidationData(
         AsicContainerValidationDataContext context,
@@ -760,6 +767,11 @@ public static class AsicContainerAugmentation
     /// <exception cref="AsicContainerAugmentationException">When the container carries no CAdES object, carries an archive manifest whose chain the change would break, does not state what a signature is detached over, or the manifest seam is missing or refuses a document.</exception>
     /// <exception cref="CAdESAugmentationException">When a CAdES object cannot be augmented.</exception>
     /// <exception cref="TimestampAcquisitionException">When the authority could not be reached, or its answer does not verify.</exception>
+    /// <remarks>
+    /// <strong>Manual disposal, not a <see langword="using"/> declaration.</strong> <c>replacements</c> is a
+    /// per-signature dictionary of replacement entries, not one disposable value, so its values are disposed
+    /// in the <see langword="finally"/> below.
+    /// </remarks>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Every carrier the loop builds is owned by a using of that iteration and the replacements the finally disposes; the rule's data flow does not follow ownership across the awaited augmentations inside the loop. The try/finally shape the rule prescribes was written first and does not satisfy it either.")]
     public static async ValueTask<AsicContainerAugmentationResult> AddSignatureArchiveTimestampsAsync(
@@ -851,6 +863,14 @@ public static class AsicContainerAugmentation
     /// therefore state the attribute for the renamed predecessor and for nothing else — item 2 b) iii)'s "all the
     /// referenced file objects above shall not have the <c>Rootfile</c> attribute or it shall be set to false",
     /// taken in its first form.
+    /// </para>
+    /// <para>
+    /// <strong>Manual disposal, not <see langword="using"/> declarations.</strong> <c>replacements</c> is a
+    /// per-signature dictionary, not one disposable value; <c>manifestDocument</c> and <c>tokenOctets</c> are
+    /// declared <see langword="null"/> and assigned only once each artifact is built, then read again after
+    /// assignment (<paramref name="context"/>'s manifest and token octets feed the returned result's fields),
+    /// so neither can be a single-declaration <see langword="using"/> target either. All three are disposed in
+    /// the <see langword="finally"/> below.
     /// </para>
     /// </remarks>
     public static async ValueTask<AsicContainerAugmentationResult> AddContainerArchiveTimestampAsync(
@@ -1238,6 +1258,9 @@ public static class AsicContainerAugmentation
     /// incorporates without distinguishing which <c>SignerInfo</c> of which file object carries them: an object
     /// whose second signer stayed at B-B caps the container just as a second file object would. The context
     /// travels as a parameter rather than being captured, the same no-closure discipline the seams keep.
+    /// <c>current</c> is reassigned once per signer as each raised object replaces its predecessor (a
+    /// <see langword="using"/> declaration forbids any reassignment), and nulled just before the return so
+    /// the <see langword="finally"/> disposes it only on a throw, never on the success path.
     /// </remarks>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "The object walked forward is held in one local the finally disposes unconditionally, and is nulled out where ownership transfers to the caller; the rule's data flow does not follow that transfer across the awaited augmentation. The exact try/finally shape the rule prescribes is what is written here.")]
@@ -1295,6 +1318,11 @@ public static class AsicContainerAugmentation
     /// <param name="pool">The memory pool every allocation this call performs is rented from.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The augmented object. The caller owns and disposes it.</returns>
+    /// <remarks>
+    /// <strong>Manual disposal, not a <see langword="using"/> declaration.</strong> <c>current</c> is
+    /// reassigned once per signer as each raised object replaces its predecessor, and nulled just before the
+    /// return so the <see langword="finally"/> disposes it only on a throw.
+    /// </remarks>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "The object walked forward is held in one local the finally disposes unconditionally, and is nulled out where ownership transfers to the caller; the rule's data flow does not follow that transfer across the awaited augmentation. The exact try/finally shape the rule prescribes is what is written here.")]
     private static async ValueTask<CmsSignedData> AddArchiveTimestampToEverySignerAsync(

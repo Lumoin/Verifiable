@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Core.Model.Dcql;
+using Verifiable.Cryptography.Pki;
 
 namespace Verifiable.Core.Dcql;
 
@@ -147,7 +148,11 @@ public static class DcqlQueryExtensions
         }
 
         /// <summary>
-        /// Validates the query structure and returns any issues found.
+        /// Validates the query structure and returns any issues found: a missing or
+        /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-6.1">
+        /// OID4VP 1.0 §6.1</see>-invalid credential query <c>id</c>, a repeated <c>id</c>, and a
+        /// <c>dc+sd-jwt</c> credential query whose <c>meta.vct_values</c> is absent or empty
+        /// (OpenID4VP 1.0 Appendix B.3.5 makes it REQUIRED).
         /// </summary>
         /// <returns>A list of validation issues, empty if valid.</returns>
         public IReadOnlyList<string> Validate()
@@ -160,22 +165,38 @@ public static class DcqlQueryExtensions
                 return issues;
             }
 
-            //Check for duplicate IDs.
+            //Check for a §6.1-invalid or duplicate id. The position is named because an id that is
+            //absent or empty renders as nothing at all, leaving the operator no way to tell which
+            //entry of credentials the issue is about.
             var seenIds = new HashSet<string>();
-            foreach(var credential in query.Credentials)
+            for(int credentialPosition = 0; credentialPosition < query.Credentials.Count; credentialPosition++)
             {
-                if(string.IsNullOrEmpty(credential.Id))
+                var credential = query.Credentials[credentialPosition];
+
+                if(!CredentialQueryId.TryCreate(credential.Id, out _))
                 {
-                    issues.Add("Credential query ID is required.");
+                    issues.Add(
+                        $"Credential query at position {credentialPosition} carries no usable ID. Per " +
+                        "OID4VP 1.0 §6.1 the ID is required and MUST be a " +
+                        "non-empty string consisting of alphanumeric, underscore (_), or hyphen (-) " +
+                        $"characters: '{credential.Id}'.");
                 }
-                else if(!seenIds.Add(credential.Id))
+                else if(!seenIds.Add(credential.Id!))
                 {
-                    issues.Add($"Duplicate credential query ID: {credential.Id}");
+                    issues.Add(
+                        $"Duplicate credential query ID: {credential.Id}. Per OID4VP 1.0 §6.1, " +
+                        "\"Within the Authorization Request, the same id MUST NOT be present more than once\".");
                 }
 
                 if(string.IsNullOrEmpty(credential.Format))
                 {
                     issues.Add($"Credential query '{credential.Id}' is missing required format.");
+                }
+
+                if(string.Equals(credential.Format, DcqlCredentialFormats.SdJwt, StringComparison.Ordinal)
+                    && credential.Meta?.VctValues is not { Count: > 0 })
+                {
+                    issues.Add($"Credential query '{credential.Id}' uses format '{DcqlCredentialFormats.SdJwt}' but does not specify a non-empty meta.{DcqlParameterNames.VctValues}, required by OpenID4VP 1.0 Appendix B.3.5.");
                 }
             }
 
@@ -352,34 +373,73 @@ public static class DcqlQueryExtensions
 
 
     /// <summary>
-    /// Extensions for <see cref="TrustedAuthoritiesQuery"/> providing trust checking.
+    /// Extensions for <see cref="TrustedAuthoritiesQuery"/> providing evidence matching per
+    /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-6.1.1">
+    /// OpenID for Verifiable Presentations 1.0, Section 6.1.1</see>.
     /// </summary>
     extension(TrustedAuthoritiesQuery authorities)
     {
         /// <summary>
-        /// Determines whether the given authority identifier is trusted.
+        /// Determines whether <paramref name="evidence"/> matches this entry, per
+        /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-6.1.1">
+        /// OpenID for Verifiable Presentations 1.0, Section 6.1.1</see>: "A Credential is identified
+        /// as a match to a Trusted Authorities Query if it matches with one of the provided values in
+        /// one of the provided types." Dispatch is on <see cref="TrustedAuthoritiesQuery.Type"/>
+        /// through <see cref="DcqlTrustedAuthorityTypes"/>; a value that does not parse into the
+        /// type's identifier shape matches nothing rather than throwing, and an entry whose
+        /// <see cref="TrustedAuthoritiesQuery.Type"/> is none of the three registered values matches
+        /// nothing (fail-closed, per Section 6.4.2's MUST NOT).
         /// </summary>
-        /// <param name="authorityId">The authority identifier to check.</param>
-        /// <returns><see langword="true"/> if the authority is in the trusted list.</returns>
-        public bool IsTrusted(string authorityId)
+        /// <param name="evidence">The credential's trust evidence.</param>
+        /// <returns><see langword="true"/> when any of <see cref="TrustedAuthoritiesQuery.Values"/> matches under this entry's type; otherwise <see langword="false"/>.</returns>
+        public bool Matches(TrustedAuthorityEvidence evidence)
         {
-            ArgumentNullException.ThrowIfNull(authorityId);
+            ArgumentNullException.ThrowIfNull(evidence);
 
-            if(authorities.Values is null)
+            return authorities.Type switch
             {
-                return false;
-            }
-
-            foreach(var value in authorities.Values)
-            {
-                if(string.Equals(value, authorityId, StringComparison.Ordinal))
-                {
-                    return true;
-                }
-            }
-
-            return false;
+                var type when DcqlTrustedAuthorityTypes.IsAki(type) =>
+                    MatchesAnyValue(authorities.Values, evidence.AuthorityKeyIdentifiers, AuthorityKeyIdentifier.TryParse),
+                var type when DcqlTrustedAuthorityTypes.IsEtsiTrustedList(type) =>
+                    MatchesAnyValue(authorities.Values, evidence.TrustedListMemberships, TrustedListIdentifier.TryCreate),
+                var type when DcqlTrustedAuthorityTypes.IsOpenIdFederation(type) =>
+                    MatchesAnyValue(authorities.Values, evidence.FederationTrustPathEntities, EntityIdentifier.TryCreate),
+                _ => false
+            };
         }
+    }
+
+
+    /// <summary>Parses a candidate string into an identifier of type <typeparamref name="T"/>, failing closed rather than throwing.</summary>
+    /// <typeparam name="T">The identifier type.</typeparam>
+    /// <param name="value">The candidate string.</param>
+    /// <param name="identifier">The parsed identifier when parsing succeeds; <see langword="default"/> otherwise.</param>
+    /// <returns><see langword="true"/> when <paramref name="value"/> parses; otherwise <see langword="false"/>.</returns>
+    private delegate bool TryParseIdentifier<T>(string? value, out T identifier);
+
+
+    /// <summary>
+    /// Reports whether any of <paramref name="values"/> parses into an identifier contained in
+    /// <paramref name="evidenceSet"/>. A value that does not parse contributes no match; it is never
+    /// an error, since a DCQL <c>trusted_authorities</c> value that another Wallet's evidence would
+    /// have parsed simply cannot be tested against this credential's evidence.
+    /// </summary>
+    /// <typeparam name="T">The identifier type the evidence set carries.</typeparam>
+    /// <param name="values">The query entry's candidate values.</param>
+    /// <param name="evidenceSet">The credential's evidence set of the matching identifier type.</param>
+    /// <param name="tryParse">Parses one candidate value into the identifier type.</param>
+    /// <returns><see langword="true"/> when any value parses and is contained in <paramref name="evidenceSet"/>; otherwise <see langword="false"/>.</returns>
+    private static bool MatchesAnyValue<T>(IReadOnlyList<string> values, IReadOnlySet<T> evidenceSet, TryParseIdentifier<T> tryParse)
+    {
+        foreach(string value in values)
+        {
+            if(tryParse(value, out T identifier) && evidenceSet.Contains(identifier))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
 

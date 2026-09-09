@@ -37,7 +37,7 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
     private const string ClientId = "https://issuer.client.test";
 
     /// <summary>The base URI the registered client is reachable at.</summary>
-    private static readonly Uri ClientBaseUri = new("https://issuer.client.test");
+    private static Uri ClientBaseUri { get; } = new("https://issuer.client.test");
 
     /// <summary>The supported Credential Configuration identifier the catalog advertises.</summary>
     private const string ConfigurationId = "UniversityDegree_dc_sd_jwt";
@@ -46,7 +46,7 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
     /// The full capability set: the metadata endpoint, plus the Credential and Nonce Endpoints
     /// whose URLs the metadata document derives off the chain.
     /// </summary>
-    private static readonly ImmutableHashSet<CapabilityIdentifier> MetadataCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> MetadataCapabilities { get; } =
         ImmutableHashSet.Create(
             WellKnownCapabilityIdentifiers.Oid4VciCredentialIssuerMetadata,
             WellKnownCapabilityIdentifiers.Oid4VciCredentialEndpoint,
@@ -668,10 +668,10 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
     /// — the same path that serializes the plain §12.2.4 document, so it handles the metadata
     /// claim set's string arrays and nested object trees verbatim.
     /// </summary>
-    private static readonly JwtHeaderSerializer AppendHeaderSerializer = static header => AppendDictionary(header);
+    private static JwtHeaderSerializer AppendHeaderSerializer { get; } = static header => AppendDictionary(header);
 
     /// <summary>A JWS-payload serializer backed by the same <see cref="JsonAppender"/> firewall walker.</summary>
-    private static readonly JwtPayloadSerializer AppendPayloadSerializer = static payload => AppendDictionary(payload);
+    private static JwtPayloadSerializer AppendPayloadSerializer { get; } = static payload => AppendDictionary(payload);
 
 
     private static byte[] AppendDictionary(IReadOnlyDictionary<string, object> dictionary)

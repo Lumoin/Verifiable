@@ -34,7 +34,7 @@ public static class WellKnownCtapGetInfoOptionIds
     /// if capable and disabled, absent if the feature is not supported at all (default "not supported"
     /// when absent).
     /// </summary>
-    public static readonly string Ep = Utf8Constants.ToInternedString(EpUtf8);
+    public static string Ep { get; } = Utf8Constants.ToInternedString(EpUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Plat"/>.</summary>
     public static ReadOnlySpan<byte> PlatUtf8 => "plat"u8;
@@ -43,7 +43,7 @@ public static class WellKnownCtapGetInfoOptionIds
     /// <c>plat</c>: whether the authenticator is a platform device attached to the client
     /// (default <see langword="false"/> when absent).
     /// </summary>
-    public static readonly string Plat = Utf8Constants.ToInternedString(PlatUtf8);
+    public static string Plat { get; } = Utf8Constants.ToInternedString(PlatUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Rk"/>.</summary>
     public static ReadOnlySpan<byte> RkUtf8 => "rk"u8;
@@ -52,7 +52,7 @@ public static class WellKnownCtapGetInfoOptionIds
     /// <c>rk</c>: whether the authenticator can create discoverable credentials (default
     /// <see langword="false"/> when absent).
     /// </summary>
-    public static readonly string Rk = Utf8Constants.ToInternedString(RkUtf8);
+    public static string Rk { get; } = Utf8Constants.ToInternedString(RkUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Uv"/>.</summary>
     public static ReadOnlySpan<byte> UvUtf8 => "uv"u8;
@@ -62,7 +62,7 @@ public static class WellKnownCtapGetInfoOptionIds
     /// it is presently configured (default "no built-in user verification capability" when absent).
     /// This simulator reports this option present unconditionally, tri-state on enrollment count.
     /// </summary>
-    public static readonly string Uv = Utf8Constants.ToInternedString(UvUtf8);
+    public static string Uv { get; } = Utf8Constants.ToInternedString(UvUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="AlwaysUv"/>.</summary>
     public static ReadOnlySpan<byte> AlwaysUvUtf8 => "alwaysUv"u8;
@@ -72,7 +72,7 @@ public static class WellKnownCtapGetInfoOptionIds
     /// <see langword="true"/> if enabled, present and <see langword="false"/> if supported but
     /// disabled, absent if the feature is not supported at all (default "not supported" when absent).
     /// </summary>
-    public static readonly string AlwaysUv = Utf8Constants.ToInternedString(AlwaysUvUtf8);
+    public static string AlwaysUv { get; } = Utf8Constants.ToInternedString(AlwaysUvUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="CredMgmt"/>.</summary>
     public static ReadOnlySpan<byte> CredMgmtUtf8 => "credMgmt"u8;
@@ -82,7 +82,7 @@ public static class WellKnownCtapGetInfoOptionIds
     /// supported" when absent). This simulator reports this option present and <see langword="true"/>
     /// unconditionally — support is a static capability of this build.
     /// </summary>
-    public static readonly string CredMgmt = Utf8Constants.ToInternedString(CredMgmtUtf8);
+    public static string CredMgmt { get; } = Utf8Constants.ToInternedString(CredMgmtUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="AuthnrCfg"/>.</summary>
     public static ReadOnlySpan<byte> AuthnrCfgUtf8 => "authnrCfg"u8;
@@ -92,7 +92,7 @@ public static class WellKnownCtapGetInfoOptionIds
     /// absent). Platforms MUST NOT invoke <c>authenticatorConfig</c> unless this is present and
     /// <see langword="true"/>.
     /// </summary>
-    public static readonly string AuthnrCfg = Utf8Constants.ToInternedString(AuthnrCfgUtf8);
+    public static string AuthnrCfg { get; } = Utf8Constants.ToInternedString(AuthnrCfgUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="BioEnroll"/>.</summary>
     public static ReadOnlySpan<byte> BioEnrollUtf8 => "bioEnroll"u8;
@@ -103,7 +103,7 @@ public static class WellKnownCtapGetInfoOptionIds
     /// commands with zero enrollments; absent: commands not supported). This simulator reports this
     /// option present unconditionally, once the fingerprint-enrollment surface ships.
     /// </summary>
-    public static readonly string BioEnroll = Utf8Constants.ToInternedString(BioEnrollUtf8);
+    public static string BioEnroll { get; } = Utf8Constants.ToInternedString(BioEnrollUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="ClientPin"/>.</summary>
     public static ReadOnlySpan<byte> ClientPinUtf8 => "clientPin"u8;
@@ -113,7 +113,7 @@ public static class WellKnownCtapGetInfoOptionIds
     /// <see langword="false"/> if the authenticator can accept a PIN but none is set, absent if the
     /// authenticator cannot accept a PIN at all (default "not supported" when absent).
     /// </summary>
-    public static readonly string ClientPin = Utf8Constants.ToInternedString(ClientPinUtf8);
+    public static string ClientPin { get; } = Utf8Constants.ToInternedString(ClientPinUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="LargeBlobs"/>.</summary>
     public static ReadOnlySpan<byte> LargeBlobsUtf8 => "largeBlobs"u8;
@@ -124,7 +124,7 @@ public static class WellKnownCtapGetInfoOptionIds
     /// present and <see langword="true"/> unconditionally — support is a static capability of this
     /// build.
     /// </summary>
-    public static readonly string LargeBlobs = Utf8Constants.ToInternedString(LargeBlobsUtf8);
+    public static string LargeBlobs { get; } = Utf8Constants.ToInternedString(LargeBlobsUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="UvBioEnroll"/>.</summary>
     public static ReadOnlySpan<byte> UvBioEnrollUtf8 => "uvBioEnroll"u8;
@@ -135,7 +135,7 @@ public static class WellKnownCtapGetInfoOptionIds
     /// <see cref="BioEnroll"/> is also present). This simulator reports this option present and
     /// <see langword="true"/> unconditionally — support is a static capability of this build.
     /// </summary>
-    public static readonly string UvBioEnroll = Utf8Constants.ToInternedString(UvBioEnrollUtf8);
+    public static string UvBioEnroll { get; } = Utf8Constants.ToInternedString(UvBioEnrollUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="PinUvAuthToken"/>.</summary>
     public static ReadOnlySpan<byte> PinUvAuthTokenUtf8 => "pinUvAuthToken"u8;
@@ -144,7 +144,7 @@ public static class WellKnownCtapGetInfoOptionIds
     /// <c>pinUvAuthToken</c>: whether <c>authenticatorClientPIN</c>'s token-issuing subcommands are
     /// supported (default "not supported" when absent).
     /// </summary>
-    public static readonly string PinUvAuthToken = Utf8Constants.ToInternedString(PinUvAuthTokenUtf8);
+    public static string PinUvAuthToken { get; } = Utf8Constants.ToInternedString(PinUvAuthTokenUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="SetMinPinLength"/>.</summary>
     public static ReadOnlySpan<byte> SetMinPinLengthUtf8 => "setMinPINLength"u8;
@@ -153,7 +153,7 @@ public static class WellKnownCtapGetInfoOptionIds
     /// <c>setMinPINLength</c>: support for the <c>authenticatorConfig</c> <c>setMinPINLength</c>
     /// subcommand (default "not supported" when absent).
     /// </summary>
-    public static readonly string SetMinPinLength = Utf8Constants.ToInternedString(SetMinPinLengthUtf8);
+    public static string SetMinPinLength { get; } = Utf8Constants.ToInternedString(SetMinPinLengthUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="MakeCredUvNotRqd"/>.</summary>
     public static ReadOnlySpan<byte> MakeCredUvNotRqdUtf8 => "makeCredUvNotRqd"u8;
@@ -163,7 +163,7 @@ public static class WellKnownCtapGetInfoOptionIds
     /// credentials without requiring some form of user verification, when the platform requests that
     /// behaviour (default "some form of user verification is required" when absent).
     /// </summary>
-    public static readonly string MakeCredUvNotRqd = Utf8Constants.ToInternedString(MakeCredUvNotRqdUtf8);
+    public static string MakeCredUvNotRqd { get; } = Utf8Constants.ToInternedString(MakeCredUvNotRqdUtf8);
 
 
     /// <summary>

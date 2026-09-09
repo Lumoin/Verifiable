@@ -30,7 +30,9 @@ using Verifiable.OAuth.Validation;
 using Verifiable.Tests.Federation;
 using Verifiable.Tests.TestDataProviders;
 using System.Collections.Immutable;
+using Verifiable.Foundation.Automata;
 using Verifiable.OAuth.Server;
+using Verifiable.Server;
 using Verifiable.Tests.TestInfrastructure;
 
 using StatusListType = Verifiable.Core.StatusList.StatusList;
@@ -68,25 +70,25 @@ internal sealed class Oid4VpFlowIntegrationTests
     private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
     private const string VerifierClientId = "https://verifier.example.com";
-    private static readonly Uri VerifierBaseUri = new("https://verifier.example.com");
+    private static Uri VerifierBaseUri { get; } = new("https://verifier.example.com");
 
     private const string IssuerId = "https://issuer.example.com";
     private const string IssuerKeyId = "did:web:issuer.example.com#key-1";
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     /// <summary>Header deserializer mirroring the authorization server's wiring.</summary>
-    private static readonly JwtHeaderDeserializer HeaderDeserializer = static bytes =>
+    private static JwtHeaderDeserializer HeaderDeserializer { get; } = static bytes =>
         JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
             bytes, TestSetup.DefaultSerializationOptions)
         ?? throw new FormatException("Header JSON parsed to null.");
 
     /// <summary>Payload deserializer mirroring the authorization server's wiring.</summary>
-    private static readonly JwtPayloadDeserializer PayloadDeserializer = static bytes =>
+    private static JwtPayloadDeserializer PayloadDeserializer { get; } = static bytes =>
         JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
             bytes, TestSetup.DefaultSerializationOptions)
         ?? throw new FormatException("Payload JSON parsed to null.");
 
-    private static readonly ImmutableHashSet<CapabilityIdentifier> Oid4VpCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> Oid4VpCapabilities { get; } =
         ImmutableHashSet.Create(
             WellKnownCapabilityIdentifiers.VcVerifiablePresentation,
             WellKnownCapabilityIdentifiers.OAuthJwksEndpoint,
@@ -209,9 +211,13 @@ internal sealed class Oid4VpFlowIntegrationTests
             "Wallet PDA must reach ResponseSent after the HTTP response POST.");
 
         PresentationVerifiedState verified = (PresentationVerifiedState)app.GetFlowState(parHandle).State;
+        Assert.AreEqual(TimeProvider.GetUtcNow(), verified.VerifiedAt,
+            "PresentationVerifiedState.VerifiedAt is EndpointServer.DispatchAsync's own context.SetVerifiedAt " +
+            "stamp, carried through VerificationSucceeded — the EndpointServer's own injected TimeProvider, " +
+            "never the system clock.");
         Assert.IsNull(verified.RedirectUri,
             "Cross-device flow must not carry a redirect_uri.");
-        Assert.IsTrue(verified.Claims.ContainsKey("pid"),
+        Assert.IsTrue(verified.Credentials.ContainsKey(new CredentialQueryId("pid")),
             "Verified claims must contain the pid credential.");
         Assert.AreEqual(4, app.GetFlowState(parHandle).StepCount,
             "Verifier PDA must traverse exactly four transitions: " +
@@ -290,7 +296,7 @@ internal sealed class Oid4VpFlowIntegrationTests
         PresentationVerifiedState verified = (PresentationVerifiedState)app.GetFlowState(parHandle).State;
         Assert.IsNull(verified.RedirectUri,
             "Cross-device flow must not carry a redirect_uri.");
-        Assert.IsTrue(verified.Claims.ContainsKey("pid"),
+        Assert.IsTrue(verified.Credentials.ContainsKey(new CredentialQueryId("pid")),
             "Verified claims must contain the pid credential.");
     }
 
@@ -364,7 +370,7 @@ internal sealed class Oid4VpFlowIntegrationTests
             "Wallet PDA must reach ResponseSent after the §5.10 POST round-trip.");
 
         PresentationVerifiedState verified = (PresentationVerifiedState)app.GetFlowState(parHandle).State;
-        Assert.IsTrue(verified.Claims.ContainsKey("pid"),
+        Assert.IsTrue(verified.Credentials.ContainsKey(new CredentialQueryId("pid")),
             "Verified claims must contain the pid credential after JAR-encrypted §5.10 round-trip.");
     }
 
@@ -895,7 +901,7 @@ internal sealed class Oid4VpFlowIntegrationTests
 
         PresentationVerifiedState verified =
             (PresentationVerifiedState)app.GetFlowState(parHandle).State;
-        Assert.IsTrue(verified.Claims.ContainsKey("pid"),
+        Assert.IsTrue(verified.Credentials.ContainsKey(new CredentialQueryId("pid")),
             "Verifier must recover the pid claims from the inline-parameter flow.");
     }
 
@@ -994,7 +1000,7 @@ internal sealed class Oid4VpFlowIntegrationTests
 
         PresentationVerifiedState verified =
             (PresentationVerifiedState)app.GetFlowState(parHandle).State;
-        Assert.IsTrue(verified.Claims.ContainsKey("pid"),
+        Assert.IsTrue(verified.Credentials.ContainsKey(new CredentialQueryId("pid")),
             "Verifier must recover the pid claims from the alg=none JAR flow.");
     }
 
@@ -1220,7 +1226,7 @@ internal sealed class Oid4VpFlowIntegrationTests
             $"Wallet PDA must reach ResponseSent for {algorithm}.");
 
         PresentationVerifiedState verified = (PresentationVerifiedState)app.GetFlowState(parHandle).State;
-        Assert.IsTrue(verified.Claims.ContainsKey("pid"),
+        Assert.IsTrue(verified.Credentials.ContainsKey(new CredentialQueryId("pid")),
             $"Verifier must reach PresentationVerified with the pid credential for {algorithm}.");
     }
 
@@ -1349,74 +1355,27 @@ internal sealed class Oid4VpFlowIntegrationTests
         Assert.IsInstanceOfType<ResponseSent>(result.TerminalState);
 
         PresentationVerifiedState verified = (PresentationVerifiedState)app.GetFlowState(parHandle).State;
-        Assert.IsTrue(verified.Claims.ContainsKey(DcqlFixtures.PidPrimaryCredentialId),
+        Assert.IsTrue(verified.Credentials.ContainsKey(new CredentialQueryId(DcqlFixtures.PidPrimaryCredentialId)),
             "Verified claims must carry the primary PID under its credential query id.");
-        Assert.IsTrue(verified.Claims.ContainsKey(DcqlFixtures.PidSecondaryCredentialId),
+        Assert.IsTrue(verified.Credentials.ContainsKey(new CredentialQueryId(DcqlFixtures.PidSecondaryCredentialId)),
             "Verified claims must carry the secondary PID under its credential query id.");
     }
 
 
-    private async ValueTask<(string SerializedSdJwt, PrivateKeyMemory HolderPrivateKey, PublicKeyMemory IssuerPublicKey)>
-        IssuePidCredentialWithClaimsAsync(string givenName, string familyName, CancellationToken cancellationToken, StatusListReference? status = null)
-    {
-        var issuerKeys = TestKeyMaterialProvider.CreateP256KeyMaterial();
-        using PrivateKeyMemory issuerPrivateKey = issuerKeys.PrivateKey;
-
-        var holderKeys = TestKeyMaterialProvider.CreateEd25519KeyMaterial();
-        using PublicKeyMemory holderPublicKey = holderKeys.PublicKey;
-
-        Dictionary<string, object> holderJwk = CryptoFormatConversions.DefaultAlgorithmToJwkConverter(
-            holderPublicKey.Tag.Get<CryptoAlgorithm>(),
-            holderPublicKey.Tag.Get<Purpose>(),
-            holderPublicKey.AsReadOnlySpan(),
-            TestSetup.Base64UrlEncoder);
-
-        var claims = new List<KeyValuePair<string, object>>
-        {
-            new(EudiPid.SdJwt.GivenName, givenName),
-            new(EudiPid.SdJwt.FamilyName, familyName)
-        };
-
-        if(status is not null)
-        {
-            //IETF Token Status List section 6: a non-disclosable status claim in the issuer payload.
-            claims.Add(new("status", new Dictionary<string, object>
-            {
-                ["status_list"] = new Dictionary<string, object>
-                {
-                    ["idx"] = status.Value.Index,
-                    ["uri"] = status.Value.Uri
-                }
-            }));
-        }
-
-        JwtPayload payload = JwtPayload.ForSdJwtVcIssuance(
-            issuer: IssuerId,
-            verifiableCredentialType: EudiPid.SdJwtVct,
-            issuedAt: TimeProvider.GetUtcNow(),
-            holderConfirmation: holderJwk,
-            claims: claims);
-
-        var disclosablePaths = new HashSet<CredentialPath>
-        {
-            CredentialPath.FromJsonPointer($"/{EudiPid.SdJwt.GivenName}"),
-            CredentialPath.FromJsonPointer($"/{EudiPid.SdJwt.FamilyName}")
-        };
-
-        SdTokenResult result = await payload.IssueSdJwtAsync(
-            c => JsonSerializerExtensions.SerializeToUtf8Bytes(c, TestSetup.DefaultSerializationOptions),
-            SdJwtIssuance.IssueVerboseAsync,
-            disclosablePaths, TestSalts.DefaultGenerator(),
-            issuerPrivateKey, IssuerKeyId, Pool,
-            mediaType: WellKnownMediaTypes.Jwt.VcSdJwt,
-            cancellationToken: cancellationToken).ConfigureAwait(false);
-
-        string compactJws = Encoding.UTF8.GetString(result.SignedToken.Span);
-        using SdToken<string> issuedToken = new(compactJws, result.Disclosures.ToList());
-        string serializedSdJwt = SdJwtSerializer.SerializeToken(issuedToken, TestSetup.Base64UrlEncoder);
-
-        return (serializedSdJwt, holderKeys.PrivateKey, issuerKeys.PublicKey);
-    }
+    /// <summary>
+    /// Issues a PID SD-JWT VC with holder key binding for the supplied claim values and, when
+    /// <paramref name="status"/> is supplied, a Status List reference. Delegates to the shared
+    /// <see cref="SdJwtVpFixture.IssuePidCredentialWithClaimsAsync"/> so every seat that mints a PID
+    /// mints the same credential.
+    /// </summary>
+    /// <param name="givenName">The value of the disclosable <c>given_name</c> claim.</param>
+    /// <param name="familyName">The value of the disclosable <c>family_name</c> claim.</param>
+    /// <param name="cancellationToken">Cancels the issuance.</param>
+    /// <param name="status">The Status List entry the credential references, or <see langword="null"/> for none.</param>
+    private ValueTask<(string SerializedSdJwt, PrivateKeyMemory HolderPrivateKey, PublicKeyMemory IssuerPublicKey)>
+        IssuePidCredentialWithClaimsAsync(string givenName, string familyName, CancellationToken cancellationToken, StatusListReference? status = null) =>
+        SdJwtVpFixture.IssuePidCredentialWithClaimsAsync(
+            TimeProvider, givenName, familyName, IssuerId, IssuerKeyId, Pool, status, cancellationToken);
 
 
     //A genuinely issued SD-JWT VC that carries an IETF Token Status List reference is verified
@@ -1444,12 +1403,12 @@ internal sealed class Oid4VpFlowIntegrationTests
 
             VpTokenParsed parsed = await SdJwtVpTokenVerification.VerifyAsync(
                 serializedSdJwt,
-                "pid",
+                new CredentialQueryId("pid"),
                 static s => SdJwtSerializer.ParseToken(
-                    s, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared, TestSalts.TestSaltTag),
+                    s, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared, TestSalts.TestSaltTag),
                 static t => SdJwtSerializer.GetSdJwtForHashing(t, TestSetup.Base64UrlEncoder),
                 IssuerLookup,
-                MicrosoftCryptographicFunctions.ComputeDigestAsync,
+                MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
                 TestSetup.Base64UrlDecoder,
                 TestSetup.Base64UrlEncoder,
                 Pool,
@@ -1457,9 +1416,9 @@ internal sealed class Oid4VpFlowIntegrationTests
                 TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsTrue(parsed.CredentialSignatureValid, "The issued credential must verify.");
-            Assert.IsNotNull(parsed.CredentialStatus, "The verifier must surface the credential's status_list reference.");
-            Assert.AreEqual(credentialIndex, parsed.CredentialStatus.Value.Index);
-            Assert.AreEqual(statusListUri, parsed.CredentialStatus.Value.Uri);
+            Assert.IsNotNull(parsed.Credential.Status?.StatusList, "The verifier must surface the credential's status_list reference.");
+            Assert.AreEqual(credentialIndex, parsed.Credential.Status!.StatusList!.Value.Index);
+            Assert.AreEqual(statusListUri, parsed.Credential.Status.StatusList!.Value.Uri);
 
             //The resolver stands in for whatever fetched and verified the status list (an HTTP fetch,
             //or an Orleans status-list grain); here the verified token is built directly.
@@ -1467,8 +1426,8 @@ internal sealed class Oid4VpFlowIntegrationTests
                 64, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
 
             CredentialStatusOutcome beforeRevocation = await CredentialStatusGate.CheckAsync(
-                parsed.CredentialStatus.Value,
-                (uri, ct) => ValueTask.FromResult(new StatusListToken(statusListUri, now, statusList)),
+                StatusListFixtures.ContextFor(parsed.Credential.Status.StatusList!.Value),
+                StatusListFixtures.ResolverFor(new StatusListToken(statusListUri, now, statusList), now),
                 now,
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
             Assert.IsTrue(beforeRevocation.IsValid, "An unset status bit must read as valid.");
@@ -1476,8 +1435,8 @@ internal sealed class Oid4VpFlowIntegrationTests
             statusList[credentialIndex] = StatusTypes.Invalid;
 
             CredentialStatusOutcome afterRevocation = await CredentialStatusGate.CheckAsync(
-                parsed.CredentialStatus.Value,
-                (uri, ct) => ValueTask.FromResult(new StatusListToken(statusListUri, now, statusList)),
+                StatusListFixtures.ContextFor(parsed.Credential.Status.StatusList!.Value),
+                StatusListFixtures.ResolverFor(new StatusListToken(statusListUri, now, statusList), now),
                 now,
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
             Assert.IsFalse(afterRevocation.IsValid, "After flipping the credential's bit the status must read as revoked.");
@@ -1506,8 +1465,17 @@ internal sealed class Oid4VpFlowIntegrationTests
             64, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
 
         Verifiable.Core.StatusList.ResolveVerifiedStatusListTokenDelegate resolveStatusList =
-            (uri, ct) => ValueTask.FromResult(
-                new StatusListToken(statusListUri, TimeProvider.GetUtcNow(), statusList));
+            (context, ct) =>
+            {
+                DateTimeOffset resolvedAt = TimeProvider.GetUtcNow();
+
+                return ValueTask.FromResult<ResolvedStatusListToken?>(new ResolvedStatusListToken
+                {
+                    Token = new StatusListToken(statusListUri, resolvedAt, statusList),
+                    ResolvedAt = resolvedAt,
+                    IsTokenOwned = false
+                });
+            };
 
         await using TestHostShell app = new(TimeProvider, resolveVerifiedStatusListToken: resolveStatusList);
         using VerifierKeyMaterial verifierKeys = app.RegisterClient(
@@ -1565,7 +1533,7 @@ internal sealed class Oid4VpFlowIntegrationTests
 
         Assert.IsNotNull(whenValid.CredentialStatuses,
             "The executor must surface CredentialStatuses when a status resolver is wired.");
-        Assert.IsTrue(whenValid.CredentialStatuses!.TryGetValue(pidCredentialQueryId, out CredentialStatusOutcome? validOutcome),
+        Assert.IsTrue(whenValid.CredentialStatuses!.TryGetValue(new CredentialQueryId(pidCredentialQueryId), out CredentialStatusOutcome? validOutcome),
             "The surfaced statuses must be keyed by the DCQL credential query id.");
         Assert.IsNotNull(validOutcome);
         Assert.IsTrue(validOutcome.IsValid, "An unset status bit must surface as valid.");
@@ -1579,11 +1547,106 @@ internal sealed class Oid4VpFlowIntegrationTests
 
         Assert.IsNotNull(whenRevoked.CredentialStatuses,
             "The executor must still surface CredentialStatuses after revocation.");
-        Assert.IsTrue(whenRevoked.CredentialStatuses!.TryGetValue(pidCredentialQueryId, out CredentialStatusOutcome? revokedOutcome),
+        Assert.IsTrue(whenRevoked.CredentialStatuses!.TryGetValue(new CredentialQueryId(pidCredentialQueryId), out CredentialStatusOutcome? revokedOutcome),
             "The surfaced statuses must be keyed by the DCQL credential query id.");
         Assert.IsNotNull(revokedOutcome);
         Assert.IsFalse(revokedOutcome.IsValid, "After flipping the bit the executor must surface a revoked status.");
         Assert.AreEqual(StatusTypes.Invalid, revokedOutcome.Status);
+    }
+
+
+    /// <summary>
+    /// A credential whose Token Status List status the verifier cannot determine — here the credential's
+    /// status index lies beyond the status list's capacity — is an unverifiable presentation. The
+    /// <c>direct_post</c> endpoint answers RFC 6749 §4.1.2.1 <c>invalid_request</c> with HTTP 400 (OID4VP 1.0
+    /// §8.2 defines only the success answer), and the verifier's terminal state carries the typed
+    /// <see cref="VerifierFlowRefusalKind.StatusUndeterminable"/>. A determinable revoked status is instead
+    /// surfaced, not refused; only an undeterminable one fails closed.
+    /// </summary>
+    [TestMethod]
+    public async Task UndeterminableCredentialStatusRefusesPresentationAsInvalidRequest()
+    {
+        const string statusListUri = "https://issuer.example/statuslists/1";
+        const int outOfBoundsIndex = 999;
+
+        //A 64-entry status list resolves cleanly, but the credential's index (999) is out of range, so the
+        //status is undeterminable and CredentialStatusGate throws — the executor fails closed.
+        using StatusListType statusList = StatusListType.Create(
+            64, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
+
+        Verifiable.Core.StatusList.ResolveVerifiedStatusListTokenDelegate resolveStatusList =
+            (context, ct) =>
+            {
+                DateTimeOffset resolvedAt = TimeProvider.GetUtcNow();
+
+                return ValueTask.FromResult<ResolvedStatusListToken?>(new ResolvedStatusListToken
+                {
+                    Token = new StatusListToken(statusListUri, resolvedAt, statusList),
+                    ResolvedAt = resolvedAt,
+                    IsTokenOwned = false
+                });
+            };
+
+        await using TestHostShell app = new(TimeProvider, resolveVerifiedStatusListToken: resolveStatusList);
+        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+
+        (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
+            await IssuePidCredentialWithClaimsAsync(
+                "Alice", "Smith", TestContext.CancellationToken,
+                status: new StatusListReference(outOfBoundsIndex, statusListUri)).ConfigureAwait(false);
+        using PrivateKeyMemory holderKey = holderPrivateKey;
+        using PublicKeyMemory issuerKey = issuerPublicKey;
+        app.RegisterIssuerTrust(IssuerId, issuerKey);
+
+        Oid4VpWalletClient walletClient =
+            await app.CreateHttpBackedOid4VpWalletClientAsync(
+                verifierKeys,
+                serializedSdJwt,
+                holderKey,
+                TestContext.CancellationToken).ConfigureAwait(false);
+
+        (Uri requestUri, string parHandle) = await app.HandleParAsync(
+            verifierKeys,
+            new TransactionNonce("nonce-status-undeterminable"),
+            CreatePreparedQuery(),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        using HttpResponseMessage jarResponse = await app.Host("default").SharedHttpClient!
+            .GetAsync(requestUri, TestContext.CancellationToken).ConfigureAwait(false);
+        jarResponse.EnsureSuccessStatusCode();
+        string compactJar = await jarResponse.Content
+            .ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        string? refusalDetail = null;
+        try
+        {
+            _ = await walletClient.PresentJarAsync(
+                new PresentJarOptions
+                {
+                    CompactJar = compactJar,
+                    RequestUri = requestUri,
+                    ExpectedVerifierClientId = VerifierClientId,
+                    FlowId = $"wallet-status-undeterminable-{Guid.NewGuid():N}"
+                },
+                TestContext.CancellationToken).ConfigureAwait(false);
+        }
+        catch(InvalidOperationException exception)
+        {
+            //The verifier refused the presentation with a non-200 direct_post; the message carries the
+            //HTTP status and the RFC 6749 §4.1.2.1 error body.
+            refusalDetail = exception.Message;
+        }
+
+        Assert.IsInstanceOfType<VerifierFlowFailedState>(app.GetFlowState(parHandle).State,
+            "An undeterminable credential status fails closed, so the verifier refuses the presentation.");
+        var failed = (VerifierFlowFailedState)app.GetFlowState(parHandle).State;
+        Assert.AreEqual(VerifierFlowRefusalKind.StatusUndeterminable, failed.Refusal!.Value.Kind,
+            "A credential whose status the verifier cannot determine fails closed as StatusUndeterminable — RFC 6749 §4.1.2.1 invalid_request.");
+        Assert.IsTrue(refusalDetail is not null && refusalDetail.Contains("status 400", StringComparison.Ordinal),
+            "The real-wire direct_post refusal answers HTTP 400, never 500.");
+        Assert.IsTrue(refusalDetail!.Contains(OAuthErrors.InvalidRequest, StringComparison.Ordinal),
+            "The real-wire refusal body carries the invalid_request error code.");
     }
 
 
@@ -1897,7 +1960,7 @@ internal sealed class Oid4VpFlowIntegrationTests
         Assert.IsInstanceOfType<ResponseSent>(
             wallet.GetFlowState(walletFlowId).State,
             "Wallet PDA must reach ResponseSent.");
-        Assert.IsTrue(verified.Claims.ContainsKey("pid"),
+        Assert.IsTrue(verified.Credentials.ContainsKey(new CredentialQueryId("pid")),
             "Verified claims must contain the pid credential.");
     }
 
@@ -2014,11 +2077,11 @@ internal sealed class Oid4VpFlowIntegrationTests
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         bool validWithCorrectKey = await Jws.VerifyAsync(
-            signedJar.Message, TestSetup.Base64UrlEncoder, correctPublicKey, TestContext.CancellationToken)
+            signedJar.Message, TestSetup.Base64UrlEncoder, correctPublicKey, BaseMemoryPool.Shared, TestContext.CancellationToken)
             .ConfigureAwait(false);
 
         bool validWithWrongKey = await Jws.VerifyAsync(
-            signedJar.Message, TestSetup.Base64UrlEncoder, wrongPublicKey, TestContext.CancellationToken)
+            signedJar.Message, TestSetup.Base64UrlEncoder, wrongPublicKey, BaseMemoryPool.Shared, TestContext.CancellationToken)
             .ConfigureAwait(false);
 
         Assert.IsTrue(validWithCorrectKey,
@@ -2154,7 +2217,7 @@ internal sealed class Oid4VpFlowIntegrationTests
         Assert.IsInstanceOfType<PresentationVerifiedState>(
             app.GetFlowState(parHandle).State,
             "Verifier PDA must reach PresentationVerified (terminal accept).");
-        Assert.IsTrue(verified.Claims.ContainsKey("pid"),
+        Assert.IsTrue(verified.Credentials.ContainsKey(new CredentialQueryId("pid")),
             "Verified claims must contain the pid credential.");
 
         //The Verifier PDA crossed five transitions on the POST path:
@@ -2350,12 +2413,12 @@ internal sealed class Oid4VpFlowIntegrationTests
 
         VpTokenParsed parsed = await SdJwtVpTokenVerification.VerifyAsync(
             compactPresentation,
-            "pid",
+            new CredentialQueryId("pid"),
             static s => SdJwtSerializer.ParseToken(
-                s, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared, TestSalts.TestSaltTag),
+                s, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared, TestSalts.TestSaltTag),
             static t => SdJwtSerializer.GetSdJwtForHashing(t, TestSetup.Base64UrlEncoder),
             IssuerLookup,
-            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             TestSetup.Base64UrlDecoder,
             TestSetup.Base64UrlEncoder,
             Pool,
@@ -2494,7 +2557,7 @@ internal sealed class Oid4VpFlowIntegrationTests
             "Wallet PDA must reach ResponseSent.");
 
         PresentationVerifiedState verified = (PresentationVerifiedState)app.GetFlowState(parHandle).State;
-        Assert.IsTrue(verified.Claims.ContainsKey("pid"),
+        Assert.IsTrue(verified.Credentials.ContainsKey(new CredentialQueryId("pid")),
             "Reaching PresentationVerified end-to-end means the executor's " +
             "transaction_data hash check passed alongside every other HAIP rule.");
 
@@ -2667,7 +2730,7 @@ internal sealed class Oid4VpFlowIntegrationTests
             "Wallet PDA must reach ResponseSent after the federation-bound HTTP wire E2E.");
 
         PresentationVerifiedState verified = (PresentationVerifiedState)app.GetFlowState(parHandle).State;
-        Assert.IsTrue(verified.Claims.ContainsKey("pid"),
+        Assert.IsTrue(verified.Credentials.ContainsKey(new CredentialQueryId("pid")),
             "Verifier must reach PresentationVerified with the pid credential.");
 
         //Multi-host scaffolding sanity — the anchor host is reachable via
@@ -2936,7 +2999,7 @@ internal sealed class Oid4VpFlowIntegrationTests
             "Wallet PDA must reach ResponseSent after two-Kestrel federation HTTP wire E2E.");
 
         PresentationVerifiedState verified2k = (PresentationVerifiedState)app.GetFlowState(parHandle).State;
-        Assert.IsTrue(verified2k.Claims.ContainsKey("pid"),
+        Assert.IsTrue(verified2k.Credentials.ContainsKey(new CredentialQueryId("pid")),
             "Verifier must reach PresentationVerified with the pid credential.");
 
         //The two hosts ran on independent ephemeral ports — confirm the
@@ -3021,7 +3084,7 @@ internal sealed class Oid4VpFlowIntegrationTests
             $"got: {result.PostedResponseArtifact[..Math.Min(40, result.PostedResponseArtifact.Length)]}");
 
         PresentationVerifiedState verified = (PresentationVerifiedState)app.GetFlowState(parHandle).State;
-        Assert.IsTrue(verified.Claims.ContainsKey("pid"),
+        Assert.IsTrue(verified.Credentials.ContainsKey(new CredentialQueryId("pid")),
             "Verifier must reach PresentationVerified after the unencrypted POST.");
         Assert.IsNull(verified.RedirectUri,
             "Cross-device direct_post (unencrypted) must not carry a redirect_uri.");
@@ -3210,50 +3273,257 @@ internal sealed class Oid4VpFlowIntegrationTests
     /// private key for KB-JWT signing, and the issuer public key for credential
     /// signature verification by the verifier.
     /// </summary>
-    private async ValueTask<(string SerializedSdJwt, PrivateKeyMemory HolderPrivateKey, PublicKeyMemory IssuerPublicKey)> IssuePidCredentialAsync(
-        CancellationToken cancellationToken)
+    private ValueTask<(string SerializedSdJwt, PrivateKeyMemory HolderPrivateKey, PublicKeyMemory IssuerPublicKey)> IssuePidCredentialAsync(
+        CancellationToken cancellationToken) =>
+        SdJwtVpFixture.IssuePidCredentialWithClaimsAsync(
+            TimeProvider, "Erika", "Mustermann", IssuerId, IssuerKeyId, Pool, status: null, cancellationToken);
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-8.1">OpenID for
+    /// Verifiable Presentations 1.0, Section 8.1</see>: "vp_token: REQUIRED. This is a JSON-encoded object
+    /// containing entries where the key is the id value used for a Credential Query in the DCQL query and the
+    /// value is an array of one or more Presentations that match the respective Credential Query." The key the
+    /// wire carries is the key the terminal verified state is read by: after a complete <c>direct_post</c> the
+    /// presented credential is reachable under the <see cref="CredentialQueryId"/> its Credential Query stated,
+    /// and the record beneath it holds the released claim at its own path, the credential's declared type and
+    /// the issuer the verifier resolved the signing key for.
+    /// </summary>
+    [TestMethod]
+    public async Task DirectPostSurfacesTheReleasedClaimsUnderTheCredentialQueryIdentifier()
     {
-        var issuerKeys = TestKeyMaterialProvider.CreateP256KeyMaterial();
-        using PrivateKeyMemory issuerPrivateKey = issuerKeys.PrivateKey;
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
 
-        var holderKeys = TestKeyMaterialProvider.CreateEd25519KeyMaterial();
-        using PublicKeyMemory holderPublicKey = holderKeys.PublicKey;
+        (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
+            await IssuePidCredentialAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        using PrivateKeyMemory holderKey = holderPrivateKey;
+        using PublicKeyMemory issuerKey = issuerPublicKey;
+        app.RegisterIssuerTrust(IssuerId, issuerKey);
 
-        Dictionary<string, object> holderJwk = CryptoFormatConversions.DefaultAlgorithmToJwkConverter(
-            holderPublicKey.Tag.Get<CryptoAlgorithm>(),
-            holderPublicKey.Tag.Get<Purpose>(),
-            holderPublicKey.AsReadOnlySpan(),
-            TestSetup.Base64UrlEncoder);
+        Oid4VpWalletClient walletClient =
+            await app.CreateHttpBackedOid4VpWalletClientAsync(
+                verifierKeys,
+                serializedSdJwt,
+                holderKey,
+                TestContext.CancellationToken).ConfigureAwait(false);
 
-        JwtPayload payload = JwtPayload.ForSdJwtVcIssuance(
-            issuer: IssuerId,
-            verifiableCredentialType: EudiPid.SdJwtVct,
-            issuedAt: TimeProvider.GetUtcNow(),
-            holderConfirmation: holderJwk,
-            claims:
-            [
-                new(EudiPid.SdJwt.GivenName, "Erika"),
-                new(EudiPid.SdJwt.FamilyName, "Mustermann")
-            ]);
+        (Uri requestUri, string parHandle) = await app.HandleParAsync(verifierKeys,
+            new TransactionNonce("nonce-typed-credential-01"),
+            CreatePreparedQuery(),
+            TestContext.CancellationToken).ConfigureAwait(false);
 
-        var disclosablePaths = new HashSet<CredentialPath>
+        using HttpResponseMessage jarResponse = await app.Host("default").SharedHttpClient!
+            .GetAsync(requestUri, TestContext.CancellationToken).ConfigureAwait(false);
+        jarResponse.EnsureSuccessStatusCode();
+        string compactJar = await jarResponse.Content
+            .ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        PresentationResult result = await walletClient.PresentJarAsync(
+            new PresentJarOptions
+            {
+                CompactJar = compactJar,
+                RequestUri = requestUri,
+                ExpectedVerifierClientId = VerifierClientId,
+                FlowId = $"wallet-typed-credential-{Guid.NewGuid():N}"
+            },
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
+            "The wallet must have POSTed the response before the verifier's terminal state is read.");
+
+        PresentationVerifiedState verified = (PresentationVerifiedState)app.GetFlowState(parHandle).State;
+
+        Assert.IsTrue(
+            verified.Credentials.TryGetValue(
+                new CredentialQueryId(DcqlFixtures.PidCredentialId),
+                out VpCredentialClaims? credential),
+            "Section 8.1 keys the vp_token by the id value used for a Credential Query, so the verified " +
+            "presentation carries the credential under that same identifier.");
+        Assert.IsNotNull(credential);
+
+        Assert.IsTrue(
+            credential.Extracted.TryGetValue(
+                CredentialPath.FromJsonPointer($"/{EudiPid.SdJwt.FamilyName}"),
+                out string? familyName),
+            "The record under the credential query identifier states the released claim at the path the " +
+            "disclosure occupies in the issuer-signed structure.");
+        Assert.AreEqual("Mustermann", familyName,
+            "The released claim carries the value the Issuer signed, not a re-derived one.");
+
+        Assert.AreEqual(EudiPid.SdJwtVct, credential.CredentialType,
+            "The record states the credential's own declared type, the value the Credential Query's " +
+            "meta.vct_values constraint was answered against.");
+        Assert.AreEqual(IssuerId, credential.Issuer,
+            "The record states the issuer identifier the verifier resolved the credential's signing key for.");
+    }
+
+
+    /// <summary>
+    /// The same Section 8.1 sentence read over two Credential Queries —
+    /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-8.1">OpenID for
+    /// Verifiable Presentations 1.0, Section 8.1</see>: "This is a JSON-encoded object containing entries where
+    /// the key is the id value used for a Credential Query in the DCQL query and the value is an array of one or
+    /// more Presentations that match the respective Credential Query." One request naming two Credential
+    /// Queries yields two entries, each under its own <see cref="CredentialQueryId"/> and each carrying only
+    /// the claims the credential answering that query released.
+    /// </summary>
+    [TestMethod]
+    public async Task TwoCredentialQueriesEachSurfaceTheirOwnCredentialRecord()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+
+        (string primarySerializedSdJwt, PrivateKeyMemory primaryHolder, PublicKeyMemory primaryIssuerPub) =
+            await IssuePidCredentialWithClaimsAsync(
+                givenName: "Erika",
+                familyName: "Mustermann",
+                TestContext.CancellationToken).ConfigureAwait(false);
+        using PrivateKeyMemory primaryHolderKey = primaryHolder;
+        using PublicKeyMemory primaryIssuerKey = primaryIssuerPub;
+
+        (string secondarySerializedSdJwt, PrivateKeyMemory secondaryHolder, PublicKeyMemory secondaryIssuerPub) =
+            await IssuePidCredentialWithClaimsAsync(
+                givenName: "Hans",
+                familyName: "Schmidt",
+                TestContext.CancellationToken).ConfigureAwait(false);
+        using PrivateKeyMemory secondaryHolderKey = secondaryHolder;
+        using PublicKeyMemory secondaryIssuerKey = secondaryIssuerPub;
+
+        app.RegisterIssuerTrust(IssuerId, primaryIssuerKey);
+
+        Dictionary<string, string> credentialsByQueryId = new(StringComparer.Ordinal)
         {
-            CredentialPath.FromJsonPointer($"/{EudiPid.SdJwt.GivenName}"),
-            CredentialPath.FromJsonPointer($"/{EudiPid.SdJwt.FamilyName}")
+            [DcqlFixtures.PidPrimaryCredentialId] = primarySerializedSdJwt,
+            [DcqlFixtures.PidSecondaryCredentialId] = secondarySerializedSdJwt
         };
 
-        SdTokenResult result = await payload.IssueSdJwtAsync(
-            c => JsonSerializerExtensions.SerializeToUtf8Bytes(c, TestSetup.DefaultSerializationOptions),
-            SdJwtIssuance.IssueVerboseAsync,
-            disclosablePaths, TestSalts.DefaultGenerator(),
-            issuerPrivateKey, IssuerKeyId, Pool,
-            mediaType: WellKnownMediaTypes.Jwt.VcSdJwt,
-            cancellationToken: cancellationToken).ConfigureAwait(false);
+        Oid4VpWalletClient walletClient =
+            await app.CreateHttpBackedOid4VpWalletClientAsync(
+                verifierKeys,
+                credentialsByQueryId,
+                primaryHolderKey,
+                TestContext.CancellationToken).ConfigureAwait(false);
 
-        string compactJws = Encoding.UTF8.GetString(result.SignedToken.Span);
-        using SdToken<string> issuedToken = new(compactJws, result.Disclosures.ToList());
-        string serializedSdJwt = SdJwtSerializer.SerializeToken(issuedToken, TestSetup.Base64UrlEncoder);
+        (Uri requestUri, string parHandle) = await app.HandleParAsync(verifierKeys,
+            new TransactionNonce("nonce-typed-credential-02"),
+            DcqlFixtures.PidPrimaryAndSecondaryFamilyNamePrepared(),
+            TestContext.CancellationToken).ConfigureAwait(false);
 
-        return (serializedSdJwt, holderKeys.PrivateKey, issuerKeys.PublicKey);
+        using HttpResponseMessage jarResponse = await app.Host("default").SharedHttpClient!
+            .GetAsync(requestUri, TestContext.CancellationToken).ConfigureAwait(false);
+        jarResponse.EnsureSuccessStatusCode();
+        string compactJar = await jarResponse.Content
+            .ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        PresentationResult result = await walletClient.PresentJarAsync(
+            new PresentJarOptions
+            {
+                CompactJar = compactJar,
+                RequestUri = requestUri,
+                ExpectedVerifierClientId = VerifierClientId,
+                FlowId = $"wallet-typed-credentials-{Guid.NewGuid():N}"
+            },
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
+            "The wallet must have POSTed the multi-credential response before the terminal state is read.");
+
+        PresentationVerifiedState verified = (PresentationVerifiedState)app.GetFlowState(parHandle).State;
+
+        Assert.HasCount(2, verified.Credentials,
+            "Two Credential Queries were answered, so Section 8.1's object carries exactly two entries.");
+
+        CredentialPath familyNamePath = CredentialPath.FromJsonPointer($"/{EudiPid.SdJwt.FamilyName}");
+
+        Assert.IsTrue(
+            verified.Credentials.TryGetValue(
+                new CredentialQueryId(DcqlFixtures.PidPrimaryCredentialId),
+                out VpCredentialClaims? primaryCredential),
+            "The first Credential Query's id keys the presentation that matched it.");
+        Assert.IsNotNull(primaryCredential);
+        Assert.AreEqual("Mustermann", primaryCredential.Extracted[familyNamePath],
+            "The entry under the first Credential Query's id carries that credential's own released claim.");
+
+        Assert.IsTrue(
+            verified.Credentials.TryGetValue(
+                new CredentialQueryId(DcqlFixtures.PidSecondaryCredentialId),
+                out VpCredentialClaims? secondaryCredential),
+            "The second Credential Query's id keys the presentation that matched it.");
+        Assert.IsNotNull(secondaryCredential);
+        Assert.AreEqual("Schmidt", secondaryCredential.Extracted[familyNamePath],
+            "The entry under the second Credential Query's id carries the other credential's released claim, " +
+            "so two claims sharing a name at the same path stay apart under their own identifiers.");
     }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-8.1">OpenID for
+    /// Verifiable Presentations 1.0, Section 8.1</see> makes the credential query identifier the key of the
+    /// response, so the map the verification produced is the map the terminal state publishes: the last
+    /// transition of the <c>direct_post</c> seat carries <see cref="VerificationSucceeded.Credentials"/> onto
+    /// <see cref="PresentationVerifiedState.Credentials"/> as the same instance, never as a re-keyed or
+    /// re-projected copy that could lose an entry.
+    /// </summary>
+    [TestMethod]
+    public async Task ThePresentationVerifiedStateCarriesTheVerificationsOwnCredentialMap()
+    {
+        Dictionary<CredentialQueryId, VpCredentialClaims> credentials = new()
+        {
+            [new CredentialQueryId(DcqlFixtures.PidCredentialId)] = new VpCredentialClaims
+            {
+                Extracted = new Dictionary<CredentialPath, string>
+                {
+                    [CredentialPath.FromJsonPointer($"/{EudiPid.SdJwt.FamilyName}")] = "Mustermann"
+                },
+                Disclosed = new Dictionary<CredentialPath, object?>(),
+                CredentialType = EudiPid.SdJwtVct,
+                Issuer = IssuerId
+            }
+        };
+
+        TransitionDelegate<FlowState, FlowInput, Oid4VpVerifierStackSymbol> transition =
+            Oid4VpVerifierFlowTransitions.Create();
+
+        TransitionResult<FlowState, Oid4VpVerifierStackSymbol>? result = await transition(
+            CreateResponseReceivedState(),
+            new VerificationSucceeded(credentials, TimeProvider.GetUtcNow()),
+            Oid4VpVerifierStackSymbol.Base,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsNotNull(result,
+            "A verification that succeeded must advance the received response to the verified presentation.");
+
+        PresentationVerifiedState verified =
+            Assert.IsInstanceOfType<PresentationVerifiedState>(result.NextState);
+        Assert.AreSame(credentials, verified.Credentials,
+            "The verified presentation publishes the very map the verification keyed by credential query " +
+            "identifier, so nothing between the two can re-key or drop an entry.");
+    }
+
+
+    /// <summary>
+    /// The <c>direct_post.jwt</c> state a verifier is in the instant the Wallet's response has arrived and its
+    /// verification is about to be recorded — the only predecessor
+    /// <see cref="VerificationSucceeded"/> advances. The response artifact itself is never read on this
+    /// transition, so a placeholder stands in for it.
+    /// </summary>
+    /// <returns>The received-response state the terminal transition is taken from.</returns>
+    private VerifierResponseReceivedState CreateResponseReceivedState() =>
+        new()
+        {
+            FlowId = "flow-typed-credentials",
+            ExpectedIssuer = VerifierClientId,
+            EnteredAt = TimeProvider.GetUtcNow(),
+            ExpiresAt = TimeProvider.GetUtcNow().AddMinutes(10),
+            Kind = FlowKind.Oid4VpVerifierServer,
+            EncryptedResponseJwt = "a.b.c.d.e",
+            ReceivedAt = TimeProvider.GetUtcNow(),
+            DecryptionKeyId = new KeyId("verifier-response-decryption-key"),
+            Nonce = new TransactionNonce("nonce-typed-credential-03"),
+            AllowedEncAlgorithms = [WellKnownJweEncryptionAlgorithms.A128Gcm],
+            CredentialQueries = DcqlFixtures.PidFamilyName().Credentials!
+        };
 }

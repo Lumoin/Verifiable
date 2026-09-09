@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using System.Globalization;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
@@ -31,7 +31,7 @@ namespace Verifiable.Cbor.Sd;
 /// <strong>Walk and redact</strong> (this class): Walks the CBOR map, creates
 /// <see cref="SdDisclosure"/> objects for disclosable claims, serializes them via
 /// <see cref="SdCwtSerializer.SerializeDisclosure(SdDisclosure)"/>, computes digests via
-/// <see cref="SdCwtSerializer.ComputeDisclosureDigest(byte[], string)"/>, and builds the
+/// <see cref="SdCwtSerializer.ComputeDisclosureDigest(byte[], string, BaseMemoryPool)"/>, and builds the
 /// mandatory claims tree. Format-specific (CBOR).
 /// </description></item>
 /// <item><description>
@@ -74,6 +74,7 @@ public static class SdCwtClaimRedaction
     /// <param name="hashAlgorithm">
     /// The hash algorithm identifier in IANA format (e.g., <c>"sha-256"</c>).
     /// </param>
+    /// <param name="pool">The memory pool every disclosure digest is rented from.</param>
     /// <param name="decoyOptions">
     /// Optional decoy-digest configuration (count policy plus per-call state) per RFC 9901 §4.2.5 (the
     /// SD-CWT draft inherits the concept), applied once per <c>redacted_claim_keys</c> location.
@@ -89,12 +90,14 @@ public static class SdCwtClaimRedaction
         IReadOnlySet<CredentialPath> disclosablePaths,
         GenerateDisclosureSaltDelegate generateSalt,
         string hashAlgorithm,
+        BaseMemoryPool pool,
         DecoyDigestOptions decoyOptions = default)
     {
         ArgumentNullException.ThrowIfNull(cwtPayloadBytes);
         ArgumentNullException.ThrowIfNull(disclosablePaths);
         ArgumentNullException.ThrowIfNull(generateSalt);
         ArgumentException.ThrowIfNullOrWhiteSpace(hashAlgorithm);
+        ArgumentNullException.ThrowIfNull(pool);
 
         DecoyDigestCountDelegate resolvedDecoyCount = decoyOptions.Count ?? DecoyDigestPolicy.None;
         object? decoyState = decoyOptions.State;
@@ -108,7 +111,7 @@ public static class SdCwtClaimRedaction
         var digestsByParent = new Dictionary<CredentialPath, List<byte[]>>();
         var payload = new CwtPayload();
 
-        var reader = new CborReader(cwtPayloadBytes, CborConformanceMode.Lax);
+        var reader = new CborReader(cwtPayloadBytes, CborOptions.Lax);
 
         try
         {
@@ -118,6 +121,7 @@ public static class SdCwtClaimRedaction
                 groupedPaths,
                 generateSalt,
                 hashAlgorithm,
+                pool,
                 payload,
                 allDisclosures,
                 digestsByParent);
@@ -151,7 +155,7 @@ public static class SdCwtClaimRedaction
         {
             using Salt decoySalt = generateSalt();
 
-            return SdCwtSerializer.ComputeDisclosureDigest(decoySalt.AsReadOnlySpan().ToArray(), hashAlgorithm);
+            return SdCwtSerializer.ComputeDisclosureDigest(decoySalt.AsReadOnlySpan().ToArray(), hashAlgorithm, pool);
         }
     }
 
@@ -165,6 +169,7 @@ public static class SdCwtClaimRedaction
         IReadOnlyDictionary<CredentialPath, IReadOnlySet<string>> groupedPaths,
         GenerateDisclosureSaltDelegate generateSalt,
         string hashAlgorithm,
+        BaseMemoryPool pool,
         Dictionary<int, object> mandatoryOutput,
         List<SdDisclosure> allDisclosures,
         Dictionary<CredentialPath, List<byte[]>> digestsByParent)
@@ -192,7 +197,7 @@ public static class SdCwtClaimRedaction
                 allDisclosures.Add(disclosure);
 
                 byte[] encoded = SdCwtSerializer.SerializeDisclosure(disclosure);
-                byte[] digest = SdCwtSerializer.ComputeDisclosureDigest(encoded, hashAlgorithm);
+                byte[] digest = SdCwtSerializer.ComputeDisclosureDigest(encoded, hashAlgorithm, pool);
 
                 if(!digestsByParent.TryGetValue(currentPath, out List<byte[]>? digests))
                 {
@@ -216,6 +221,7 @@ public static class SdCwtClaimRedaction
                         groupedPaths,
                         generateSalt,
                         hashAlgorithm,
+                        pool,
                         nestedOutput,
                         allDisclosures,
                         digestsByParent);

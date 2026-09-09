@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography.Text;
 
 namespace Verifiable.OAuth.Siop;
@@ -21,7 +22,7 @@ public static class SiopErrors
     /// The <c>user_cancelled</c> error — the End-User cancelled the Authorization
     /// Request from the RP.
     /// </summary>
-    public static readonly string UserCancelled = Utf8Constants.ToInternedString(UserCancelledUtf8);
+    public static string UserCancelled { get; } = Utf8Constants.ToInternedString(UserCancelledUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="ClientMetadataValueNotSupported"/>.</summary>
     public static ReadOnlySpan<byte> ClientMetadataValueNotSupportedUtf8 => "client_metadata_value_not_supported"u8;
@@ -30,7 +31,7 @@ public static class SiopErrors
     /// The <c>client_metadata_value_not_supported</c> error — the Self-Issued OP does
     /// not support some Relying Party parameter values received in the request.
     /// </summary>
-    public static readonly string ClientMetadataValueNotSupported = Utf8Constants.ToInternedString(ClientMetadataValueNotSupportedUtf8);
+    public static string ClientMetadataValueNotSupported { get; } = Utf8Constants.ToInternedString(ClientMetadataValueNotSupportedUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="SubjectSyntaxTypesNotSupported"/>.</summary>
     public static ReadOnlySpan<byte> SubjectSyntaxTypesNotSupportedUtf8 => "subject_syntax_types_not_supported"u8;
@@ -40,7 +41,7 @@ public static class SiopErrors
     /// none of the Subject Syntax Types the RP communicated in
     /// <c>subject_syntax_types_supported</c>.
     /// </summary>
-    public static readonly string SubjectSyntaxTypesNotSupported = Utf8Constants.ToInternedString(SubjectSyntaxTypesNotSupportedUtf8);
+    public static string SubjectSyntaxTypesNotSupported { get; } = Utf8Constants.ToInternedString(SubjectSyntaxTypesNotSupportedUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="InvalidClientMetadataUri"/>.</summary>
     public static ReadOnlySpan<byte> InvalidClientMetadataUriUtf8 => "invalid_client_metadata_uri"u8;
@@ -49,7 +50,9 @@ public static class SiopErrors
     /// The <c>invalid_client_metadata_uri</c> error — the <c>client_metadata_uri</c> in
     /// the Authorization Request returns an error or contains invalid data.
     /// </summary>
-    public static readonly string InvalidClientMetadataUri = Utf8Constants.ToInternedString(InvalidClientMetadataUriUtf8);
+    [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
+        Justification = "This value is the wire error-code literal 'invalid_client_metadata_uri' (compared and serialised as a string), not a dereferenceable System.Uri.")]
+    public static string InvalidClientMetadataUri { get; } = Utf8Constants.ToInternedString(InvalidClientMetadataUriUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="InvalidClientMetadataObject"/>.</summary>
     public static ReadOnlySpan<byte> InvalidClientMetadataObjectUtf8 => "invalid_client_metadata_object"u8;
@@ -58,7 +61,7 @@ public static class SiopErrors
     /// The <c>invalid_client_metadata_object</c> error — the <c>client_metadata</c>
     /// parameter contains an invalid RP parameter Object.
     /// </summary>
-    public static readonly string InvalidClientMetadataObject = Utf8Constants.ToInternedString(InvalidClientMetadataObjectUtf8);
+    public static string InvalidClientMetadataObject { get; } = Utf8Constants.ToInternedString(InvalidClientMetadataObjectUtf8);
 
 
     /// <summary>Returns <see langword="true"/> when <paramref name="value"/> is

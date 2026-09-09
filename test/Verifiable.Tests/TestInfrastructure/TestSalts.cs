@@ -4,6 +4,8 @@ using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Cryptography.Provider;
 using Verifiable.Microsoft;
+using Microsoft.Extensions.Time.Testing;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.TestInfrastructure;
 
@@ -15,7 +17,7 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// <remarks>
 /// <para>
 /// Production code allocates salt through the entropy backend (e.g.,
-/// <see cref="Verifiable.Microsoft.MicrosoftEntropyFunctions.GenerateSalt"/>) which
+/// <see cref="Verifiable.Microsoft.MicrosoftEntropyFunctionsAdapter.GenerateSalt"/>) which
 /// stamps full provenance — <see cref="Purpose.Salt"/>, <see cref="ProviderLibrary"/>,
 /// <see cref="CryptoLibrary"/>, <see cref="ProviderClass"/>,
 /// <see cref="ProviderOperation"/> — on the resulting <see cref="Salt.Tag"/>. Tests
@@ -53,7 +55,7 @@ internal static class TestSalts
     /// The tag stamped on every test-constructed salt. Carries
     /// <see cref="Purpose.Salt"/> plus test-assembly provenance.
     /// </summary>
-    public static readonly Tag TestSaltTag = CreateTestSaltTag();
+    public static Tag TestSaltTag { get; } = CreateTestSaltTag();
 
 
     private static Tag CreateTestSaltTag()
@@ -128,7 +130,7 @@ internal static class TestSalts
 
     /// <summary>
     /// Produces a single fresh salt through the entropy provider
-    /// (<see cref="MicrosoftEntropyFunctions.GenerateSalt"/>), so the salt carries full provider
+    /// (<see cref="MicrosoftEntropyFunctionsAdapter.GenerateSalt"/>), so the salt carries full provider
     /// provenance and the generation is the same tracked path production uses. The convenience
     /// <c>Salt.Generate(byteLength, tag, pool)</c> shortcut was removed precisely because it bypassed
     /// this path; tests go through the provider too. The emitted <c>CryptoEvent</c> is dropped here —
@@ -142,7 +144,7 @@ internal static class TestSalts
     {
         BaseMemoryPool resolvedPool = pool ?? BaseMemoryPool.Shared;
 
-        return MicrosoftEntropyFunctions.GenerateSalt(byteLength, tag, resolvedPool).Result;
+        return MicrosoftEntropyFunctions.GenerateSalt(byteLength, tag, resolvedPool, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch)).Result;
     }
 
 

@@ -19,6 +19,7 @@ using Verifiable.OAuth.Oid4Vp;
 using Verifiable.OAuth.Oid4Vp.Wallet;
 using Verifiable.OAuth.Oid4Vp.Wallet.States;
 using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.OAuth;
 
@@ -479,21 +480,19 @@ internal sealed class TestWallet
         CancellationToken cancellationToken)
     {
         using SdToken<string> token = SdJwtSerializer.ParseToken(
-            sdJwtWithoutKb, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared, TestSalts.TestSaltTag);
+            sdJwtWithoutKb, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared, TestSalts.TestSaltTag);
 
         //Minimal disclosure (data minimization) computed through the same Core engine
         //every flow runs — DcqlDisclosure over the parsed token. A null set means a
         //whole-credential request (no specific claims) or a wildcard leaf, so every
         //disclosure is revealed. The verifier's CheckNoOverDisclosure rule rejects
         //anything beyond what the engine selected.
-        HashSet<string>? selectedClaimNames = await ComputeSelectedClaimNamesAsync(
+        IReadOnlySet<CredentialPath>? selectedPaths = await ComputeSelectedPathsAsync(
             dcqlQuery, credentialQueryId, token, cancellationToken: cancellationToken).ConfigureAwait(false);
 
-        using SdToken<string> presentationToken = token.SelectDisclosures(
-            selectedClaimNames is null
-                ? static _ => true
-                : disclosure => disclosure.ClaimName is not null && selectedClaimNames.Contains(disclosure.ClaimName),
-            BaseMemoryPool.Shared);
+        using SdToken<string> presentationToken = selectedPaths is null
+            ? token.SelectDisclosures(static _ => true, BaseMemoryPool.Shared)
+            : token.SelectDisclosures(selectedPaths, BaseMemoryPool.Shared).Token;
 
         string hashInput = SdJwtSerializer.GetSdJwtForHashing(presentationToken, TestSetup.Base64UrlEncoder);
         byte[] hashInputBytes = Encoding.UTF8.GetBytes(hashInput);
@@ -529,14 +528,30 @@ internal sealed class TestWallet
     }
 
 
-    //The disclosure claim names to reveal for the given credential query, computed
-    //through the Core selective-disclosure engine: DcqlDisclosure.ComputeStrategyAsync
-    //evaluates the parsed token against the query via SdTokenDcqlAdapter and the
-    //decision's SelectedPaths are the minimal set (iss/vct are the always-visible
-    //mandatory paths). Returns null — reveal everything — when the query requests the
-    //whole credential (no specific claims) or carries a wildcard leaf (open-ended),
-    //mirroring the verifier's permissive claims-less / wildcard handling.
-    private static async Task<HashSet<string>?> ComputeSelectedClaimNamesAsync(
+    /// <summary>
+    /// The disclosure paths to reveal for the given credential query, computed through the Core
+    /// selective-disclosure engine: <c>DcqlDisclosure.ComputeStrategyAsync</c> evaluates the
+    /// parsed token against the query via <see cref="SdTokenDcqlAdapter"/> and the decision's
+    /// <c>SelectedPaths</c> are the minimal set (<c>iss</c>/<c>vct</c> are the always-visible
+    /// mandatory paths) — the real path road, never a leaf name synthesised back from one.
+    /// </summary>
+    /// <remarks>
+    /// Only a query that names no claims at all reveals the whole credential; a query whose path
+    /// carries an index or a wildcard segment goes through the engine like any other, because
+    /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html">OpenID for
+    /// Verifiable Presentations 1.0, Section 6.4</see> holds for it too — "Wallets MUST NOT send
+    /// selectively disclosable claims that have not been selected according to the rules below" —
+    /// and Section 7.1.1's processing of those segments is what the adapter resolves.
+    /// </remarks>
+    /// <param name="dcqlQuery">The query the verifier sent.</param>
+    /// <param name="credentialQueryId">The credential query being answered.</param>
+    /// <param name="token">The credential the wallet holds.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>
+    /// The positions to release, or <see langword="null"/> when the query names no claims and the
+    /// whole credential is asked for.
+    /// </returns>
+    private static async Task<IReadOnlySet<CredentialPath>?> ComputeSelectedPathsAsync(
         DcqlQuery dcqlQuery,
         string credentialQueryId,
         SdToken<string> token,
@@ -552,41 +567,19 @@ internal sealed class TestWallet
             }
         }
 
-        if(credentialQuery?.Claims is not { Count: > 0 } claimQueries)
+        if(credentialQuery?.Claims is not { Count: > 0 })
         {
             return null;
         }
 
-        foreach(ClaimsQuery claimQuery in claimQueries)
-        {
-            if(claimQuery.Path is { Count: > 0 } pattern && pattern[pattern.Count - 1].KeyValue is null)
-            {
-                //Wildcard leaf -> open-ended request; reveal everything.
-                return null;
-            }
-        }
-
-        DisclosureStrategyGraph<SdToken<string>> graph = (await DcqlDisclosure.ComputeStrategyAsync(
-            credentialQuery,
-            token,
-            SdTokenDcqlAdapter.CreateMetadataExtractor<string>(DcqlCredentialFormats.SdJwt),
-            SdTokenDcqlAdapter.ClaimExtractor<string>,
-            mandatoryPaths: new HashSet<CredentialPath>
+        DisclosureStrategyGraph<SdToken<string>> graph = (await DcqlDisclosure.ComputeStrategyAsync(credentialQuery, token, SdTokenDcqlAdapter.CreateMetadataExtractor<string>(DcqlCredentialFormats.SdJwt), SdTokenDcqlAdapter.ClaimExtractor<string>, new FakeTimeProvider(TestClock.CanonicalEpoch), mandatoryPaths: new HashSet<CredentialPath>
             {
                 CredentialPath.FromJsonPointer("/iss"),
                 CredentialPath.FromJsonPointer("/vct")
-            },
-            cancellationToken: cancellationToken).ConfigureAwait(false)).Graph;
+            }, cancellationToken: cancellationToken).ConfigureAwait(false)).Graph;
 
-        HashSet<string> selected = new(StringComparer.Ordinal);
-        if(graph.Decisions.Count > 0)
-        {
-            foreach(CredentialPath path in graph.Decisions[0].SelectedPaths)
-            {
-                selected.Add(path.ToString().TrimStart('/'));
-            }
-        }
-
-        return selected;
+        return graph.Decisions.Count > 0
+            ? graph.Decisions[0].SelectedPaths
+            : new HashSet<CredentialPath>();
     }
 }

@@ -19,7 +19,7 @@ namespace Verifiable.Tpm.Spec.Handles;
 ///   <item><description>TPM_HT_PERSISTENT (0x81) - persistent objects stored in NV.</description></item>
 /// </list>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 9.3.
+/// Specification reference: TPM 2.0 Library Part 2, clause 9.3.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]

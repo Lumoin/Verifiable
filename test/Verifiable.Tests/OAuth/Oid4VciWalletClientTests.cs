@@ -38,7 +38,7 @@ internal sealed class Oid4VciWalletClientTests
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private const string ClientId = "https://wallet.client.test";
-    private static readonly Uri ClientBaseUri = new("https://wallet.client.test");
+    private static Uri ClientBaseUri { get; } = new("https://wallet.client.test");
     private const string ConfigurationId = "eu.europa.ec.eudi.pid.1";
     private const string PreAuthorizedCode = "SplxlOBeZQQYbYS6WxSbIA";
     private const string EndUserSubject = "urn:uuid:end-user-42";
@@ -46,7 +46,7 @@ internal sealed class Oid4VciWalletClientTests
 
     private const string OfferId = "GkurKxf5T0Y-mnPFCHqWOMiZi4VS138cQO_V7PZHAdM";
 
-    private static readonly ImmutableHashSet<CapabilityIdentifier> IssuerCapabilities =
+    private static ImmutableHashSet<CapabilityIdentifier> IssuerCapabilities { get; } =
         ImmutableHashSet.Create(
             WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
             WellKnownCapabilityIdentifiers.Oid4VciPreAuthorizedCodeGrant,
@@ -56,12 +56,12 @@ internal sealed class Oid4VciWalletClientTests
             WellKnownCapabilityIdentifiers.Oid4VciDeferredCredentialEndpoint,
             WellKnownCapabilityIdentifiers.Oid4VciNotificationEndpoint);
 
-    private static readonly JwtHeaderSerializer HeaderSerializer =
+    private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)header,
             TestSetup.DefaultSerializationOptions);
 
-    private static readonly JwtPayloadSerializer PayloadSerializer =
+    private static JwtPayloadSerializer PayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)payload,
             TestSetup.DefaultSerializationOptions);
@@ -556,14 +556,9 @@ internal sealed class Oid4VciWalletClientTests
         using HttpRequestMessage request = new(HttpMethod.Post, endpoint);
 
         //§7 Nonce Request carries no body; only the §8 Credential Request has one.
-        if(jsonBody.Length > 0)
-        {
-            request.Content = new StringContent(jsonBody, Encoding.UTF8, WellKnownMediaTypes.Application.Json);
-        }
-        else
-        {
-            request.Content = new ByteArrayContent([]);
-        }
+        request.Content = jsonBody.Length > 0
+            ? new StringContent(jsonBody, Encoding.UTF8, WellKnownMediaTypes.Application.Json)
+            : new ByteArrayContent([]);
 
         foreach(KeyValuePair<string, string> header in headers)
         {

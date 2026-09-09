@@ -14,7 +14,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// TPM2_GetRandom command.
 /// </para>
 /// <para>
-/// <b>Response parameters (Part 3, Section 16.1):</b>
+/// <b>Response parameters (Part 3, clause 16.1):</b>
 /// </para>
 /// <list type="bullet">
 ///   <item><description>randomBytes (TPM2B_DIGEST) - the random octets.</description></item>

@@ -135,7 +135,6 @@ internal sealed class PAdESFirewalledFlowTests
     private static PdfIncrementalUpdateAnchor LocateNextAnchor(byte[] document)
     {
         using PdfByteSurfaceParseResult located = PdfByteSurfaceReader.Locate(document, BaseMemoryPool.Shared);
-        PdfSignatureDictionary signature = located.SignatureDictionaries![0];
         int xrefOffset = FindLastXrefOffset(document);
 
         //The base fixture always starts its own signature object at number 2 (object 1 is the catalog), so the

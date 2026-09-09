@@ -1,4 +1,5 @@
 using System.Buffers;
+using Verifiable.Core.StatusList;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 
@@ -32,6 +33,7 @@ namespace Verifiable.Core.Model.SelectiveDisclosure;
 ///   <item><description>Extract the holder public key from the embedded SD-CWT <c>cnf</c> COSE_Key via <see cref="ExtractSdCwtHolderKeyDelegate"/>.</description></item>
 ///   <item><description>Verify the KBT holder signature against the holder key via <c>Cose.VerifyAsync</c>.</description></item>
 ///   <item><description>Read KBT payload claims <c>aud</c>/<c>iat</c>/<c>cnonce</c> via <see cref="ReadKbtCwtClaimsDelegate"/>.</description></item>
+///   <item><description>Read the embedded SD-CWT <c>status</c> claim via <see cref="ExtractSdCwtStatusDelegate"/> — a decode of the issuer's own statement, independent of the signature verdict.</description></item>
 ///   <item><description>Resolve the issuer key from the embedded SD-CWT <c>iss</c> via <see cref="ExtractSdCwtIssuerDelegate"/> + <see cref="ResolveSdCwtIssuerKeyDelegate"/>.</description></item>
 ///   <item><description>Verify the embedded SD-CWT (issuer signature + per-disclosure digest binding) reusing the existing SD-CWT verification.</description></item>
 ///   <item><description>Collect disclosed claims from the embedded SD-CWT disclosures.</description></item>
@@ -74,6 +76,14 @@ public static class KbCwtVerification
     /// Delegate that reads the <c>iss</c> claim from the embedded SD-CWT payload.
     /// Wired to <c>Verifiable.Cbor.Sd.SdCwtVpParsing.ExtractIssuer</c>.
     /// </param>
+    /// <param name="extractCredentialType">
+    /// Delegate that reads the <c>vct</c> claim from the embedded SD-CWT payload.
+    /// Wired to <c>Verifiable.Cbor.Sd.SdCwtVpParsing.ExtractCredentialType</c>.
+    /// </param>
+    /// <param name="extractStatus">
+    /// Delegate that reads the <c>status</c> claim (CWT claim 65535) from the embedded SD-CWT
+    /// payload. Wired to <c>Verifiable.Cbor.Sd.SdCwtVpParsing.ExtractStatus</c>.
+    /// </param>
     /// <param name="resolveIssuerKey">
     /// Application-provided delegate that resolves the issuer's public key from its identifier.
     /// </param>
@@ -97,6 +107,8 @@ public static class KbCwtVerification
         ExtractSdCwtHolderKeyDelegate extractHolderKey,
         ReadKbtCwtClaimsDelegate readKbtClaims,
         ExtractSdCwtIssuerDelegate extractIssuer,
+        ExtractSdCwtCredentialTypeDelegate extractCredentialType,
+        ExtractSdCwtStatusDelegate extractStatus,
         ResolveSdCwtIssuerKeyDelegate resolveIssuerKey,
         VerifySdCwtCredentialDelegate verifyCredential,
         BuildSigStructureDelegate buildSigStructure,
@@ -110,6 +122,8 @@ public static class KbCwtVerification
         ArgumentNullException.ThrowIfNull(extractHolderKey);
         ArgumentNullException.ThrowIfNull(readKbtClaims);
         ArgumentNullException.ThrowIfNull(extractIssuer);
+        ArgumentNullException.ThrowIfNull(extractCredentialType);
+        ArgumentNullException.ThrowIfNull(extractStatus);
         ArgumentNullException.ThrowIfNull(resolveIssuerKey);
         ArgumentNullException.ThrowIfNull(verifyCredential);
         ArgumentNullException.ThrowIfNull(buildSigStructure);
@@ -151,6 +165,16 @@ public static class KbCwtVerification
         //The digest binding is performed by the existing SD-CWT verification — not
         //reimplemented here.
         string? issuer = extractIssuer(embeddedToken);
+        string? credentialType = extractCredentialType(embeddedToken);
+
+        //Token Status List Section 6.3's Status structure, read off the same embedded token that was
+        //parsed above. This is a decode of what the issuer wrote, so it happens at the parse boundary
+        //regardless of what the issuer signature check below concludes — the twin of the mdoc path,
+        //where the Mobile Security Object's status member decodes with the rest of the object. The
+        //ordering Section 8.3 states governs the FETCH of the Status List Token, which is the
+        //verifier's own later step over a credential whose signature held.
+        StatusClaim? status = extractStatus(embeddedToken);
+
         PublicKeyMemory? issuerPublicKey = issuer is not null ? resolveIssuerKey(issuer) : null;
 
         bool credentialSignatureValid = false;
@@ -160,9 +184,23 @@ public static class KbCwtVerification
                 embeddedToken, issuerPublicKey, pool, cancellationToken).ConfigureAwait(false);
         }
 
-        //Collect disclosed claims from the embedded SD-CWT disclosures, and observe the shortest salt
-        //length (the verifier-side salt-length signal — RFC 9901 §9.3).
-        var disclosedClaims = new Dictionary<string, string>();
+        //Collect disclosed claims from the embedded SD-CWT disclosures at their real position in
+        //the issuer-signed structure — embeddedToken.DisclosurePaths is the parse's own
+        //resolution (RFC 9901 §9.3: the same claim name legitimately recurs at different depths
+        //with independent salts, so the leaf name alone cannot key this map) — and observe the
+        //shortest salt length (the verifier-side salt-length signal — RFC 9901 §9.3).
+        var disclosedClaims = new Dictionary<CredentialPath, object?>();
+
+        //The unconditionally disclosed claims (vct/iss and any non-disclosable business claim) are part
+        //of what a relying-party query can address, so they join the disclosed map; they are tracked
+        //apart so §6.4 over-disclosure enforcement — which governs only what the wallet chose to send —
+        //never counts them against the wallet.
+        foreach(KeyValuePair<CredentialPath, object?> claim in embeddedToken.IssuerSignedClaims)
+        {
+            disclosedClaims[claim.Key] = claim.Value;
+        }
+
+        var unconditionallyDisclosedPaths = new HashSet<CredentialPath>(embeddedToken.IssuerSignedClaims.Keys);
         int? minimumSaltLength = null;
         foreach(SdDisclosure disclosure in embeddedToken.Disclosures)
         {
@@ -172,9 +210,9 @@ public static class KbCwtVerification
                 minimumSaltLength = saltLength;
             }
 
-            if(disclosure.ClaimName is not null)
+            if(embeddedToken.DisclosurePaths.TryGetPath(disclosure, out CredentialPath path))
             {
-                disclosedClaims[disclosure.ClaimName] = disclosure.ClaimValue?.ToString() ?? "";
+                disclosedClaims[path] = disclosure.ClaimValue;
             }
         }
 
@@ -184,6 +222,9 @@ public static class KbCwtVerification
         bool saltReused = false;
         if(saltReuseSeam is not null)
         {
+            //Not a using declaration: commitments is a list of disposables built by a loop, a shape
+            //the using declaration syntax does not accept (it disposes one variable's own value, not a
+            //collection's elements); the finally disposes each commitment exactly once on every exit path.
             var commitments = new List<DigestValue>();
             try
             {
@@ -211,10 +252,14 @@ public static class KbCwtVerification
             HolderSignatureValid = holderSignatureValid,
             CredentialSignatureValid = credentialSignatureValid,
             Issuer = issuer,
+            CredentialType = credentialType,
+            Status = status,
+            IssuerVerificationKey = credentialSignatureValid ? issuerPublicKey : null,
             Audience = kbtClaims.Aud,
             Cnonce = kbtClaims.Cnonce,
             IssuedAt = kbtClaims.Iat,
             DisclosedClaims = disclosedClaims,
+            UnconditionallyDisclosedPaths = unconditionallyDisclosedPaths,
             MinimumDisclosureSaltLengthBytes = minimumSaltLength,
             SaltReused = saltReused
         };

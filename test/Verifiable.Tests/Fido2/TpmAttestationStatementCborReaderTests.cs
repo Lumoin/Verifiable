@@ -1,4 +1,6 @@
-using System.Formats.Cbor;
+using System.Buffers;
+using Lumoin.Veritas.Cbor;
+using Verifiable.Cbor;
 using Verifiable.Cbor.Fido2;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
@@ -112,14 +114,16 @@ internal sealed class TpmAttestationStatementCborReaderTests
     [TestMethod]
     public void StatementDefaultRejectsAnUnrecognisedMember()
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(2);
         writer.WriteTextString("foo");
         writer.WriteBoolean(true);
         writer.WriteTextString("ver");
         writer.WriteTextString("2.0");
         writer.WriteEndMap();
-        byte[] cbor = writer.Encode();
+        byte[] cbor = writerBuffer.WrittenSpan.ToArray();
 
         Fido2FormatException exception = Assert.ThrowsExactly<Fido2FormatException>(() => TpmAttestationStatementCborReader.Parse(cbor, BaseMemoryPool.Shared));
 
@@ -150,6 +154,9 @@ internal sealed class TpmAttestationStatementCborReaderTests
         byte[] certificateBytes = [10, 11, 12];
         byte[] cbor = EncodeTpmAttStmtRaw(ver: "2.0", alg: -65535, sig: sig, certInfo: certInfo, pubArea: pubArea, x5cEntries: [certificateBytes]);
 
+        //statement.X5c is a collection of disposables, not one disposable value: a using declaration
+        //disposes one variable's own value, not a collection's elements, so the foreach below in the
+        //finally block is the release point.
         TpmAttestationStatement statement = TpmAttestationStatementCborReader.Parse(cbor, BaseMemoryPool.Shared);
         try
         {
@@ -191,7 +198,9 @@ internal sealed class TpmAttestationStatementCborReaderTests
     {
         int memberCount = (alg is not null ? 1 : 0) + (sig is not null ? 1 : 0) + (ver is not null ? 1 : 0)
             + (x5cEntries is not null ? 1 : 0) + (pubArea is not null ? 1 : 0) + (certInfo is not null ? 1 : 0);
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(memberCount);
 
         if(alg is not null)
@@ -238,6 +247,6 @@ internal sealed class TpmAttestationStatementCborReaderTests
 
         writer.WriteEndMap();
 
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 }

@@ -1,4 +1,4 @@
-﻿namespace Verifiable.Cesr;
+namespace Verifiable.Cesr;
 
 /// <summary>
 /// The size descriptor for a CESR indexed-signature code. Indexed codes are a context-specific coding scheme

@@ -105,10 +105,8 @@ namespace Verifiable.Core.Assessment
         /// </summary>
         /// <param name="claimIssuer">The claim issuer to generate claims from input.</param>
         /// <param name="assessors">The assessors to run in parallel.</param>
+        /// <param name="timeProvider">Time provider for timestamps.</param>
         /// <param name="aggregationStrategy">How to aggregate individual results.</param>
-        /// <param name="timeProvider">
-        /// Time provider for timestamps. If <see langword="null"/>, uses <see cref="TimeProvider.System"/>.
-        /// </param>
         /// <param name="requiredQuorum">
         /// Minimum assessors required for <see cref="AssessmentAggregationStrategy.QuorumMustSucceed"/>.
         /// </param>
@@ -121,12 +119,13 @@ namespace Verifiable.Core.Assessment
         public CompositeClaimAssessor(
             ClaimIssuer<TInput> claimIssuer,
             IReadOnlyList<AssessorConfiguration> assessors,
+            TimeProvider timeProvider,
             AssessmentAggregationStrategy aggregationStrategy = AssessmentAggregationStrategy.AllMustSucceed,
-            TimeProvider? timeProvider = null,
             int requiredQuorum = 0)
         {
             ArgumentNullException.ThrowIfNull(claimIssuer, nameof(claimIssuer));
             ArgumentNullException.ThrowIfNull(assessors, nameof(assessors));
+            ArgumentNullException.ThrowIfNull(timeProvider, nameof(timeProvider));
 
             if(assessors.Count == 0)
             {
@@ -136,7 +135,7 @@ namespace Verifiable.Core.Assessment
             ClaimIssuer = claimIssuer;
             Assessors = assessors;
             AggregationStrategy = aggregationStrategy;
-            TimeProvider = timeProvider ?? TimeProvider.System;
+            TimeProvider = timeProvider;
             RequiredQuorum = requiredQuorum > 0 ? requiredQuorum : (assessors.Count / 2) + 1;
         }
 
@@ -267,6 +266,9 @@ namespace Verifiable.Core.Assessment
             }
             catch(Exception ex)
             {
+                //Each configured assessor is isolated: a fault from one (a caller-registered, arbitrary
+                //assessment delegate) is recorded as this assessor's own Faulted outcome and never takes
+                //down the composite run, cancellation excepted above.
                 stopwatch.Stop();
                 return new IndividualAssessorResult(
                     AssessorId: config.AssessorId,

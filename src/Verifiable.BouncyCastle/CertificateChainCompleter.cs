@@ -241,7 +241,7 @@ public sealed class CertificateChainCompleter
             return null;
         }
 
-        return AuthorityKeyIdentifier.GetInstance(X509ExtensionUtilities.FromExtensionValue(extensionValue)).KeyIdentifier?.GetOctets();
+        return Org.BouncyCastle.Asn1.X509.AuthorityKeyIdentifier.GetInstance(X509ExtensionUtilities.FromExtensionValue(extensionValue)).KeyIdentifier?.GetOctets();
     }
 
 

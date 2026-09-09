@@ -1,5 +1,5 @@
 using System.Buffers;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Core.Model.SelectiveDisclosure;
@@ -60,7 +60,8 @@ public static class SdKbtIssuance
         //Keys are written in canonical (ascending) label order — alg(1),
         //kcwt(13), typ(16) — so the wire form matches what the canonical
         //conformance mode requires for the integrity-protected header.
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        using var buffer = new SlabBufferWriter(pool);
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(3);
 
         writer.WriteInt32(CoseHeaderParameters.Alg);
@@ -74,15 +75,9 @@ public static class SdKbtIssuance
 
         writer.WriteEndMap();
 
-        int size = writer.BytesWritten;
-        IMemoryOwner<byte> owner = pool.Rent(size);
-        int written = writer.Encode(owner.Memory.Span);
-        if(written != size)
-        {
-            owner.Dispose();
-            throw new InvalidOperationException(
-                $"CborWriter.Encode wrote {written} bytes, expected {size}.");
-        }
+        using IMemoryOwner<byte> encoded = buffer.Detach();
+        IMemoryOwner<byte> owner = pool.Rent(encoded.Memory.Length);
+        encoded.Memory.Span.CopyTo(owner.Memory.Span);
 
         return new EncodedCoseProtectedHeader(owner, CryptoTags.CoseEncodedProtectedHeader);
     }
@@ -108,7 +103,8 @@ public static class SdKbtIssuance
         ArgumentException.ThrowIfNullOrWhiteSpace(aud);
         ArgumentNullException.ThrowIfNull(pool);
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        using var buffer = new SlabBufferWriter(pool);
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
 
         int mapSize = cnonce is null ? 2 : 3;
         writer.WriteStartMap(mapSize);
@@ -127,15 +123,9 @@ public static class SdKbtIssuance
 
         writer.WriteEndMap();
 
-        int size = writer.BytesWritten;
-        IMemoryOwner<byte> owner = pool.Rent(size);
-        int written = writer.Encode(owner.Memory.Span);
-        if(written != size)
-        {
-            owner.Dispose();
-            throw new InvalidOperationException(
-                $"CborWriter.Encode wrote {written} bytes, expected {size}.");
-        }
+        using IMemoryOwner<byte> encoded = buffer.Detach();
+        IMemoryOwner<byte> owner = pool.Rent(encoded.Memory.Length);
+        encoded.Memory.Span.CopyTo(owner.Memory.Span);
 
         return owner;
     }
@@ -155,7 +145,9 @@ public static class SdKbtIssuance
         //Parse recovers payload/protected/signature plus the issuer's original full
         //disclosure set. SdCwtMessage is not itself IDisposable, but it owns those
         //parsed disclosures (and their salts); they are the issuer set, never embedded,
-        //so dispose them once the wire structure is recovered.
+        //so dispose them once the wire structure is recovered. issuerMessage.Disclosures is a
+        //collection, not one disposable value, so it is disposed in the finally below rather than
+        //through a using declaration.
         SdCwtMessage issuerMessage = SdCwtSerializer.Parse(
             presentationToken.IssuerSigned, CryptoTags.WireDecodedDisclosureSalt, pool);
 

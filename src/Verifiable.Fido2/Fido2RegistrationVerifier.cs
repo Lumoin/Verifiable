@@ -191,8 +191,7 @@ public static class Fido2RegistrationVerifier
     /// Defaults to <see langword="false"/>.
     /// </param>
     /// <param name="timeProvider">
-    /// Time provider for <see cref="ClaimIssueResult.CreationTimestampInUtc"/> stamping. When
-    /// <see langword="null"/>, <see cref="TimeProvider.System"/> is used.
+    /// Time provider for <see cref="ClaimIssueResult.CreationTimestampInUtc"/> stamping.
     /// </param>
     /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
     /// <returns>The combined attestation, ceremony-rule, and credential-record outcome.</returns>
@@ -208,10 +207,10 @@ public static class Fido2RegistrationVerifier
         DateTimeOffset validationTime,
         string correlationId,
         BaseMemoryPool pool,
+        TimeProvider timeProvider,
         IReadOnlyList<string>? transports = null,
         string? authenticatorAttachment = null,
         bool acceptsUntrustedAttestationAsNone = false,
-        TimeProvider? timeProvider = null,
         CancellationToken cancellationToken = default)
     {
         var claimIssuer = new ClaimIssuer<RegistrationCeremonyInput>(
@@ -290,7 +289,7 @@ public static class Fido2RegistrationVerifier
         return VerifyAsync(
             attestationStatementFormat, attestationStatement, authenticatorDataBytes, clientDataJson, ceremonyInput,
             selectAttestationVerifier, isCredentialIdUnique, trustAnchors, validationTime, correlationId,
-            pool, transports, authenticatorAttachment, acceptsUntrustedAttestationAsNone, timeProvider, cancellationToken);
+            pool, timeProvider, transports, authenticatorAttachment, acceptsUntrustedAttestationAsNone, cancellationToken);
     }
 
 

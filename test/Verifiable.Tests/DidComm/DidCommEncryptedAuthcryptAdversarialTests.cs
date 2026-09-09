@@ -33,14 +33,14 @@ internal sealed class DidCommEncryptedAuthcryptAdversarialTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly BaseMemoryPool Pool = BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool { get; } = BaseMemoryPool.Shared;
 
     //A non-network resolution context; it only satisfies the SSRF-policy-carrying parameter.
-    private static readonly ExchangeContext Context = new();
+    private static ExchangeContext Context { get; } = new();
 
     //The protected-header serializer, mirroring the anoncrypt adversarial tests: the headers are a
     //Dictionary<string, object> the JWE layer hands to this delegate to produce the UTF-8 JSON bytes.
-    private static readonly JwtHeaderSerializer HeaderSerializer =
+    private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)header,
             TestSetup.DefaultSerializationOptions);
@@ -421,7 +421,7 @@ internal sealed class DidCommEncryptedAuthcryptAdversarialTests
             HeaderSerializer,
             TestSetup.Base64UrlEncoder,
             CryptoFormatConversions.DefaultTagToEpkCrvConverter,
-            MicrosoftEntropyFunctions.GenerateNonce,
+            MicrosoftEntropyFunctionsAdapter.GenerateNonce,
             BouncyCastleKeyAgreementFunctions.Ecdh1PuMultiRecipientAgreementEncryptX25519Async,
             ConcatKdf.DefaultAuthenticatedKeyDerivationDelegate,
             MicrosoftKeyAgreementFunctions.AesKeyWrapAsync,
@@ -603,26 +603,26 @@ internal sealed class DidCommEncryptedAuthcryptAdversarialTests
     //disposes both keys via DisposeKeys.
     private sealed class AuthcryptWire
     {
-        private readonly PrivateKeyMemory recipientPrivate;
-        private readonly PublicKeyMemory senderPublic;
+        private PrivateKeyMemory RecipientPrivate { get; }
+        private PublicKeyMemory SenderPublic { get; }
 
         public AuthcryptWire(string wireJson, PrivateKeyMemory recipientPrivate, PublicKeyMemory senderPublic)
         {
             WireJson = wireJson;
-            this.recipientPrivate = recipientPrivate;
-            this.senderPublic = senderPublic;
+            this.RecipientPrivate = recipientPrivate;
+            this.SenderPublic = senderPublic;
         }
 
         public string WireJson { get; }
 
-        public PrivateKeyMemory RecipientPrivateKey => recipientPrivate;
+        public PrivateKeyMemory RecipientPrivateKey => RecipientPrivate;
 
-        public PublicKeyMemory SenderPublicKey => senderPublic;
+        public PublicKeyMemory SenderPublicKey => SenderPublic;
 
         public void DisposeKeys()
         {
-            recipientPrivate.Dispose();
-            senderPublic.Dispose();
+            RecipientPrivate.Dispose();
+            SenderPublic.Dispose();
         }
     }
 }

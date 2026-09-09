@@ -47,7 +47,7 @@ public interface ITpmCommandInput
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Per TPM 2.0 Library Part 1, Section 19.1 only the first parameter of the parameter area can be
+    /// Per TPM 2.0 Library Part 1, clause 18.1 only the first parameter of the parameter area can be
     /// encrypted, and only when it has an explicit size field. A command whose first parameter is a fixed-size
     /// scalar (for example a <c>UINT16</c>) is not encryptable and leaves this <see langword="false"/>.
     /// </para>
@@ -58,6 +58,43 @@ public interface ITpmCommandInput
     /// </para>
     /// </remarks>
     bool FirstCommandParameterIsEncryptable => false;
+
+    /// <summary>
+    /// Gets whether this command's first command handle carries an authorization role — the <c>@</c> decoration
+    /// on that handle's row in its own Part 3 command table (TPM 2.0 Library Part 3, clause 4.2) — so the first
+    /// session in the authorization area authorizes it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Part 4's <c>ComputeCommandHMAC</c> folds a decrypt or encrypt session's own <c>nonceTPM</c> into session
+    /// 0's command HMAC only <c>"if(sessionIndex == 0 &amp;&amp; s_associatedHandles[sessionIndex] !=
+    /// TPM_RH_UNASSIGNED)"</c> — session 0 being ASSOCIATED WITH a handle, never merely the command having one
+    /// (TPM 2.0 Library Part 1, clause 16.6.5: "the value of nonceTPM for the decrypt or encrypt session... is
+    /// included in the HMAC of the first authorization session but only in the command"). Most handle-bearing
+    /// commands authorize their first handle and leave this <see langword="true"/>; a command whose first
+    /// handle's Auth Index is None — <c>TPM2_ReadPublic()</c>, <c>TPM2_NV_ReadPublic()</c>, the six key commands
+    /// admitted through the no-authorization session mechanism, and <c>TPM2_RSA_Encrypt()</c> among them —
+    /// overrides this to <see langword="false"/>, since session 0 there is always a companion, never an
+    /// authorizer.
+    /// </para>
+    /// <para>
+    /// <see cref="TpmCommandExecutor"/> reads this to decide whether the first-session nonce fold applies at
+    /// all, rather than inferring the fact from the handle count alone.
+    /// </para>
+    /// </remarks>
+    bool IsFirstHandleAuthorized => true;
+
+    /// <summary>
+    /// Whether the command handle at <paramref name="handleIndex"/> (in handle order) names a sequence object,
+    /// whose cpHash Name term is the Empty Buffer ("If an authorization or audit for a sequence object requires
+    /// computation of a cpHash and an rpHash, the Name associated with sequenceHandle will be the Empty Buffer",
+    /// TPM 2.0 Library Part 1, clause 29.4.6; Part 3, clause 17.7.1). A transient handle's value cannot say
+    /// whether it names a key or a sequence, so the input — which knows its own command table — declares it,
+    /// and <see cref="TpmCommandExecutor"/> derives the term rather than requiring a caller-supplied Name.
+    /// </summary>
+    /// <param name="handleIndex">The zero-based position in the command's handle area.</param>
+    /// <returns><see langword="true"/> when the handle at that position is a sequence handle.</returns>
+    bool HandleIsSequence(int handleIndex) => false;
 
     /// <summary>
     /// Gets the total serialized size of the handle area plus the parameter area, in bytes.

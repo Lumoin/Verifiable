@@ -54,9 +54,9 @@ namespace Verifiable.Tests.Vcalm;
 [DebuggerDisplay("VcalmConformanceHttpApplication Tenant={tenantSegment}")]
 internal sealed class VcalmConformanceHttpApplication
 {
-    private readonly EndpointServer server;
-    private readonly string tenantSegment;
-    private readonly ClientRecord registration;
+    private EndpointServer Server { get; }
+    private string TenantSegment { get; }
+    private ClientRecord Registration { get; }
 
     /// <summary>
     /// The stable, suite-expected issuer interface path the W3C issuer suite POSTs to. Rewritten to
@@ -79,9 +79,9 @@ internal sealed class VcalmConformanceHttpApplication
         ArgumentNullException.ThrowIfNull(server);
         ArgumentNullException.ThrowIfNull(registration);
 
-        this.server = server;
-        this.registration = registration;
-        tenantSegment = registration.TenantId.Value;
+        this.Server = server;
+        this.Registration = registration;
+        TenantSegment = registration.TenantId.Value;
     }
 
 
@@ -91,7 +91,7 @@ internal sealed class VcalmConformanceHttpApplication
             context.Request, context.RequestAborted).ConfigureAwait(false);
 
         ExchangeContext exchangeContext = new();
-        exchangeContext.SetTenantId(new TenantId(tenantSegment));
+        exchangeContext.SetTenantId(new TenantId(TenantSegment));
 
         //Map the inbound flat path the suite uses onto the tenant-scoped path the dispatcher matches.
         //An unmapped path yields null; the dispatcher then reports its standard 404.
@@ -117,7 +117,7 @@ internal sealed class VcalmConformanceHttpApplication
 
         IncomingRequest dispatchRequest = incomingRequest with { Path = dispatchPath };
 
-        ServerHttpResponse response = await server.DispatchAsync(
+        ServerHttpResponse response = await Server.DispatchAsync(
             dispatchRequest, exchangeContext, context.RequestAborted).ConfigureAwait(false);
 
         await WriteResponseAsync(response, context.Response, context.RequestAborted)
@@ -152,7 +152,7 @@ internal sealed class VcalmConformanceHttpApplication
             _ => null
         };
 
-        return suffix is null ? flatPath : $"/connect/{tenantSegment}/{suffix}";
+        return suffix is null ? flatPath : $"/connect/{TenantSegment}/{suffix}";
     }
 
 
@@ -169,7 +169,7 @@ internal sealed class VcalmConformanceHttpApplication
         //registration on context. The dispatcher sets these later for the dispatched request; the
         //gate sets them itself so it can run BEFORE dispatch.
         exchangeContext.SetIncomingRequest(incomingRequest);
-        exchangeContext.SetRegistration(registration);
+        exchangeContext.SetRegistration(Registration);
 
         if(!BearerTokenValidation.TryExtractBearer(exchangeContext, out string? bearerToken)
             || string.IsNullOrEmpty(bearerToken))
@@ -181,7 +181,7 @@ internal sealed class VcalmConformanceHttpApplication
         }
 
         (_, ServerHttpResponse? failure) = await BearerTokenValidation.ValidateAsync(
-            bearerToken, server, registration, exchangeContext, cancellationToken).ConfigureAwait(false);
+            bearerToken, Server, Registration, exchangeContext, cancellationToken).ConfigureAwait(false);
 
         if(failure is not null)
         {

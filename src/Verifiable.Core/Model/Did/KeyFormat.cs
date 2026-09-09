@@ -52,7 +52,8 @@ namespace Verifiable.Core.Model.Did
 
         /// <inheritdoc />
         [EditorBrowsable(EditorBrowsableState.Never)]
-        public override bool Equals([NotNullWhen(true)] object? obj) => obj is KeyFormat keyFormat && Equals(keyFormat);
+        public override bool Equals([NotNullWhen(true)] object? obj) =>
+            obj is not null && GetType() == obj.GetType() && Equals((KeyFormat)obj);
 
 
         /// <inheritdoc />

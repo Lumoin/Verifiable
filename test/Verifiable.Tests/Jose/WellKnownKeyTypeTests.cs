@@ -53,5 +53,21 @@ namespace Verifiable.Tests.Jwt
             string incorrectAlgorithm = instanceAlgorithm.ToggleCaseForLetterAt(0);
             Assert.IsFalse(isCorrectKeyType(incorrectAlgorithm), "Comparison should fail when casing is changed.");
         }
+
+
+        /// <summary>
+        /// RFC 7517 &#167;4.1 specifies "kty" values as case-sensitive strings compared for exact
+        /// match. A soft hyphen (U+00AD, a Unicode default-ignorable code point) inserted into the
+        /// value produces a byte-different string that a culture-aware comparison could still treat
+        /// as equal; <see cref="WellKnownKeyTypeValues.Equals(string, string)"/> must reject it.
+        /// </summary>
+        [TestMethod]
+        public void KeyTypeWithIgnorableCodePointIsNotEqualToCanonicalValue()
+        {
+            string tamperedKeyType = WellKnownKeyTypeValues.Ec.InsertIgnorableCodePointAt(1);
+
+            Assert.IsFalse(WellKnownKeyTypeValues.Equals(WellKnownKeyTypeValues.Ec, tamperedKeyType));
+            Assert.IsFalse(WellKnownKeyTypeValues.IsEc(tamperedKeyType));
+        }
     }
 }

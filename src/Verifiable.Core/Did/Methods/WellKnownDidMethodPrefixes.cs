@@ -15,8 +15,8 @@ namespace Verifiable.Core.Did.Methods;
 /// </para>
 /// <para>
 /// This class centralizes prefix definitions to ensure consistency across the library.
-/// The comparison methods use culture-invariant string comparison for predictable behavior
-/// across different locales.
+/// The comparison methods use ordinal string comparison so a prefix is matched byte-for-byte,
+/// never treated as equal to a variant that differs only by an ICU-ignorable code point.
 /// </para>
 /// <para>
 /// During DID deserialization these prefixes are used to determine the appropriate concrete
@@ -100,11 +100,12 @@ public static class WellKnownDidMethodPrefixes
 
     /// <summary>
     /// Returns <see langword="true"/> when the two prefixes are equal using
-    /// culture-invariant comparison.
+    /// ordinal comparison, per DID Core 1.0 &#167;3.1 (a DID method name is
+    /// <c>1*method-char</c> of lowercase ASCII, and DID comparison is by exact string match).
     /// </summary>
     public static bool Equals(string didPrefixA, string didPrefixB)
     {
         return ReferenceEquals(didPrefixA, didPrefixB)
-            || StringComparer.InvariantCulture.Equals(didPrefixA, didPrefixB);
+            || StringComparer.Ordinal.Equals(didPrefixA, didPrefixB);
     }
 }

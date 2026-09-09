@@ -25,7 +25,7 @@ internal sealed class DidResolutionConformanceTests
     private const string ExampleDid = "did:example:123";
 
     /// <summary>A default context; this layer does no network I/O.</summary>
-    private static readonly ExchangeContext Context = new();
+    private static ExchangeContext Context { get; } = new();
 
     public TestContext TestContext { get; set; } = null!;
 

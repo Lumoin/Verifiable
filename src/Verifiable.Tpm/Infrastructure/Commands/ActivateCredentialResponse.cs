@@ -10,7 +10,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Response structure (TPM 2.0 Part 3, Section 12.5): a single TPM2B_DIGEST <c>certInfo</c> — the recovered
+/// Response structure (TPM 2.0 Library Part 3, clause 12.5): a single TPM2B_DIGEST <c>certInfo</c> — the recovered
 /// credential secret. Recovering it proves the activate object and the credential key co-reside in one TPM;
 /// returning it to the challenger completes attestation-key enrollment. It is confidential, so the codec marks
 /// it eligible for session-based parameter encryption.

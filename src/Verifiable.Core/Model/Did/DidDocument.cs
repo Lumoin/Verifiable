@@ -282,6 +282,8 @@ namespace Verifiable.Core.Model.Did
                 return false;
             }
 
+            //Value equality over every declared member, one field at a time: a ladder, not a candidate
+            //for an extracted predicate, since each conjunct already names its own field.
             return Equals(Id, other.Id)
                 && Equals(Context, other.Context)
                 && (AlsoKnownAs?.SequenceEqual(other.AlsoKnownAs!) ?? other.AlsoKnownAs is null)

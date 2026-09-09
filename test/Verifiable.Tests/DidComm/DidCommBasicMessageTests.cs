@@ -17,7 +17,7 @@ namespace Verifiable.Tests.DidComm;
 [TestClass]
 internal sealed class DidCommBasicMessageTests
 {
-    private static readonly BaseMemoryPool Pool = BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool { get; } = BaseMemoryPool.Shared;
 
     private const string Alice = "did:example:alice";
     private const string Bob = "did:example:bob";

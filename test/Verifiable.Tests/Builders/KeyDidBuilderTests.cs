@@ -12,6 +12,7 @@ using Verifiable.Cryptography.Context;
 using Verifiable.Json;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 
 namespace Verifiable.Tests.Builders
@@ -37,12 +38,10 @@ namespace Verifiable.Tests.Builders
         /// The one and only (stateless) assessor for KeyDID for the builder tests.
         /// </summary>
         private static ClaimAssessor<DidDocument> KeyDidAssessor { get; } = new ClaimAssessor<DidDocument>(
-            new ClaimIssuer<DidDocument>(
-                issuerId: "DefaultKeyDidIssuer",
-                validationRules: KeyDidValidationRules.AllRules,
-                claimIdGenerator: (ct) => ValueTask.FromResult(string.Empty)),
+            new ClaimIssuer<DidDocument>(issuerId: "DefaultKeyDidIssuer", validationRules: KeyDidValidationRules.AllRules, claimIdGenerator: (ct) => ValueTask.FromResult(string.Empty), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch)),
             assessor: DefaultAssessors.DefaultKeyDidAssessorAsync,
-            assessorId: "DefaultKeyDidAssessorId");
+            assessorId: "DefaultKeyDidAssessorId",
+            timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
 
 
 
@@ -58,6 +57,7 @@ namespace Verifiable.Tests.Builders
             var keyDidDocument = await KeyDidBuilder.BuildAsync(
                 publicKey,
                 testData.VerificationMethodTypeInfo,
+                BaseMemoryPool.Shared,
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
             //Assert that the KeyFormat exists and is of the expected type.
@@ -67,7 +67,6 @@ namespace Verifiable.Tests.Builders
 
             //The builder produced DID identifier type should match KeyDidId, as the type of the document is key DID.
             Assert.IsInstanceOfType<KeyDidMethod>(keyDidDocument.Id);
-            string serializedDidDocumentx = JsonSerializerExtensions.Serialize(keyDidDocument, TestSetup.DefaultSerializationOptions);
 
             //This catches if there is a mismatch in generated tag for the key format
             //AND if the identifier does not match the used crypto algorithm. In
@@ -110,6 +109,7 @@ namespace Verifiable.Tests.Builders
             var didDocument = await KeyDidBuilder.BuildAsync(
                 publicKey,
                 testData.VerificationMethodTypeInfo,
+                BaseMemoryPool.Shared,
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
             //Sign data.
@@ -140,6 +140,7 @@ namespace Verifiable.Tests.Builders
             var didDocument = await KeyDidBuilder.BuildAsync(
                 publicKey,
                 X25519KeyAgreementKey2020VerificationMethodTypeInfo.Instance,
+                BaseMemoryPool.Shared,
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
             //Find the key agreement verification method.
@@ -189,7 +190,7 @@ namespace Verifiable.Tests.Builders
             PrivateKeyMemory otherPartyPrivateKey,
             BaseMemoryPool memoryPool)
         {
-            var (algorithm, purpose, scheme, publicKeyOwner) = VerificationMethodCryptoConversions.DefaultConverter(verificationMethod, memoryPool);
+            var (algorithm, _, _, publicKeyOwner) = VerificationMethodCryptoConversions.DefaultConverter(verificationMethod, memoryPool);
             using(publicKeyOwner)
             {
                 if(algorithm.Equals(CryptoAlgorithm.X25519))

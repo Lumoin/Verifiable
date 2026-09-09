@@ -799,9 +799,9 @@ public static class CBAdESSignatureValidation
 
         CBAdESProtectedHeaders headers = outcome.Headers!;
         CBAdESUnsignedHeaders? unsignedHeaders = outcome.UnsignedHeaders;
-        Signature signatureValue = outcome.SignatureValue!;
-        EncodedCBAdESUnsignedHeaders? rawUnsignedHeaders = outcome.RawUnsignedHeaders;
-        EncodedCoseProtectedHeader? rawProtectedHeader = outcome.RawProtectedHeader;
+        using Signature signatureValue = outcome.SignatureValue!;
+        using EncodedCBAdESUnsignedHeaders? rawUnsignedHeaders = outcome.RawUnsignedHeaders;
+        using EncodedCoseProtectedHeader? rawProtectedHeader = outcome.RawProtectedHeader;
 
         //The valData certificate candidates every arcTst instance's per-token coverage check (CB-6.3-h)
         //identity-matches against -- collected once, since it is the SAME
@@ -1034,9 +1034,10 @@ public static class CBAdESSignatureValidation
         }
         finally
         {
-            signatureValue.Dispose();
-            rawUnsignedHeaders?.Dispose();
-            rawProtectedHeader?.Dispose();
+            //archiveTimestampPayloadRented is bound by a tuple deconstruction from
+            //ResolvePayloadTimestampImprintSourceAsync inside the loop above (a using declaration accepts only
+            //a single simple declaration, never a deconstruction target) and only on the lazy first arcTst
+            //visit, so it is disposed manually here rather than at its own declaration point.
             archiveTimestampPayloadRented?.Dispose();
         }
     }
@@ -2370,7 +2371,7 @@ public static class CBAdESSignatureValidation
     /// <see cref="ParseCBAdESSign1Delegate"/>'s own documented contract already promises never to throw for
     /// malformed input (its <see cref="CBAdESSign1ParseResult.IsSuccess"/> <see langword="false"/> arm covers
     /// that case), so this catch is belt-and-suspenders defense against a non-conformant implementation of
-    /// that delegate, not a documented necessity. <c>System.Formats.Cbor.CborContentException</c> — the type
+    /// that delegate, not a documented necessity. <c>Lumoin.Veritas.Cbor.CborException</c> — the type
     /// <see cref="Verifiable.Cbor.CoseVerification"/>'s own classifier includes — is deliberately absent here:
     /// <c>Verifiable.JCose</c> does not reference the CBOR reader package at all (the reference graph runs
     /// <c>Verifiable.Cbor</c> → <c>Verifiable.JCose</c>, never the other way), so this classifier can only name

@@ -25,11 +25,11 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 ///   not normalized.</description></item>
 /// </list>
 /// <para>
-/// Lockout Authorization may SET <c>disableClear</c> but not CLEAR it (TPM 2.0 Library Part 3, Section 24.7.1);
+/// Lockout Authorization may SET <c>disableClear</c> but not CLEAR it (TPM 2.0 Library Part 3, clause 24.7.1);
 /// Platform Authorization may do either. This asymmetry is not encoded on the wire - both directions share the
 /// same handle and Auth Role - so it is enforced by the command's own transition logic. This command is
-/// authorized, so it is sent with <c>TPM_ST_SESSIONS</c>. See TPM 2.0 Library Part 3, Section 24.7 (Table
-/// 186/187).
+/// authorized, so it is sent with <c>TPM_ST_SESSIONS</c>. See TPM 2.0 Library Part 3, clause 24.7 (Table
+/// 203/204).
 /// </para>
 /// </remarks>
 /// <param name="Auth">The lockout or platform hierarchy authorizing the change.</param>

@@ -464,6 +464,19 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// The codec seam that CBOR-encodes the resolved <c>hmac-secret</c> <c>authenticatorGetAssertion</c>
     /// authData extensions output map — required, see <paramref name="encodeMakeCredentialExtensionOutputs"/>.
     /// </param>
+    /// <param name="timeProvider">
+    /// The authenticator's only time source: every stamped instant — <c>PoweredOnAt</c> (the power-up
+    /// instant CTAP 2.3 section 6.6's 10-second <c>authenticatorReset</c> window, lines 6365-6366/6374,
+    /// is measured from) and every trace timestamp alike — reads from this clock, never from
+    /// <see cref="System.DateTimeOffset.UtcNow"/> or <see cref="System.TimeProvider.System"/> directly.
+    /// Required rather than defaulted: a hidden system-clock fallback here would make the power-up-window
+    /// comparison depend on real wall-clock time elapsing during test setup, an unreliable oracle. Callers
+    /// composing a deterministic simulator pass a fixed clock explicitly.
+    /// </param>
+    /// <param name="pinUvAuthKeyAgreementPool">
+    /// The memory pool the two PIN/UV auth protocol key-agreement key pairs (CTAP 2.3 §6.5.6/§6.5.7)
+    /// are minted from at construction — a one-time event, independent of any later command's own pool.
+    /// </param>
     /// <param name="aaguid">
     /// The authenticator's claimed AAGUID. When <see langword="null"/>, one is drawn from
     /// <paramref name="rng"/> instead of an inline magic value, matching CTAP 2.3 section 6.4's
@@ -486,20 +499,13 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// </param>
     /// <param name="rng">
     /// The random-number backend the AAGUID and every minted credential identifier are drawn from.
-    /// Defaults to <see cref="RandomNumberGenerator.Fill(Span{byte})"/>. Tests inject a fixed-pattern
-    /// delegate for deterministic, independently-reproducible values.
+    /// Tests inject a fixed-pattern delegate for deterministic, independently-reproducible values.
     /// </param>
     /// <param name="credentialSigningBackend">
     /// The credential-minting backend for <c>authenticatorMakeCredential</c>. When <see langword="null"/>
     /// (the default), every <c>authenticatorMakeCredential</c> request answers
     /// <c>CTAP2_ERR_UNSUPPORTED_ALGORITHM</c>, mirroring <c>Verifiable.Tpm.Automata.TpmSimulator</c>'s
     /// "no backend, no crypto commands" convention.
-    /// </param>
-    /// <param name="timeProvider">The time source for trace timestamps. Defaults to <see cref="System.TimeProvider.System"/>.</param>
-    /// <param name="pinUvAuthKeyAgreementPool">
-    /// The memory pool the two PIN/UV auth protocol key-agreement key pairs (CTAP 2.3 §6.5.6/§6.5.7)
-    /// are minted from at construction — a one-time event, independent of any later command's own
-    /// pool. Defaults to <see cref="Lumoin.Base.BaseMemoryPool.Shared"/> when <see langword="null"/>.
     /// </param>
     /// <param name="simulateFingerprintCapture">
     /// The outcome-injection knob for <c>enrollBegin</c>'s/<c>enrollCaptureNextSample</c>'s own
@@ -551,8 +557,8 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// <paramref name="decodeCredentialManagementRequest"/>, <paramref name="encodeCredentialManagementResponse"/>,
     /// <paramref name="decodeBioEnrollmentRequest"/>, <paramref name="encodeBioEnrollmentResponse"/>,
     /// <paramref name="decodeLargeBlobsRequest"/>, <paramref name="encodeLargeBlobsResponse"/>,
-    /// <paramref name="encodeMakeCredentialExtensionOutputs"/>, or
-    /// <paramref name="encodeGetAssertionExtensionOutputs"/> is <see langword="null"/>.
+    /// <paramref name="encodeMakeCredentialExtensionOutputs"/>, <paramref name="encodeGetAssertionExtensionOutputs"/>,
+    /// or <paramref name="timeProvider"/> is <see langword="null"/>.
     /// </exception>
     /// <exception cref="ArgumentOutOfRangeException">
     /// <paramref name="residentCredentialCapacity"/> is negative, or <paramref name="firmwareVersion"/>
@@ -578,13 +584,13 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
         EncodeCtapLargeBlobsResponseDelegate encodeLargeBlobsResponse,
         EncodeCtapMakeCredentialExtensionOutputsDelegate encodeMakeCredentialExtensionOutputs,
         EncodeCtapGetAssertionExtensionOutputsDelegate encodeGetAssertionExtensionOutputs,
+        TimeProvider timeProvider,
+        BaseMemoryPool pinUvAuthKeyAgreementPool,
+        FillEntropyDelegate rng,
         Guid? aaguid = null,
         IReadOnlyList<string>? supportedExtensions = null,
         int residentCredentialCapacity = 8,
-        FillEntropyDelegate? rng = null,
         CtapCredentialSigningBackend? credentialSigningBackend = null,
-        TimeProvider? timeProvider = null,
-        BaseMemoryPool? pinUvAuthKeyAgreementPool = null,
         SimulateFingerprintCaptureDelegate? simulateFingerprintCapture = null,
         SimulateBuiltInUvDelegate? simulateBuiltInUv = null,
         SimulateUserPresenceDelegate? simulateUserPresence = null,
@@ -593,6 +599,9 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
         int firmwareVersion = 1)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(runId);
+        ArgumentNullException.ThrowIfNull(timeProvider);
+        ArgumentNullException.ThrowIfNull(pinUvAuthKeyAgreementPool);
+        ArgumentNullException.ThrowIfNull(rng);
         ArgumentNullException.ThrowIfNull(encodeGetInfoResponse);
         ArgumentNullException.ThrowIfNull(decodeMakeCredentialRequest);
         ArgumentNullException.ThrowIfNull(encodeMakeCredentialResponse);
@@ -623,8 +632,8 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
         EncodePackedSelfAttestationStatement = encodePackedSelfAttestationStatement;
         EncodePackedCertifiedAttestationStatement = encodePackedCertifiedAttestationStatement;
         CredentialSigningBackend = credentialSigningBackend;
-        TimeProvider = timeProvider ?? TimeProvider.System;
-        Rng = rng ?? RandomNumberGenerator.Fill;
+        TimeProvider = timeProvider;
+        Rng = rng;
         SimulateFingerprintCapture = simulateFingerprintCapture ?? DefaultSimulateFingerprintCapture;
         SimulateBuiltInUv = simulateBuiltInUv ?? DefaultSimulateBuiltInUv;
         SimulateUserPresence = simulateUserPresence ?? DefaultSimulateUserPresence;
@@ -645,7 +654,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
         Automaton = new PushdownAutomaton<CtapAuthenticatorState, CtapAuthenticatorInput, CtapAuthenticatorStackSymbol>(
             runId: runId,
             initialState: CtapAuthenticatorState.Initial(
-                resolvedAaguid, TimeProvider.GetUtcNow(), supportedExtensions, residentCredentialCapacity, pinUvAuthKeyAgreementPool,
+                resolvedAaguid, TimeProvider.GetUtcNow(), pinUvAuthKeyAgreementPool, supportedExtensions, residentCredentialCapacity,
                 enterpriseAttestationProvisioning, firmwareVersion),
             initialStackSymbol: CtapAuthenticatorStackSymbol.Session,
             transition: CtapAuthenticatorTransitions.Create(),
@@ -684,6 +693,8 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// <param name="encodeLargeBlobsResponse">See the constructor parameter of the same name.</param>
     /// <param name="encodeMakeCredentialExtensionOutputs">See the constructor parameter of the same name.</param>
     /// <param name="encodeGetAssertionExtensionOutputs">See the constructor parameter of the same name.</param>
+    /// <param name="timeProvider">See the constructor parameter of the same name.</param>
+    /// <param name="pinUvAuthKeyAgreementPool">See the constructor parameter of the same name.</param>
     /// <param name="aaguid">
     /// See the constructor parameter of the same name — for a custody-composed simulator this SHOULD be a
     /// stable, explicitly supplied value rather than <see langword="null"/>: rehydration's own fingerprint
@@ -694,8 +705,6 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// <param name="residentCredentialCapacity">See the constructor parameter of the same name.</param>
     /// <param name="rng">See the constructor parameter of the same name.</param>
     /// <param name="credentialSigningBackend">See the constructor parameter of the same name.</param>
-    /// <param name="timeProvider">See the constructor parameter of the same name.</param>
-    /// <param name="pinUvAuthKeyAgreementPool">See the constructor parameter of the same name.</param>
     /// <param name="simulateFingerprintCapture">See the constructor parameter of the same name.</param>
     /// <param name="simulateBuiltInUv">See the constructor parameter of the same name.</param>
     /// <param name="simulateUserPresence">See the constructor parameter of the same name.</param>
@@ -760,13 +769,13 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
         EncodeCtapLargeBlobsResponseDelegate encodeLargeBlobsResponse,
         EncodeCtapMakeCredentialExtensionOutputsDelegate encodeMakeCredentialExtensionOutputs,
         EncodeCtapGetAssertionExtensionOutputsDelegate encodeGetAssertionExtensionOutputs,
+        TimeProvider timeProvider,
+        BaseMemoryPool pinUvAuthKeyAgreementPool,
+        FillEntropyDelegate rng,
         Guid? aaguid = null,
         IReadOnlyList<string>? supportedExtensions = null,
         int residentCredentialCapacity = 8,
-        FillEntropyDelegate? rng = null,
         CtapCredentialSigningBackend? credentialSigningBackend = null,
-        TimeProvider? timeProvider = null,
-        BaseMemoryPool? pinUvAuthKeyAgreementPool = null,
         SimulateFingerprintCaptureDelegate? simulateFingerprintCapture = null,
         SimulateBuiltInUvDelegate? simulateBuiltInUv = null,
         SimulateUserPresenceDelegate? simulateUserPresence = null,
@@ -780,29 +789,38 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(custody);
+        ArgumentNullException.ThrowIfNull(pinUvAuthKeyAgreementPool);
 
         EncodeCtapAuthenticatorSnapshotDelegate resolvedEncodeSnapshot = encodeSnapshot ?? CtapAuthenticatorSnapshotCborWriter.Write;
         DecodeCtapAuthenticatorSnapshotDelegate resolvedDecodeSnapshot = decodeSnapshot ?? CtapAuthenticatorSnapshotCborReader.Read;
-        BaseMemoryPool resolvedPool = pinUvAuthKeyAgreementPool ?? BaseMemoryPool.Shared;
 
         CtapAuthenticatorSimulator simulator = new(
             runId, encodeGetInfoResponse, decodeMakeCredentialRequest, encodeMakeCredentialResponse, decodeGetAssertionRequest,
             encodeGetAssertionResponse, encodeCredentialPublicKey, encodePackedSelfAttestationStatement, decodeClientPinRequest,
             encodeClientPinResponse, decodeAuthenticatorConfigRequest, decodeCredentialManagementRequest,
             encodeCredentialManagementResponse, decodeBioEnrollmentRequest, encodeBioEnrollmentResponse, decodeLargeBlobsRequest,
-            encodeLargeBlobsResponse, encodeMakeCredentialExtensionOutputs, encodeGetAssertionExtensionOutputs, aaguid,
-            supportedExtensions, residentCredentialCapacity, rng, credentialSigningBackend, timeProvider, pinUvAuthKeyAgreementPool,
-            simulateFingerprintCapture, simulateBuiltInUv, simulateUserPresence, enterpriseAttestationProvisioning,
-            encodePackedCertifiedAttestationStatement, firmwareVersion);
+            encodeLargeBlobsResponse, encodeMakeCredentialExtensionOutputs, encodeGetAssertionExtensionOutputs, timeProvider,
+            pinUvAuthKeyAgreementPool,
+            aaguid: aaguid,
+            supportedExtensions: supportedExtensions,
+            residentCredentialCapacity: residentCredentialCapacity,
+            rng: rng,
+            credentialSigningBackend: credentialSigningBackend,
+            simulateFingerprintCapture: simulateFingerprintCapture,
+            simulateBuiltInUv: simulateBuiltInUv,
+            simulateUserPresence: simulateUserPresence,
+            enterpriseAttestationProvisioning: enterpriseAttestationProvisioning,
+            encodePackedCertifiedAttestationStatement: encodePackedCertifiedAttestationStatement,
+            firmwareVersion: firmwareVersion);
 
         try
         {
-            PooledMemory? loaded = await custody.TryLoadSnapshotAsync(runId, resolvedPool, cancellationToken).ConfigureAwait(false);
+            PooledMemory? loaded = await custody.TryLoadSnapshotAsync(runId, pinUvAuthKeyAgreementPool, cancellationToken).ConfigureAwait(false);
             if(loaded is not null)
             {
                 try
                 {
-                    simulator.RehydratePersistentSubset(loaded.AsReadOnlyMemory(), resolvedDecodeSnapshot, resolvedPool);
+                    simulator.RehydratePersistentSubset(loaded.AsReadOnlyMemory(), resolvedDecodeSnapshot, pinUvAuthKeyAgreementPool);
                 }
                 finally
                 {
@@ -1122,12 +1140,12 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// unobserved in practice.
     /// </remarks>
     /// <param name="keyAgreementPool">
-    /// The memory pool the refreshed key-agreement key pairs and tokens are minted from. Defaults to
-    /// <see cref="BaseMemoryPool.Shared"/> when <see langword="null"/>.
+    /// The memory pool the refreshed key-agreement key pairs and tokens are minted from.
     /// </param>
     /// <exception cref="ObjectDisposedException">This instance has been disposed.</exception>
-    public void PowerCycle(BaseMemoryPool? keyAgreementPool = null)
+    public void PowerCycle(BaseMemoryPool keyAgreementPool)
     {
+        ArgumentNullException.ThrowIfNull(keyAgreementPool);
         ObjectDisposedException.ThrowIf(disposed, this);
 
         CtapAuthenticatorState powerCycledState = Automaton.CurrentState.PowerCycle(TimeProvider.GetUtcNow(), keyAgreementPool);
@@ -2161,7 +2179,20 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
             //never action.CurrentStoredPin (captured BEFORE this command ran, and possibly stale once a
             //custody bundle is composed — a rehydrated stale snapshot would otherwise wrongly reject a
             //legitimate change here).
-            if(action.IsForcePinChangeRequired && CryptographicOperations.FixedTimeEquals(newPinHash!.AsReadOnlySpan(), confirmedCurrentPinHash!.AsReadOnlySpan()))
+            bool isSameAsCurrentUnderForce;
+            try
+            {
+                isSameAsCurrentUnderForce = action.IsForcePinChangeRequired
+                    && CryptographicOperations.FixedTimeEquals(newPinHash!.AsReadOnlySpan(), confirmedCurrentPinHash!.AsReadOnlySpan());
+            }
+            catch
+            {
+                newPinHash?.Dispose();
+
+                throw;
+            }
+
+            if(isSameAsCurrentUnderForce)
             {
                 newPinHash.Dispose();
 
@@ -3545,6 +3576,9 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// <see cref="CtapAuthenticatorState.SerializedLargeBlobArray"/> is never touched either way (line
     /// 7666's "the stored array UNCHANGED"). Runs identically whether <see cref="CtapCommitLargeBlobArrayAction.AuthenticatingPinUvAuthProtocol"/>
     /// is <see langword="null"/> (a tokenless write) or set: the integrity check has no auth dependency.
+    /// The copy, digest and comparison run inside a <see langword="try"/> whose <see langword="catch"/>
+    /// disposes <c>buffer</c> and rethrows, so a fault before either intentional outcome (fold-back,
+    /// failure-dispose, or the success transfer below) never leaks the rented buffer.
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "The constructed PooledMemory transfers ownership into the returned CtapLargeBlobArrayCommitAttempted.CommittedArray, which OnLargeBlobArrayCommitAttempted adopts as CtapAuthenticatorState.SerializedLargeBlobArray; the analyzer cannot see this transfer through the record construction.")]
@@ -3554,25 +3588,35 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
         cancellationToken.ThrowIfCancellationRequested();
 
         IMemoryOwner<byte> buffer = action.ExistingPendingBuffer ?? context.Pool.Rent(action.ExpectedLength);
-        action.Fragment.Span.CopyTo(buffer.Memory.Span.Slice(action.Offset, action.Fragment.Length));
 
-        int newNextOffset = action.Offset + action.Fragment.Length;
-        if(newNextOffset != action.ExpectedLength)
-        {
-            return ValueTask.FromResult<CtapAuthenticatorInput>(new CtapLargeBlobArrayCommitAttempted(
-                IsComplete: false, PendingBuffer: buffer, PendingNextOffset: newNextOffset, action.ExpectedLength,
-                action.AuthenticatingPinUvAuthProtocol, IsIntegrityValid: false, CommittedArray: null));
-        }
-
-        ReadOnlySpan<byte> completedArray = buffer.Memory.Span[..action.ExpectedLength];
-        int trailingHashStart = action.ExpectedLength - LargeBlobArrayTrailingHashLength;
-        ReadOnlySpan<byte> precedingBytes = completedArray[..trailingHashStart];
-        ReadOnlySpan<byte> storedTrailingHash = completedArray[trailingHashStart..];
-
+        int newNextOffset;
         bool isIntegrityValid;
-        using(DigestValue fullDigest = CryptographicKeyEvents.ComputeDigest(precedingBytes, Sha256Length, CryptoTags.Sha256Digest, context.Pool))
+        try
         {
-            isIntegrityValid = CryptographicOperations.FixedTimeEquals(fullDigest.AsReadOnlySpan()[..LargeBlobArrayTrailingHashLength], storedTrailingHash);
+            action.Fragment.Span.CopyTo(buffer.Memory.Span.Slice(action.Offset, action.Fragment.Length));
+
+            newNextOffset = action.Offset + action.Fragment.Length;
+            if(newNextOffset != action.ExpectedLength)
+            {
+                return ValueTask.FromResult<CtapAuthenticatorInput>(new CtapLargeBlobArrayCommitAttempted(
+                    IsComplete: false, PendingBuffer: buffer, PendingNextOffset: newNextOffset, action.ExpectedLength,
+                    action.AuthenticatingPinUvAuthProtocol, IsIntegrityValid: false, CommittedArray: null));
+            }
+
+            ReadOnlySpan<byte> completedArray = buffer.Memory.Span[..action.ExpectedLength];
+            int trailingHashStart = action.ExpectedLength - LargeBlobArrayTrailingHashLength;
+            ReadOnlySpan<byte> precedingBytes = completedArray[..trailingHashStart];
+            ReadOnlySpan<byte> storedTrailingHash = completedArray[trailingHashStart..];
+
+            using(DigestValue fullDigest = CryptographicKeyEvents.ComputeDigest(precedingBytes, Sha256Length, CryptoTags.Sha256Digest, context.Pool))
+            {
+                isIntegrityValid = CryptographicOperations.FixedTimeEquals(fullDigest.AsReadOnlySpan()[..LargeBlobArrayTrailingHashLength], storedTrailingHash);
+            }
+        }
+        catch
+        {
+            buffer.Dispose();
+            throw;
         }
 
         if(!isIntegrityValid)

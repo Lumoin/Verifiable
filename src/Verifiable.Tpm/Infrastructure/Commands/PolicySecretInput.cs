@@ -22,12 +22,12 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// <para>
 /// <see cref="NonceTpm"/>, <see cref="CpHashA"/>, and <see cref="PolicyRef"/> were always part of the command's
 /// wire shape; a negative <see cref="Expiration"/> requests a real <c>TPMT_TK_AUTH</c> authorization ticket
-/// (TPM 2.0 Library Part 3, Section 23.2.5) instead of the NULL ticket a non-negative expiration produces. A
+/// (TPM 2.0 Library Part 3, clause 23.2.5) instead of the NULL ticket a non-negative expiration produces. A
 /// trial policy session still requires <see cref="AuthHandle"/>'s authorization to succeed, but skips this
 /// command's own nonceTPM/expiration/cpHashA checks and ticket minting.
 /// </para>
 /// <para>
-/// Command structure (TPM 2.0 Part 3, Section 23.4, Table 129):
+/// Command structure (TPM 2.0 Library Part 3, clause 23.4, Table 146):
 /// </para>
 /// <list type="bullet">
 ///   <item><description>authHandle (TPMI_DH_ENTITY): The entity whose authorization is required. Requires authorization at USER role.</description></item>

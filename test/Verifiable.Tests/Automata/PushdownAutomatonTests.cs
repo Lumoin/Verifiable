@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Diagnostics;
 using Verifiable.Foundation.Automata;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Automata;
 
@@ -356,7 +357,8 @@ internal sealed class PushdownAutomatonTests
             "Start",
             "Z",
             (state, input, top, ct) => Transition("Next", StackAction<string>.None),
-            state => false);
+            state => false,
+            new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         using(pda.Subscribe(observer))
         {
@@ -421,7 +423,8 @@ internal sealed class PushdownAutomatonTests
                 ("B", "2") => Transition("C", StackAction<string>.Push("Y")),
                 _ => Null()
             },
-            state => state == "D");
+            state => state == "D",
+            new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         Assert.AreEqual(original.CurrentState, hydrated.CurrentState);
         Assert.AreEqual(original.StepCount, hydrated.StepCount);
@@ -566,7 +569,8 @@ internal sealed class PushdownAutomatonTests
             initialState,
             initialStackSymbol,
             transition,
-            accept ?? (state => state is "Accept" or "Complete" or "Reading" or "D"));
+            accept ?? (state => state is "Accept" or "Complete" or "Reading" or "D"),
+            new FakeTimeProvider(TestClock.CanonicalEpoch));
     }
 
     private static ValueTask<TransitionResult<string, string>?> Transition(

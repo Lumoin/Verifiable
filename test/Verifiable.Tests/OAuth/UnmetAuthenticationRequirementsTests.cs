@@ -31,8 +31,8 @@ internal sealed class UnmetAuthenticationRequirementsTests
 
     private const string ClientId = "https://client.example.com";
     private const string SubjectId = "subject-unmet-1";
-    private static readonly Uri ClientBaseUri = new("https://client.example.com");
-    private static readonly Uri RedirectUri = new("https://client.example.com/callback");
+    private static Uri ClientBaseUri { get; } = new("https://client.example.com");
+    private static Uri RedirectUri { get; } = new("https://client.example.com/callback");
 
 
     /// <summary>

@@ -32,19 +32,19 @@ internal sealed class DidCommEncryptedAnoncryptAdversarialTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly BaseMemoryPool Pool = BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool { get; } = BaseMemoryPool.Shared;
 
     //A non-network resolution context; it only satisfies the SSRF-policy-carrying parameter.
-    private static readonly ExchangeContext Context = new();
+    private static ExchangeContext Context { get; } = new();
 
     //A non-nested anoncrypt message never triggers nested-signature resolution, so this resolver is never
     //invoked; it satisfies the unpack overload's resolver parameter.
-    private static readonly DidResolver NestedSignerResolver = new DidResolver(DidMethodSelectors.FromResolvers(
+    private static DidResolver NestedSignerResolver { get; } = new DidResolver(DidMethodSelectors.FromResolvers(
         ("did:example", (_, _, _, _) => ValueTask.FromResult(DidResolutionResult.Failure(DidResolutionErrors.NotFound)))));
 
     //The protected-header serializer, mirroring DidCommEncryptedAnoncryptRoundTripTests: the headers
     //are a Dictionary<string, object> the JWE layer hands to this delegate to produce the UTF-8 JSON bytes.
-    private static readonly JwtHeaderSerializer HeaderSerializer =
+    private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)header,
             TestSetup.DefaultSerializationOptions);
@@ -441,7 +441,7 @@ internal sealed class DidCommEncryptedAnoncryptAdversarialTests
                 HeaderSerializer,
                 TestSetup.Base64UrlEncoder,
                 CryptoFormatConversions.DefaultTagToEpkCrvConverter,
-                MicrosoftEntropyFunctions.GenerateNonce,
+                MicrosoftEntropyFunctionsAdapter.GenerateNonce,
                 BouncyCastleKeyAgreementFunctions.EcdhEsMultiRecipientAgreementEncryptP256Async,
                 ConcatKdf.DefaultKeyDerivationDelegate,
                 MicrosoftKeyAgreementFunctions.AesKeyWrapAsync,
@@ -501,7 +501,7 @@ internal sealed class DidCommEncryptedAnoncryptAdversarialTests
             HeaderSerializer,
             TestSetup.Base64UrlEncoder,
             CryptoFormatConversions.DefaultTagToEpkCrvConverter,
-            MicrosoftEntropyFunctions.GenerateNonce,
+            MicrosoftEntropyFunctionsAdapter.GenerateNonce,
             BouncyCastleKeyAgreementFunctions.EcdhEsMultiRecipientAgreementEncryptP256Async,
             ConcatKdf.DefaultKeyDerivationDelegate,
             MicrosoftKeyAgreementFunctions.AesKeyWrapAsync,
@@ -665,21 +665,21 @@ internal sealed class DidCommEncryptedAnoncryptAdversarialTests
     //A packed anoncrypt wire string plus the recipient's private key. The caller disposes via DisposeKeys.
     private sealed class AnoncryptWire
     {
-        private readonly PrivateKeyMemory recipientPrivate;
+        private PrivateKeyMemory RecipientPrivate { get; }
 
         public AnoncryptWire(string wireJson, PrivateKeyMemory recipientPrivate)
         {
             WireJson = wireJson;
-            this.recipientPrivate = recipientPrivate;
+            this.RecipientPrivate = recipientPrivate;
         }
 
         public string WireJson { get; }
 
-        public PrivateKeyMemory RecipientPrivateKey => recipientPrivate;
+        public PrivateKeyMemory RecipientPrivateKey => RecipientPrivate;
 
         public void DisposeKeys()
         {
-            recipientPrivate.Dispose();
+            RecipientPrivate.Dispose();
         }
     }
 }

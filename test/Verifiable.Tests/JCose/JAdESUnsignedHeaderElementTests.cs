@@ -1,12 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.IO;
 using System.Linq;
-using System.Reflection;
 using System.Text;
+using System.Text.RegularExpressions;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Foundation;
+using Verifiable.Tests.Foundation;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.JCose;
@@ -26,6 +28,9 @@ internal sealed class JAdESUnsignedHeaderElementTests
 {
     /// <summary>The MSTest context.</summary>
     public TestContext TestContext { get; set; } = null!;
+
+    /// <summary>The repository-relative path declaring <see cref="JAdESUnsignedHeaders"/>.</summary>
+    private const string JAdESUnsignedHeadersPath = "src/Verifiable.Cryptography/Pki/JAdESUnsignedHeaders.cs";
 
 
     [TestMethod]
@@ -181,30 +186,32 @@ internal sealed class JAdESUnsignedHeaderElementTests
     /// <summary>
     /// JA-5.3.1-03 ("New JSON values shall always be added at the end") is enforced by API shape, not a
     /// runtime flag: <see cref="JAdESUnsignedHeaders.Append"/> must remain the sole growth operation, and
-    /// the public surface must never expose an insert-at/remove/reorder/sort member.
+    /// the public surface must never expose an insert-at/remove/reorder/sort member. Checked as a source
+    /// scan of the declaring file's own public instance-method declaration lines, with no reflection over
+    /// the loaded type.
     /// </summary>
     [TestMethod]
     public void PublicSurfaceExposesNoInsertRemoveOrReorderOperation()
     {
         string[] disallowedNameFragments = ["Insert", "Remove", "Sort", "Reverse", "Clear", "Reorder", "Replace", "SetItem", "Move"];
+        string text = File.ReadAllText(Path.Combine(SourceHygieneScanner.FindRepositoryRoot(), JAdESUnsignedHeadersPath));
+        MatchCollection publicInstanceMethodDeclarations = Regex.Matches(
+            text, @"(?m)^\s*public\s+(?!static\b)[\w<>\[\],\.\?]+\s+(\w+)\s*\(");
 
-        MethodInfo[] publicInstanceMethods = typeof(JAdESUnsignedHeaders)
-            .GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
-            .Where(method => !method.IsSpecialName)
-            .ToArray();
+        string[] publicInstanceMethodNames = [.. publicInstanceMethodDeclarations.Select(static m => m.Groups[1].Value)];
 
-        foreach(MethodInfo method in publicInstanceMethods)
+        foreach(string methodName in publicInstanceMethodNames)
         {
             foreach(string fragment in disallowedNameFragments)
             {
                 Assert.IsFalse(
-                    method.Name.Contains(fragment, StringComparison.OrdinalIgnoreCase),
-                    $"Public method '{method.Name}' looks like it could insert, remove, or reorder elements, " +
+                    methodName.Contains(fragment, StringComparison.OrdinalIgnoreCase),
+                    $"Public method '{methodName}' looks like it could insert, remove, or reorder elements, " +
                     "which would break the JA-5.3.1-03 append-only invariant.");
             }
         }
 
-        Assert.Contains("Append", publicInstanceMethods.Select(method => method.Name).ToArray(), "Append must remain the sole growth operation.");
+        Assert.Contains("Append", publicInstanceMethodNames, "Append must remain the sole growth operation.");
     }
 
 

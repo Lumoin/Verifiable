@@ -800,14 +800,14 @@ internal sealed class CBAdESMultiServerWireFlowTests
     /// </summary>
     private sealed class BinaryTsaHostAdapter
     {
-        private readonly FetchTimestampResponseAsyncDelegate responder;
+        private FetchTimestampResponseAsyncDelegate Responder { get; }
 
 
         /// <summary>Initializes a new <see cref="BinaryTsaHostAdapter"/> over a responder.</summary>
         /// <param name="responder">The RFC 3161 responder this host answers every request through.</param>
         internal BinaryTsaHostAdapter(FetchTimestampResponseAsyncDelegate responder)
         {
-            this.responder = responder;
+            this.Responder = responder;
         }
 
 
@@ -818,7 +818,7 @@ internal sealed class CBAdESMultiServerWireFlowTests
         internal async Task<BinaryHttpResponse> HandleAsync(BinaryHttpRequest request, CancellationToken cancellationToken)
         {
             using PkiCertificateMemory requestCarrier = ToCarrier(request.Body, PkiCertificateTags.TimestampRequest);
-            PkiCertificateMemory? response = await responder(
+            PkiCertificateMemory? response = await Responder(
                 new TimestampFetchContext { TsaUri = request.Path, Request = requestCarrier },
                 BaseMemoryPool.Shared, cancellationToken).ConfigureAwait(false);
 
@@ -899,14 +899,14 @@ internal sealed class CBAdESMultiServerWireFlowTests
     /// </summary>
     private sealed class WireTimestampTransport
     {
-        private readonly HttpClient httpClient;
+        private HttpClient WireClient { get; }
 
 
         /// <summary>Initializes a new <see cref="WireTimestampTransport"/> over a pinned client.</summary>
         /// <param name="httpClient">The client, already pinned to the Time-Stamping Authority host's certificate.</param>
         internal WireTimestampTransport(HttpClient httpClient)
         {
-            this.httpClient = httpClient;
+            this.WireClient = httpClient;
         }
 
 
@@ -923,7 +923,7 @@ internal sealed class CBAdESMultiServerWireFlowTests
             HttpResponseMessage httpResponse;
             try
             {
-                httpResponse = await httpClient.PostAsync(new Uri(context.TsaUri), content, cancellationToken).ConfigureAwait(false);
+                httpResponse = await WireClient.PostAsync(new Uri(context.TsaUri), content, cancellationToken).ConfigureAwait(false);
             }
             catch(HttpRequestException)
             {
@@ -953,14 +953,14 @@ internal sealed class CBAdESMultiServerWireFlowTests
     /// </summary>
     private sealed class WireOcspTransport
     {
-        private readonly HttpClient httpClient;
+        private HttpClient WireClient { get; }
 
 
         /// <summary>Initializes a new <see cref="WireOcspTransport"/> over a pinned client.</summary>
         /// <param name="httpClient">The client, already pinned to the OCSP responder host's certificate.</param>
         internal WireOcspTransport(HttpClient httpClient)
         {
-            this.httpClient = httpClient;
+            this.WireClient = httpClient;
         }
 
 
@@ -977,7 +977,7 @@ internal sealed class CBAdESMultiServerWireFlowTests
             HttpResponseMessage httpResponse;
             try
             {
-                httpResponse = await httpClient.PostAsync(new Uri(context.ResponderUri), content, cancellationToken).ConfigureAwait(false);
+                httpResponse = await WireClient.PostAsync(new Uri(context.ResponderUri), content, cancellationToken).ConfigureAwait(false);
             }
             catch(HttpRequestException)
             {
@@ -1016,9 +1016,9 @@ internal sealed class CBAdESMultiServerWireFlowTests
         /// </summary>
         private static byte[] WrongImprint { get; } = new byte[32];
 
-        private readonly X509ChainTestRingNode authority;
-        private readonly IReadOnlyList<X509ChainTestRingNode> embeddedCertificates;
-        private readonly DateTimeOffset generationTime;
+        private X509ChainTestRingNode Authority { get; }
+        private IReadOnlyList<X509ChainTestRingNode> EmbeddedCertificates { get; }
+        private DateTimeOffset GenerationTime { get; }
 
 
         /// <summary>Initializes a new <see cref="MismatchedImprintTsaResponder"/>.</summary>
@@ -1030,9 +1030,9 @@ internal sealed class CBAdESMultiServerWireFlowTests
             IReadOnlyList<X509ChainTestRingNode> embeddedCertificates,
             DateTimeOffset generationTime)
         {
-            this.authority = authority;
-            this.embeddedCertificates = embeddedCertificates;
-            this.generationTime = generationTime;
+            this.Authority = authority;
+            this.EmbeddedCertificates = embeddedCertificates;
+            this.GenerationTime = generationTime;
         }
 
 
@@ -1045,7 +1045,7 @@ internal sealed class CBAdESMultiServerWireFlowTests
         internal ValueTask<PkiCertificateMemory?> FetchAsync(TimestampFetchContext context, BaseMemoryPool pool, CancellationToken cancellationToken)
         {
             using PkiCertificateMemory token = X509ChainTestRingTimestamping.MintTimestampTokenOverImprint(
-                authority, embeddedCertificates, WrongImprint, generationTime);
+                Authority, EmbeddedCertificates, WrongImprint, GenerationTime);
 
             return ValueTask.FromResult<PkiCertificateMemory?>(WrapGrantedResponse(token.AsReadOnlySpan(), pool));
         }

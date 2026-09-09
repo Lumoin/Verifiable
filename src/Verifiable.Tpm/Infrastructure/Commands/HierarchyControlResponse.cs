@@ -5,7 +5,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// response is the 10-byte header alone.
 /// </summary>
 /// <remarks>
-/// See TPM 2.0 Library Part 3, Section 24.2 (Table 177).
+/// See TPM 2.0 Library Part 3, clause 24.2 (Table 194).
 /// </remarks>
 public sealed class HierarchyControlResponse: ITpmWireType
 {

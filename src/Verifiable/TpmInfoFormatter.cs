@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using Lumoin.Base;
 using Verifiable.Tpm.Extensions.Info;
 using Verifiable.Tpm.Extensions.Pcr;
 using Verifiable.Tpm.Spec.Constants;
@@ -15,9 +16,10 @@ internal static class TpmInfoFormatter
     /// Writes TPM information to the console in a human-readable format.
     /// </summary>
     /// <param name="info">The TPM information to display.</param>
+    /// <param name="pool">The memory pool the event log summary's transient buffers are rented from.</param>
     /// <param name="revealSecrets">If true, shows full PCR digest values. If false (default), redacts them.</param>
     /// <param name="includeEventLog">If true, includes event log summary. Default is true.</param>
-    public static void WriteToConsole(TpmInfo info, bool revealSecrets = false, bool includeEventLog = true)
+    public static void WriteToConsole(TpmInfo info, BaseMemoryPool pool, bool revealSecrets = false, bool includeEventLog = true)
     {
         WriteIdentity(info.Identity, info.Platform);
         WriteAlgorithms(info.SupportedAlgorithms);
@@ -26,7 +28,7 @@ internal static class TpmInfoFormatter
 
         if(includeEventLog)
         {
-            WriteEventLogSummary();
+            WriteEventLogSummary(pool);
         }
     }
 
@@ -40,8 +42,10 @@ internal static class TpmInfoFormatter
         ConsoleFormatter.WriteLabeled("Revision:", identity.Revision.ToString(CultureInfo.InvariantCulture));
         ConsoleFormatter.WriteLabeled("Firmware:", identity.FirmwareVersion);
 
-        string buildDate = $"Day {identity.FirmwareDayOfYear}, {identity.FirmwareYear}";
-        ConsoleFormatter.WriteLabeled("Build Date:", buildDate);
+        string specEdition = identity.SpecYear == 0
+            ? $"errata {identity.SpecErrata}"
+            : $"day {identity.SpecErrata} of {identity.SpecYear}";
+        ConsoleFormatter.WriteLabeled("Spec Edition:", specEdition);
 
         ConsoleFormatter.WriteLabeled("Platform:", platform);
         ConsoleFormatter.WriteLabeled("PCR Count:", identity.PcrCount.ToString(CultureInfo.InvariantCulture));
@@ -129,9 +133,9 @@ internal static class TpmInfoFormatter
         }
     }
 
-    private static void WriteEventLogSummary()
+    private static void WriteEventLogSummary(BaseMemoryPool pool)
     {
-        var log = TcgEventLogFormatter.TryReadEventLog(out string? error);
+        var log = TcgEventLogFormatter.TryReadEventLog(pool, out string? error);
 
         ConsoleFormatter.WriteHeader("Event Log");
 

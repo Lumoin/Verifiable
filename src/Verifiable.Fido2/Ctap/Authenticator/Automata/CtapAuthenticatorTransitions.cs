@@ -1019,7 +1019,7 @@ public static class CtapAuthenticatorTransitions
         bool largeBlobKeyRequested = false;
         if(request.LargeBlobKey is bool largeBlobKeyValue)
         {
-            if(largeBlobKeyValue != true)
+            if(!largeBlobKeyValue)
             {
                 return Reject(state, WellKnownCtapStatusCodes.InvalidOption, "MakeCredential:LargeBlobKeyNotTrue");
             }
@@ -1096,12 +1096,22 @@ public static class CtapAuthenticatorTransitions
         CtapCredentialRecord? overwritten = record.IsResident
             ? FindResidentCredential(byId, record.RpId, record.UserId)
             : null;
-        if(overwritten is not null)
+        try
         {
-            byId = byId.Remove(CredentialIdKey(overwritten.CredentialId));
+            if(overwritten is not null)
+            {
+                byId = byId.Remove(CredentialIdKey(overwritten.CredentialId));
+            }
+
+            byId = byId.SetItem(CredentialIdKey(record.CredentialId), record);
+        }
+        catch
+        {
+            overwritten?.Dispose();
+
+            throw;
         }
 
-        byId = byId.SetItem(CredentialIdKey(record.CredentialId), record);
         overwritten?.Dispose();
 
         CtapAuthenticatorState nextState = state with
@@ -1198,6 +1208,9 @@ public static class CtapAuthenticatorTransitions
             return Reject(state, WellKnownCtapStatusCodes.UnsupportedOption, "GetAssertion:ResidentKeyOptionRejected");
         }
 
+        //request.Options can be non-null while carrying a null ResidentKey, so the guard above does
+        //not prove Options is null here: the read below is not the constant "always null" a syntactic
+        //null-conditional narrowing might suggest.
         bool userPresent = request.Options?.UserPresence ?? true;
 
         //getInfo 0x07 (snapshot lines 4405-4409, "Maximum number of credentials supported in
@@ -1224,6 +1237,10 @@ public static class CtapAuthenticatorTransitions
                 return Reject(state, WellKnownCtapStatusCodes.PuatRequired, "GetAssertion:AlwaysUvNotProtected");
             }
 
+            //effectiveUserVerification is true exactly when the request asserts uv with no
+            //pinUvAuthParam and built-in UV is provisioned (its assignment above, unwritten since);
+            //it is false whenever the request omits uv or built-in UV is not yet provisioned, so this
+            //guard is genuinely two-valued rather than a constant.
             if(!pinUvAuthParamPresent && !effectiveUserVerification)
             {
                 if(state.HasProvisionedBioEnrollments)
@@ -1416,7 +1433,7 @@ public static class CtapAuthenticatorTransitions
             //§12.3 line 12865: a present largeBlobKey value that is not exactly true is a
             //request-shape error, checked once a credential has actually been located (CTAP 2.3's own
             //extension-processing step follows credential location, mirroring mc's own placement).
-            if(request.LargeBlobKey is bool allowListLargeBlobKeyValue && allowListLargeBlobKeyValue != true)
+            if(request.LargeBlobKey is bool allowListLargeBlobKeyValue && !allowListLargeBlobKeyValue)
             {
                 return Reject(state, WellKnownCtapStatusCodes.InvalidOption, "GetAssertion:LargeBlobKeyNotTrue");
             }
@@ -1437,7 +1454,7 @@ public static class CtapAuthenticatorTransitions
             return Reject(state, WellKnownCtapStatusCodes.NoCredentials, "GetAssertion:NoCredentials");
         }
 
-        if(request.LargeBlobKey is bool discoverableLargeBlobKeyValue && discoverableLargeBlobKeyValue != true)
+        if(request.LargeBlobKey is bool discoverableLargeBlobKeyValue && !discoverableLargeBlobKeyValue)
         {
             return Reject(state, WellKnownCtapStatusCodes.InvalidOption, "GetAssertion:LargeBlobKeyNotTrue");
         }

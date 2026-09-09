@@ -47,6 +47,7 @@ public static class DataIntegritySelectiveDisclosure
     /// <param name="requestedPaths">The paths the verifier asked for (any front-end may produce these).</param>
     /// <param name="mandatoryPaths">Paths that must always be disclosed (the base proof's mandatory pointers).</param>
     /// <param name="serialize">Delegate that serializes the credential, used to enumerate its claim surface.</param>
+    /// <param name="timeProvider">Clock for the disclosure engine's decision-record timestamps.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The paths the engine selected for disclosure; empty when the request cannot be satisfied.</returns>
     public static async Task<IReadOnlySet<CredentialPath>> ComputeDisclosurePathsAsync(
@@ -54,12 +55,14 @@ public static class DataIntegritySelectiveDisclosure
         IReadOnlySet<CredentialPath> requestedPaths,
         IReadOnlySet<CredentialPath> mandatoryPaths,
         CredentialSerializeDelegate serialize,
+        TimeProvider timeProvider,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(credential);
         ArgumentNullException.ThrowIfNull(requestedPaths);
         ArgumentNullException.ThrowIfNull(mandatoryPaths);
         ArgumentNullException.ThrowIfNull(serialize);
+        ArgumentNullException.ThrowIfNull(timeProvider);
 
         var availablePaths = EnumerateClaimPaths(credential, serialize);
 
@@ -77,7 +80,7 @@ public static class DataIntegritySelectiveDisclosure
             Format = null
         };
 
-        var computation = new DisclosureComputation<DataIntegritySecuredCredential>();
+        var computation = new DisclosureComputation<DataIntegritySecuredCredential>([], timeProvider);
         var graph = await computation.ComputeAsync([match], cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return graph.Decisions.Count > 0

@@ -55,7 +55,7 @@ public enum JsonataValueKind
 [DebuggerDisplay("{Kind}")]
 public readonly struct JsonataValue: IEquatable<JsonataValue>
 {
-    private readonly object? _payload;
+    private object? Payload { get; }
 
     /// <summary>
     /// The discriminated kind of this value.
@@ -66,7 +66,7 @@ public readonly struct JsonataValue: IEquatable<JsonataValue>
     private JsonataValue(JsonataValueKind kind, object? payload)
     {
         Kind = kind;
-        _payload = payload;
+        Payload = payload;
     }
 
 
@@ -169,7 +169,7 @@ public readonly struct JsonataValue: IEquatable<JsonataValue>
     public string AsString()
     {
         return Kind == JsonataValueKind.String
-            ? (string)_payload!
+            ? (string)Payload!
             : throw new InvalidOperationException($"Value is {Kind}, not a string.");
     }
 
@@ -181,7 +181,7 @@ public readonly struct JsonataValue: IEquatable<JsonataValue>
     public long AsInteger()
     {
         return Kind == JsonataValueKind.Integer
-            ? (long)_payload!
+            ? (long)Payload!
             : throw new InvalidOperationException($"Value is {Kind}, not an integer.");
     }
 
@@ -193,7 +193,7 @@ public readonly struct JsonataValue: IEquatable<JsonataValue>
     public double AsNumber()
     {
         return Kind == JsonataValueKind.Number
-            ? (double)_payload!
+            ? (double)Payload!
             : throw new InvalidOperationException($"Value is {Kind}, not a number.");
     }
 
@@ -205,7 +205,7 @@ public readonly struct JsonataValue: IEquatable<JsonataValue>
     public bool AsBoolean()
     {
         return Kind == JsonataValueKind.Boolean
-            ? (bool)_payload!
+            ? (bool)Payload!
             : throw new InvalidOperationException($"Value is {Kind}, not a boolean.");
     }
 
@@ -218,7 +218,7 @@ public readonly struct JsonataValue: IEquatable<JsonataValue>
     public IReadOnlyDictionary<string, JsonataValue> AsObject()
     {
         return Kind == JsonataValueKind.Object
-            ? (Dictionary<string, JsonataValue>)_payload!
+            ? (Dictionary<string, JsonataValue>)Payload!
             : throw new InvalidOperationException($"Value is {Kind}, not an object.");
     }
 
@@ -231,7 +231,7 @@ public readonly struct JsonataValue: IEquatable<JsonataValue>
     public IReadOnlyList<JsonataValue> AsArray()
     {
         return Kind == JsonataValueKind.Array
-            ? (List<JsonataValue>)_payload!
+            ? (List<JsonataValue>)Payload!
             : throw new InvalidOperationException($"Value is {Kind}, not an array.");
     }
 
@@ -252,7 +252,7 @@ public readonly struct JsonataValue: IEquatable<JsonataValue>
             return Null;
         }
 
-        var members = (Dictionary<string, JsonataValue>)_payload!;
+        var members = (Dictionary<string, JsonataValue>)Payload!;
 
         return members.TryGetValue(name, out JsonataValue member) ? member : Null;
     }
@@ -269,11 +269,11 @@ public readonly struct JsonataValue: IEquatable<JsonataValue>
         return Kind switch
         {
             JsonataValueKind.Null => true,
-            JsonataValueKind.Boolean => (bool)_payload! == (bool)other._payload!,
-            JsonataValueKind.Integer => (long)_payload! == (long)other._payload!,
-            JsonataValueKind.Number => ((double)_payload!).Equals((double)other._payload!),
-            JsonataValueKind.String => string.Equals((string)_payload!, (string)other._payload!, StringComparison.Ordinal),
-            _ => ReferenceEquals(_payload, other._payload)
+            JsonataValueKind.Boolean => (bool)Payload! == (bool)other.Payload!,
+            JsonataValueKind.Integer => (long)Payload! == (long)other.Payload!,
+            JsonataValueKind.Number => ((double)Payload!).Equals((double)other.Payload!),
+            JsonataValueKind.String => string.Equals((string)Payload!, (string)other.Payload!, StringComparison.Ordinal),
+            _ => ReferenceEquals(Payload, other.Payload)
         };
     }
 
@@ -288,11 +288,11 @@ public readonly struct JsonataValue: IEquatable<JsonataValue>
         return Kind switch
         {
             JsonataValueKind.Null => 0,
-            JsonataValueKind.Boolean => HashCode.Combine(Kind, (bool)_payload!),
-            JsonataValueKind.Integer => HashCode.Combine(Kind, (long)_payload!),
-            JsonataValueKind.Number => HashCode.Combine(Kind, (double)_payload!),
-            JsonataValueKind.String => HashCode.Combine(Kind, string.GetHashCode((string)_payload!, StringComparison.Ordinal)),
-            _ => HashCode.Combine(Kind, _payload)
+            JsonataValueKind.Boolean => HashCode.Combine(Kind, (bool)Payload!),
+            JsonataValueKind.Integer => HashCode.Combine(Kind, (long)Payload!),
+            JsonataValueKind.Number => HashCode.Combine(Kind, (double)Payload!),
+            JsonataValueKind.String => HashCode.Combine(Kind, string.GetHashCode((string)Payload!, StringComparison.Ordinal)),
+            _ => HashCode.Combine(Kind, Payload)
         };
     }
 

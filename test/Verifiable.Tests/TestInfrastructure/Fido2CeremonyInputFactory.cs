@@ -190,7 +190,8 @@ internal static class Fido2CeremonyInputFactory
             ClientExtensionOutputs = clientExtensionOutputs,
             AuthenticatorExtensionOutputs = authenticatorExtensionOutputs,
             ExtensionOutputProcessor = extensionOutputProcessor,
-            RejectUnregisteredExtensionOutputs = rejectUnregisteredExtensionOutputs
+            RejectUnregisteredExtensionOutputs = rejectUnregisteredExtensionOutputs,
+            ExtensionProcessingPool = BaseMemoryPool.Shared
         };
 
         //Projects the bare COSE algorithm identifiers this factory's callers pass into the
@@ -338,7 +339,8 @@ internal static class Fido2CeremonyInputFactory
             ExtensionOutputProcessor = extensionOutputProcessor,
             RejectUnregisteredExtensionOutputs = rejectUnregisteredExtensionOutputs,
             AppIdExtensionOutput = appIdExtensionOutput,
-            ExpectedAppIdHash = expectedAppIdHashCarrier
+            ExpectedAppIdHash = expectedAppIdHashCarrier,
+            ExtensionProcessingPool = BaseMemoryPool.Shared
         };
     }
 

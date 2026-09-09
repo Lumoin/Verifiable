@@ -130,8 +130,7 @@ public sealed class PushdownAutomaton<TState, TInput, TStackSymbol>: IObservable
     /// <param name="transition">The transition function (<c>δ</c>).</param>
     /// <param name="acceptPredicate">A predicate that returns <see langword="true"/> for accept states (<c>F</c>).</param>
     /// <param name="timeProvider">
-    /// The time provider for timestamps in trace entries. Defaults to <see cref="System.TimeProvider.System"/>
-    /// if <see langword="null"/>. Use <c>FakeTimeProvider</c> in tests.
+    /// The time provider for timestamps in trace entries. Use <c>FakeTimeProvider</c> in tests.
     /// </param>
     public PushdownAutomaton(
         string runId,
@@ -139,17 +138,18 @@ public sealed class PushdownAutomaton<TState, TInput, TStackSymbol>: IObservable
         TStackSymbol initialStackSymbol,
         TransitionDelegate<TState, TInput, TStackSymbol> transition,
         Func<TState, bool> acceptPredicate,
-        TimeProvider? timeProvider = null)
+        TimeProvider timeProvider)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(runId);
         ArgumentNullException.ThrowIfNull(transition);
         ArgumentNullException.ThrowIfNull(acceptPredicate);
+        ArgumentNullException.ThrowIfNull(timeProvider);
 
         RunId = runId;
         CurrentState = initialState;
         Transition = transition;
         AcceptPredicate = acceptPredicate;
-        TimeProvider = timeProvider ?? TimeProvider.System;
+        TimeProvider = timeProvider;
         Stack = new Stack<TStackSymbol>();
         Stack.Push(initialStackSymbol);
     }
@@ -165,7 +165,7 @@ public sealed class PushdownAutomaton<TState, TInput, TStackSymbol>: IObservable
     /// <param name="savedStepCount">The step count at the time of the snapshot.</param>
     /// <param name="transition">The transition function (must be the same version as the original).</param>
     /// <param name="acceptPredicate">The accept predicate.</param>
-    /// <param name="timeProvider">The time provider. Defaults to <see cref="System.TimeProvider.System"/>.</param>
+    /// <param name="timeProvider">The time provider.</param>
     public PushdownAutomaton(
         string runId,
         TState savedState,
@@ -173,19 +173,20 @@ public sealed class PushdownAutomaton<TState, TInput, TStackSymbol>: IObservable
         int savedStepCount,
         TransitionDelegate<TState, TInput, TStackSymbol> transition,
         Func<TState, bool> acceptPredicate,
-        TimeProvider? timeProvider = null)
+        TimeProvider timeProvider)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(runId);
         ArgumentNullException.ThrowIfNull(savedStack);
         ArgumentNullException.ThrowIfNull(transition);
         ArgumentNullException.ThrowIfNull(acceptPredicate);
+        ArgumentNullException.ThrowIfNull(timeProvider);
 
         RunId = runId;
         CurrentState = savedState;
         StepCount = savedStepCount;
         Transition = transition;
         AcceptPredicate = acceptPredicate;
-        TimeProvider = timeProvider ?? TimeProvider.System;
+        TimeProvider = timeProvider;
         Stack = new Stack<TStackSymbol>();
 
         foreach(TStackSymbol symbol in savedStack)

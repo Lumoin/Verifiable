@@ -24,7 +24,7 @@ namespace Verifiable.JCose;
 /// own doc comment) — self-contained, decoding CMS/ASN.1 with no help from a higher layer, because
 /// <c>CmsSignedData</c>/<see cref="ManagedCertificate"/> already live in the SAME assembly as the seam types. No
 /// analogous CBOR decoder exists in <c>Verifiable.Cryptography</c> for CB-AdES, and none can: the project bans
-/// <c>System.Formats.Cbor</c> in every assembly except <c>Verifiable.Json</c>/<c>Verifiable.Cbor</c>/<c>Verifiable</c>/tests
+/// <c>Lumoin.Veritas.Cbor</c> in every assembly except <c>Verifiable.Json</c>/<c>Verifiable.Cbor</c>/<c>Verifiable</c>/tests
 /// (<c>Directory.Build.props</c>, <c>BannedSymbols.Serialization.txt</c>) — a hard, analyzer-enforced boundary,
 /// not a convention. The CB-AdES decode/validate machinery (<see cref="CBAdESProtectedHeaders"/>,
 /// <see cref="CBAdESHeaderRules"/>) lives in THIS assembly instead, one layer below the CBOR codec

@@ -8,6 +8,8 @@ using Verifiable.Tpm.Extensions.Policy;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Spec.Constants;
+using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -16,7 +18,7 @@ namespace Verifiable.Tests.Tpm;
 /// <see cref="TpmSimulator"/> — entirely in-process, with no external assets. Each test builds a policy once, then
 /// confirms that <see cref="TpmPolicy.ComputeDigest"/> (the host prediction) and <see cref="TpmPolicy.ExecuteAsync"/>
 /// (the on-device replay, through the production command path) agree on a live session, so the two duals — predict
-/// and execute — cannot drift apart (TPM 2.0 Library Part 1, clause 17.7).
+/// and execute — cannot drift apart (TPM 2.0 Library Part 1, clause 16.7).
 /// </summary>
 /// <remarks>
 /// The simulator advances the session's policyDigest by calling the same <see cref="TpmPolicyDigest"/> methods the
@@ -47,7 +49,7 @@ internal sealed class TpmInHouseSimulatorPolicyBuilderTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         //One description: require the object's authValue, then restrict the session to TPM2_Sign.
         TpmPolicy policy = new TpmPolicyBuilder()
@@ -59,7 +61,7 @@ internal sealed class TpmInHouseSimulatorPolicyBuilderTests
         //buffer-sizing defect: ComputeDigest must not throw when the pooled digest buffer it hashes into
         //internally comes back larger than this array.
         byte[] predicted = new byte[TpmPolicyDigest.Size(policyHash)];
-        _ = policy.ComputeDigest(policyHash, predicted);
+        _ = policy.ComputeDigest(policyHash, predicted, pool);
 
         TpmResult<StartAuthSessionResponse> startResult = await tpm.StartPolicySessionAsync(
             policyHash, TestContext.CancellationToken).ConfigureAwait(false);
@@ -92,16 +94,16 @@ internal sealed class TpmInHouseSimulatorPolicyBuilderTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
-        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         const TpmAlgIdConstants PolicyHash = TpmAlgIdConstants.TPM_ALG_SHA256;
         int size = TpmPolicyDigest.Size(PolicyHash);
 
         //Two alternative branches; the session will satisfy the first.
         byte[] branchA = new byte[size];
-        _ = new TpmPolicyBuilder().WithAuthValue().Build().ComputeDigest(PolicyHash, branchA);
+        _ = new TpmPolicyBuilder().WithAuthValue().Build().ComputeDigest(PolicyHash, branchA, pool);
 
         byte[] branchB = new byte[size];
-        _ = new TpmPolicyBuilder().WithCommandCode(TpmCcConstants.TPM_CC_Sign).Build().ComputeDigest(PolicyHash, branchB);
+        _ = new TpmPolicyBuilder().WithCommandCode(TpmCcConstants.TPM_CC_Sign).Build().ComputeDigest(PolicyHash, branchB, pool);
 
         var branches = new ReadOnlyMemory<byte>[] { branchA, branchB };
 
@@ -112,7 +114,7 @@ internal sealed class TpmInHouseSimulatorPolicyBuilderTests
             .Build();
 
         byte[] predicted = new byte[size];
-        _ = policy.ComputeDigest(PolicyHash, predicted);
+        _ = policy.ComputeDigest(PolicyHash, predicted, pool);
 
         TpmResult<StartAuthSessionResponse> startResult = await tpm.StartPolicySessionAsync(
             PolicyHash, TestContext.CancellationToken).ConfigureAwait(false);
@@ -149,7 +151,7 @@ internal sealed class TpmInHouseSimulatorPolicyBuilderTests
     /// <returns>The operational simulator.</returns>
     private async Task<TpmSimulator> CreateOperationalAsync(BaseMemoryPool pool)
     {
-        var simulator = new TpmSimulator("tpm-in-house-policy-builder", signingBackend: BouncyCastleTpmEccSigningBackend.Create());
+        var simulator = new TpmSimulator("tpm-in-house-policy-builder", signingBackend: BouncyCastleTpmEccSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await BringOperationalAsync(simulator, pool).ConfigureAwait(false);
 

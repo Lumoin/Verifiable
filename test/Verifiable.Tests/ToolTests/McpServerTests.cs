@@ -2,6 +2,7 @@ using ModelContextProtocol.Client;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using Lumoin.Base;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 
@@ -120,7 +121,7 @@ internal sealed class McpServerTests
             Assert.Inconclusive(TestInfrastructureConstants.NoTpmDeviceAvailableMessage);
         }
 
-        var result = await VerifiableOperations.GetTpmInfoAsJsonAsync().ConfigureAwait(false);
+        var result = await VerifiableOperations.GetTpmInfoAsJsonAsync(BaseMemoryPool.Shared, TestEntropy.NewCounterStream()).ConfigureAwait(false);
 
         if(result.IsSuccess)
         {
@@ -146,10 +147,10 @@ internal sealed class McpServerTests
             Assert.Inconclusive(TestInfrastructureConstants.NoTpmDeviceAvailableMessage);
         }
 
-        string testFilePath = Path.Combine(Path.GetTempPath(), $"test_tpm_{Guid.NewGuid()}.json");
+        string testFilePath = Path.Join(Path.GetTempPath(), $"test_tpm_{Guid.NewGuid()}.json");
         try
         {
-            var result = await VerifiableOperations.SaveTpmInfoToFileAsync(testFilePath)
+            var result = await VerifiableOperations.SaveTpmInfoToFileAsync(BaseMemoryPool.Shared, TestEntropy.NewCounterStream(), testFilePath)
                 .ConfigureAwait(false);
 
             if(result.IsSuccess)
@@ -184,7 +185,7 @@ internal sealed class McpServerTests
             Assert.Inconclusive(TestInfrastructureConstants.NoTpmDeviceAvailableMessage);
         }
 
-        var result = await VerifiableOperations.SaveTpmInfoToFileAsync(null)
+        var result = await VerifiableOperations.SaveTpmInfoToFileAsync(BaseMemoryPool.Shared, TestEntropy.NewCounterStream(), null)
             .ConfigureAwait(false);
 
         if(result.IsSuccess)

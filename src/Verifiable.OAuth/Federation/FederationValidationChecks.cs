@@ -545,6 +545,9 @@ public static class FederationValidationChecks
         cancellationToken.ThrowIfCancellationRequested();
 
         UnverifiedJwtPayload payload = context.Statement.Payload;
+
+        //Kept as if/else rather than a ternary: each branch is its own multi-clause OR-chain with its own
+        //spec citation, which a ternary would compress into one hard-to-read line.
         bool misplaced;
         if(context.Statement is EntityConfiguration)
         {

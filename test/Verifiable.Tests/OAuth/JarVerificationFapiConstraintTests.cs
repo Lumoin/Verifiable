@@ -25,26 +25,26 @@ internal sealed class JarVerificationFapiConstraintTests
 
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
-    private static readonly TimeSpan ClockSkew = TimeSpan.FromSeconds(5);
+    private static TimeSpan ClockSkew { get; } = TimeSpan.FromSeconds(5);
 
-    private static readonly TimeSpan MaximumLifetime = TimeSpan.FromSeconds(60);
+    private static TimeSpan MaximumLifetime { get; } = TimeSpan.FromSeconds(60);
 
-    private static readonly JwtHeaderSerializer HeaderSerializer =
+    private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)header,
             TestSetup.DefaultSerializationOptions);
 
-    private static readonly JwtPayloadSerializer PayloadSerializer =
+    private static JwtPayloadSerializer PayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)payload,
             TestSetup.DefaultSerializationOptions);
 
-    private static readonly JwtHeaderDeserializer HeaderDeserializer =
+    private static JwtHeaderDeserializer HeaderDeserializer { get; } =
         static bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
             bytes, TestSetup.DefaultSerializationOptions)
             ?? throw new FormatException("Header JSON parsed to null.");
 
-    private static readonly JwtPayloadDeserializer PayloadDeserializer =
+    private static JwtPayloadDeserializer PayloadDeserializer { get; } =
         static bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
             bytes, TestSetup.DefaultSerializationOptions)
             ?? throw new FormatException("Payload JSON parsed to null.");

@@ -52,12 +52,12 @@ namespace Verifiable.Core.Model.DataIntegrity
         public static CanonicalizationAlgorithm Jcs { get; } = new(2);
 
 
-        private static List<CanonicalizationAlgorithm> algorithms { get; } = new([None, Rdfc10, Jcs]);
+        private static List<CanonicalizationAlgorithm> RegisteredAlgorithms { get; } = new([None, Rdfc10, Jcs]);
 
         /// <summary>
         /// Gets the collection of all registered canonicalization algorithms.
         /// </summary>
-        public static IReadOnlyList<CanonicalizationAlgorithm> Algorithms => algorithms.AsReadOnly();
+        public static IReadOnlyList<CanonicalizationAlgorithm> Algorithms => RegisteredAlgorithms.AsReadOnly();
 
         /// <summary>
         /// Gets the integer code representing this canonicalization algorithm.
@@ -79,16 +79,16 @@ namespace Verifiable.Core.Model.DataIntegrity
         /// <exception cref="ArgumentException">Thrown if the code already exists.</exception>
         public static CanonicalizationAlgorithm Create(int algorithm)
         {
-            for(int i = 0; i < algorithms.Count; ++i)
+            for(int i = 0; i < RegisteredAlgorithms.Count; ++i)
             {
-                if(algorithms[i].Algorithm == algorithm)
+                if(RegisteredAlgorithms[i].Algorithm == algorithm)
                 {
                     throw new ArgumentException("Algorithm code already exists.", nameof(algorithm));
                 }
             }
 
             var newAlgorithm = new CanonicalizationAlgorithm(algorithm);
-            algorithms.Add(newAlgorithm);
+            RegisteredAlgorithms.Add(newAlgorithm);
 
             return newAlgorithm;
         }
@@ -142,7 +142,7 @@ namespace Verifiable.Core.Model.DataIntegrity
 
         /// <inheritdoc/>
         [EditorBrowsable(EditorBrowsableState.Never)]
-        public override int GetHashCode() => Algorithm.GetHashCode();
+        public override int GetHashCode() => Algorithm;
     }
 
 

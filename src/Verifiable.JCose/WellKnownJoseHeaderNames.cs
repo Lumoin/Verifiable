@@ -4,22 +4,42 @@ using Verifiable.Cryptography.Text;
 namespace Verifiable.JCose;
 
 /// <summary>
-/// JOSE-only header parameter NAMES — strings that appear as JSON keys in
+/// JOSE header parameter NAMES — strings that appear as JSON keys in
 /// JWS / JWE protected or unprotected headers per
 /// <see href="https://www.rfc-editor.org/rfc/rfc7515">RFC 7515</see> and
-/// <see href="https://www.rfc-editor.org/rfc/rfc7516">RFC 7516</see>,
-/// and which are NOT also JWK members.
+/// <see href="https://www.rfc-editor.org/rfc/rfc7516">RFC 7516</see>.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Parameters that appear as both JWK members and JOSE header parameters
-/// (<c>alg</c>, <c>kid</c>, <c>x5*</c>, <c>jwk</c>) live in
-/// <see cref="WellKnownJwkMemberNames"/> — the strings are identical, so
-/// one home avoids duplicate constants.
+/// <see cref="Alg"/> is this table's own entry for the JWS/JWE <c>alg</c>
+/// header parameter (RFC 7515 §4.1.1). RFC 7517 §4.4 defines a distinctly
+/// scoped <c>alg</c> JWK member (the key's intended algorithm, carried
+/// inside the key itself, not the header that secures a message); that
+/// name lives in <see cref="WellKnownJwkMemberNames.Alg"/>. The two
+/// parameters share a spelling but are not the same name — each table
+/// names its own.
+/// </para>
+/// <para>
+/// <c>kid</c>, <c>x5*</c> and <c>jwk</c> also appear as both JWK members
+/// and JOSE header parameters with identical strings, and remain in
+/// <see cref="WellKnownJwkMemberNames"/> as the shared constant for both
+/// call sites.
 /// </para>
 /// </remarks>
 public static class WellKnownJoseHeaderNames
 {
+    /// <summary>The UTF-8 source literal of <see cref="Alg"/>.</summary>
+    public static ReadOnlySpan<byte> AlgUtf8 => "alg"u8;
+
+    /// <summary>
+    /// The <c>alg</c> (Algorithm) JOSE header parameter per RFC 7515 §4.1.1: "The 'alg' (algorithm)
+    /// Header Parameter identifies the cryptographic algorithm used to secure the JWS. … This Header
+    /// Parameter MUST be present and MUST be understood and processed by implementations." Distinct
+    /// from the RFC 7517 §4.4 JWK <c>alg</c> member (<see cref="WellKnownJwkMemberNames.Alg"/>), which
+    /// shares the spelling but names a different parameter.
+    /// </summary>
+    public static string Alg { get; } = Utf8Constants.ToInternedString(AlgUtf8);
+
     /// <summary>The UTF-8 source literal of <see cref="B64"/>.</summary>
     public static ReadOnlySpan<byte> B64Utf8 => "b64"u8;
 
@@ -29,7 +49,7 @@ public static class WellKnownJoseHeaderNames
     /// <see langword="true"/>; when <see langword="false"/> the payload is signed unencoded and MUST be listed
     /// in <c>crit</c>.
     /// </summary>
-    public static readonly string B64 = Utf8Constants.ToInternedString(B64Utf8);
+    public static string B64 { get; } = Utf8Constants.ToInternedString(B64Utf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Typ"/>.</summary>
     public static ReadOnlySpan<byte> TypUtf8 => "typ"u8;
@@ -38,7 +58,7 @@ public static class WellKnownJoseHeaderNames
     /// The <c>typ</c> (Type) header parameter per RFC 7515 §4.1.9. Declares the
     /// media type of the complete JWT/JWS/JWE.
     /// </summary>
-    public static readonly string Typ = Utf8Constants.ToInternedString(TypUtf8);
+    public static string Typ { get; } = Utf8Constants.ToInternedString(TypUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Cty"/>.</summary>
     public static ReadOnlySpan<byte> CtyUtf8 => "cty"u8;
@@ -47,7 +67,7 @@ public static class WellKnownJoseHeaderNames
     /// The <c>cty</c> (Content Type) header parameter per RFC 7515 §4.1.10 and
     /// RFC 7519 §5.2. Used when the payload itself is a JWT (nested JWT case).
     /// </summary>
-    public static readonly string Cty = Utf8Constants.ToInternedString(CtyUtf8);
+    public static string Cty { get; } = Utf8Constants.ToInternedString(CtyUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Enc"/>.</summary>
     public static ReadOnlySpan<byte> EncUtf8 => "enc"u8;
@@ -56,7 +76,7 @@ public static class WellKnownJoseHeaderNames
     /// The <c>enc</c> (Encryption Algorithm) header parameter per RFC 7516 §4.1.2.
     /// Identifies the content encryption algorithm used to produce the ciphertext.
     /// </summary>
-    public static readonly string Enc = Utf8Constants.ToInternedString(EncUtf8);
+    public static string Enc { get; } = Utf8Constants.ToInternedString(EncUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Epk"/>.</summary>
     public static ReadOnlySpan<byte> EpkUtf8 => "epk"u8;
@@ -65,7 +85,7 @@ public static class WellKnownJoseHeaderNames
     /// The <c>epk</c> (Ephemeral Public Key) header parameter per RFC 7518 §4.6.1.1.
     /// Carries the sender's ephemeral public key in ECDH key-agreement algorithms.
     /// </summary>
-    public static readonly string Epk = Utf8Constants.ToInternedString(EpkUtf8);
+    public static string Epk { get; } = Utf8Constants.ToInternedString(EpkUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Apu"/>.</summary>
     public static ReadOnlySpan<byte> ApuUtf8 => "apu"u8;
@@ -76,7 +96,7 @@ public static class WellKnownJoseHeaderNames
     /// (base64url) here per ISO/IEC 18013-7 §B.4.4 so the Verifier can reconstruct the
     /// SessionTranscript.
     /// </summary>
-    public static readonly string Apu = Utf8Constants.ToInternedString(ApuUtf8);
+    public static string Apu { get; } = Utf8Constants.ToInternedString(ApuUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Apv"/>.</summary>
     public static ReadOnlySpan<byte> ApvUtf8 => "apv"u8;
@@ -86,7 +106,7 @@ public static class WellKnownJoseHeaderNames
     /// In DIDComm v2 this is the base64url encoding of the SHA-256 hash of the
     /// alphanumerically-sorted recipient <c>kid</c> list joined with <c>.</c>.
     /// </summary>
-    public static readonly string Apv = Utf8Constants.ToInternedString(ApvUtf8);
+    public static string Apv { get; } = Utf8Constants.ToInternedString(ApvUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Skid"/>.</summary>
     public static ReadOnlySpan<byte> SkidUtf8 => "skid"u8;
@@ -98,7 +118,7 @@ public static class WellKnownJoseHeaderNames
     /// this is a DID URL to the sender's <c>keyAgreement</c> verification method; its value
     /// is resolvable from <c>apu</c> when <c>skid</c> is absent.
     /// </summary>
-    public static readonly string Skid = Utf8Constants.ToInternedString(SkidUtf8);
+    public static string Skid { get; } = Utf8Constants.ToInternedString(SkidUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Jwk"/>.</summary>
     public static ReadOnlySpan<byte> JwkUtf8 => "jwk"u8;
@@ -108,7 +128,7 @@ public static class WellKnownJoseHeaderNames
     /// Carries the public key used to verify the JWS. MUST NOT contain private
     /// key components.
     /// </summary>
-    public static readonly string Jwk = Utf8Constants.ToInternedString(JwkUtf8);
+    public static string Jwk { get; } = Utf8Constants.ToInternedString(JwkUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Jwt"/>.</summary>
     public static ReadOnlySpan<byte> JwtUtf8 => "jwt"u8;
@@ -118,8 +138,14 @@ public static class WellKnownJoseHeaderNames
     /// JWT in a signed Authorization Request Object per
     /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-12">OID4VP 1.0 §12</see>.
     /// </summary>
-    public static readonly string Jwt = Utf8Constants.ToInternedString(JwtUtf8);
+    public static string Jwt { get; } = Utf8Constants.ToInternedString(JwtUtf8);
 
+
+    /// <summary>Whether <paramref name="name"/> is <see cref="Alg"/>.</summary>
+    public static bool IsAlg(string name) => Equals(name, Alg);
+
+    /// <summary>Whether <paramref name="name"/> is <see cref="B64"/>.</summary>
+    public static bool IsB64(string name) => Equals(name, B64);
 
     /// <summary>Whether <paramref name="name"/> is <see cref="Typ"/>.</summary>
     public static bool IsTyp(string name) => Equals(name, Typ);
@@ -155,6 +181,8 @@ public static class WellKnownJoseHeaderNames
     /// </summary>
     public static string GetCanonicalizedValue(string name) => name switch
     {
+        _ when IsAlg(name) => Alg,
+        _ when IsB64(name) => B64,
         _ when IsTyp(name) => Typ,
         _ when IsCty(name) => Cty,
         _ when IsEnc(name) => Enc,

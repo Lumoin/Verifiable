@@ -1,10 +1,11 @@
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Formats.Asn1;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Verifiable.BouncyCastle;
+using Verifiable.Cbor;
 using Verifiable.Cbor.Mdoc;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
@@ -12,6 +13,8 @@ using Verifiable.Fido2;
 using Verifiable.JCose;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.X509;
+using Microsoft.Extensions.Time.Testing;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Fido2;
 
@@ -559,7 +562,7 @@ internal static class Fido2AttestationTestVectors
     /// Builds an OKP (Ed25519) COSE_Key view from an Ed25519 public key's raw bytes — the EdDSA packed
     /// self-attestation algorithm-matrix fixture. No independent .NET BCL Ed25519 primitive exists, so
     /// this credential is minted through <see cref="TestKeyMaterialProvider.CreateFreshEd25519KeyMaterial"/>
-    /// and signed via <see cref="BouncyCastleCryptographicFunctions.SignEd25519Async"/> — the firewall
+    /// and signed via <see cref="BouncyCastleCryptographicFunctionsAdapter.SignEd25519Async"/> — the firewall
     /// independence is that no key object crosses the issuer/verifier boundary, only wire bytes.
     /// </summary>
     /// <param name="publicKey">The Ed25519 public key's raw bytes.</param>
@@ -729,7 +732,7 @@ internal static class Fido2AttestationTestVectors
         ArgumentNullException.ThrowIfNull(privateKey);
         ArgumentNullException.ThrowIfNull(toBeSigned);
 
-        using Signature signature = await privateKey.SignAsync(toBeSigned, BouncyCastleCryptographicFunctions.SignEd25519Async, BaseMemoryPool.Shared).ConfigureAwait(false);
+        using Signature signature = await privateKey.SignAsync(toBeSigned, BouncyCastleCryptographicFunctionsAdapter.SignEd25519Async, BaseMemoryPool.Shared).ConfigureAwait(false);
 
         return signature.AsReadOnlySpan().ToArray();
     }
@@ -753,7 +756,7 @@ internal static class Fido2AttestationTestVectors
         ArgumentNullException.ThrowIfNull(privateKey);
         ArgumentNullException.ThrowIfNull(toBeSigned);
 
-        using Signature p1363Signature = await privateKey.SignAsync(toBeSigned, BouncyCastleCryptographicFunctions.SignSecp256k1Async, BaseMemoryPool.Shared).ConfigureAwait(false);
+        using Signature p1363Signature = await privateKey.SignAsync(toBeSigned, BouncyCastleCryptographicFunctionsAdapter.SignSecp256k1Async, BaseMemoryPool.Shared).ConfigureAwait(false);
         using IMemoryOwner<byte> derOwner = EcdsaSignatureEncoding.ConvertP1363ToDer(p1363Signature.AsReadOnlySpan(), BaseMemoryPool.Shared, out int derLength);
 
         return derOwner.Memory.Span[..derLength].ToArray();
@@ -775,7 +778,7 @@ internal static class Fido2AttestationTestVectors
         ArgumentNullException.ThrowIfNull(toBeSigned);
 
         byte[] privateKeyDer = key.ExportRSAPrivateKey();
-        (Signature signature, CryptoEvent? _) = await BouncyCastleCryptographicFunctions.SignRsaSha256PssAsync(privateKeyDer, toBeSigned, BaseMemoryPool.Shared).ConfigureAwait(false);
+        (Signature signature, CryptoEvent? _) = await BouncyCastleCryptographicFunctions.SignRsaSha256PssAsync(privateKeyDer, toBeSigned, BaseMemoryPool.Shared, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch)).ConfigureAwait(false);
         using var disposableSignature = signature;
 
         return signature.AsReadOnlySpan().ToArray();
@@ -844,7 +847,9 @@ internal static class Fido2AttestationTestVectors
     /// <returns>The encoded <c>attestationObject</c> bytes.</returns>
     internal static byte[] EncodeAttestationObject(string format, byte[] attStmtCbor, byte[] authData)
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(3);
         writer.WriteTextString("fmt");
         writer.WriteTextString(format);
@@ -854,7 +859,7 @@ internal static class Fido2AttestationTestVectors
         writer.WriteByteString(authData);
         writer.WriteEndMap();
 
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -868,7 +873,9 @@ internal static class Fido2AttestationTestVectors
     /// <returns>The encoded <c>attStmt</c> bytes.</returns>
     internal static byte[] EncodePackedAttStmt(int alg, byte[] sig, IReadOnlyList<byte[]>? x5c)
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteStartMap(x5c is null ? 2 : 3);
         writer.WriteTextString("alg");
         writer.WriteInt32(alg);
@@ -888,6 +895,6 @@ internal static class Fido2AttestationTestVectors
 
         writer.WriteEndMap();
 
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 }

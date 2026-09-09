@@ -168,7 +168,7 @@ public static class BearerTokenValidation
                 bearerToken,
                 oauth.Codecs.Decoder,
                 bytes => oauth.Codecs.JwtHeaderDeserializer(bytes),
-                BaseMemoryPool.Shared);
+                oauth.MemoryPool!);
         }
         catch(Exception ex) when(ex is FormatException or InvalidOperationException)
         {
@@ -237,7 +237,7 @@ public static class BearerTokenValidation
                 signatureValid = await Jws.VerifyAsync(
                     bearerToken,
                     oauth.Codecs.Decoder,
-                    BaseMemoryPool.Shared,
+                    oauth.MemoryPool!,
                     publicKey,
                     cancellationToken).ConfigureAwait(false);
             }

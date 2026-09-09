@@ -17,7 +17,7 @@ namespace Verifiable.Tpm.Extensions.Seal;
 /// This is what a caller persists to disk or a database between sessions: <see cref="GetSerializedSize"/> and
 /// <see cref="WriteTo"/> write the wire form a caller stores, and the static <see cref="Parse"/> rebuilds an
 /// independent instance from those bytes alone — the same disk round trip the seal flow tests perform by
-/// copying the private blob and reserializing the public area (TPM 2.0 Library Part 3, Section 12.1, Table 20).
+/// copying the private blob and reserializing the public area (TPM 2.0 Library Part 3, clause 12.1, Table 18).
 /// </para>
 /// <para>
 /// Both carriers are pooled and owned by this instance; dispose it once the blob is either persisted (its bytes

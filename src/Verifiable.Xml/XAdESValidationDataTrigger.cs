@@ -160,6 +160,9 @@ public static class XAdESValidationDataTrigger
             {
                 TriggerSignal.ValuesProperty => hasValuesProperty = true,
                 TriggerSignal.AttributeValuesProperty => hasAttributeValuesProperty = true,
+                //The innermost arm is kept as "condition ? flag = true : false" rather than the
+                //algebraically equivalent "condition && (flag = true)": the ternary keeps the assignment
+                //visible as its own branch rather than folding it into a boolean operand.
                 TriggerSignal.UnrecognizedCandidate => XmlSignatureModelGrammar.IsElement(table, entry.ElementIndex, XAdESIdentifiers.XAdESNamespaceV141Utf8, "ArchiveTimeStamp"u8)
                     ? hasArchiveTimeStamp = true
                     : XmlSignatureModelGrammar.IsElement(table, entry.ElementIndex, XAdESIdentifiers.XAdESNamespaceV141Utf8, "AnyValidationData"u8)

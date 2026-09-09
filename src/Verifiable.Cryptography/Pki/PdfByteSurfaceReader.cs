@@ -782,11 +782,6 @@ public static class PdfByteSurfaceReader
                 {
                     return false;
                 }
-
-                if(i < chars.Length && chars[i] == '\'')
-                {
-                    i++;
-                }
             }
 
             offset = new TimeSpan(offsetHours, offsetMinutes, 0);
@@ -794,10 +789,6 @@ public static class PdfByteSurfaceReader
             {
                 offset = -offset;
             }
-        }
-        else if(i < chars.Length && chars[i] == 'Z')
-        {
-            i++;
         }
 
         try

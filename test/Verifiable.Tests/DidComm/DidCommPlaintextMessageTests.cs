@@ -86,7 +86,7 @@ internal sealed class DidCommPlaintextMessageTests
         Assert.AreEqual(message.Id, roundTripped.Id);
         Assert.AreEqual(message.Type, roundTripped.Type);
         Assert.AreEqual(message.From, roundTripped.From);
-        Assert.AreSequenceEqual((List<string>)message.To!, (List<string>)roundTripped.To!);
+        Assert.AreSequenceEqual(message.To!, roundTripped.To!);
         Assert.AreEqual(message.ThreadId, roundTripped.ThreadId);
         Assert.AreEqual(message.ParentThreadId, roundTripped.ParentThreadId);
         Assert.AreEqual(message.CreatedTime, roundTripped.CreatedTime);

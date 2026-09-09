@@ -1,4 +1,4 @@
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using MessagePack;
 
 namespace Verifiable.Tests.TestInfrastructure;

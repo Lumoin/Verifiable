@@ -1,7 +1,7 @@
 using System;
 using System.Buffers;
 using System.Collections.Generic;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using System.IO;
 using System.Linq;
 using Verifiable.Core.Model.DataIntegrity;
@@ -105,7 +105,8 @@ public static class EcdsaSd2023CborSerializer
         stream.Write(BaseProofHeader);
 
         //Write CBOR-encoded components array.
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteStartArray(5);
         writer.WriteByteString(baseSignature);
         writer.WriteByteString(publicKey);
@@ -129,8 +130,7 @@ public static class EcdsaSd2023CborSerializer
 
         writer.WriteEndArray();
 
-        byte[] cborBytes = writer.Encode();
-        stream.Write(cborBytes);
+        stream.Write(buffer.WrittenSpan);
 
         return stream.ToArray();
     }
@@ -186,7 +186,7 @@ public static class EcdsaSd2023CborSerializer
         }
 
         //Parse CBOR content.
-        var reader = new CborReader(proofBytes[3..].ToArray(), CborConformanceMode.Lax);
+        var reader = new CborReader(proofBytes[3..].ToArray(), CborOptions.Lax);
 
         int? arrayLength = reader.ReadStartArray();
         if(arrayLength != 5)
@@ -212,11 +212,11 @@ public static class EcdsaSd2023CborSerializer
 
         //Read mandatory pointers array.
         int? pointersLength = reader.ReadStartArray();
-        var mandatoryPointers = new List<Verifiable.JsonPointer.JsonPointer>(pointersLength ?? 0);
+        var mandatoryPointers = new List<Lumoin.Veritas.JsonPointer.JsonPointer>(pointersLength ?? 0);
         while(reader.PeekState() != CborReaderState.EndArray)
         {
             string pointerStr = reader.ReadTextString();
-            mandatoryPointers.Add(Verifiable.JsonPointer.JsonPointer.Parse(pointerStr));
+            mandatoryPointers.Add(Lumoin.Veritas.JsonPointer.JsonPointer.Parse(pointerStr));
         }
         reader.ReadEndArray();
 
@@ -311,7 +311,8 @@ public static class EcdsaSd2023CborSerializer
         stream.Write(DerivedProofHeader);
 
         //Write CBOR-encoded components array.
-        var writer = new CborWriter(CborConformanceMode.Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteStartArray(5);
         writer.WriteByteString(baseSignature);
         writer.WriteByteString(publicKey);
@@ -345,8 +346,7 @@ public static class EcdsaSd2023CborSerializer
 
         writer.WriteEndArray();
 
-        byte[] cborBytes = writer.Encode();
-        stream.Write(cborBytes);
+        stream.Write(buffer.WrittenSpan);
 
         return stream.ToArray();
     }
@@ -410,7 +410,7 @@ public static class EcdsaSd2023CborSerializer
         }
 
         //Parse CBOR content.
-        var reader = new CborReader(proofBytes[3..].ToArray(), CborConformanceMode.Lax);
+        var reader = new CborReader(proofBytes[3..].ToArray(), CborOptions.Lax);
 
         int? arrayLength = reader.ReadStartArray();
         if(arrayLength != 5)

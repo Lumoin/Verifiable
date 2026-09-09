@@ -164,7 +164,7 @@ internal sealed class JsonTestingUtilitiesTests
     {
         const string inputJson = /*lang=json,strict*/ """{"name":"test","value":42,"extra":"data"}""";
 
-        var (obj1, obj2, reserializedString1, reserializedString2) =
+        var (obj1, obj2, _, _) =
             JsonSerializationUtilities.PerformExtendedSerializationCycle<TestDocument, TestDocumentExtended>(inputJson, DefaultOptions);
 
         Assert.IsNotNull(obj1);

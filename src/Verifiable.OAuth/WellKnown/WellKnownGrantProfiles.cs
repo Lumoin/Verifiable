@@ -15,7 +15,7 @@ public static class WellKnownGrantProfiles
     /// The <c>urn:ietf:params:oauth:grant-profile:id-jag</c> Identity Assertion JWT Authorization Grant
     /// profile identifier (draft-ietf-oauth-identity-assertion-authz-grant-04 (21 May 2026) §7.2 / §8 / §10.2).
     /// </summary>
-    public static readonly string IdJag = Utf8Constants.ToInternedString(IdJagUtf8);
+    public static string IdJag { get; } = Utf8Constants.ToInternedString(IdJagUtf8);
 
 
     /// <summary>Whether <paramref name="value"/> is <see cref="IdJag"/>.</summary>

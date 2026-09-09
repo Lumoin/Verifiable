@@ -18,37 +18,37 @@ public static class WellKnownTokenTypeIdentifiers
     public static ReadOnlySpan<byte> AccessTokenUtf8 => "urn:ietf:params:oauth:token-type:access_token"u8;
 
     /// <summary>The RFC 8693 §3 access token type identifier.</summary>
-    public static readonly string AccessToken = Utf8Constants.ToInternedString(AccessTokenUtf8);
+    public static string AccessToken { get; } = Utf8Constants.ToInternedString(AccessTokenUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="RefreshToken"/>.</summary>
     public static ReadOnlySpan<byte> RefreshTokenUtf8 => "urn:ietf:params:oauth:token-type:refresh_token"u8;
 
     /// <summary>The RFC 8693 §3 refresh token type identifier.</summary>
-    public static readonly string RefreshToken = Utf8Constants.ToInternedString(RefreshTokenUtf8);
+    public static string RefreshToken { get; } = Utf8Constants.ToInternedString(RefreshTokenUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="IdToken"/>.</summary>
     public static ReadOnlySpan<byte> IdTokenUtf8 => "urn:ietf:params:oauth:token-type:id_token"u8;
 
     /// <summary>The RFC 8693 §3 OpenID Connect ID Token type identifier.</summary>
-    public static readonly string IdToken = Utf8Constants.ToInternedString(IdTokenUtf8);
+    public static string IdToken { get; } = Utf8Constants.ToInternedString(IdTokenUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Saml1"/>.</summary>
     public static ReadOnlySpan<byte> Saml1Utf8 => "urn:ietf:params:oauth:token-type:saml1"u8;
 
     /// <summary>The RFC 8693 §3 SAML 1.1 assertion type identifier.</summary>
-    public static readonly string Saml1 = Utf8Constants.ToInternedString(Saml1Utf8);
+    public static string Saml1 { get; } = Utf8Constants.ToInternedString(Saml1Utf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Saml2"/>.</summary>
     public static ReadOnlySpan<byte> Saml2Utf8 => "urn:ietf:params:oauth:token-type:saml2"u8;
 
     /// <summary>The RFC 8693 §3 SAML 2.0 assertion type identifier.</summary>
-    public static readonly string Saml2 = Utf8Constants.ToInternedString(Saml2Utf8);
+    public static string Saml2 { get; } = Utf8Constants.ToInternedString(Saml2Utf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Jwt"/>.</summary>
     public static ReadOnlySpan<byte> JwtUtf8 => "urn:ietf:params:oauth:token-type:jwt"u8;
 
     /// <summary>The RFC 8693 §3 JSON Web Token type identifier.</summary>
-    public static readonly string Jwt = Utf8Constants.ToInternedString(JwtUtf8);
+    public static string Jwt { get; } = Utf8Constants.ToInternedString(JwtUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="IdJag"/>.</summary>
     public static ReadOnlySpan<byte> IdJagUtf8 => "urn:ietf:params:oauth:token-type:id-jag"u8;
@@ -57,7 +57,7 @@ public static class WellKnownTokenTypeIdentifiers
     /// The Identity Assertion JWT Authorization Grant token type identifier
     /// (draft-ietf-oauth-identity-assertion-authz-grant-04 (21 May 2026) §4.3 / §10.2).
     /// </summary>
-    public static readonly string IdJag = Utf8Constants.ToInternedString(IdJagUtf8);
+    public static string IdJag { get; } = Utf8Constants.ToInternedString(IdJagUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="NotApplicable"/>.</summary>
     public static ReadOnlySpan<byte> NotApplicableUtf8 => "N_A"u8;
@@ -67,7 +67,7 @@ public static class WellKnownTokenTypeIdentifiers
     /// token is not an OAuth access token — e.g. an ID-JAG returned in <c>access_token</c> for historical
     /// reasons (draft-ietf-oauth-identity-assertion-authz-grant-04 §4.3.4 / RFC 8693 §2.2.1).
     /// </summary>
-    public static readonly string NotApplicable = Utf8Constants.ToInternedString(NotApplicableUtf8);
+    public static string NotApplicable { get; } = Utf8Constants.ToInternedString(NotApplicableUtf8);
 
 
     /// <summary>Whether <paramref name="value"/> is <see cref="AccessToken"/>.</summary>

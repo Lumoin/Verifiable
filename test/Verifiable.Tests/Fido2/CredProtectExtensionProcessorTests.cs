@@ -1,9 +1,10 @@
 using System;
 using System.Buffers;
 using System.Collections.Generic;
-using System.Formats.Cbor;
+using Lumoin.Veritas.Cbor;
 using System.Threading;
 using System.Threading.Tasks;
+using Verifiable.Cbor;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Cbor.Fido2;
 using Verifiable.Core.Assessment;
@@ -11,6 +12,7 @@ using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
 using Verifiable.Fido2.Ctap.Authenticator.Automata;
 using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Fido2;
 
@@ -91,9 +93,11 @@ internal sealed class CredProtectExtensionProcessorTests
     [TestMethod]
     public async Task NonIntegerValueFailsCeremonyClaimClosed()
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteTextString("not-an-integer");
-        byte[] authenticatorOutputCbor = writer.Encode();
+        byte[] authenticatorOutputCbor = writerBuffer.WrittenSpan.ToArray();
 
         ClaimIssueResult result = await IssueRegistrationClaimsAsync(authenticatorOutputCbor);
 
@@ -121,7 +125,7 @@ internal sealed class CredProtectExtensionProcessorTests
             authenticatorExtensionOutputs: [new Fido2ExtensionOutput(WellKnownWebAuthnExtensionIdentifiers.CredProtect, authenticatorOutputCbor)],
             extensionOutputProcessor: selector);
 
-        var issuer = new ClaimIssuer<RegistrationCeremonyInput>("credprotect-extension-processor-firewalled-test", Fido2ValidationProfiles.RegistrationRules());
+        var issuer = new ClaimIssuer<RegistrationCeremonyInput>("credprotect-extension-processor-firewalled-test", Fido2ValidationProfiles.RegistrationRules(), new FakeTimeProvider(TestClock.CanonicalEpoch));
         ClaimIssueResult result = await issuer.GenerateClaimsAsync(input, "credprotect-extension-processor-firewalled-test-correlation", TestContext.CancellationToken);
 
         Assert.AreEqual(ClaimOutcome.Success, GetOutcome(result, Fido2ClaimIds.Fido2RegistrationCredProtect));
@@ -139,7 +143,7 @@ internal sealed class CredProtectExtensionProcessorTests
     /// </summary>
     private static async Task<byte[]> MintCredProtectAuthenticatorOutputBytesAsync(int credProtect, CancellationToken cancellationToken)
     {
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator($"credprotect-processor-{credProtect}");
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator($"credprotect-processor-{credProtect}",BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         ReadOnlyMemory<byte> extensions = CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialExtensionsInput(credProtect: credProtect);
@@ -165,10 +169,12 @@ internal sealed class CredProtectExtensionProcessorTests
     /// <summary>Encodes <paramref name="value"/> as a single CTAP2 canonical CBOR unsigned integer.</summary>
     private static byte[] EncodeCborUnsignedInteger(int value)
     {
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var writerBuffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(writerBuffer, CborOptions.Ctap2Canonical);
+
         writer.WriteInt32(value);
 
-        return writer.Encode();
+        return writerBuffer.WrittenSpan.ToArray();
     }
 
 
@@ -187,7 +193,7 @@ internal sealed class CredProtectExtensionProcessorTests
             authenticatorExtensionOutputs: [new Fido2ExtensionOutput(WellKnownWebAuthnExtensionIdentifiers.CredProtect, authenticatorOutputCbor)],
             extensionOutputProcessor: selector);
 
-        var issuer = new ClaimIssuer<RegistrationCeremonyInput>("credprotect-extension-processor-test", Fido2ValidationProfiles.RegistrationRules());
+        var issuer = new ClaimIssuer<RegistrationCeremonyInput>("credprotect-extension-processor-test", Fido2ValidationProfiles.RegistrationRules(), new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         return await issuer.GenerateClaimsAsync(input, "credprotect-extension-processor-test-correlation", TestContext.CancellationToken);
     }

@@ -25,14 +25,14 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// } TPMS_NV_CERTIFY_INFO;
 /// </code>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 10.12.8, Table 128.
+/// Specification reference: TPM 2.0 Library Part 2, clause 10.11.8, Table 150.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 public sealed class TpmsNvCertifyInfo: ITpmWireType, IDisposable
 {
-    private readonly IMemoryOwner<byte>? nvContentsStorage;
-    private readonly int nvContentsLength;
+    private IMemoryOwner<byte>? NvContentsStorage { get; }
+    private int NvContentsLength { get; }
     private bool disposed;
 
     /// <summary>
@@ -54,7 +54,7 @@ public sealed class TpmsNvCertifyInfo: ITpmWireType, IDisposable
         {
             ObjectDisposedException.ThrowIf(disposed, this);
 
-            return nvContentsStorage is null ? [] : nvContentsStorage.Memory.Span[..nvContentsLength];
+            return NvContentsStorage is null ? [] : NvContentsStorage.Memory.Span[..NvContentsLength];
         }
     }
 
@@ -65,8 +65,8 @@ public sealed class TpmsNvCertifyInfo: ITpmWireType, IDisposable
     {
         IndexName = indexName;
         Offset = offset;
-        this.nvContentsStorage = nvContentsStorage;
-        this.nvContentsLength = nvContentsLength;
+        this.NvContentsStorage = nvContentsStorage;
+        this.NvContentsLength = nvContentsLength;
     }
 
     /// <summary>
@@ -102,7 +102,7 @@ public sealed class TpmsNvCertifyInfo: ITpmWireType, IDisposable
         {
             ObjectDisposedException.ThrowIf(disposed, this);
 
-            return IndexName.SerializedSize + sizeof(ushort) + sizeof(ushort) + nvContentsLength;
+            return IndexName.SerializedSize + sizeof(ushort) + sizeof(ushort) + NvContentsLength;
         }
     }
 
@@ -152,10 +152,18 @@ public sealed class TpmsNvCertifyInfo: ITpmWireType, IDisposable
         if(!disposed)
         {
             IndexName.Dispose();
-            nvContentsStorage?.Dispose();
+            NvContentsStorage?.Dispose();
             disposed = true;
         }
     }
 
-    private string DebuggerDisplay => $"TPMS_NV_CERTIFY_INFO(indexName={IndexName.Size} bytes, offset={Offset}, nvContents={nvContentsLength} bytes)";
+    private string DebuggerDisplay => $"TPMS_NV_CERTIFY_INFO(indexName={IndexName.Size} bytes, offset={Offset}, nvContents={NvContentsLength} bytes)";
+
+    /// <summary>
+    /// Returns the same metadata-only summary the debugger shows — the Index Name's octet length,
+    /// the read offset, and the read length, never the NV contents themselves — so an enclosing
+    /// type's own diagnostic string interpolation renders this instance meaningfully instead of
+    /// its type name.
+    /// </summary>
+    public override string ToString() => DebuggerDisplay;
 }

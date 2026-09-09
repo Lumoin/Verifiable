@@ -21,7 +21,7 @@ namespace Verifiable.Cesr.Streaming;
 [SuppressMessage("Performance", "CA1815:Override equals and operator equals on value types", Justification = "This is a disposable owner of pooled memory, not a comparable value; equality is not meaningful.")]
 public readonly struct CesrToken: IDisposable
 {
-    private readonly IMemoryOwner<byte>? bodyOwner;
+    private IMemoryOwner<byte>? BodyOwner { get; }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CesrToken"/> struct.
@@ -40,7 +40,7 @@ public readonly struct CesrToken: IDisposable
         Serialization = serialization;
         Code = code;
         Count = count;
-        this.bodyOwner = bodyOwner;
+        this.BodyOwner = bodyOwner;
         BodyLength = bodyLength;
     }
 
@@ -85,14 +85,14 @@ public readonly struct CesrToken: IDisposable
     /// characters); for a non-native item, the raw JSON/CBOR/MGPK serialization. An empty span for a
     /// genus/version code.
     /// </summary>
-    public ReadOnlySpan<byte> Body => bodyOwner is null ? default : bodyOwner.Memory.Span[..BodyLength];
+    public ReadOnlySpan<byte> Body => BodyOwner is null ? default : BodyOwner.Memory.Span[..BodyLength];
 
     /// <summary>
     /// The framed group body as memory, suitable for handing to a semantics-aware reader (for a binary-domain
     /// token, <see cref="CesrGroupReader"/>) to walk the group element by element. Empty for a genus/version
     /// code. Valid only until this token is disposed.
     /// </summary>
-    public ReadOnlyMemory<byte> BodyMemory => bodyOwner is null ? default : bodyOwner.Memory[..BodyLength];
+    public ReadOnlyMemory<byte> BodyMemory => BodyOwner is null ? default : BodyOwner.Memory[..BodyLength];
 
     /// <summary>
     /// The major and minor protocol version of a genus/version code, or <see langword="null"/> for a count group.
@@ -103,5 +103,5 @@ public readonly struct CesrToken: IDisposable
     /// <summary>
     /// Returns the pooled body buffer to its pool.
     /// </summary>
-    public void Dispose() => bodyOwner?.Dispose();
+    public void Dispose() => BodyOwner?.Dispose();
 }

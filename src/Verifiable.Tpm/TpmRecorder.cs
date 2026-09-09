@@ -19,7 +19,8 @@ namespace Verifiable.Tpm;
 /// <b>Basic usage:</b> Subscribe to a TpmDevice, perform operations, then extract the recording:
 /// </para>
 /// <code>
-/// using var tpm = TpmDevice.Open();
+/// using var pool = BaseMemoryPool.Shared;
+/// using var tpm = TpmDevice.Open(pool, RandomNumberGenerator.Fill);
 /// using var recorder = new TpmRecorder();
 ///
 /// // Subscribe returns IDisposable; disposing ends the subscription.
@@ -49,8 +50,17 @@ namespace Verifiable.Tpm;
 public sealed class TpmRecorder: IObserver<TpmExchange>, IDisposable
 {
     private List<TpmExchange> Exchanges { get; } = [];
-    private readonly Lock _lock = new();
-    private bool _completed;
+
+    /// <summary>
+    /// A field, not a property: a lock target must be one instance that no accessor can re-mint.
+    /// </summary>
+    private readonly Lock recorderLock = new();
+
+    /// <summary>
+    /// Whether the observed sequence has ended, through <see cref="OnError"/>, <see cref="OnCompleted"/> or
+    /// <see cref="Dispose"/>: once set, <see cref="OnNext"/> stops recording further exchanges.
+    /// </summary>
+    private bool completed;
 
     /// <summary>
     /// Gets the number of exchanges recorded so far.
@@ -59,7 +69,7 @@ public sealed class TpmRecorder: IObserver<TpmExchange>, IDisposable
     {
         get
         {
-            lock(_lock)
+            lock(recorderLock)
             {
                 return Exchanges.Count;
             }
@@ -72,7 +82,7 @@ public sealed class TpmRecorder: IObserver<TpmExchange>, IDisposable
     /// <returns>An array of recorded exchanges.</returns>
     public TpmExchange[] GetExchanges()
     {
-        lock(_lock)
+        lock(recorderLock)
         {
             return [.. Exchanges];
         }
@@ -87,7 +97,7 @@ public sealed class TpmRecorder: IObserver<TpmExchange>, IDisposable
     {
         ArgumentNullException.ThrowIfNull(info);
 
-        lock(_lock)
+        lock(recorderLock)
         {
             return new TpmRecording(info, [.. Exchanges]);
         }
@@ -99,9 +109,9 @@ public sealed class TpmRecorder: IObserver<TpmExchange>, IDisposable
     /// <param name="value">The exchange to record.</param>
     public void OnNext(TpmExchange value)
     {
-        lock(_lock)
+        lock(recorderLock)
         {
-            if(!_completed)
+            if(!completed)
             {
                 Exchanges.Add(value);
             }
@@ -115,9 +125,9 @@ public sealed class TpmRecorder: IObserver<TpmExchange>, IDisposable
     public void OnError(Exception error)
     {
         //Errors are not recorded. The recording stops.
-        lock(_lock)
+        lock(recorderLock)
         {
-            _completed = true;
+            completed = true;
         }
     }
 
@@ -126,9 +136,9 @@ public sealed class TpmRecorder: IObserver<TpmExchange>, IDisposable
     /// </summary>
     public void OnCompleted()
     {
-        lock(_lock)
+        lock(recorderLock)
         {
-            _completed = true;
+            completed = true;
         }
     }
 
@@ -137,10 +147,10 @@ public sealed class TpmRecorder: IObserver<TpmExchange>, IDisposable
     /// </summary>
     public void Clear()
     {
-        lock(_lock)
+        lock(recorderLock)
         {
             Exchanges.Clear();
-            _completed = false;
+            completed = false;
         }
     }
 
@@ -149,9 +159,9 @@ public sealed class TpmRecorder: IObserver<TpmExchange>, IDisposable
     /// </summary>
     public void Dispose()
     {
-        lock(_lock)
+        lock(recorderLock)
         {
-            _completed = true;
+            completed = true;
             Exchanges.Clear();
         }
     }

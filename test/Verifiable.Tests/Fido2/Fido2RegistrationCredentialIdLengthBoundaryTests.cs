@@ -5,6 +5,7 @@ using Verifiable.Fido2;
 using Verifiable.JCose;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Fido2;
 
@@ -129,7 +130,8 @@ internal sealed class Fido2RegistrationCredentialIdLengthBoundaryTests
             UserVerification = UserVerificationRequirement.Required,
             ExpectedPubKeyCredParams = [new PublicKeyCredentialParameters { Type = WellKnownPublicKeyCredentialTypes.PublicKey, Alg = WellKnownCoseAlgorithms.Es256 }],
             AttestationResult = new NoneAttestationResult(),
-            AcceptNoneAttestation = true
+            AcceptNoneAttestation = true,
+            ExtensionProcessingPool = BaseMemoryPool.Shared
         };
     }
 
@@ -137,8 +139,7 @@ internal sealed class Fido2RegistrationCredentialIdLengthBoundaryTests
     /// <summary>Runs <see cref="Fido2ValidationProfiles.RegistrationRules"/> through a real <see cref="ClaimIssuer{TInput}"/>.</summary>
     private Task<ClaimIssueResult> IssueClaimsAsync(RegistrationCeremonyInput input)
     {
-        var issuer = new ClaimIssuer<RegistrationCeremonyInput>(
-            "fido2-registration-credential-id-length-boundary-test", Fido2ValidationProfiles.RegistrationRules());
+        var issuer = new ClaimIssuer<RegistrationCeremonyInput>("fido2-registration-credential-id-length-boundary-test", Fido2ValidationProfiles.RegistrationRules(), new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         return issuer.GenerateClaimsAsync(input, "fido2-registration-credential-id-length-boundary-test-correlation", TestContext.CancellationToken).AsTask();
     }

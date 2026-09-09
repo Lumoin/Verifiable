@@ -18,7 +18,7 @@ namespace Verifiable.JCose
         /// Elliptic Curve key type.
         /// </summary>
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7518#section-6.2.1">RFC 7518 - Section 6.2.1</see>.</remarks>
-        public static readonly string Ec = Utf8Constants.ToInternedString(EcUtf8);
+        public static string Ec { get; } = Utf8Constants.ToInternedString(EcUtf8);
 
         /// <summary>The UTF-8 source literal of <see cref="Oct"/>.</summary>
         public static ReadOnlySpan<byte> OctUtf8 => "oct"u8;
@@ -27,7 +27,7 @@ namespace Verifiable.JCose
         /// Symmetric key type.
         /// </summary>
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7518#section-6.4">RFC 7518 - Section 6.4</see>.</remarks>
-        public static readonly string Oct = Utf8Constants.ToInternedString(OctUtf8);
+        public static string Oct { get; } = Utf8Constants.ToInternedString(OctUtf8);
 
         /// <summary>The UTF-8 source literal of <see cref="Okp"/>.</summary>
         public static ReadOnlySpan<byte> OkpUtf8 => "OKP"u8;
@@ -36,7 +36,7 @@ namespace Verifiable.JCose
         /// Octet Key Pair key type.
         /// </summary>
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc8037">RFC 8037</see>.</remarks>
-        public static readonly string Okp = Utf8Constants.ToInternedString(OkpUtf8);
+        public static string Okp { get; } = Utf8Constants.ToInternedString(OkpUtf8);
 
         /// <summary>The UTF-8 source literal of <see cref="Rsa"/>.</summary>
         public static ReadOnlySpan<byte> RsaUtf8 => "RSA"u8;
@@ -45,7 +45,7 @@ namespace Verifiable.JCose
         /// RSA key type.
         /// </summary>
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7518#section-6.3.1">RFC 7518 §6.3.1</see>.</remarks>
-        public static readonly string Rsa = Utf8Constants.ToInternedString(RsaUtf8);
+        public static string Rsa { get; } = Utf8Constants.ToInternedString(RsaUtf8);
 
         /// <summary>The UTF-8 source literal of <see cref="Akp"/>.</summary>
         public static ReadOnlySpan<byte> AkpUtf8 => "AKP"u8;
@@ -58,7 +58,7 @@ namespace Verifiable.JCose
         /// Used for ML-DSA and other algorithms where the key structure is algorithm-specific.
         /// The <c>pub</c> and <c>priv</c> parameters carry the raw public and private key bytes.
         /// </remarks>
-        public static readonly string Akp = Utf8Constants.ToInternedString(AkpUtf8);
+        public static string Akp { get; } = Utf8Constants.ToInternedString(AkpUtf8);
 
 
         /// <summary>
@@ -129,7 +129,7 @@ namespace Verifiable.JCose
         /// <remarks>This comparison is case-sensitive. See at <see href="https://www.rfc-editor.org/rfc/rfc7517">RFC 7517</see>.</remarks>
         public static bool Equals(string ktyA, string ktyB)
         {
-            return object.ReferenceEquals(ktyA, ktyB) || StringComparer.InvariantCulture.Equals(ktyA, ktyB);
+            return object.ReferenceEquals(ktyA, ktyB) || StringComparer.Ordinal.Equals(ktyA, ktyB);
         }
     }
 }

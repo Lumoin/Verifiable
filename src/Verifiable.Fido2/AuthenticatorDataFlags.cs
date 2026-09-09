@@ -148,7 +148,7 @@ public readonly struct AuthenticatorDataFlags: IEquatable<AuthenticatorDataFlags
     /// <returns>The hash code for <see cref="Value"/>.</returns>
     public override int GetHashCode()
     {
-        return Value.GetHashCode();
+        return Value;
     }
 
 

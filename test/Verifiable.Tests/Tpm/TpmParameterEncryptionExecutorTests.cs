@@ -16,6 +16,7 @@ using Verifiable.Tpm.Spec.Attributes;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -37,7 +38,7 @@ namespace Verifiable.Tests.Tpm;
 /// </para>
 /// <para>
 /// Sessions here are bound with an empty authValue, so sessionValue reduces unambiguously to the session key
-/// (Part 1 §19.1) regardless of the authValue-inclusion rule, and the oracle and the implementation must agree.
+/// (Part 1, clause 18.1) regardless of the authValue-inclusion rule, and the oracle and the implementation must agree.
 /// </para>
 /// </remarks>
 [TestClass]
@@ -81,14 +82,14 @@ internal sealed class TpmParameterEncryptionExecutorTests
                 sessionKey.AsReadOnlyMemory(), nonceCaller, nonceTpmNew.AsReadOnlyMemory(), plaintext.Memory[..PlaintextLength], ResponseAttributes, handlerPool, cancellationToken);
         }
 
-        using var device = TpmDevice.Create(Handler);
+        using var device = TpmDevice.Create(Handler, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         using TpmSession session = await TpmSession.CreateBoundAsync(
             new TpmHandle(0x02000000u),
             bindAuth.AsReadOnlyMemory(),
             startNonceCaller.AsReadOnlyMemory(),
             Tpm2bNonce.Create(startNonceTpm.AsReadOnlySpan(), pool),
-            SessionAlg,
+            SessionAlg, TestEntropy.NewCounterStream(),
             pool,
             symmetric: TpmtSymDef.Xor(SessionAlg),
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -143,14 +144,14 @@ internal sealed class TpmParameterEncryptionExecutorTests
                 wrongKey.AsReadOnlyMemory(), nonceCaller, nonceTpmNew.AsReadOnlyMemory(), plaintext.Memory[..PlaintextLength], ResponseAttributes, handlerPool, cancellationToken);
         }
 
-        using var device = TpmDevice.Create(Handler);
+        using var device = TpmDevice.Create(Handler, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         using TpmSession session = await TpmSession.CreateBoundAsync(
             new TpmHandle(0x02000000u),
             bindAuth.AsReadOnlyMemory(),
             startNonceCaller.AsReadOnlyMemory(),
             Tpm2bNonce.Create(startNonceTpm.AsReadOnlySpan(), pool),
-            SessionAlg,
+            SessionAlg, TestEntropy.NewCounterStream(),
             pool,
             symmetric: TpmtSymDef.Xor(SessionAlg),
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -189,6 +190,8 @@ internal sealed class TpmParameterEncryptionExecutorTests
         using IMemoryOwner<byte> plaintext = pool.Rent(PlaintextLength);
         FillPattern(plaintext.Memory.Span[..PlaintextLength], 0x44);
 
+        //observed is declared null and assigned once inside the Handler local function below; a using
+        //declaration cannot target a variable assigned after its declaration (CS1656).
         IMemoryOwner<byte>? observed = null;
         int observedLength = 0;
 
@@ -208,14 +211,14 @@ internal sealed class TpmParameterEncryptionExecutorTests
                 return ValueTask.FromResult(ErrorResponse(TpmRcConstants.TPM_RC_VALUE, handlerPool));
             }
 
-            using var device = TpmDevice.Create(Handler);
+            using var device = TpmDevice.Create(Handler, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
             using TpmSession session = await TpmSession.CreateBoundAsync(
                 new TpmHandle(0x02000000u),
                 bindAuth.AsReadOnlyMemory(),
                 startNonceCaller.AsReadOnlyMemory(),
                 Tpm2bNonce.Create(startNonceTpm.AsReadOnlySpan(), pool),
-                SessionAlg,
+                SessionAlg, TestEntropy.NewCounterStream(),
                 pool,
                 symmetric: TpmtSymDef.Xor(SessionAlg),
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -236,7 +239,7 @@ internal sealed class TpmParameterEncryptionExecutorTests
             Assert.HasCount(PlaintextLength, encryptedFirstParam, "Parameter encryption must not change the data length.");
             Assert.IsFalse(encryptedFirstParam.Span.SequenceEqual(plaintext.Memory.Span[..PlaintextLength]), "The first command parameter must be encrypted on the wire.");
 
-            //Command direction (Part 1 §19.2): nonceNewer = nonceCaller, nonceOlder = nonceTPM (the session's
+            //Command direction (Part 1, clause 18.2): nonceNewer = nonceCaller, nonceOlder = nonceTPM (the session's
             //current nonceTPM, which for the first command is the StartAuthSession nonceTPM). XOR is self-inverse,
             //so the same call recovers the plaintext in place.
             using IMemoryOwner<byte> recovered = pool.Rent(PlaintextLength);
@@ -288,14 +291,14 @@ internal sealed class TpmParameterEncryptionExecutorTests
                 sessionKey.AsReadOnlyMemory(), nonceCaller, nonceTpmNew.AsReadOnlyMemory(), plaintext.Memory[..PlaintextLength], ResponseAttributes, KeyBits, handlerPool, cancellationToken);
         }
 
-        using var device = TpmDevice.Create(Handler);
+        using var device = TpmDevice.Create(Handler, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         using TpmSession session = await TpmSession.CreateBoundAsync(
             new TpmHandle(0x02000000u),
             bindAuth.AsReadOnlyMemory(),
             startNonceCaller.AsReadOnlyMemory(),
             Tpm2bNonce.Create(startNonceTpm.AsReadOnlySpan(), pool),
-            SessionAlg,
+            SessionAlg, TestEntropy.NewCounterStream(),
             pool,
             symmetric: TpmtSymDef.Aes(KeyBits, TpmAlgIdConstants.TPM_ALG_CFB),
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -334,6 +337,8 @@ internal sealed class TpmParameterEncryptionExecutorTests
         using IMemoryOwner<byte> plaintext = pool.Rent(PlaintextLength);
         FillPattern(plaintext.Memory.Span[..PlaintextLength], 0x44);
 
+        //observed is declared null and assigned once inside the Handler local function below; a using
+        //declaration cannot target a variable assigned after its declaration (CS1656).
         IMemoryOwner<byte>? observed = null;
         int observedLength = 0;
 
@@ -353,14 +358,14 @@ internal sealed class TpmParameterEncryptionExecutorTests
                 return ValueTask.FromResult(ErrorResponse(TpmRcConstants.TPM_RC_VALUE, handlerPool));
             }
 
-            using var device = TpmDevice.Create(Handler);
+            using var device = TpmDevice.Create(Handler, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
             using TpmSession session = await TpmSession.CreateBoundAsync(
                 new TpmHandle(0x02000000u),
                 bindAuth.AsReadOnlyMemory(),
                 startNonceCaller.AsReadOnlyMemory(),
                 Tpm2bNonce.Create(startNonceTpm.AsReadOnlySpan(), pool),
-                SessionAlg,
+                SessionAlg, TestEntropy.NewCounterStream(),
                 pool,
                 symmetric: TpmtSymDef.Aes(KeyBits, TpmAlgIdConstants.TPM_ALG_CFB),
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -381,7 +386,7 @@ internal sealed class TpmParameterEncryptionExecutorTests
             Assert.HasCount(PlaintextLength, encryptedFirstParam, "Parameter encryption must not change the data length.");
             Assert.IsFalse(encryptedFirstParam.Span.SequenceEqual(plaintext.Memory.Span[..PlaintextLength]), "The first command parameter must be encrypted on the wire.");
 
-            //Command direction (Part 1 §19.2): nonceNewer = nonceCaller, nonceOlder = nonceTPM (the session's
+            //Command direction (Part 1, clause 18.2): nonceNewer = nonceCaller, nonceOlder = nonceTPM (the session's
             //current nonceTPM, which for the first command is the StartAuthSession nonceTPM).
             using IMemoryOwner<byte> recovered = pool.Rent(PlaintextLength);
             encryptedFirstParam.Span.CopyTo(recovered.Memory.Span);
@@ -433,12 +438,12 @@ internal sealed class TpmParameterEncryptionExecutorTests
             return ValueTask.FromResult(TpmResult<TpmResponse>.TransportError(0u));
         }
 
-        using var device = TpmDevice.Create(Handler);
+        using var device = TpmDevice.Create(Handler, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         using Tpm2bNonce startNonceTpm = MakeNonce(32, 0xC3, pool);
         Tpm2bNonce nonceTpm = Tpm2bNonce.Create(startNonceTpm.AsReadOnlySpan(), pool);
         using var session = new TpmSession(
-            new TpmHandle(0x02000000u), nonceTpm, TpmAlgIdConstants.TPM_ALG_SHA256, pool, TpmtSymDef.Xor(TpmAlgIdConstants.TPM_ALG_SHA256));
+            new TpmHandle(0x02000000u), nonceTpm, TpmAlgIdConstants.TPM_ALG_SHA256, TestEntropy.NewCounterStream(), pool, TpmtSymDef.Xor(TpmAlgIdConstants.TPM_ALG_SHA256));
         session.SessionAttributes = TpmaSession.CONTINUE_SESSION | TpmaSession.ENCRYPT;
 
         //FlushContext has no response parameters, so the encrypt attribute cannot apply.
@@ -465,14 +470,14 @@ internal sealed class TpmParameterEncryptionExecutorTests
             return ValueTask.FromResult(TpmResult<TpmResponse>.TransportError(0u));
         }
 
-        using var device = TpmDevice.Create(Handler);
+        using var device = TpmDevice.Create(Handler, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         using Tpm2bNonce startNonceTpm = MakeNonce(32, 0xC3, pool);
         TpmtSymDef xor = TpmtSymDef.Xor(TpmAlgIdConstants.TPM_ALG_SHA256);
         using var first = new TpmSession(
-            new TpmHandle(0x02000000u), Tpm2bNonce.Create(startNonceTpm.AsReadOnlySpan(), pool), TpmAlgIdConstants.TPM_ALG_SHA256, pool, xor);
+            new TpmHandle(0x02000000u), Tpm2bNonce.Create(startNonceTpm.AsReadOnlySpan(), pool), TpmAlgIdConstants.TPM_ALG_SHA256, TestEntropy.NewCounterStream(), pool, xor);
         using var second = new TpmSession(
-            new TpmHandle(0x02000001u), Tpm2bNonce.Create(startNonceTpm.AsReadOnlySpan(), pool), TpmAlgIdConstants.TPM_ALG_SHA256, pool, xor);
+            new TpmHandle(0x02000001u), Tpm2bNonce.Create(startNonceTpm.AsReadOnlySpan(), pool), TpmAlgIdConstants.TPM_ALG_SHA256, TestEntropy.NewCounterStream(), pool, xor);
         first.SessionAttributes = TpmaSession.CONTINUE_SESSION | TpmaSession.DECRYPT;
         second.SessionAttributes = TpmaSession.CONTINUE_SESSION | TpmaSession.DECRYPT;
 
@@ -500,12 +505,12 @@ internal sealed class TpmParameterEncryptionExecutorTests
             return ValueTask.FromResult(TpmResult<TpmResponse>.TransportError(0u));
         }
 
-        using var device = TpmDevice.Create(Handler);
+        using var device = TpmDevice.Create(Handler, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
 
         using Tpm2bNonce startNonceTpm = MakeNonce(32, 0xC3, pool);
         Tpm2bNonce nonceTpm = Tpm2bNonce.Create(startNonceTpm.AsReadOnlySpan(), pool);
         using var session = new TpmSession(
-            new TpmHandle(0x02000000u), nonceTpm, TpmAlgIdConstants.TPM_ALG_SHA256, pool, symmetric);
+            new TpmHandle(0x02000000u), nonceTpm, TpmAlgIdConstants.TPM_ALG_SHA256, TestEntropy.NewCounterStream(), pool, symmetric);
         session.SessionAttributes = attributes;
 
         if(useEncryptableInput)
@@ -531,7 +536,7 @@ internal sealed class TpmParameterEncryptionExecutorTests
 
     /// <summary>
     /// Derives the bound session key with the project's KDFa: <c>KDFa(SHA-256, bindAuth, "ATH", nonceTPM,
-    /// nonceCaller, 256)</c> (Part 1 §17.6.10), returning it in the same <see cref="Tpm2bAuth"/> semantic carrier
+    /// nonceCaller, 256)</c> (Part 1, clause 16.6.10), returning it in the same <see cref="Tpm2bAuth"/> semantic carrier
     /// the production session uses (<see cref="TpmSession.CreateBoundAsync"/> derives the identical key into the
     /// identical type). What makes this an independent oracle is that the KDF is driven by hand here, with the
     /// device-side nonce ordering. The caller disposes the returned value, which zeroes the key on release.
@@ -751,18 +756,18 @@ internal sealed class TpmParameterEncryptionExecutorTests
     /// </summary>
     private sealed class EncryptableProbeInput: ITpmCommandInput, IDisposable
     {
-        private readonly Tpm2bData payload;
+        private Tpm2bData Payload { get; }
 
         public EncryptableProbeInput(ReadOnlySpan<byte> data, BaseMemoryPool pool)
         {
-            payload = Tpm2bData.Create(data, pool);
+            Payload = Tpm2bData.Create(data, pool);
         }
 
         public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_GetRandom;
 
         public bool FirstCommandParameterIsEncryptable => true;
 
-        public int GetSerializedSize() => payload.SerializedSize;
+        public int GetSerializedSize() => Payload.SerializedSize;
 
         public void WriteHandles(ref TpmWriter writer)
         {
@@ -770,12 +775,12 @@ internal sealed class TpmParameterEncryptionExecutorTests
 
         public void WriteParameters(ref TpmWriter writer)
         {
-            payload.WriteTo(ref writer);
+            Payload.WriteTo(ref writer);
         }
 
         public void Dispose()
         {
-            payload.Dispose();
+            Payload.Dispose();
         }
     }
 }

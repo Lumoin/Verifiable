@@ -35,9 +35,9 @@ internal sealed class AccessTokenTypeValidationTests
     private const string SubjectId = "subject-typ-confusion";
     private const string ResourceServerAudience = "https://rs.example.com";
 
-    private static readonly Uri ClientBaseUri = new(ClientId);
-    private static readonly Uri RedirectUri = new("https://client.example.com/callback");
-    private static readonly TimeSpan IatSkew = TimeSpan.FromSeconds(60);
+    private static Uri ClientBaseUri { get; } = new(ClientId);
+    private static Uri RedirectUri { get; } = new("https://client.example.com/callback");
+    private static TimeSpan IatSkew { get; } = TimeSpan.FromSeconds(60);
 
     //Standalone (non-host) fixture constants for the hand-built-header tests, mirroring
     //JwsAccessTokenValidatorTests' local fixture shape.
@@ -304,7 +304,7 @@ internal sealed class AccessTokenTypeValidationTests
             material.Registration.IssuerUri!.OriginalString,
             expectedAudience,
             resolveKey,
-            MicrosoftCryptographicFunctions.VerifyP256Async,
+            MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             JwsAccessTokenTestSupport.Parser,
             TestSetup.Base64UrlDecoder,
             TimeProvider,
@@ -334,7 +334,7 @@ internal sealed class AccessTokenTypeValidationTests
             material.Registration.IssuerUri!.OriginalString,
             expectedAudience,
             resolveKey,
-            MicrosoftCryptographicFunctions.VerifyP256Async,
+            MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             JwsAccessTokenTestSupport.Parser,
             TestSetup.Base64UrlDecoder,
             TimeProvider,
@@ -361,7 +361,7 @@ internal sealed class AccessTokenTypeValidationTests
             StandaloneIssuer,
             StandaloneAudience,
             resolver,
-            MicrosoftCryptographicFunctions.VerifyP256Async,
+            MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             JwsAccessTokenTestSupport.Parser,
             TestSetup.Base64UrlDecoder,
             TimeProvider,

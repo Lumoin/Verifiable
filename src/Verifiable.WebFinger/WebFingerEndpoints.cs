@@ -38,7 +38,7 @@ public static class WebFingerEndpoints
     /// <summary>
     /// The endpoint builder delegate. Pass this to <see cref="ServerConfiguration.EndpointBuilders"/>.
     /// </summary>
-    public static readonly EndpointBuilderDelegate Builder = static (registration, context, ct) =>
+    public static EndpointBuilderDelegate Builder { get; } = static (registration, context, ct) =>
     {
         List<EndpointCandidate> candidates = [];
 
@@ -130,6 +130,9 @@ public static class WebFingerEndpoints
                 }
                 catch
                 {
+                    //ResolveWebFingerResourceAsync is a caller-registered, application-specific delegate; a
+                    //fault it raises is this endpoint's own server error rather than a signal to propagate
+                    //uncaught, cancellation excepted above.
                     return (null, await WithCorsAsync(
                         ServerHttpResponse.ServerError(ServerErrors.ServerError, "The WebFinger resource resolver failed."),
                         webFinger, registration, context, ct).ConfigureAwait(false));

@@ -1,5 +1,6 @@
 using System;
-using System.Formats.Cbor;
+using System.Buffers;
+using Lumoin.Veritas.Cbor;
 using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
 
@@ -29,14 +30,15 @@ public static class CtapLargeBlobsResponseCborWriter
     {
         ArgumentNullException.ThrowIfNull(response);
 
-        var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.Ctap2Canonical);
 
         writer.WriteStartMap(1);
         writer.WriteInt32(WellKnownCtapLargeBlobsResponseKeys.Config);
         writer.WriteByteString(response.Config.Span);
         writer.WriteEndMap();
 
-        byte[] encoded = writer.Encode();
+        byte[] encoded = buffer.WrittenSpan.ToArray();
 
         return new TaggedMemory<byte>(encoded, Fido2BufferTags.CtapLargeBlobsResponsePayload);
     }

@@ -26,11 +26,13 @@ public static class DcqlTrustedAuthorityTypes
     public static ReadOnlySpan<byte> AkiUtf8 => "aki"u8;
 
     /// <summary>
-    /// <c>aki</c> — the authority is identified by the <c>KeyIdentifier</c> of the
-    /// <c>AuthorityKeyIdentifier</c> X.509 extension (base64url-encoded DER value) per
-    /// OID4VP 1.0 §6.1.1.1. Used with X.509-anchored credential formats (e.g. mdoc).
+    /// <c>aki</c> — the authority is identified by the base64url encoding of the
+    /// <c>AuthorityKeyIdentifier</c> X.509 extension's <c>KeyIdentifier</c> OCTET STRING
+    /// contents (RFC 5280 §4.2.1.1), matched as raw bytes against any certificate in the
+    /// credential's chain per OID4VP 1.0 §6.1.1.1. Used with X.509-anchored credential
+    /// formats (e.g. mdoc).
     /// </summary>
-    public static readonly string Aki = Utf8Constants.ToInternedString(AkiUtf8);
+    public static string Aki { get; } = Utf8Constants.ToInternedString(AkiUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="EtsiTrustedList"/>.</summary>
     public static ReadOnlySpan<byte> EtsiTrustedListUtf8 => "etsi_tl"u8;
@@ -40,18 +42,17 @@ public static class DcqlTrustedAuthorityTypes
     /// List (ETSI TS 119 612) per OID4VP 1.0 §6.1.1.2; the list, or one it cascades to,
     /// must contain the credential's issuing authority.
     /// </summary>
-    public static readonly string EtsiTrustedList = Utf8Constants.ToInternedString(EtsiTrustedListUtf8);
+    public static string EtsiTrustedList { get; } = Utf8Constants.ToInternedString(EtsiTrustedListUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="OpenIdFederation"/>.</summary>
     public static ReadOnlySpan<byte> OpenIdFederationUtf8 => "openid_federation"u8;
 
     /// <summary>
-    /// <c>openid_federation</c> — the authority is identified by an OpenID Federation
-    /// Entity Identifier (OpenID Federation §1) per OID4VP 1.0 §6.1.1.3; a valid trust
-    /// path including that identifier must be constructible from a matching credential.
-    /// This is the value carried for SD-JWT VC issuers identified by their <c>iss</c>.
+    /// <c>openid_federation</c> — the value is an OpenID Federation Entity Identifier
+    /// (OpenID Federation §1) that must lie on a validated trust path from the
+    /// credential's issuer to a familiar trust anchor per OID4VP 1.0 §6.1.1.3.
     /// </summary>
-    public static readonly string OpenIdFederation = Utf8Constants.ToInternedString(OpenIdFederationUtf8);
+    public static string OpenIdFederation { get; } = Utf8Constants.ToInternedString(OpenIdFederationUtf8);
 
 
     /// <summary>Returns <see langword="true"/> when <paramref name="value"/> is exactly <c>aki</c>.</summary>

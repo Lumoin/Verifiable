@@ -199,6 +199,9 @@ public static class PaceChipAuthenticationMapping
 
         (Ciphertext ivBlock, _) = await encrypt(
             minusOne.Memory[..BlockLength], encryptionKey.AsReadOnlyMemory(), zeroIv.Memory[..BlockLength], CryptoTags.Aes128Cbc, pool, null, cancellationToken).ConfigureAwait(false);
+
+        //Not a using declaration: ivBlock comes out of a tuple deconstruction, a shape the using
+        //declaration syntax does not accept; the try/finally disposes it exactly once on every exit path.
         try
         {
             IMemoryOwner<byte> initialisationVector = pool.Rent(BlockLength);

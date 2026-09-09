@@ -30,8 +30,8 @@ namespace Verifiable.Tests.Mdoc;
 [TestClass]
 internal sealed class MdocDcqlAdapterTests
 {
-    private static readonly string PidDocType = EudiPid.AttestationType;
-    private static readonly string PidNamespace = EudiPid.Mdoc.Namespace;
+    private static string PidDocType { get; } = EudiPid.AttestationType;
+    private static string PidNamespace { get; } = EudiPid.Mdoc.Namespace;
 
 
     [TestMethod]
@@ -39,7 +39,7 @@ internal sealed class MdocDcqlAdapterTests
     {
         using MdocDocument document = BuildSampleLogicalPid();
 
-        DcqlCredentialMetadata metadata = MdocDcqlAdapter.MetadataExtractor(document);
+        DcqlCredentialMetadata metadata = MdocDcqlAdapter.CreateMetadataExtractor()(document);
 
         Assert.AreEqual(MdocDcqlAdapter.FormatIdentifier, metadata.Format);
         Assert.AreEqual(PidDocType, metadata.CredentialType);
@@ -52,7 +52,7 @@ internal sealed class MdocDcqlAdapterTests
     {
         using MdocDocument document = BuildSampleLogicalPid();
 
-        DcqlCredentialMetadata metadata = MdocDcqlAdapter.MetadataExtractor(document);
+        DcqlCredentialMetadata metadata = MdocDcqlAdapter.CreateMetadataExtractor()(document);
 
         CredentialPath familyNamePath = ResolveMdocPath(PidNamespace, EudiPid.Mdoc.FamilyName);
         CredentialPath givenNamePath = ResolveMdocPath(PidNamespace, EudiPid.Mdoc.GivenName);
@@ -150,11 +150,11 @@ internal sealed class MdocDcqlAdapterTests
         List<DcqlMatch<MdocDocument>> matches = DcqlEvaluator.Evaluate(
             prepared,
             credentials: [document],
-            metadataExtractor: MdocDcqlAdapter.MetadataExtractor,
+            metadataExtractor: MdocDcqlAdapter.CreateMetadataExtractor(),
             claimExtractor: MdocDcqlAdapter.ClaimExtractor).ToList();
 
         Assert.HasCount(1, matches);
-        Assert.AreEqual("pid", matches[0].CredentialQueryId);
+        Assert.AreEqual("pid", matches[0].CredentialQueryId.Value);
         Assert.HasCount(2, matches[0].MatchedPatterns);
     }
 
@@ -185,7 +185,7 @@ internal sealed class MdocDcqlAdapterTests
         List<DcqlMatch<MdocDocument>> matches = DcqlEvaluator.Evaluate(
             DcqlPreparer.Prepare(query),
             credentials: [document],
-            metadataExtractor: MdocDcqlAdapter.MetadataExtractor,
+            metadataExtractor: MdocDcqlAdapter.CreateMetadataExtractor(),
             claimExtractor: MdocDcqlAdapter.ClaimExtractor).ToList();
 
         Assert.HasCount(0, matches);
@@ -209,6 +209,10 @@ internal sealed class MdocDcqlAdapterTests
                 {
                     Id = "pid",
                     Format = "dc+sd-jwt",
+                    //Appendix B.3.5 makes meta.vct_values REQUIRED for dc+sd-jwt; supplying it keeps
+                    //this query's own preparation valid so DcqlEvaluator.Evaluate reaches the format
+                    //gate under test rather than refusing the query outright.
+                    Meta = new CredentialQueryMeta { VctValues = [EudiPid.SdJwtVct] },
                     Claims = [new ClaimsQuery { Path = DcqlClaimPattern.FromKeys("family_name") }]
                 }
             ]
@@ -217,7 +221,7 @@ internal sealed class MdocDcqlAdapterTests
         List<DcqlMatch<MdocDocument>> matches = DcqlEvaluator.Evaluate(
             DcqlPreparer.Prepare(query),
             credentials: [document],
-            metadataExtractor: MdocDcqlAdapter.MetadataExtractor,
+            metadataExtractor: MdocDcqlAdapter.CreateMetadataExtractor(),
             claimExtractor: MdocDcqlAdapter.ClaimExtractor).ToList();
 
         Assert.HasCount(0, matches);
@@ -277,7 +281,7 @@ internal sealed class MdocDcqlAdapterTests
     }
 
 
-    private static readonly byte[] PlaceholderWireBytes = [0xD8, 0x18, 0x40];
+    private static byte[] PlaceholderWireBytes { get; } = [0xD8, 0x18, 0x40];
 
 
     private static CredentialPath ResolveMdocPath(string nameSpace, string elementIdentifier)

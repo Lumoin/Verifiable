@@ -199,9 +199,7 @@ public static class BouncyCastleEcPointFunctions
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The returned buffer is owned and disposed by the caller.")]
     private static IMemoryOwner<byte> EncodeScalar(BigInteger value, int length, BaseMemoryPool pool)
     {
-        IMemoryOwner<byte> owner = pool is BaseMemoryPool basePool
-            ? basePool.Rent(length, AllocationKind.Pinned)
-            : pool.Rent(length);
+        IMemoryOwner<byte> owner = pool.Rent(length, AllocationKind.Pinned);
         try
         {
             byte[] magnitude = BigIntegers.AsUnsignedByteArray(length, value);

@@ -34,14 +34,14 @@ internal sealed class StepUpAccessTokenClaimsTests
 
     private const string ClientId = "https://client.example.com";
     private const string SubjectId = "subject-stepup-1";
-    private static readonly Uri ClientBaseUri = new("https://client.example.com");
-    private static readonly Uri RedirectUri = new("https://client.example.com/callback");
+    private static Uri ClientBaseUri { get; } = new("https://client.example.com");
+    private static Uri RedirectUri { get; } = new("https://client.example.com/callback");
 
     /// <summary>
     /// An <c>auth_time</c> distinct from the request clock so the assertion proves the
     /// access token carries the <em>stamped</em> authentication instant, not "now".
     /// </summary>
-    private static readonly DateTimeOffset StampedAuthTime =
+    private static DateTimeOffset StampedAuthTime { get; } =
         new(2026, 6, 1, 11, 30, 0, TimeSpan.Zero);
 
 

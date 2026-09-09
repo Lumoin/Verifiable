@@ -5,11 +5,11 @@ using Verifiable.Tpm.Spec.Structures;
 namespace Verifiable.Tpm.Automata;
 
 /// <summary>
-/// One <c>Name</c> term of a command's handle-Name area (TPM 2.0 Library Part 1, clause 16.7 equation 15's
+/// One <c>Name</c> term of a command's handle-Name area (TPM 2.0 Library Part 1, clause 15.7 equation 15's
 /// <c>Name1..N</c>), in whichever of the two forms the addressed entity has: a computed
 /// <c>TPM2B_NAME</c> for an object, an NV Index or any other entity whose Name is
 /// <c>nameAlg ‖ H(public area)</c>, or the entity's own 4-octet big-endian handle value for a permanent
-/// entity, whose Name IS its handle (Part 1, clause 14, Table 6).
+/// entity, whose Name IS its handle (Part 1, clause 13, Table 9).
 /// </summary>
 /// <remarks>
 /// A term never owns anything: the computed form holds a BORROWED reference to a <see cref="Tpm2bName"/>
@@ -54,6 +54,16 @@ public readonly record struct TpmHandleName
     public static TpmHandleName None => default;
 
     /// <summary>
+    /// Gets the Empty-Buffer term: PRESENT in the area but contributing no octets — the Name of a sequence
+    /// object ("If an authorization or audit for a sequence object requires computation of a cpHash and an
+    /// rpHash, the Name associated with sequenceHandle will be the Empty Buffer", TPM 2.0 Library Part 1,
+    /// clause 29.4.6; clause 13, Table 9, footnote (1); Part 3, clause 17.7.1), which Part 4's
+    /// <c>EntityGetName</c> answers as a zero-size Name for the <c>nameAlg == TPM_ALG_NULL</c> object a
+    /// sequence context is.
+    /// </summary>
+    public static TpmHandleName EmptyBuffer => FromName(Tpm2bName.Empty);
+
+    /// <summary>
     /// Creates a term borrowing an entity's computed Name.
     /// </summary>
     /// <param name="name">The Name carrier; borrowed, never disposed through this term, and required to outlive the effect that digests the area.</param>
@@ -68,7 +78,7 @@ public readonly record struct TpmHandleName
 
     /// <summary>
     /// Creates a term for a permanent entity, whose Name is its own 4-octet big-endian handle value (TPM 2.0
-    /// Library Part 1, clause 14, Table 6).
+    /// Library Part 1, clause 13, Table 9).
     /// </summary>
     /// <param name="handle">The entity's handle.</param>
     /// <returns>The handle-form Name term.</returns>
@@ -122,8 +132,8 @@ public readonly record struct TpmHandleName
 
 /// <summary>
 /// A command's whole handle-Name area — the ordered <c>Name1 ‖ Name2 ‖ Name3</c> term list cpHash covers
-/// between the command code and the parameters (TPM 2.0 Library Part 1, clause 16.7 equation 15, printed page
-/// 103). That same equation — <c>cpHash = HsessionAlg(commandCode {Name1 {Name2 {Name3}}} {parameters})</c> —
+/// between the command code and the parameters (TPM 2.0 Library Part 1, clause 15.7 equation 15, printed page
+/// 106). That same equation — <c>cpHash = HsessionAlg(commandCode {Name1 {Name2 {Name3}}} {parameters})</c> —
 /// caps the term list at three, so the area is exactly three ordered <see cref="TpmHandleName"/> slots,
 /// trailing ones absent.
 /// </summary>
